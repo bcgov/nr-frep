@@ -15,6 +15,13 @@ on:
         description: PR number, 'test' or 'prod'
         default: ${{ github.event.number }}
         type: string
+    slot:
+      description: |
+        Route hostname slot. Tests must hit the actual deployed host, which
+        for PR previews is `nr-frep-<PR % 50>.apps...` rather than
+        `nr-frep-<PR>.apps...`. Omit for TEST/PROD; defaults to `target`.
+      default: ""
+      type: string
 
     secrets:
       e2e_idir_user:
@@ -26,7 +33,7 @@ on:
 
 env:
   DOMAIN: apps.silver.devops.gov.bc.ca
-  PREFIX: nr-frep-${{ inputs.target }}
+  PREFIX: nr-frep-${{ inputs.slot || inputs.target }}
 
 permissions: {}
 

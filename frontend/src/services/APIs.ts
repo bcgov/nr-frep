@@ -1,7 +1,14 @@
-import { env } from '@/env';
-import { UserService } from '@/services/users.service';
-
 import type { APIConfig } from '@/config/api/types';
+
+import { env } from '@/env';
+import { AcceptedSitesService } from '@/services/acceptedSites.service';
+import { ConfigurationService } from '@/services/configuration.service';
+import { MasterListAdminService } from '@/services/masterListAdmin.service';
+import { ProtocolChecklistService } from '@/services/protocolChecklist.service';
+import { RandomListService } from '@/services/randomList.service';
+import { SearchService } from '@/services/search.service';
+import { SiteDetailService } from '@/services/siteDetail.service';
+import { UserService } from '@/services/users.service';
 
 const basePath = (env.VITE_BASE_PATH ?? '').replace(/\/$/, '');
 
@@ -33,6 +40,13 @@ BackendApiConfig.TOKEN = async () => '';
 
 const serviceConstructors = {
   user: new UserService(BackendApiConfig),
+  acceptedSites: new AcceptedSitesService(BackendApiConfig),
+  configuration: new ConfigurationService(BackendApiConfig),
+  randomList: new RandomListService(BackendApiConfig),
+  siteDetail: new SiteDetailService(BackendApiConfig),
+  protocolChecklist: new ProtocolChecklistService(BackendApiConfig),
+  search: new SearchService(BackendApiConfig),
+  masterListAdmin: new MasterListAdminService(BackendApiConfig),
 } as const;
 
 type ExternalApiType = {

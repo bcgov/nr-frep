@@ -1,34 +1,16 @@
 @use "sass:map";
 
-@use "@bcgov-nr/nr-theme/design-tokens/type-family.scss" as types;
-@use "@carbon/type/scss/font-family.scss" with (
-  $font-families: types.$type-family,
-  $font-weights: types.$font-weights
-);
-
-@use "@carbon/themes/scss/utilities";
 @use "./variables" as variables;
-@use "@bcgov-nr/nr-theme/design-tokens/light-theme.scss" as light;
-@use "@bcgov-nr/nr-theme/design-tokens/dark-theme.scss" as dark;
-@use "@bcgov-nr/nr-theme/design-tokens/colors.scss" as colors;
 
 @use "@carbon/react/scss/themes";
 @use "@carbon/react/scss/theme" with (
   $fallback: themes.$white,
-  $theme: light.$light-theme
+  $theme: themes.$white
 );
 
 @use "@carbon/react/scss/components/button/tokens" as button-tokens;
-@use "@bcgov-nr/nr-theme/design-tokens/light-buttons.scss" as light-button-overrides;
-@use "@bcgov-nr/nr-theme/design-tokens/dark-buttons.scss" as dark-button-overrides;
-
 @use "@carbon/react/scss/components/tag/tokens" as tag-tokens;
-@use "@bcgov-nr/nr-theme/design-tokens/light-tags.scss" as light-tag-overrides;
-@use "@bcgov-nr/nr-theme/design-tokens/dark-tags.scss" as dark-tag-overrides;
-
 @use "@carbon/react/scss/components/notification/tokens" as notification-tokens;
-@use "@bcgov-nr/nr-theme/design-tokens/light-notifications.scss" as light-notification-overrides;
-@use "@bcgov-nr/nr-theme/design-tokens/dark-notifications.scss" as dark-notification-overrides;
 
 @use "@carbon/react";
 @use "@carbon/styles/scss/grid";
@@ -39,44 +21,17 @@
 
 :root[data-carbon-theme='white'] {
   --cds-grid-gutter: 0;
-  $button-tokens: utilities.merge(
-    button-tokens.$button-tokens,
-    light-button-overrides.$light-button-token-overrides
-  );
-  $tag-tokens: utilities.merge(
-    tag-tokens.$tag-tokens,
-    light-tag-overrides.$light-tag-token-overrides
-  );
-
-  $notification-tokens: utilities.merge(
-    notification-tokens.$notification-tokens,
-    light-notification-overrides.$light-notification-token-overrides
-  );
-
-  @include theme.add-component-tokens($button-tokens);
-  @include theme.add-component-tokens($tag-tokens);
-  @include theme.add-component-tokens($notification-tokens);
+  @include theme.add-component-tokens(button-tokens.$button-tokens);
+  @include theme.add-component-tokens(tag-tokens.$tag-tokens);
+  @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$white);
 }
 
 :root[data-carbon-theme='g100'] {
   --cds-grid-gutter: 0;
-  $button-tokens: utilities.merge(
-    button-tokens.$button-tokens,
-    dark-button-overrides.$dark-button-token-overrides
-  );
-  $tag-tokens: utilities.merge(
-    tag-tokens.$tag-tokens,
-    dark-tag-overrides.$dark-tag-token-overrides
-  );
-  $notification-tokens: utilities.merge(
-    notification-tokens.$notification-tokens,
-    light-notification-overrides.$light-notification-token-overrides
-  );
-
-  @include theme.add-component-tokens($button-tokens);
-  @include theme.add-component-tokens($tag-tokens);
-  @include theme.add-component-tokens($notification-tokens);
+  @include theme.add-component-tokens(button-tokens.$button-tokens);
+  @include theme.add-component-tokens(tag-tokens.$tag-tokens);
+  @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$g100);
 }
 
@@ -280,7 +235,7 @@ $types: "error", "info", "success", "warning";
 .#{variables.$bcgov-prefix}--table-header-label,
 .#{variables.$bcgov-prefix}--data-table thead th,
 .#{variables.$bcgov-prefix}--data-table thead .#{variables.$bcgov-prefix}--table-header {
-  @include font-family.font-weight(bold);
+  font-weight: 700;
 }
 
 /* ----------------- Tabs (contained) -------------------

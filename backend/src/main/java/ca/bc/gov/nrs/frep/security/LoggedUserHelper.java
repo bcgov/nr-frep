@@ -47,7 +47,7 @@ public class LoggedUserHelper {
   // ─── Role / authority helpers (these use cognito:groups from the access token) ──
 
   /**
-   * Returns the set of authority strings for the current user (e.g. {@code FREP_ADMIN}).
+   * Returns the set of authority strings for the current user (e.g. {@code FREP_SYS_ADMIN}).
    */
   public Set<String> getAuthorities() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -61,10 +61,36 @@ public class LoggedUserHelper {
   }
 
   /**
-   * Returns {@code true} if the user holds the {@code FREP_ADMIN} authority.
+   * Returns {@code true} if the user holds the {@code FREP_SYS_ADMIN} authority.
    */
-  public boolean isAdmin() {
-    return getAuthorities().contains(RoleConstants.ADMIN_AUTHORITY);
+  public boolean isSysAdmin() {
+    return getAuthorities().contains(RoleConstants.SYS_ADMIN_AUTHORITY);
+  }
+
+  /**
+   * Returns {@code true} if the user holds the {@code FREP_UPDATE} authority.
+   */
+  public boolean isUpdate() {
+    return getAuthorities().contains(RoleConstants.UPDATE_AUTHORITY);
+  }
+
+  /**
+   * Returns {@code true} when the user is view-only per legacy {@code RestAction#isViewOnlyUser}:
+   * has {@code FREP_VIEW_ONLY} and does not also hold sys-admin or update roles.
+   */
+  public boolean isViewOnly() {
+    Set<String> authorities = getAuthorities();
+    return authorities.contains(RoleConstants.VIEW_ONLY_AUTHORITY)
+        && !authorities.contains(RoleConstants.SYS_ADMIN_AUTHORITY)
+        && !authorities.contains(RoleConstants.UPDATE_AUTHORITY);
+  }
+
+  /**
+   * Returns {@code true} if the user may perform write operations
+   * ({@code FREP_SYS_ADMIN} or {@code FREP_UPDATE}).
+   */
+  public boolean canWrite() {
+    return isSysAdmin() || isUpdate();
   }
 
   // ─── Internal helpers ─────────────────────────────────────────────

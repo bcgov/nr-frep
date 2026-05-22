@@ -4,9 +4,9 @@ export type JWT = AmplifyJWT;
 
 /**
  * Recognized Cognito groups that map to application roles.
- * Must match the AWS Cognito group names exactly.
+ * Names match legacy WebADE roles (FrepUser.SYSADMIN / UPDATE / VIEW_ONLY).
  */
-export const AVAILABLE_ROLES = ['FREP_ADMIN', 'FREP_VIEWER'] as const;
+export const AVAILABLE_ROLES = ['FREP_SYS_ADMIN', 'FREP_UPDATE', 'FREP_VIEW_ONLY'] as const;
 
 export type ROLE_TYPE = (typeof AVAILABLE_ROLES)[number];
 

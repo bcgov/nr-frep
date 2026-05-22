@@ -10,7 +10,7 @@ const LOCAL_DEV_USER: FamLoginUser = {
   userName: 'local-dev',
   displayName: 'Local Developer',
   idpProvider: 'IDIR',
-  roles: ['FREP_VIEWER'],
+  roles: ['FREP_VIEW_ONLY'],
   privileges: {},
 };
 

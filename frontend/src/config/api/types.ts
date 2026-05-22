@@ -87,8 +87,8 @@ export class HttpClient {
   axiosInstance: AxiosInstance;
   constructor(readonly config: APIConfig) {
     this.config = config;
+    // Do not set axios baseURL: getUrl() already prefixes config.BASE.
     this.axiosInstance = axios.create({
-      baseURL: config.BASE,
       timeout: config.TIMEOUT || 60000, // Default timeout of 60 seconds
       headers: {
         'Content-Type': 'application/json',

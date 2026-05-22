@@ -1,0 +1,50 @@
+@use '@carbon/type';
+@use '../../styles/variables' as vars;
+
+.master-list-admin-grid {
+  row-gap: 2rem;
+}
+
+.master-list-admin__title {
+  @include type.type-style('heading-05');
+  margin: 0;
+}
+
+.master-list-admin__subtitle {
+  margin: 0.5rem 0 0;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+.master-list-admin__panel {
+  padding: 1.5rem;
+  height: 100%;
+
+  h2 {
+    @include type.type-style('heading-03');
+    margin: 0 0 1rem;
+  }
+
+  p {
+    margin: 0 0 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+.master-list-admin__label {
+  @include type.type-style('label-01');
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+.master-list-admin__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+}
+
+.master-list-admin__actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+}

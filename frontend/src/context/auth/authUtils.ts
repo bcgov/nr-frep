@@ -99,7 +99,8 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
 /**
  * Parses Cognito group strings into a user privilege object.
  *
- * Recognizes groups that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMIN", "FREP_VIEWER").
+ * Recognizes groups that exactly match {@link AVAILABLE_ROLES}
+ * (e.g. "FREP_SYS_ADMIN", "FREP_UPDATE", "FREP_VIEW_ONLY").
  * Unrecognized groups are silently ignored.
  *
  * @param {string[]} input - Array of group strings from Cognito.
@@ -108,7 +109,7 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
 export function parsePrivileges(input: string[]): USER_PRIVILEGE_TYPE {
   const result: USER_PRIVILEGE_TYPE = {};
   for (const item of input) {
-    // Direct match against known Cognito groups (FREP_ADMIN, FREP_VIEWER)
+    // Direct match against known Cognito groups (legacy WebADE role names)
     if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
       result[item as ROLE_TYPE] = null; // null = global (non-scoped) role
     }

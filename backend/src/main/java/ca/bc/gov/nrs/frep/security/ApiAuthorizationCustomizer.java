@@ -28,11 +28,23 @@ public class ApiAuthorizationCustomizer implements
   /*
    * --- Cognito role-based authorization (re-enable before deploying) ---
    *
-   * authorize.requestMatchers(HttpMethod.POST, "/api/**").hasAuthority(RoleConstants.ADMIN_AUTHORITY);
-   * authorize.requestMatchers(HttpMethod.PUT, "/api/**").hasAuthority(RoleConstants.ADMIN_AUTHORITY);
-   * authorize.requestMatchers(HttpMethod.DELETE, "/api/**").hasAuthority(RoleConstants.ADMIN_AUTHORITY);
+   * Legacy WebADE roles map 1:1 to Cognito groups (see RoleConstants).
+   *
+   * authorize.requestMatchers(HttpMethod.POST, "/api/**")
+   *     .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
+   * authorize.requestMatchers(HttpMethod.PUT, "/api/**")
+   *     .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
+   * authorize.requestMatchers(HttpMethod.PATCH, "/api/**")
+   *     .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
+   * authorize.requestMatchers(HttpMethod.DELETE, "/api/**")
+   *     .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
    * authorize.requestMatchers(HttpMethod.GET, "/api/**")
-   *     .hasAnyAuthority(RoleConstants.ADMIN_AUTHORITY, RoleConstants.VIEWER_AUTHORITY);
+   *     .hasAnyAuthority(RoleConstants.READ_AUTHORITIES);
+   *
+   * Admin-only endpoints (legacy ACTIVATECHECKLIST parity), when added:
+   * authorize.requestMatchers("/api/v1/admin/**")
+   *     .hasAuthority(RoleConstants.SYS_ADMIN_AUTHORITY);
+   *
    * authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
    * ... static assets, actuator, SPA fallback ...
    * authorize.anyRequest().denyAll();

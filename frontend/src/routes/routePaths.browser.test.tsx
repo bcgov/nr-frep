@@ -3,11 +3,23 @@ import { describe, it, expect } from 'vitest';
 import * as routePaths from './routePaths';
 
 describe('routePaths', () => {
-  it('getMenuEntries returns the dashboard menu item', () => {
-    const entries = routePaths.getMenuEntries([]);
+  it('getMenuEntries returns the dashboard and ported FREP screens for non-admin', () => {
+    const entries = routePaths.getMenuEntries(['FREP_VIEW_ONLY']);
     expect(Array.isArray(entries)).toBe(true);
+    expect(entries.some((e) => e.id === 'Welcome')).toBe(true);
     expect(entries.some((e) => e.id === 'Dashboard')).toBe(true);
-    expect(entries).toHaveLength(1);
+    expect(entries.some((e) => e.id === 'District Random List')).toBe(true);
+    expect(entries.some((e) => e.id === 'Accepted Sites')).toBe(true);
+    expect(entries.some((e) => e.id === 'Checklist Search')).toBe(true);
+    expect(entries.some((e) => e.id === 'Client Search')).toBe(true);
+    expect(entries.some((e) => e.id === 'Site Details')).toBe(false);
+    expect(entries.some((e) => e.id === 'Protocol Checklist')).toBe(false);
+    expect(entries.some((e) => e.id === 'Generate Master List')).toBe(false);
+  });
+
+  it('getMenuEntries exposes Generate Master List to sys-admins', () => {
+    const entries = routePaths.getMenuEntries(['FREP_SYS_ADMIN']);
+    expect(entries.some((e) => e.id === 'Generate Master List')).toBe(true);
   });
 
   it('getPublicRoutes returns the unauthenticated route set', () => {

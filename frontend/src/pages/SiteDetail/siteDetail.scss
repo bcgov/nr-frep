@@ -1,0 +1,66 @@
+@use '@carbon/type';
+@use '../../styles/variables' as vars;
+
+.site-detail-grid {
+  row-gap: 2rem;
+}
+
+.site-detail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+
+  h1 {
+    margin: 0;
+  }
+}
+
+.site-detail__back {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--#{vars.$bcgov-prefix}-link-primary);
+  padding: 0;
+  font: inherit;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.site-detail__panel {
+  background-color: var(--#{vars.$bcgov-prefix}-layer);
+  padding: 1.5rem;
+  border: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle);
+}
+
+.site-detail__panel-title {
+  @include type.type-style('heading-03');
+  margin: 0 0 1rem;
+}
+
+.site-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem 2rem;
+}
+
+.site-detail__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.site-detail__field-label {
+  @include type.type-style('label-01');
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+.site-detail__field-value {
+  @include type.type-style('body-02');
+}

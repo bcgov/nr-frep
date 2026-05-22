@@ -1,0 +1,28 @@
+@use '@carbon/type';
+@use '../../styles/variables' as vars;
+
+.checklist-search-grid {
+  row-gap: 2rem;
+}
+
+.checklist-search__title {
+  @include type.type-style('heading-05');
+  margin: 0;
+}
+
+.checklist-search__subtitle {
+  margin: 0.5rem 0 0;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+.checklist-search__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.checklist-search__actions {
+  display: flex;
+  gap: 0.5rem;
+}

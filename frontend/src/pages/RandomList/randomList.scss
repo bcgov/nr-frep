@@ -1,0 +1,30 @@
+@use '@carbon/type';
+@use '../../styles/variables' as vars;
+
+.random-list-grid {
+  row-gap: 2rem;
+}
+
+.random-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+
+  h1 {
+    margin: 0;
+  }
+}
+
+.random-list__subtitle {
+  margin: 0.5rem 0 0;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+.random-list__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+}

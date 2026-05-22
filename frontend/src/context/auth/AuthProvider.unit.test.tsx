@@ -19,7 +19,7 @@ describe('AuthProvider (local dev mock)', () => {
     );
     await waitFor(() => expect(context).toBeDefined());
     expect(context.isLoggedIn).toBe(true);
-    expect(context.user?.roles).toContain('FREP_VIEWER');
+    expect(context.user?.roles).toContain('FREP_VIEW_ONLY');
   });
 
   it('login navigates to the dashboard', async () => {

@@ -58,7 +58,7 @@ describe('AppRoutes', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
       isLoading: false,
       isLoggedIn: true,
-      user: { roles: ['FREP_VIEWER'] },
+      user: { roles: ['FREP_VIEW_ONLY'] },
     });
 
     render(

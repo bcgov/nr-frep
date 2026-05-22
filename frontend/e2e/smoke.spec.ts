@@ -11,10 +11,12 @@ const assertNoGlobalError = async (page: Page) => {
 };
 
 test.describe('page coverage', () => {
-  test('dashboard renders', async ({ page }) => {
+  test('dashboard renders accepted sites table', async ({ page }) => {
     await gotoProtected(page, '/dashboard');
     await expect(page.getByTestId('side-nav-link-Dashboard')).toBeVisible();
-    await expect(page.getByTestId('hello-world-message')).toHaveText('Hello World');
+    await expect(page.getByRole('heading', { name: 'Accepted Sites' })).toBeVisible();
+    await expect(page.getByTestId('accepted-sites-table')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Edit in legacy FREP' })).toBeVisible();
     await assertNoGlobalError(page);
   });
 

@@ -7,22 +7,28 @@ import type { FamLoginUser, ROLE_TYPE } from '@/context/auth/types';
 /**
  * Authorization result returned by {@link useAuthorization}.
  *
- * All boolean flags are derived from the Cognito groups present in the
- * user's JWT token.
+ * Role semantics mirror legacy WebADE ({@code FrepUser} / {@code RestAction}).
  */
 export type AuthorizationInfo = {
-  /** `true` when the user holds the `FREP_ADMIN` Cognito group. */
-  isAdmin: boolean;
-  /** `true` when the user holds the `FREP_VIEWER` Cognito group. */
-  isViewer: boolean;
-  /** `true` when the user has at least one recognized role (`FREP_ADMIN` or `FREP_VIEWER`). */
+  /** `true` when the user holds the `FREP_SYS_ADMIN` Cognito group. */
+  isSysAdmin: boolean;
+  /** `true` when the user holds the `FREP_UPDATE` Cognito group. */
+  isUpdate: boolean;
+  /**
+   * `true` when the user is view-only: has `FREP_VIEW_ONLY` without
+   * `FREP_SYS_ADMIN` or `FREP_UPDATE` (legacy {@code isViewOnlyUser}).
+   */
+  isViewOnly: boolean;
+  /** `true` when the user has at least one recognized FREP role. */
   hasAnyRole: boolean;
-  /** `true` when the user can perform write operations (create / update / delete). */
+  /** `true` when the user can perform write operations (sys-admin or update). */
   canEdit: boolean;
   /** `true` when the user can create new resources. Alias for {@link canEdit}. */
   canCreate: boolean;
   /** `true` when the user can delete resources. Alias for {@link canEdit}. */
   canDelete: boolean;
+  /** `true` for admin-only actions (legacy {@code ACTIVATECHECKLIST} parity). */
+  canPerformSysAdminActions: boolean;
   /** Checks if the user holds a specific role. */
   hasRole: (role: ROLE_TYPE) => boolean;
   /** The full user object for advanced checks (may be `undefined` before login). */
@@ -35,12 +41,12 @@ export type AuthorizationInfo = {
  *
  * @example
  * ```tsx
- * const { isAdmin, canEdit } = useAuthorization();
+ * const { isSysAdmin, canEdit } = useAuthorization();
  *
  * return (
  *   <>
  *     {canEdit && <Button>Edit</Button>}
- *     {isAdmin && <Link to="/admin">Admin</Link>}
+ *     {isSysAdmin && <Link to="/admin">Admin</Link>}
  *   </>
  * );
  * ```
@@ -50,24 +56,28 @@ export const useAuthorization = (): AuthorizationInfo => {
 
   return useMemo<AuthorizationInfo>(() => {
     const roles = user?.roles ?? [];
-    const isAdmin = roles.includes('FREP_ADMIN');
-    const isViewer = roles.includes('FREP_VIEWER');
-    const hasAnyRole = isAdmin || isViewer;
+    const isSysAdmin = roles.includes('FREP_SYS_ADMIN');
+    const isUpdate = roles.includes('FREP_UPDATE');
+    const hasViewOnlyRole = roles.includes('FREP_VIEW_ONLY');
+    const isViewOnly = hasViewOnlyRole && !isSysAdmin && !isUpdate;
+    const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole;
 
-    // Only FREP_ADMIN can perform write operations
-    const canEdit = isAdmin;
-    const canCreate = isAdmin;
-    const canDelete = isAdmin;
+    const canEdit = isSysAdmin || isUpdate;
+    const canCreate = canEdit;
+    const canDelete = canEdit;
+    const canPerformSysAdminActions = isSysAdmin;
 
     const hasRole = (role: ROLE_TYPE) => roles.includes(role);
 
     return {
-      isAdmin,
-      isViewer,
+      isSysAdmin,
+      isUpdate,
+      isViewOnly,
       hasAnyRole,
       canEdit,
       canCreate,
       canDelete,
+      canPerformSysAdminActions,
       hasRole,
       user,
     };

@@ -1,66 +1,129 @@
-import { Column, Grid, SkeletonText } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
+import {
+  DocumentTasks,
+  Home,
+  ListChecked,
+  Search,
+  SettingsAdjust,
+  TableSplit,
+  Tree,
+  UserMultiple,
+} from '@carbon/icons-react';
+import { ClickableTile, Column, Grid } from '@carbon/react';
+import { useNavigate } from 'react-router-dom';
 
-import { buildApiUrl } from '@/config/api/baseUrl';
-import { useNotification } from '@/context/notification/useNotification';
+import type { FC } from 'react';
+
+import { useAuthorization } from '@/hooks/useAuthorization';
+
 import './dashboard.scss';
 
+type ScreenTile = {
+  code: string;
+  title: string;
+  description: string;
+  to: string;
+  Icon: React.ComponentType<{ size?: number }>;
+  sysAdminOnly?: boolean;
+};
+
+const SCREENS: ScreenTile[] = [
+  {
+    code: 'FREP000',
+    title: 'Welcome',
+    description: 'Program intro and quick links to the screens you use most.',
+    to: '/welcome',
+    Icon: Home,
+  },
+  {
+    code: 'FREP100',
+    title: 'District Random List',
+    description:
+      'View randomly generated sites for a given district during a master list year, and drill into individual site details.',
+    to: '/random-list',
+    Icon: ListChecked,
+  },
+  {
+    code: 'FREP110',
+    title: 'Site Details',
+    description:
+      'Inspect a single selected site: tenure header, opening info, and per-protocol accept / reject / target decisions.',
+    to: '/site-detail/1001',
+    Icon: DocumentTasks,
+  },
+  {
+    code: 'FREP200',
+    title: 'Accepted Sites',
+    description:
+      'Browse sites that have been accepted onto the current master list, filtered by district and protocol.',
+    to: '/accepted-sites',
+    Icon: TableSplit,
+  },
+  {
+    code: 'FREP210–254',
+    title: 'Protocol Checklists',
+    description:
+      'Biodiversity, Riparian, and Water Quality field evaluations rendered as tabbed checklists.',
+    to: '/protocol-checklists/biodiversity/9001',
+    Icon: Tree,
+  },
+  {
+    code: 'FREP400',
+    title: 'Checklist Search',
+    description: 'Find any FREP checklist by tenure, opening, client number, protocol, or status.',
+    to: '/search/checklists',
+    Icon: Search,
+  },
+  {
+    code: 'FREP410',
+    title: 'Client Search',
+    description: 'Look up Forest Client records by client number or name.',
+    to: '/search/clients',
+    Icon: UserMultiple,
+  },
+  {
+    code: 'FREP700',
+    title: 'Generate Master List',
+    description:
+      'Sys-admin tool to set eligibility criteria and (re-)generate the provincial random list.',
+    to: '/admin/master-list',
+    Icon: SettingsAdjust,
+    sysAdminOnly: true,
+  },
+];
+
 const DashboardPage: FC = () => {
-  const { display } = useNotification();
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
+  const navigate = useNavigate();
+  const { isSysAdmin } = useAuthorization();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setHasError(false);
-
-    fetch(buildApiUrl('/hello'), {
-      signal: controller.signal,
-      credentials: 'include',
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Unable to load greeting (${response.status})`);
-        }
-        return response.text();
-      })
-      .then((text) => {
-        if (controller.signal.aborted) return;
-        setMessage(text);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        if (err.name === 'AbortError' || controller.signal.aborted) return;
-        display({
-          kind: 'error',
-          title: "We couldn't load the greeting",
-          subtitle: err.message,
-          timeout: 9000,
-        });
-        setHasError(true);
-        setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [display]);
+  const visibleScreens = SCREENS.filter((s) => !s.sysAdminOnly || isSysAdmin);
 
   return (
     <Grid fullWidth className="default-grid dashboard-grid">
       <Column sm={4} md={8} lg={16}>
-        <div className="dashboard__header">
-          <h1>Welcome to FREP</h1>
+        <h1 className="dashboard__title">FREP Dashboard</h1>
+        <p className="dashboard__subtitle">
+          Select a screen to begin. These screens are read-only ports of the legacy FREP web app.
+        </p>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <div className="dashboard__tiles">
+          {visibleScreens.map(({ code, title, description, to, Icon }) => (
+            <ClickableTile
+              key={code}
+              onClick={() => navigate(to)}
+              className="dashboard__tile"
+              aria-label={`${code} — ${title}`}
+            >
+              <div className="dashboard__tile-icon" aria-hidden="true">
+                <Icon size={32} />
+              </div>
+              <span className="dashboard__tile-code">{code}</span>
+              <h2 className="dashboard__tile-title">{title}</h2>
+              <p className="dashboard__tile-description">{description}</p>
+            </ClickableTile>
+          ))}
         </div>
-        {loading && (
-          <div aria-busy>
-            <SkeletonText width="40%" />
-          </div>
-        )}
-        {!loading && hasError && <p>We couldn&apos;t load the greeting from the backend.</p>}
-        {!loading && !hasError && message && (
-          <p data-testid="hello-world-message">{message}</p>
-        )}
       </Column>
     </Grid>
   );

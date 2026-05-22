@@ -16,15 +16,33 @@
  *   getMenuEntries(roles)    — returns sidebar menu items filtered by role.
  */
 
-import { DashboardReference } from '@carbon/icons-react';
+import {
+  DashboardReference,
+  DocumentTasks,
+  Home,
+  ListChecked,
+  Search,
+  SettingsAdjust,
+  TableSplit,
+  Tree,
+  UserMultiple,
+} from '@carbon/icons-react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 
 import Layout from '@/components/Layout';
+import AcceptedSitesPage from '@/pages/AcceptedSites';
+import ChecklistSearchPage from '@/pages/ChecklistSearch';
+import ClientSearchPage from '@/pages/ClientSearch';
 import DashboardPage from '@/pages/Dashboard';
 import GlobalErrorPage from '@/pages/GlobalError';
 import LandingPage from '@/pages/Landing';
+import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
+import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
+import RandomListPage from '@/pages/RandomList';
 import RoleErrorPage from '@/pages/RoleError';
+import SiteDetailPage from '@/pages/SiteDetail';
+import WelcomePage from '@/pages/Welcome';
 
 import ProtectedRoute from './ProtectedRoute';
 
@@ -77,6 +95,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
+    path: '/welcome',
+    id: 'Welcome',
+    icon: Home,
+    element: (
+      <Layout>
+        <WelcomePage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
     path: '/dashboard',
     id: 'Dashboard',
     icon: DashboardReference,
@@ -86,6 +115,84 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: true,
+  },
+  {
+    path: '/random-list',
+    id: 'District Random List',
+    icon: ListChecked,
+    element: (
+      <Layout>
+        <RandomListPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
+    path: '/accepted-sites',
+    id: 'Accepted Sites',
+    icon: TableSplit,
+    element: (
+      <Layout>
+        <AcceptedSitesPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
+    path: '/site-detail/:id',
+    id: 'Site Details',
+    icon: DocumentTasks,
+    element: (
+      <Layout>
+        <SiteDetailPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+  },
+  {
+    path: '/protocol-checklists/:type/:id',
+    id: 'Protocol Checklist',
+    icon: Tree,
+    element: (
+      <Layout>
+        <ProtocolChecklistPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+  },
+  {
+    path: '/search/checklists',
+    id: 'Checklist Search',
+    icon: Search,
+    element: (
+      <Layout>
+        <ChecklistSearchPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
+    path: '/search/clients',
+    id: 'Client Search',
+    icon: UserMultiple,
+    element: (
+      <Layout>
+        <ClientSearchPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
+    path: '/admin/master-list',
+    id: 'Generate Master List',
+    icon: SettingsAdjust,
+    element: (
+      <Layout>
+        <MasterListAdminPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+    roles: ['FREP_SYS_ADMIN'],
   },
   {
     path: '/unauthorized',

@@ -1,0 +1,314 @@
+import {
+  Button,
+  Column,
+  DataTable,
+  Grid,
+  Select,
+  SelectItem,
+  SkeletonText,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TextInput,
+} from '@carbon/react';
+import { useEffect, useMemo, useState, type FC } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+
+import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
+import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search';
+
+import { useNotification } from '@/context/notification/useNotification';
+import API from '@/services/APIs';
+
+import './checklistSearch.scss';
+
+const TABLE_HEADERS = [
+  { key: 'checklistId', header: 'Checklist' },
+  { key: 'protocolCode', header: 'Protocol' },
+  { key: 'effectiveYear', header: 'Year' },
+  { key: 'orgUnitCode', header: 'District' },
+  { key: 'licenceId', header: 'Licence' },
+  { key: 'cuttingPermitId', header: 'CP' },
+  { key: 'cutBlockId', header: 'Cut block' },
+  { key: 'openingId', header: 'Opening' },
+  { key: 'clientNumber', header: 'Client #' },
+  { key: 'evaluationDate', header: 'Eval. date' },
+  { key: 'evaluatorUserid', header: 'Evaluator' },
+  { key: 'checklistStatus', header: 'Status' },
+] as const;
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'Any status' },
+  { value: 'RDY', label: 'Ready' },
+  { value: 'SUB', label: 'Submitted' },
+];
+
+const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
+  BIO: 'biodiversity',
+  RIP: 'riparian',
+  WAT: 'water',
+};
+
+const ChecklistSearchPage: FC = () => {
+  const { display } = useNotification();
+
+  const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [protocols, setProtocols] = useState<Protocol[]>([]);
+  const [configLoading, setConfigLoading] = useState(true);
+
+  const [filters, setFilters] = useState<ChecklistSearchQuery>({});
+  const [results, setResults] = useState<ChecklistSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setConfigLoading(true);
+
+    Promise.all([
+      API.configuration.getMasterListYears(),
+      API.configuration.getOrgUnits(),
+      API.configuration.getProtocols(),
+    ])
+      .then(([years, units, fetchedProtocols]) => {
+        if (cancelled) return;
+        setMasterListYears(years);
+        setOrgUnits(units);
+        setProtocols(fetchedProtocols);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        display({
+          kind: 'error',
+          title: "We couldn't load filter options",
+          subtitle: message,
+          timeout: 9000,
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setConfigLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [display]);
+
+  const runSearch = async () => {
+    setLoading(true);
+    setHasError(false);
+    try {
+      const data = await API.search.searchChecklists(filters);
+      setResults(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      display({
+        kind: 'error',
+        title: "We couldn't run the search",
+        subtitle: message,
+        timeout: 9000,
+      });
+      setHasError(true);
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateFilter = <K extends keyof ChecklistSearchQuery>(
+    key: K,
+    value: ChecklistSearchQuery[K],
+  ) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const tableRows = useMemo(
+    () => results.map((row) => ({ id: row.checklistId, ...row })),
+    [results],
+  );
+
+  return (
+    <Grid fullWidth className="default-grid checklist-search-grid">
+      <Column sm={4} md={8} lg={16}>
+        <h1 className="checklist-search__title">FREP400 — Checklist Search</h1>
+        <p className="checklist-search__subtitle">
+          Look up FREP checklists by tenure, opening, client, or protocol.
+        </p>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <div className="checklist-search__filters">
+          <Select
+            id="checklist-search-year"
+            labelText="Year"
+            value={filters.effectiveYear ?? ''}
+            onChange={(e) => updateFilter('effectiveYear', e.target.value || undefined)}
+            disabled={configLoading}
+          >
+            <SelectItem value="" text="Any year" />
+            {masterListYears.map((year) => (
+              <SelectItem key={year.effectiveYear} value={year.effectiveYear} text={year.label} />
+            ))}
+          </Select>
+          <Select
+            id="checklist-search-org-unit"
+            labelText="Org unit"
+            value={filters.orgUnit ?? ''}
+            onChange={(e) => updateFilter('orgUnit', e.target.value || undefined)}
+            disabled={configLoading}
+          >
+            <SelectItem value="" text="Any district" />
+            {orgUnits.map((unit) => (
+              <SelectItem
+                key={unit.orgUnitNo}
+                value={unit.orgUnitNo}
+                text={`${unit.orgUnitCode} — ${unit.orgUnitName}`}
+              />
+            ))}
+          </Select>
+          <Select
+            id="checklist-search-protocol"
+            labelText="Protocol"
+            value={filters.protocolType ?? ''}
+            onChange={(e) => updateFilter('protocolType', e.target.value || undefined)}
+            disabled={configLoading}
+          >
+            <SelectItem value="" text="Any protocol" />
+            {protocols.map((protocol) => (
+              <SelectItem key={protocol.code} value={protocol.code} text={protocol.name} />
+            ))}
+          </Select>
+          <Select
+            id="checklist-search-status"
+            labelText="Status"
+            value={filters.checklistStatusCode ?? ''}
+            onChange={(e) => updateFilter('checklistStatusCode', e.target.value || undefined)}
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} text={opt.label} />
+            ))}
+          </Select>
+          <TextInput
+            id="checklist-search-licence"
+            labelText="Licence"
+            value={filters.licenceId ?? ''}
+            onChange={(e) => updateFilter('licenceId', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-cp"
+            labelText="Cutting permit"
+            value={filters.cuttingPermitId ?? ''}
+            onChange={(e) => updateFilter('cuttingPermitId', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-block"
+            labelText="Cut block"
+            value={filters.cutBlockId ?? ''}
+            onChange={(e) => updateFilter('cutBlockId', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-opening"
+            labelText="Opening"
+            value={filters.openingId ?? ''}
+            onChange={(e) => updateFilter('openingId', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-client"
+            labelText="Client #"
+            value={filters.clientNumber ?? ''}
+            onChange={(e) => updateFilter('clientNumber', e.target.value || undefined)}
+          />
+          <div className="checklist-search__actions">
+            <Button onClick={() => void runSearch()} disabled={loading}>
+              Search
+            </Button>
+            <Button
+              kind="ghost"
+              onClick={() => {
+                setFilters({});
+                void runSearch();
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        {loading && (
+          <div aria-busy data-testid="checklist-search-loading">
+            <SkeletonText paragraph lineCount={4} />
+          </div>
+        )}
+        {!loading && hasError && (
+          <p data-testid="checklist-search-error">We couldn&apos;t run the search.</p>
+        )}
+        {!loading && !hasError && results.length === 0 && (
+          <p data-testid="checklist-search-empty">No checklists match the selected filters.</p>
+        )}
+        {!loading && !hasError && results.length > 0 && (
+          <DataTable
+            rows={tableRows}
+            headers={[...TABLE_HEADERS]}
+            data-testid="checklist-search-table"
+          >
+            {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
+              <TableContainer
+                title="Checklists"
+                description={`${results.length} match${results.length === 1 ? '' : 'es'}`}
+              >
+                <Table {...getTableProps()}>
+                  <TableHead>
+                    <TableRow>
+                      {headers.map((header) => (
+                        <TableHeader {...getHeaderProps({ header })} key={header.key}>
+                          {header.header}
+                        </TableHeader>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => {
+                      const data = results.find((r) => r.checklistId === row.id);
+                      const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
+                      return (
+                        <TableRow {...getRowProps({ row })} key={row.id}>
+                          {row.cells.map((cell) => {
+                            if (cell.info.header === 'checklistId' && protoPath) {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <RouterLink to={`/protocol-checklists/${protoPath}/${row.id}`}>
+                                    {cell.value}
+                                  </RouterLink>
+                                </TableCell>
+                              );
+                            }
+                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
+                          })}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </DataTable>
+        )}
+      </Column>
+    </Grid>
+  );
+};
+
+export default ChecklistSearchPage;

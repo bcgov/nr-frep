@@ -3,7 +3,6 @@
 @use '@carbon/react/scss/type' as *;
 @use '@carbon/react/scss/breakpoint' as *;
 @use '@carbon/react/scss/theme' as *;
-@use '@bcgov-nr/nr-theme/design-tokens/colors.scss' as colors;
 @use '@carbon/type';
 
 .unauthorized-column__body {
@@ -19,8 +18,8 @@
     justify-content: center;
 
     .empty-section-icon path {
-      fill: colors.$red-60;
-      color: colors.$red-60;
+      fill: #da1e28;
+      color: #da1e28;
     }
   }
 

@@ -20,7 +20,7 @@ class LegacyRoleMappingTest {
   void cognitoGroupNamesMatchExpectedConstants() {
     // Admin group renamed from legacy FREP_SYS_ADMIN to FREP_ADMIN in Cognito.
     assertEquals("FREP_ADMIN", RoleConstants.SYS_ADMIN_AUTHORITY);
-    assertEquals("FREP_UPDATE", RoleConstants.UPDATE_AUTHORITY);
+    assertEquals("FREP_EDITOR", RoleConstants.UPDATE_AUTHORITY);
     assertEquals("FREP_VIEW_ONLY", RoleConstants.VIEW_ONLY_AUTHORITY);
   }
 
@@ -47,7 +47,7 @@ class LegacyRoleMappingTest {
 
   @Test
   void activateChecklistIsSysAdminOnlyInLegacyWebade() {
-    // action_lnk grants ACTIVATECHECKLIST to FREP_SYS_ADMIN (legacy) only (not FREP_UPDATE).
+    // action_lnk grants ACTIVATECHECKLIST to FREP_SYS_ADMIN (legacy) only (not FREP_UPDATE/FREP_EDITOR).
     // Cognito's equivalent group is FREP_ADMIN.
     String adminOnlyAction = "ACTIVATECHECKLIST";
     String sysAdminRole = RoleConstants.SYS_ADMIN_AUTHORITY;

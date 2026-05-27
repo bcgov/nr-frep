@@ -67,7 +67,7 @@ public class LoggedUserHelper {
   }
 
   /**
-   * Returns {@code true} if the user holds the {@code FREP_UPDATE} authority.
+   * Returns {@code true} if the user holds the {@code FREP_EDITOR} authority.
    */
   public boolean isUpdate() {
     return getAuthorities().contains(RoleConstants.UPDATE_AUTHORITY);
@@ -86,7 +86,7 @@ public class LoggedUserHelper {
 
   /**
    * Returns {@code true} if the user may perform write operations
-   * ({@code FREP_ADMIN} or {@code FREP_UPDATE}).
+   * ({@code FREP_ADMIN} or {@code FREP_EDITOR}).
    */
   public boolean canWrite() {
     return isSysAdmin() || isUpdate();

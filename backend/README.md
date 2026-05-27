@@ -54,6 +54,6 @@ See `.env.example` for the full list.
 | `/actuator/**`      | public (for OpenShift probes + Prometheus) |
 | `/api/hello`        | public |
 | `/api/v1/admin/**`  | `FREP_ADMIN` |
-| `GET /api/**`       | any of `FREP_ADMIN`, `FREP_UPDATE`, `FREP_VIEW_ONLY` |
-| `POST/PUT/PATCH/DELETE /api/**` | `FREP_ADMIN` or `FREP_UPDATE` |
+| `GET /api/**`       | any of `FREP_ADMIN`, `FREP_EDITOR`, `FREP_VIEW_ONLY` |
+| `POST/PUT/PATCH/DELETE /api/**` | `FREP_ADMIN` or `FREP_EDITOR` |
 | anything else       | authenticated |

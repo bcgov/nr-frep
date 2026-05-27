@@ -23,8 +23,8 @@ public class RoleConstants {
   /** Cognito group for full administrative access (legacy WebADE: FREP_SYS_ADMIN). */
   public static final String SYS_ADMIN_AUTHORITY = "FREP_ADMIN";
 
-  /** Legacy WebADE / Cognito group for create, edit, and submit workflows. */
-  public static final String UPDATE_AUTHORITY = "FREP_UPDATE";
+  /** Cognito group for create, edit, and submit workflows (legacy WebADE: FREP_UPDATE). */
+  public static final String UPDATE_AUTHORITY = "FREP_EDITOR";
 
   /** Legacy WebADE / Cognito group for read-only access. */
   public static final String VIEW_ONLY_AUTHORITY = "FREP_VIEW_ONLY";

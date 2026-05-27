@@ -12,11 +12,11 @@ import type { FamLoginUser, ROLE_TYPE } from '@/context/auth/types';
 export type AuthorizationInfo = {
   /** `true` when the user holds the `FREP_ADMIN` Cognito group. */
   isSysAdmin: boolean;
-  /** `true` when the user holds the `FREP_UPDATE` Cognito group. */
+  /** `true` when the user holds the `FREP_EDITOR` Cognito group. */
   isUpdate: boolean;
   /**
    * `true` when the user is view-only: has `FREP_VIEW_ONLY` without
-   * `FREP_ADMIN` or `FREP_UPDATE` (legacy {@code isViewOnlyUser}).
+   * `FREP_ADMIN` or `FREP_EDITOR` (legacy {@code isViewOnlyUser}).
    */
   isViewOnly: boolean;
   /** `true` when the user has at least one recognized FREP role. */
@@ -57,7 +57,7 @@ export const useAuthorization = (): AuthorizationInfo => {
   return useMemo<AuthorizationInfo>(() => {
     const roles = user?.roles ?? [];
     const isSysAdmin = roles.includes('FREP_ADMIN');
-    const isUpdate = roles.includes('FREP_UPDATE');
+    const isUpdate = roles.includes('FREP_EDITOR');
     const hasViewOnlyRole = roles.includes('FREP_VIEW_ONLY');
     const isViewOnly = hasViewOnlyRole && !isSysAdmin && !isUpdate;
     const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole;

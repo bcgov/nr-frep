@@ -43,8 +43,8 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     });
   });
 
-  it('grants write but not admin-only actions to FREP_UPDATE', () => {
-    withRoles(['FREP_UPDATE']);
+  it('grants write but not admin-only actions to FREP_EDITOR', () => {
+    withRoles(['FREP_EDITOR']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -75,8 +75,8 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     });
   });
 
-  it('does not treat FREP_VIEW_ONLY as view-only when FREP_UPDATE is also present', () => {
-    withRoles(['FREP_VIEW_ONLY', 'FREP_UPDATE']);
+  it('does not treat FREP_VIEW_ONLY as view-only when FREP_EDITOR is also present', () => {
+    withRoles(['FREP_VIEW_ONLY', 'FREP_EDITOR']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -102,7 +102,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
   it('maps legacy write actions to sys-admin and update roles', () => {
     const writeActionsRoles: Array<FamLoginUser['roles']> = [
       ['FREP_ADMIN'],
-      ['FREP_UPDATE'],
+      ['FREP_EDITOR'],
     ];
 
     for (const roles of writeActionsRoles) {
@@ -116,7 +116,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
   });
 
   it('maps legacy ACTIVATECHECKLIST to sys-admin only', () => {
-    withRoles(['FREP_UPDATE']);
+    withRoles(['FREP_EDITOR']);
     expect(renderHook(() => useAuthorization()).result.current.canPerformSysAdminActions).toBe(
       false,
     );

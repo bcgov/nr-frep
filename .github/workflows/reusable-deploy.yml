@@ -107,7 +107,6 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
-            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
@@ -148,6 +147,7 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
+            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"

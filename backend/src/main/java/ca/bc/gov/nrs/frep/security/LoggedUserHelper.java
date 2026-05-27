@@ -25,8 +25,7 @@ import java.util.stream.Collectors;
  * claims map so that existing {@link JwtPrincipalUtil} methods continue to work
  * without modification.
  */
-// LOCAL DEV: Cognito user helper disabled. Uncomment @Component before deploying.
-// @Component("auth")
+@Component("auth")
 public class LoggedUserHelper {
 
   private final CognitoUserInfoService userInfoService;

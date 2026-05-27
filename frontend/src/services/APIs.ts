@@ -1,3 +1,5 @@
+import { fetchAuthSession } from 'aws-amplify/auth';
+
 import type { APIConfig } from '@/config/api/types';
 
 import { env } from '@/env';
@@ -24,19 +26,19 @@ export const BackendApiConfig: APIConfig = {
   ENCODE_PATH: undefined,
 };
 
-// LOCAL DEV: Cognito token injection disabled.
-BackendApiConfig.TOKEN = async () => '';
-
-/*
- * --- Cognito token for API calls (re-enable before deploying) ---
- *
- * import { fetchAuthSession } from 'aws-amplify/auth';
- *
- * BackendApiConfig.TOKEN = async () => {
- *   const { tokens } = (await fetchAuthSession()) ?? {};
- *   return tokens?.accessToken?.toString() ?? '';
- * };
+/**
+ * Resolve the Cognito access token for the current session. Returns an empty
+ * string when no session exists so the request fires unauthenticated and the
+ * backend can respond with 401.
  */
+BackendApiConfig.TOKEN = async () => {
+  try {
+    const { tokens } = (await fetchAuthSession()) ?? {};
+    return tokens?.accessToken?.toString() ?? '';
+  } catch {
+    return '';
+  }
+};
 
 const serviceConstructors = {
   user: new UserService(BackendApiConfig),

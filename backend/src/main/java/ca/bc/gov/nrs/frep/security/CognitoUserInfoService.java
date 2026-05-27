@@ -38,8 +38,7 @@ import org.springframework.web.client.RestTemplate;
  * <p>The Cognito userInfo endpoint returns these claims when called with a valid
  * access token, bridging the gap without reverting to the ID-token anti-pattern.
  */
-// LOCAL DEV: Cognito userInfo integration disabled. Uncomment @Service before deploying.
-// @Service
+@Service
 public class CognitoUserInfoService {
 
   private static final Logger LOG = LoggerFactory.getLogger(CognitoUserInfoService.class);

@@ -11,21 +11,21 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import ca.bc.gov.nrs.frep.security.ApiAuthorizationCustomizer;
-// import ca.bc.gov.nrs.frep.security.CsrfCookieFilter;
-// import ca.bc.gov.nrs.frep.security.CsrfSecurityCustomizer;
+import ca.bc.gov.nrs.frep.security.CsrfCookieFilter;
+import ca.bc.gov.nrs.frep.security.CsrfSecurityCustomizer;
 import ca.bc.gov.nrs.frep.security.HeadersSecurityCustomizer;
-// import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
+import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
 
 /**
- * Main security configuration.
- *
- * LOCAL DEV: Cognito JWT validation and CSRF are disabled. Re-enable the
- * commented dependencies and filter-chain steps before deploying.
+ * Main security configuration. The API runs as an OAuth 2.0 resource server
+ * validating Cognito access tokens; CSRF is enforced for state-changing
+ * requests using the cookie-token strategy.
  */
 @Configuration
 @EnableWebSecurity
@@ -38,22 +38,21 @@ public class SecurityConfiguration {
   public SecurityFilterChain filterChain(
       HttpSecurity http,
       HeadersSecurityCustomizer headersCustomizer,
-      // CsrfSecurityCustomizer csrfCustomizer,
-      // CsrfCookieFilter csrfCookieFilter,
-      ApiAuthorizationCustomizer apiCustomizer
-      // Oauth2SecurityCustomizer oauth2Customizer
+      CsrfSecurityCustomizer csrfCustomizer,
+      CsrfCookieFilter csrfCookieFilter,
+      ApiAuthorizationCustomizer apiCustomizer,
+      Oauth2SecurityCustomizer oauth2Customizer
   ) throws Exception {
 
     http
         .headers(headersCustomizer)
-        // .csrf(csrfCustomizer)
-        // .addFilterAfter(csrfCookieFilter, BasicAuthenticationFilter.class)
-        .csrf(AbstractHttpConfigurer::disable)
+        .csrf(csrfCustomizer)
+        .addFilterAfter(csrfCookieFilter, BasicAuthenticationFilter.class)
         .cors(Customizer.withDefaults())
         .authorizeHttpRequests(apiCustomizer)
         .httpBasic(AbstractHttpConfigurer::disable)
-        .formLogin(AbstractHttpConfigurer::disable);
-        // .oauth2ResourceServer(oauth2Customizer);
+        .formLogin(AbstractHttpConfigurer::disable)
+        .oauth2ResourceServer(oauth2Customizer);
 
     return http.build();
   }

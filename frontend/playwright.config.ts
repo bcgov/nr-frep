@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-import { baseURL } from './e2e/utils';
+import { baseURL, STORAGE_STATE } from './e2e/utils';
 
 /**
  * Playwright E2E config — runs against deployed DEV by default.
@@ -34,29 +34,18 @@ export default defineConfig({
   },
 
   projects: [
-    // LOCAL DEV: Cognito auth setup disabled. Re-enable `setup` dependency before deploying.
-    // {
-    //   name: 'setup',
-    //   testMatch: /auth\.setup\.ts/,
-    //   use: { ...devices['Desktop Chrome'] },
-    // },
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-      },
-    },
-    /*
-    {
-      name: 'Google Chrome',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: 'chrome',
         storageState: STORAGE_STATE,
       },
       dependencies: ['setup'],
     },
-    ...
-    */
   ],
 });

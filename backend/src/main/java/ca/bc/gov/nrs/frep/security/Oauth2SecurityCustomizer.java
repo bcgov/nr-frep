@@ -39,7 +39,7 @@ import org.springframework.stereotype.Component;
  * {@code "access"}. This customizer rejects ID tokens so that only access tokens are
  * accepted by the API — enforcing the correct OAuth 2.0 pattern.
  */
-// @Component
+@Component
 public class Oauth2SecurityCustomizer implements
     Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
 

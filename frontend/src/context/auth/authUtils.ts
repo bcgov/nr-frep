@@ -1,5 +1,3 @@
-import { env } from '@/env';
-
 import {
   AVAILABLE_ROLES,
   validIdpProviders,
@@ -9,6 +7,8 @@ import {
   type ROLE_TYPE,
   type USER_PRIVILEGE_TYPE,
 } from './types';
+
+import { env } from '@/env';
 
 // ── Cookie helpers ───────────────────────────────────────────────────
 

@@ -100,7 +100,7 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
  * Parses Cognito group strings into a user privilege object.
  *
  * Recognizes groups that exactly match {@link AVAILABLE_ROLES}
- * (e.g. "FREP_SYS_ADMIN", "FREP_UPDATE", "FREP_VIEW_ONLY").
+ * (e.g. "FREP_ADMIN", "FREP_UPDATE", "FREP_VIEW_ONLY").
  * Unrecognized groups are silently ignored.
  *
  * @param {string[]} input - Array of group strings from Cognito.

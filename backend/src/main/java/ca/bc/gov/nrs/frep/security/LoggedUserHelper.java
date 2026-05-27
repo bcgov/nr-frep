@@ -46,7 +46,7 @@ public class LoggedUserHelper {
   // ─── Role / authority helpers (these use cognito:groups from the access token) ──
 
   /**
-   * Returns the set of authority strings for the current user (e.g. {@code FREP_SYS_ADMIN}).
+   * Returns the set of authority strings for the current user (e.g. {@code FREP_ADMIN}).
    */
   public Set<String> getAuthorities() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -60,7 +60,7 @@ public class LoggedUserHelper {
   }
 
   /**
-   * Returns {@code true} if the user holds the {@code FREP_SYS_ADMIN} authority.
+   * Returns {@code true} if the user holds the {@code FREP_ADMIN} authority.
    */
   public boolean isSysAdmin() {
     return getAuthorities().contains(RoleConstants.SYS_ADMIN_AUTHORITY);
@@ -86,7 +86,7 @@ public class LoggedUserHelper {
 
   /**
    * Returns {@code true} if the user may perform write operations
-   * ({@code FREP_SYS_ADMIN} or {@code FREP_UPDATE}).
+   * ({@code FREP_ADMIN} or {@code FREP_UPDATE}).
    */
   public boolean canWrite() {
     return isSysAdmin() || isUpdate();

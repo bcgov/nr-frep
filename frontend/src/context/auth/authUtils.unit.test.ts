@@ -103,7 +103,7 @@ describe('authUtils', () => {
           'custom:idp_name': 'idir',
           'custom:idp_username': 'jdoe',
           'email': 'john@example.com',
-          'cognito:groups': ['FREP_SYS_ADMIN', 'FREP_UPDATE'],
+          'cognito:groups': ['FREP_ADMIN', 'FREP_UPDATE'],
         },
       };
       const user = parseToken(jwt);
@@ -112,7 +112,7 @@ describe('authUtils', () => {
         displayName: 'Doe, John',
         email: 'john@example.com',
         idpProvider: 'IDIR',
-        privileges: { FREP_SYS_ADMIN: null, FREP_UPDATE: null },
+        privileges: { FREP_ADMIN: null, FREP_UPDATE: null },
         firstName: 'John',
         lastName: 'Doe',
         providerUsername: 'IDIR\\jdoe',
@@ -122,16 +122,16 @@ describe('authUtils', () => {
 
   describe('parsePrivileges', () => {
     it('parses recognized Cognito groups', () => {
-      const input = ['FREP_SYS_ADMIN', 'FREP_UPDATE', 'FREP_VIEW_ONLY'];
+      const input = ['FREP_ADMIN', 'FREP_UPDATE', 'FREP_VIEW_ONLY'];
       expect(parsePrivileges(input)).toEqual({
-        FREP_SYS_ADMIN: null,
+        FREP_ADMIN: null,
         FREP_UPDATE: null,
         FREP_VIEW_ONLY: null,
       });
     });
     it('ignores unrecognized groups', () => {
-      const input = ['FREP_SYS_ADMIN', 'UNKNOWN_GROUP'];
-      expect(parsePrivileges(input)).toEqual({ FREP_SYS_ADMIN: null });
+      const input = ['FREP_ADMIN', 'UNKNOWN_GROUP'];
+      expect(parsePrivileges(input)).toEqual({ FREP_ADMIN: null });
     });
     it('returns empty object for no input', () => {
       expect(parsePrivileges([])).toEqual({});

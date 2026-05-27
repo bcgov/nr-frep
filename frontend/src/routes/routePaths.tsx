@@ -192,7 +192,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: true,
-    roles: ['FREP_SYS_ADMIN'],
+    roles: ['FREP_ADMIN'],
   },
   {
     path: '/unauthorized',

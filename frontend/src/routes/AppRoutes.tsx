@@ -11,7 +11,7 @@ import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/r
  * Top-level router. Switches between three route sets based on auth state:
  * public (Landing, 404), no-role (only /unauthorized), and protected
  * (Dashboard, Projects, etc.). A user who authenticates but lacks both
- * FREP_SYS_ADMIN, FREP_UPDATE, or FREP_VIEW_ONLY lands on /unauthorized rather than NotFound.
+ * FREP_ADMIN, FREP_UPDATE, or FREP_VIEW_ONLY lands on /unauthorized rather than NotFound.
  */
 const AppRoutes: FC = () => {
   const { isLoggedIn, isLoading, user } = useAuth();

@@ -26,8 +26,8 @@ function withRoles(roles: FamLoginUser['roles']) {
 }
 
 describe('useAuthorization (legacy WebADE role parity)', () => {
-  it('grants full write and admin actions to FREP_SYS_ADMIN', () => {
-    withRoles(['FREP_SYS_ADMIN']);
+  it('grants full write and admin actions to FREP_ADMIN', () => {
+    withRoles(['FREP_ADMIN']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -84,8 +84,8 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     expect(result.current.canEdit).toBe(true);
   });
 
-  it('does not treat FREP_VIEW_ONLY as view-only when FREP_SYS_ADMIN is also present', () => {
-    withRoles(['FREP_VIEW_ONLY', 'FREP_SYS_ADMIN']);
+  it('does not treat FREP_VIEW_ONLY as view-only when FREP_ADMIN is also present', () => {
+    withRoles(['FREP_VIEW_ONLY', 'FREP_ADMIN']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -101,7 +101,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
    */
   it('maps legacy write actions to sys-admin and update roles', () => {
     const writeActionsRoles: Array<FamLoginUser['roles']> = [
-      ['FREP_SYS_ADMIN'],
+      ['FREP_ADMIN'],
       ['FREP_UPDATE'],
     ];
 
@@ -121,7 +121,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
       false,
     );
 
-    withRoles(['FREP_SYS_ADMIN']);
+    withRoles(['FREP_ADMIN']);
     expect(renderHook(() => useAuthorization()).result.current.canPerformSysAdminActions).toBe(
       true,
     );

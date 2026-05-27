@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Legacy WebADE role semantics are preserved (see {@link RoleConstants}):
  * <ul>
- *   <li>{@code FREP_SYS_ADMIN} and {@code FREP_UPDATE} may write.</li>
+ *   <li>{@code FREP_ADMIN} and {@code FREP_UPDATE} may write.</li>
  *   <li>{@code FREP_VIEW_ONLY} may read but not write.</li>
  *   <li>{@code /api/v1/admin/**} (FREP700, future admin endpoints) is sys-admin only.</li>
  * </ul>

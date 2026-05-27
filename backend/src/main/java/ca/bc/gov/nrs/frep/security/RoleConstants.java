@@ -20,8 +20,8 @@ import org.springframework.stereotype.Component;
 @Component("roles")
 public class RoleConstants {
 
-  /** Legacy WebADE / Cognito group for full administrative access. */
-  public static final String SYS_ADMIN_AUTHORITY = "FREP_SYS_ADMIN";
+  /** Cognito group for full administrative access (legacy WebADE: FREP_SYS_ADMIN). */
+  public static final String SYS_ADMIN_AUTHORITY = "FREP_ADMIN";
 
   /** Legacy WebADE / Cognito group for create, edit, and submit workflows. */
   public static final String UPDATE_AUTHORITY = "FREP_UPDATE";

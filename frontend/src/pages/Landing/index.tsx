@@ -1,21 +1,23 @@
-import { ArrowRight } from '@carbon/icons-react';
+import { Login } from '@carbon/icons-react';
 import { Button, Column, Grid } from '@carbon/react';
-import { Link } from 'react-router-dom';
 
 import logo_rev from '@/assets/img/bc-gov-logo-rev.png';
 import logo from '@/assets/img/bc-gov-logo.png';
 import LandingImg from '@/assets/img/landing.jpg';
-import { useTheme } from '@/context/theme/useTheme';
 import useBreakpoint from '@/hooks/useBreakpoint';
 
 import type { BreakpointType } from '@/hooks/useBreakpoint/types';
 import type { FC } from 'react';
+
+import { useAuth } from '@/context/auth/useAuth';
+import { useTheme } from '@/context/theme/useTheme';
 
 import './index.scss';
 
 const LandingPage: FC = () => {
   const breakpoint = useBreakpoint();
   const { theme } = useTheme();
+  const { login } = useAuth();
 
   const elementMarginMap: Record<BreakpointType, number> = {
     max: 6,
@@ -51,28 +53,16 @@ const LandingPage: FC = () => {
 
             <div className="buttons-container single-row">
               <Button
-                as={Link}
-                to="/dashboard"
-                renderIcon={ArrowRight}
-                size="md"
-                data-testid="landing-button__dashboard"
-                className="login-btn"
-              >
-                Go to dashboard
-              </Button>
-            </div>
-
-            {/*
-              --- IDIR login (re-enable with Cognito auth before deploying) ---
-              <Button
                 type="button"
-                onClick={() => login()}
+                onClick={login}
                 renderIcon={Login}
+                size="md"
                 data-testid="landing-button__idir"
+                className="login-btn"
               >
                 Log in with IDIR
               </Button>
-            */}
+            </div>
           </div>
         </Column>
         <Column className="landing-img-col" sm={4} md={8} lg={8}>

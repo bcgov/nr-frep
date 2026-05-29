@@ -5,10 +5,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistField;
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistResponse;
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistSection;
-import ca.bc.gov.nrs.frep.service.ProtocolChecklistService;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
+import ca.bc.gov.nrs.frep.service.frep.ProtocolChecklistService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;

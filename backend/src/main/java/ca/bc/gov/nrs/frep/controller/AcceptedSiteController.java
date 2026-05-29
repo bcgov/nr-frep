@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.controller;
 
-import ca.bc.gov.nrs.frep.dto.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.service.AcceptedSiteService;
+import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.service.frep.AcceptedSiteService;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ResponseEntity;

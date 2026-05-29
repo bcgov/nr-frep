@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.controller;
 
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistResponse;
-import ca.bc.gov.nrs.frep.service.ProtocolChecklistService;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
+import ca.bc.gov.nrs.frep.service.frep.ProtocolChecklistService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

@@ -37,14 +37,14 @@ class SearchControllerTest {
     when(searchService.searchChecklists(
         any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(List.of(new ChecklistSearchResult(
-            "9001", "BIO", "Biodiversity", "2024", "DCK",
+            "9001", "SLB", "Biodiversity", "2024", "DCK",
             "L1234", "CP-8891", "CB-442", "987654", "00010001",
-            "2024-08-12", "IDIR\\JDOE", "RDY", "Ready for evaluation")));
+            "2024-08-12", "IDIR\\JDOE", "RDY", "RDY")));
 
     mockMvc.perform(get("/api/v1/search/checklists").param("effectiveYear", "2024"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].checklistId").value("9001"))
-        .andExpect(jsonPath("$[0].protocolCode").value("BIO"));
+        .andExpect(jsonPath("$[0].protocolCode").value("SLB"));
   }
 
   @Test

@@ -79,8 +79,19 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/configuratio
 ```
 
 District rows are loaded via legacy
-`FREP_CODE_LISTS.GET_DISTRICT_ORG_UNIT_CODE`. Master-list years and protocols
-remain stubbed until their PL/SQL packages are wired in Phase 1.
+`FREP_CODE_LISTS.GET_DISTRICT_ORG_UNIT_CODE`. Master-list years are loaded via
+`FREP_CODE_LISTS.GET_MASTERLIST_YEAR_CODE`. Protocols are loaded via
+`FREP_CODE_LISTS.GET_RESOURCE_VALUE`. Accepted sites are loaded via
+`FREP_200_ACCEPTED_SITES.GET`. District random list sites are loaded via
+`FREP_100_DIST_RAND_LIST.GET`. Checklist and client search use
+`FREP_400_CHECKLIST_SEARCH` and `FREP_410_CLIENT_SEARCH`. Site details are loaded via
+`FREP_110_SITE_DETAILS.GET`. Master list admin criteria and generation use
+`FREP_700_GEN_MASTER.GET` and `FREP_700_GEN_MASTER.GENERATE`. Protocol checklists
+are loaded via `frep_210_bio_opening.GET`, `FREP_211_BioStratum.get`,
+`FREP_212_BioPlot.get`, `FREP_230_STRM_OPEN.GET`, `FREP_231_FIELD_DATA.GET`,
+`FREP_232_OTHER_INDS.GET`, `FREP_233_QUESTIONS.GET`, `FREP_234_SPECIFIC_IMPACTS.GET`,
+`FREP_235_FINAL_CMTS.GET`, `FREP_250_WATER_CHKLST_GET`, `FREP_251_SAMPLE_SITE_GET`,
+`FREP_252_ASSESSMENT_GET`, `FREP_253_RANGE_GET`, and `FREP_254_SUMMARY_GET`.
 
 | Variable | Description |
 |---|---|

@@ -1,0 +1,132 @@
+package ca.bc.gov.nrs.frep.repository.frep;
+
+import java.sql.Array;
+import java.sql.CallableStatement;
+import java.sql.SQLException;
+import java.sql.Struct;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
+import oracle.jdbc.OracleConnection;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+/**
+ * Wraps legacy package {@code FREP_100_DIST_RAND_LIST} (FREP100 District Random List).
+ */
+@Repository
+@Profile("oracle")
+public class RandomListRepository extends AbstractFrepRepository {
+
+  static final String PACKAGE_NAME = "FREP_100_DIST_RAND_LIST";
+  static final String ARRAY_TYPE_NAME = "THE.FREP_RANDOM_LIST_VARRAY";
+
+  public RandomListRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
+    super(jdbcTemplate);
+  }
+
+  /**
+   * Loads randomly generated sites for a master-list year and optional district.
+   *
+   * <p>Legacy equivalent: {@code Frep100DataManager.getSelectedSites}.
+   */
+  public List<RandomListRow> findRandomList(String effectiveYear, String orgUnitNo) {
+    String call = "{call " + PACKAGE_NAME + ".GET (?,?,?,?,?,?,?,?,?,?)}";
+    return executeCall(call, cs -> {
+      cs.setString(1, effectiveYear);
+      cs.setString(2, blankToNull(orgUnitNo));
+      cs.setString(3, "");
+      cs.registerOutParameter(4, Types.VARCHAR);
+      cs.registerOutParameter(5, Types.VARCHAR);
+      cs.registerOutParameter(6, Types.VARCHAR);
+      cs.registerOutParameter(7, Types.VARCHAR);
+      cs.registerOutParameter(8, Types.VARCHAR);
+      setInOutString(cs, 9, null);
+      setEmptyRandomListArray(cs, 10);
+      cs.registerOutParameter(10, Types.ARRAY, ARRAY_TYPE_NAME);
+    }, cs -> {
+      throwIfError(PACKAGE_NAME, "GET", cs.getString(9));
+      return readRandomListArray(cs.getArray(10));
+    });
+  }
+
+  private static void setEmptyRandomListArray(CallableStatement cs, int index) throws SQLException {
+    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
+    cs.setArray(index, connection.createOracleArray(ARRAY_TYPE_NAME, new Object[0]));
+  }
+
+  private static List<RandomListRow> readRandomListArray(Array array) throws SQLException {
+    if (array == null) {
+      return List.of();
+    }
+    Object[] elements = (Object[]) array.getArray();
+    List<RandomListRow> rows = new ArrayList<>(elements.length);
+    for (Object element : elements) {
+      if (element instanceof Struct struct) {
+        rows.add(fromStruct(struct));
+      }
+    }
+    return rows;
+  }
+
+  static RandomListRow fromStruct(Struct struct) throws SQLException {
+    Object[] attrs = struct.getAttributes();
+    return new RandomListRow(
+        stringAttr(attrs, 0),
+        stringAttr(attrs, 1),
+        stringAttr(attrs, 2),
+        stringAttr(attrs, 3),
+        stringAttr(attrs, 4),
+        stringAttr(attrs, 6),
+        stringAttr(attrs, 8),
+        stringAttr(attrs, 9),
+        stringAttr(attrs, 14),
+        stringAttr(attrs, 15),
+        stringAttr(attrs, 11),
+        stringAttr(attrs, 12),
+        readExistingChecklistTypes(attrs, 23)
+    );
+  }
+
+  private static List<String> readExistingChecklistTypes(Object[] attrs, int index) throws SQLException {
+    if (attrs == null || index >= attrs.length || attrs[index] == null) {
+      return List.of();
+    }
+    if (!(attrs[index] instanceof Array checklistArray)) {
+      return List.of();
+    }
+    Object[] elements = (Object[]) checklistArray.getArray();
+    List<String> types = new ArrayList<>(elements.length);
+    for (Object element : elements) {
+      if (element instanceof Struct checklistStruct) {
+        String type = stringAttr(checklistStruct.getAttributes(), 1);
+        if (!type.isBlank()) {
+          types.add(type);
+        }
+      }
+    }
+    return types;
+  }
+
+  private static String stringAttr(Object[] attrs, int index) {
+    if (attrs == null || index >= attrs.length || attrs[index] == null) {
+      return "";
+    }
+    String value = attrs[index].toString().trim();
+    if (value.endsWith(".0")) {
+      try {
+        Double.parseDouble(value);
+        value = value.substring(0, value.length() - 2);
+      } catch (NumberFormatException ignored) {
+        // keep original string
+      }
+    }
+    return value;
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
+  }
+}

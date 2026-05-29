@@ -38,7 +38,7 @@ class RandomListControllerTest {
             new RandomListSiteResponse(
                 "1001", true, "DCK", "A12345", "987654", "L1234",
                 "CP-8891", "CB-442", 24.5, 22.1,
-                "2023-09-15", "2024-06-15", List.of("BIO")
+                "2023-09-15", "2024-06-15", List.of("SLB")
             )
         ));
 
@@ -48,7 +48,7 @@ class RandomListControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].frepSelectedSiteId").value("1001"))
         .andExpect(jsonPath("$[0].openingNumber").value("A12345"))
-        .andExpect(jsonPath("$[0].existingChecklists[0]").value("BIO"));
+        .andExpect(jsonPath("$[0].existingChecklists[0]").value("SLB"));
   }
 
   @Test

@@ -1,6 +1,5 @@
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
-import { env } from '@/env';
 
 import type { AcceptedSite, AcceptedSitesQuery } from '@/types/acceptedSite';
 
@@ -22,9 +21,4 @@ export class AcceptedSitesService extends HttpClient {
       },
     });
   }
-}
-
-export function buildLegacyAcceptedSitesUrl(): string {
-  const base = (env.VITE_LEGACY_APP_URL ?? '/ext/frep').replace(/\/$/, '');
-  return `${base}/frep200AcceptedSitesAction.do?isMenuPick=true`;
 }

@@ -6,7 +6,8 @@
 .#{vars.$bcgov-prefix}--header {
 
   .#{vars.$bcgov-prefix}--header__name {
-    margin-left: 0.9375rem;
+    margin-left: 0;
+    padding-inline-start: 0.25rem;
     color: #fff;
 
     &:hover {
@@ -14,22 +15,29 @@
     }
 
     @include breakpoint-down(lg) {
-      margin-left: 0;      
-      padding: 0;
+      margin-left: 0;
+      padding: 0 0 0 0.25rem;
     }
   }
 
-  .#{vars.$bcgov-prefix}--header__menu-toggle {
+  // Carbon hides the menu toggle at lg+ by default; keep the hamburger visible
+  // at every breakpoint so users can collapse/expand the side nav.
+  .#{vars.$bcgov-prefix}--header__menu-toggle,
+  .#{vars.$bcgov-prefix}--header__menu-toggle__hidden {
+    display: flex;
     color: #fff;
 
     &.#{vars.$bcgov-prefix}--header__action--active {
       color: var(--#{vars.$bcgov-prefix}-layer-selected-inverse);
     }
 
-    path{
-      fill: currentColor;
+    &:focus:not(:focus-visible) {
+      border-color: transparent;
     }
 
+    path {
+      fill: currentColor;
+    }
   }
 
 }

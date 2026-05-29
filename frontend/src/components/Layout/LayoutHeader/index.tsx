@@ -12,7 +12,15 @@ import LayoutHeaderGlobalBar from './LayoutHeaderGlobalBar';
 import './index.scss';
 
 export const LayoutHeader: FC = () => {
-  const { isSideNavExpanded, toggleSideNav } = useLayout();
+  const { isSideNavExpanded, toggleSideNav, closeSideNav } = useLayout();
+
+  const handleMenuButtonClick = () => {
+    if (isSideNavExpanded) {
+      closeSideNav();
+    } else {
+      toggleSideNav();
+    }
+  };
 
   const appName = env.VITE_APP_NAME;
 
@@ -22,7 +30,7 @@ export const LayoutHeader: FC = () => {
       <HeaderMenuButton
         aria-label={isSideNavExpanded ? 'Close menu' : 'Open menu'}
         isActive={isSideNavExpanded}
-        onClick={toggleSideNav}
+        onClick={handleMenuButtonClick}
       />
       <HeaderName as={Link} to={'/dashboard'} prefix="">
         {appName}

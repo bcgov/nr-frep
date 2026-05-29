@@ -1,0 +1,18 @@
+@use '@carbon/type';
+@use '../../styles/variables' as vars;
+
+.reports-grid {
+  row-gap: 2rem;
+}
+
+.reports__title {
+  @include type.type-style('heading-05');
+  margin: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.reports__subtitle {
+  margin: 0.5rem 0 0;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}

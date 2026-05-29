@@ -10,6 +10,19 @@
   column-gap: 2rem;
   flex-grow: 1;
   align-content: start;
+  text-align: left;
+
+  :is(
+    h1,
+    .dashboard__title,
+    .checklist-search__title,
+    .client-search__title,
+    .master-list-admin__title,
+    .reports__title
+  ) {
+    text-align: left;
+    width: 100%;
+  }
 
   .#{vars.$bcgov-prefix}--css-grid-column {
     margin: 0;

@@ -3,7 +3,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Link,
   SkeletonText,
   Table,
   TableBody,
@@ -21,7 +20,6 @@ import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
-import { buildLegacySiteDetailUrl } from '@/services/siteDetail.service';
 
 import './siteDetail.scss';
 
@@ -135,8 +133,6 @@ const SiteDetailPage: FC = () => {
     };
   }, [display, id]);
 
-  const legacyUrl = buildLegacySiteDetailUrl(id);
-
   return (
     <Grid fullWidth className="default-grid site-detail-grid">
       <Column sm={4} md={8} lg={16}>
@@ -149,10 +145,7 @@ const SiteDetailPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>FREP110 — Site Details</h1>
-          <Link href={legacyUrl} target="_blank" rel="noopener noreferrer">
-            Edit in legacy FREP
-          </Link>
+          <h1>Site Details</h1>
         </div>
       </Column>
 

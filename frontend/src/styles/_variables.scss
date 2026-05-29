@@ -1,1 +1,4 @@
-$bcgov-prefix: 'cds'
+$bcgov-prefix: 'cds';
+
+// Expanded side nav width (Carbon default is 16rem; was previously trimmed to 12rem).
+$layout-side-nav-width: 16rem;

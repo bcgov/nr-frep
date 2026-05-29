@@ -19,7 +19,7 @@
 import {
   DashboardReference,
   DocumentTasks,
-  Home,
+  Document,
   ListChecked,
   Search,
   SettingsAdjust,
@@ -40,9 +40,9 @@ import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
 import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
 import RandomListPage from '@/pages/RandomList';
+import ReportsPage from '@/pages/Reports';
 import RoleErrorPage from '@/pages/RoleError';
 import SiteDetailPage from '@/pages/SiteDetail';
-import WelcomePage from '@/pages/Welcome';
 
 import ProtectedRoute from './ProtectedRoute';
 
@@ -93,17 +93,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     id: 'RedirectWhileLoggedIn',
     element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
-  },
-  {
-    path: '/welcome',
-    id: 'Welcome',
-    icon: Home,
-    element: (
-      <Layout>
-        <WelcomePage />
-      </Layout>
-    ),
-    isSideMenu: true,
   },
   {
     path: '/dashboard',
@@ -178,6 +167,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ClientSearchPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+  },
+  {
+    path: '/reports',
+    id: 'Reports',
+    icon: Document,
+    element: (
+      <Layout>
+        <ReportsPage />
       </Layout>
     ),
     isSideMenu: true,

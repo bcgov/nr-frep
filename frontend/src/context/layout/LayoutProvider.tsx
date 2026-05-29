@@ -21,6 +21,7 @@ export const LayoutProvider = ({ children }: { children: React.ReactNode }) => {
       value={{
         isSideNavExpanded,
         toggleSideNav: () => setSideNavExpanded((prev) => !prev),
+        closeSideNav: () => setSideNavExpanded(false),
         isHeaderPanelOpen,
         toggleHeaderPanel: () => setHeaderPanelOpen((prev) => !prev),
         closeHeaderPanel: () => setHeaderPanelOpen(false),

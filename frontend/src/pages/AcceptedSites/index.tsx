@@ -3,7 +3,6 @@ import {
   Column,
   DataTable,
   Grid,
-  Link,
   Select,
   SelectItem,
   SkeletonText,
@@ -22,7 +21,6 @@ import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
-import { buildLegacyAcceptedSitesUrl } from '@/services/acceptedSites.service';
 import API from '@/services/APIs';
 
 import './acceptedSites.scss';
@@ -151,19 +149,15 @@ const AcceptedSitesPage: FC = () => {
   }, [loadAcceptedSites]);
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
-  const legacyUrl = buildLegacyAcceptedSitesUrl();
 
   return (
     <Grid fullWidth className="default-grid accepted-sites-grid">
       <Column sm={4} md={8} lg={16}>
         <div className="accepted-sites__header">
-          <h1>FREP200 — Accepted Sites</h1>
-          <Link href={legacyUrl} target="_blank" rel="noopener noreferrer">
-            Edit in legacy FREP
-          </Link>
+          <h1>Accepted Sites</h1>
         </div>
         <p className="accepted-sites__subtitle">
-          Read-only view of accepted sites. Writes remain in the legacy application until Phase 3.
+          Read-only view of accepted sites for the selected master list year, district, and protocol.
         </p>
       </Column>
 

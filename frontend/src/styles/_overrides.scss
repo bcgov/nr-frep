@@ -460,13 +460,8 @@ nav.#{variables.$bcgov-prefix}--side-nav,
   }
 }
 
-.#{variables.$bcgov-prefix}--content {
-  @include breakpoint(lg) {
-    // Matches the trimmed side-nav width in LayoutSideNav/index.scss.
-    padding-left: 12rem;
-    padding-right: 0;
-  }
-}
+// Persistent side nav content offset is applied via .layout-content--side-nav-expanded
+// in components/Layout/index.scss.
 
 // If you don't have the Carbon mixin available:
 // Hide the "Close" tooltip label on modal close buttons

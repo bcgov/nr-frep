@@ -3,8 +3,9 @@ package ca.bc.gov.nrs.frep.dto.frep;
 /**
  * FREP protocol (evaluation type) reference entry.
  *
- * <p>Mirrors {@code resource_value_type} values used by legacy filters
- * (Biodiversity, Riparian, Water Quality, Culture Heritage Resource).
+ * <p>Mirrors rows from {@code FREP_CODE_LISTS.GET_RESOURCE_VALUE} /
+ * {@code frep_resource_value_type_code} (e.g. {@code SLB}, {@code RIP},
+ * {@code WTR}, {@code CHR}).
  *
  * @param code  short code passed to the {@code /accepted-sites} filter
  * @param name  display name

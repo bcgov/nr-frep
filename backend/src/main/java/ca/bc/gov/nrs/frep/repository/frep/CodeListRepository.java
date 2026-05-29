@@ -18,11 +18,11 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 @Profile("oracle")
-public class FrepCodeListRepository extends AbstractFrepRepository {
+public class CodeListRepository extends AbstractFrepRepository {
 
   static final String PACKAGE_NAME = "FREP_CODE_LISTS";
 
-  public FrepCodeListRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
+  public CodeListRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
   }
 
@@ -37,7 +37,36 @@ public class FrepCodeListRepository extends AbstractFrepRepository {
     String call = "{call " + PACKAGE_NAME + ".get_district_org_unit_code(?)}";
     return executeCall(call,
         cs -> registerOutCursor(cs, 1),
-        cs -> readCursor(cs, 1, FrepCodeListRepository::rowToMap));
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Master list (evaluation) years for dropdowns and reference lookups.
+   *
+   * <p>Legacy procedure {@code get_masterlist_year_code} returns
+   * {@code code} = {@code effective_year} and {@code description} =
+   * {@code effective_year || '/' || (effective_year + 1)}, ordered by
+   * {@code code} descending.
+   */
+  public List<Map<String, Object>> getMasterListYearCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_masterlist_year_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * FREP protocol (resource value type) codes for dropdowns and filters.
+   *
+   * <p>Legacy procedure {@code get_resource_value} returns
+   * {@code code} = {@code frep_resource_value_type_code} and
+   * {@code description}, ordered by {@code description}.
+   */
+  public List<Map<String, Object>> getResourceValue() {
+    String call = "{call " + PACKAGE_NAME + ".get_resource_value(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
   }
 
   private static Map<String, Object> rowToMap(ResultSet rs) throws java.sql.SQLException {

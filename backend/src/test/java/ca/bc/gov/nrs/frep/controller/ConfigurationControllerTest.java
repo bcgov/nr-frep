@@ -8,8 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
 import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
-import ca.bc.gov.nrs.frep.service.frep.ConfigurationService;
+
 import java.util.List;
+
+import ca.bc.gov.nrs.frep.service.frep.ConfigurationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

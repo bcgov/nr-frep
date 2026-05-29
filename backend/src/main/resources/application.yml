@@ -22,18 +22,14 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  jpa:
+    show-sql: false
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${AWS_COGNITO_ISSUER_URI}
           jwk-set-uri: ${AWS_COGNITO_ISSUER_URI}/.well-known/jwks.json
-  # Datasource is intentionally left un-configured for the POC. The application will expect
-  # environment-specific JDBC settings (e.g. Oracle) to be provided at runtime. Flyway and
-  # Postgres-specific settings were removed for this POC.
-  jpa:
-    show-sql: false
-
   mvc:
     problemdetails:
       enabled: true
@@ -150,9 +146,6 @@ ca:
 # (Spring's relaxed binding maps UPPERCASE_WITH_UNDERSCORES → dot.case):
 #   APP_LOG_LEVEL                              → ca.bc.gov.nrs.frep
 #   HIKARI_LOG_LEVEL                           → com.zaxxer.hikari
-#   HIBERNATE_SQL_LOG_LEVEL                    → org.hibernate.SQL
-#   HIBERNATE_BIND_LOG_LEVEL                   → org.hibernate.orm.jdbc.bind
-#   HIBERNATE_CONNECTIONS_LOG_LEVEL            → org.hibernate.engine.jdbc.connections
 #   ORACLE_JDBC_LOG_LEVEL                      → oracle.jdbc
 #   LOGGING_LEVEL_ROOT                         → root logger
 #   LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY → Spring Security
@@ -169,13 +162,6 @@ logging:
   level:
     ca.bc.gov.nrs.frep: ${APP_LOG_LEVEL:INFO}
     com.zaxxer.hikari: ${HIKARI_LOG_LEVEL:INFO}
-    org.hibernate.SQL: ${HIBERNATE_SQL_LOG_LEVEL:INFO}
-    org.hibernate.orm.jdbc.bind: ${HIBERNATE_BIND_LOG_LEVEL:INFO}
-    org.hibernate.engine.jdbc.connections: ${HIBERNATE_CONNECTIONS_LOG_LEVEL:INFO}
     oracle.jdbc: ${ORACLE_JDBC_LOG_LEVEL:INFO}
-    # Suppress Hibernate 6's "Database info: ... undefined/unknown ..." block.
-    # Those fields read as undefined when Spring (not Hibernate) owns the
-    # HikariCP pool, so the line is noise rather than diagnostic.
-    org.hibernate.orm.connections.pooling: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${spring.application.name}] [%X{X-TRACE-ID:-},${PID:-}] [%t] %logger:%L - %m%n%wEx"

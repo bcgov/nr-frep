@@ -7,8 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.MasterListAdminResponse;
-import ca.bc.gov.nrs.frep.service.MasterListAdminService;
+import ca.bc.gov.nrs.frep.dto.frep.MasterListAdminResponse;
+import ca.bc.gov.nrs.frep.service.frep.MasterListAdminService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

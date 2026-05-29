@@ -6,7 +6,7 @@ A full-stack application scaffold for the Natural Resources sector.
 |-----------|------------|
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
-| Database | Oracle (optional `oracle` profile) |
+| Database | Oracle (`spring.datasource.*`, same as nr-fspts) |
 | Auth | AWS Cognito (FAM) — IDIR sign-in |
 
 ## Run locally

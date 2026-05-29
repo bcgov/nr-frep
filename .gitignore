@@ -1,3 +1,6 @@
+# Local migration planning (not for repo)
+migration-plan.md
+
 ### Generated ###
 # Created by https://www.toptal.com/developers/gitignore/api/node,java,python,go
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,java,python,go
@@ -389,6 +392,7 @@ pyrightconfig.json
 **/application-prod.properties
 **/application-secrets.properties
 **/application-*.yml
+!**/application-oracle.yml
 **/bootstrap-local.yml
 **/bootstrap-prod.yml
 # Other common credential/config files

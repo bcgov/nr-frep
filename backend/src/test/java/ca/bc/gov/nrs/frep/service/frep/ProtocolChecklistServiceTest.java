@@ -1,13 +1,19 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.ProtocolChecklistWriteRepository;
+import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.frep.ProtocolChecklistService.ProtocolSubmitValidationException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class ProtocolChecklistServiceTest {
@@ -26,6 +33,12 @@ class ProtocolChecklistServiceTest {
 
   @Mock
   private CodeListRepository codeListRepository;
+
+  @Mock
+  private ProtocolChecklistWriteRepository writeRepository;
+
+  @Mock
+  private LoggedUserHelper loggedUserHelper;
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -115,6 +128,67 @@ class ProtocolChecklistServiceTest {
   @Test
   void findChecklistReturnsEmptyForUnknownProtocol() {
     assertTrue(service.findChecklist("CHR", "9001").isEmpty());
+  }
+
+  @Test
+  void submitMapsBioToSlbAndSucceedsWhenNoValidationError() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\u");
+    when(writeRepository.submit("SLB", "9001", "IDIR\\u")).thenReturn("");
+
+    service.submit("bio", "9001");
+
+    verify(writeRepository).submit("SLB", "9001", "IDIR\\u");
+  }
+
+  @Test
+  void submitThrowsValidationExceptionWithSplitMessages() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    when(writeRepository.submit("RIP", "9001", "u"))
+        .thenReturn("frep.submit.common.evaluation;frep.submit.common.teamlead;");
+
+    ProtocolSubmitValidationException ex = assertThrows(
+        ProtocolSubmitValidationException.class, () -> service.submit("rip", "9001"));
+    assertEquals(2, ex.getMessages().size());
+    assertTrue(ex.getMessages().contains("frep.submit.common.teamlead"));
+  }
+
+  @Test
+  void submitForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.submit("bio", "9001"));
+  }
+
+  @Test
+  void unsubmitMapsWaterToWtr() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    when(writeRepository.unsubmit("WTR", "9001", "u")).thenReturn("");
+
+    service.unsubmit("wat", "9001");
+
+    verify(writeRepository).unsubmit("WTR", "9001", "u");
+  }
+
+  @Test
+  void getBiodiversityOpeningThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBiodiversityOpening("9001"));
+  }
+
+  @Test
+  void saveBiodiversityOpeningDelegatesToRepositoryWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening opening = new BiodiversityOpening(
+        "9001", "500", "ACT", "N", "loc", "N", "N", "N", null, "N", null, "W", "ok", "3");
+    when(writeRepository.saveBiodiversityOpening(opening, "u")).thenReturn(opening);
+
+    BiodiversityOpening saved = service.saveBiodiversityOpening("9001", opening);
+
+    assertEquals("9001", saved.checklistId());
+    verify(writeRepository).saveBiodiversityOpening(opening, "u");
   }
 
   private static ChecklistSectionData sectionWithHeader(

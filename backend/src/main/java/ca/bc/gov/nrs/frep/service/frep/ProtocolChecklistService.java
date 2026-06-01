@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
+import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
@@ -7,14 +8,19 @@ import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.ProtocolChecklistWriteRepository;
+import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Protocol checklist lookup backed by legacy Oracle GET procedures via
@@ -26,13 +32,77 @@ public class ProtocolChecklistService {
 
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
+  private final ProtocolChecklistWriteRepository writeRepository;
+  private final LoggedUserHelper loggedUserHelper;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
-      CodeListRepository codeListRepository
+      CodeListRepository codeListRepository,
+      ProtocolChecklistWriteRepository writeRepository,
+      LoggedUserHelper loggedUserHelper
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
+    this.writeRepository = writeRepository;
+    this.loggedUserHelper = loggedUserHelper;
+  }
+
+  /** Submit a protocol checklist (server-side DB validation + status to SUB). */
+  public void submit(String protocolType, String checklistId) {
+    String resourceType = resolveResourceType(protocolType);
+    assertCanWrite();
+    String error = writeRepository.submit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
+    if (StringUtils.isNotBlank(error)) {
+      throw new ProtocolSubmitValidationException(splitValidationMessages(error));
+    }
+  }
+
+  /** Revert a submitted checklist to ACT. */
+  public void unsubmit(String protocolType, String checklistId) {
+    String resourceType = resolveResourceType(protocolType);
+    assertCanWrite();
+    String error = writeRepository.unsubmit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
+    if (StringUtils.isNotBlank(error)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+    }
+  }
+
+  /** Typed read of the Biodiversity Opening screen for editing. */
+  public BiodiversityOpening getBiodiversityOpening(String checklistId) {
+    BiodiversityOpening opening = writeRepository.getBiodiversityOpening(checklistId);
+    if (opening == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Biodiversity checklist not found: " + checklistId);
+    }
+    return opening;
+  }
+
+  /** Save the Biodiversity Opening screen via FREP_210_BIO_OPENING.SAVE. */
+  public BiodiversityOpening saveBiodiversityOpening(String checklistId, BiodiversityOpening opening) {
+    assertCanWrite();
+    BiodiversityOpening toSave = opening.checklistId() == null
+        ? opening.withIdentity(checklistId, opening.revisionCount())
+        : opening;
+    return writeRepository.saveBiodiversityOpening(toSave, loggedUserHelper.getLoggedUserId());
+  }
+
+  private String resolveResourceType(String protocolType) {
+    return normalizeProtocolType(protocolType)
+        .orElseThrow(() -> new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Unknown protocol type: " + protocolType));
+  }
+
+  private void assertCanWrite() {
+    if (!loggedUserHelper.canWrite()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to edit checklists.");
+    }
+  }
+
+  /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */
+  private static List<String> splitValidationMessages(String error) {
+    return Arrays.stream(error.split(";"))
+        .map(String::trim)
+        .filter(StringUtils::isNotBlank)
+        .toList();
   }
 
   public Optional<ProtocolChecklistResponse> findChecklist(String protocolType, String checklistId) {
@@ -185,4 +255,18 @@ public class ProtocolChecklistService {
   }
 
   private record SectionDefinition(String id, String title, ChecklistSectionData data) {}
+
+  /** Thrown when submit fails server-side validation; carries the (DB-sourced) message codes. */
+  public static class ProtocolSubmitValidationException extends RuntimeException {
+    private final transient List<String> messages;
+
+    public ProtocolSubmitValidationException(List<String> messages) {
+      super("Protocol checklist submit validation failed");
+      this.messages = messages;
+    }
+
+    public List<String> getMessages() {
+      return messages;
+    }
+  }
 }

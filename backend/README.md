@@ -91,7 +91,21 @@ are loaded via `frep_210_bio_opening.GET`, `FREP_211_BioStratum.get`,
 `FREP_212_BioPlot.get`, `FREP_230_STRM_OPEN.GET`, `FREP_231_FIELD_DATA.GET`,
 `FREP_232_OTHER_INDS.GET`, `FREP_233_QUESTIONS.GET`, `FREP_234_SPECIFIC_IMPACTS.GET`,
 `FREP_235_FINAL_CMTS.GET`, `FREP_250_WATER_CHKLST_GET`, `FREP_251_SAMPLE_SITE_GET`,
-`FREP_252_ASSESSMENT_GET`, `FREP_253_RANGE_GET`, and `FREP_254_SUMMARY_GET`.
+`FREP_252_ASSESSMENT_GET`, `FREP_253_RANGE_GET`, and `FREP_254_SUMMARY_GET`. Culture Heritage (CHR) checklist lifecycle endpoints use JPA
+persistence adapted from legacy `RestDataManager` plus JDBC tombstone calls:
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/v1/chr/checklists/{id}` | Load checklist JSON resource |
+| POST | `/api/v1/chr/checklists` | Save active/read-only upload |
+| POST | `/api/v1/chr/checklists/{id}/submit` | Submit with validation |
+| POST | `/api/v1/chr/checklists/{id}/activate` | Admin: RDO → ACT |
+| POST | `/api/v1/chr/checklists/{id}/offline` | ACT → RDO + device GUID |
+| POST | `/api/v1/chr/checklists/{id}/unsubmit` | `FREP_TOMBSTONE.UNSUBMIT` |
+| POST | `/api/v1/chr/attachments` | S3 photo upload |
+
+CHR object storage is configured via `frep.chr.object-storage.*` (`CHR_OBJECT_STORAGE_HOST`,
+`CHR_OBJECT_STORAGE_BUCKET`, `CHR_OBJECT_STORAGE_ACCESS_KEY`, `CHR_OBJECT_STORAGE_SECRET_KEY`).
 
 | Variable | Description |
 |---|---|

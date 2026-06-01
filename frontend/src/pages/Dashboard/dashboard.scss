@@ -8,6 +8,8 @@
 .dashboard__title {
   @include type.type-style('heading-05');
   margin: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .dashboard__subtitle {
@@ -30,11 +32,6 @@
 
 .dashboard__tile-icon {
   color: var(--#{vars.$bcgov-prefix}-icon-primary);
-}
-
-.dashboard__tile-code {
-  @include type.type-style('label-01');
-  color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
 .dashboard__tile-title {

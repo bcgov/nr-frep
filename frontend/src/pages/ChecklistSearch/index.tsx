@@ -141,7 +141,7 @@ const ChecklistSearchPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid checklist-search-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="checklist-search__title">FREP400 — Checklist Search</h1>
+        <h1 className="checklist-search__title">Checklist Search</h1>
         <p className="checklist-search__subtitle">
           Look up FREP checklists by tenure, opening, client, or protocol.
         </p>

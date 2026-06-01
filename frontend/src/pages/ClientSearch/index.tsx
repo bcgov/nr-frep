@@ -69,7 +69,7 @@ const ClientSearchPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid client-search-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="client-search__title">FREP410 — Client Search</h1>
+        <h1 className="client-search__title">Client Search</h1>
         <p className="client-search__subtitle">
           Find Forest Client records by client number or name (substring, case-insensitive).
         </p>

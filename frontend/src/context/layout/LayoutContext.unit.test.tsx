@@ -48,7 +48,7 @@ const renderWithProvider = async () => {
 describe('LayoutContext', () => {
   it('provides default layout values', async () => {
     await renderWithProvider();
-    // Initial state depends on breakpoint, but default isSideNavExpanded is true in tests
+    // Initial state follows viewport: collapsed in the default test environment.
     expect(screen.getByTestId('side-nav').textContent).toMatch(/expanded|collapsed/);
     expect(screen.getByTestId('header-panel').textContent).toBe('closed');
   });

@@ -5,9 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.SiteDetailResponse;
-import ca.bc.gov.nrs.frep.dto.SiteResourceResponse;
-import ca.bc.gov.nrs.frep.service.SiteDetailService;
+import ca.bc.gov.nrs.frep.dto.frep.SiteDetailResponse;
+import ca.bc.gov.nrs.frep.dto.frep.SiteResourceResponse;
+import ca.bc.gov.nrs.frep.service.frep.SiteDetailService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +50,7 @@ class SiteDetailControllerTest {
             "FSP-101",
             "2024",
             List.of(
-                new SiteResourceResponse("BIO", "Biodiversity", "ACC", null,
+                new SiteResourceResponse("SLB", "Biodiversity", "ACC", null,
                     "Site within target stratum", null, "9001", "RDY")
             )
         )));
@@ -59,7 +59,7 @@ class SiteDetailControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.frepSelectedSiteId").value("1001"))
         .andExpect(jsonPath("$.opening").value("A12345"))
-        .andExpect(jsonPath("$.resources[0].resourceType").value("BIO"));
+        .andExpect(jsonPath("$.resources[0].resourceType").value("SLB"));
   }
 
   @Test

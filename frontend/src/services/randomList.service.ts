@@ -2,7 +2,6 @@ import type { RandomListQuery, RandomListSite } from '@/types/randomList';
 
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
-import { env } from '@/env';
 
 export class RandomListService extends HttpClient {
   constructor(readonly config: APIConfig) {
@@ -21,9 +20,4 @@ export class RandomListService extends HttpClient {
       },
     });
   }
-}
-
-export function buildLegacyRandomListUrl(): string {
-  const base = (env.VITE_LEGACY_APP_URL ?? '/ext/frep').replace(/\/$/, '');
-  return `${base}/frep100RandomListAction.do?isMenuPick=true`;
 }

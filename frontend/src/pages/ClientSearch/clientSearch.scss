@@ -8,6 +8,8 @@
 .client-search__title {
   @include type.type-style('heading-05');
   margin: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .client-search__subtitle {

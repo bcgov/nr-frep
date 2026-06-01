@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.controller;
 
-import ca.bc.gov.nrs.frep.dto.SiteDetailResponse;
-import ca.bc.gov.nrs.frep.service.SiteDetailService;
+import ca.bc.gov.nrs.frep.dto.frep.SiteDetailResponse;
+import ca.bc.gov.nrs.frep.service.frep.SiteDetailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

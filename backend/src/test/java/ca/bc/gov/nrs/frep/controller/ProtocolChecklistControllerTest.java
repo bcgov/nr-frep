@@ -5,10 +5,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistField;
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistResponse;
-import ca.bc.gov.nrs.frep.dto.ProtocolChecklistSection;
-import ca.bc.gov.nrs.frep.service.ProtocolChecklistService;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
+import ca.bc.gov.nrs.frep.service.frep.ProtocolChecklistService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +38,7 @@ class ProtocolChecklistControllerTest {
   void returnsChecklistWhenFound() throws Exception {
     when(protocolChecklistService.findChecklist("bio", "9001"))
         .thenReturn(Optional.of(new ProtocolChecklistResponse(
-            "9001", "BIO", "Biodiversity", "1001", "A12345", "2024",
+            "9001", "SLB", "Biodiversity", "1001", "A12345", "2024",
             "RDY", "Ready", "IDIR\\JDOE", "2024-08-12",
             List.of(new ProtocolChecklistSection("opening", "Opening info",
                 List.of(new ProtocolChecklistField("Stand age", "82", "NUMBER"))))
@@ -47,7 +47,7 @@ class ProtocolChecklistControllerTest {
     mockMvc.perform(get("/api/v1/protocol-checklists/bio/9001"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.checklistId").value("9001"))
-        .andExpect(jsonPath("$.protocolType").value("BIO"))
+        .andExpect(jsonPath("$.protocolType").value("SLB"))
         .andExpect(jsonPath("$.sections[0].fields[0].label").value("Stand age"));
   }
 

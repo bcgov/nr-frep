@@ -8,6 +8,8 @@
 .checklist-search__title {
   @include type.type-style('heading-05');
   margin: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .checklist-search__subtitle {

@@ -148,7 +148,7 @@ const MasterListAdminPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid master-list-admin-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="master-list-admin__title">FREP700 — Generate Master List</h1>
+        <h1 className="master-list-admin__title">Generate Master List</h1>
         <p className="master-list-admin__subtitle">
           Sys-admin only. Review eligibility criteria for a master list year and (re-)generate the
           provincial random list of evaluation sites.

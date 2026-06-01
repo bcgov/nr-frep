@@ -38,12 +38,9 @@ services:
     working_dir: /app
     entrypoint: sh -c "mvn -DskipTests spring-boot:run"
     environment:
-      # Activates application-local.yml AND application-oracle.yml. Spring
-      # merges them; application-local.yml supplies the credentials.
+      # Activates application-local.yml (gitignored credentials).
       SPRING_PROFILES_ACTIVE: local,oracle
-      # Override the host-absolute TRUSTSTORE_PATH baked into
-      # application-local.yml. The cert dir is mounted in via ./backend:/app,
-      # so this is the equivalent in-container path.
+      # Truststore path for Oracle TCPS (spring.datasource.hikari property).
       TRUSTSTORE_PATH: /app/src/main/resources/cert/jssecacerts
     ports: ["8080:8080"]
     volumes:

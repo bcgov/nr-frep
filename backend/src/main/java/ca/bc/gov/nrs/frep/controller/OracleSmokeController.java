@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Small smoke endpoint that verifies Oracle connectivity by executing a lightweight query.
- * Active only when the `oracle` profile is enabled.
+ * Active only when the {@code oracle} profile is enabled.
  */
 @RestController
 @RequestMapping("/internal/oracle")
@@ -33,5 +33,4 @@ public class OracleSmokeController {
       return ResponseEntity.status(503).body(Map.of("status", "DOWN", "error", e.getMessage()));
     }
   }
-
 }

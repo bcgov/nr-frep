@@ -1,0 +1,154 @@
+package ca.bc.gov.nrs.frep.repository.frep;
+
+import java.sql.Array;
+import java.sql.CallableStatement;
+import java.sql.SQLException;
+import java.sql.Struct;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
+import oracle.jdbc.OracleConnection;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+/**
+ * Wraps legacy package {@code FREP_110_SITE_DETAILS} (FREP110 Site Details).
+ */
+@Repository
+@Profile("oracle")
+public class SiteDetailRepository extends AbstractFrepRepository {
+
+  static final String PACKAGE_NAME = "FREP_110_SITE_DETAILS";
+  static final String RESOURCE_ARRAY_TYPE = "THE.FREP_RESOURCE_VARRAY";
+
+  public SiteDetailRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
+    super(jdbcTemplate);
+  }
+
+  /**
+   * Loads site header and resource values for a selected site.
+   *
+   * <p>Legacy equivalent: {@code FrepResourceDataManager.getSiteDetails}.
+   */
+  public SiteDetailData findSiteDetail(String frepSelectedSiteId) {
+    String call = "{call " + PACKAGE_NAME + ".GET (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}";
+    return executeCall(call, cs -> {
+      setInOutString(cs, 1, frepSelectedSiteId);
+      setEmptyResourceArray(cs, 2);
+      setInOutString(cs, 3, null);
+      cs.registerOutParameter(4, Types.VARCHAR);
+      cs.registerOutParameter(5, Types.VARCHAR);
+      cs.registerOutParameter(6, Types.VARCHAR);
+      cs.registerOutParameter(7, Types.VARCHAR);
+      setInOutString(cs, 8, null);
+      setInOutString(cs, 9, null);
+      cs.registerOutParameter(10, Types.VARCHAR);
+      cs.registerOutParameter(11, Types.VARCHAR);
+      cs.registerOutParameter(12, Types.VARCHAR);
+      cs.registerOutParameter(13, Types.VARCHAR);
+      cs.registerOutParameter(14, Types.VARCHAR);
+      cs.registerOutParameter(15, Types.VARCHAR);
+      cs.registerOutParameter(16, Types.VARCHAR);
+      cs.registerOutParameter(17, Types.VARCHAR);
+      cs.registerOutParameter(18, Types.VARCHAR);
+      cs.registerOutParameter(19, Types.VARCHAR);
+      cs.registerOutParameter(20, Types.VARCHAR);
+      cs.registerOutParameter(21, Types.VARCHAR);
+      cs.registerOutParameter(22, Types.VARCHAR);
+    }, cs -> {
+      throwIfError(PACKAGE_NAME, "GET", cs.getString(3));
+      return new SiteDetailData(
+          stringValue(cs.getString(1)),
+          stringValue(cs.getString(8)),
+          stringValue(cs.getString(18)),
+          stringValue(cs.getString(5)),
+          stringValue(cs.getString(6)),
+          stringValue(cs.getString(20)),
+          stringValue(cs.getString(9)),
+          stringValue(cs.getString(10)),
+          stringValue(cs.getString(11)),
+          stringValue(cs.getString(12)),
+          stringValue(cs.getString(13)),
+          stringValue(cs.getString(14)),
+          stringValue(cs.getString(4)),
+          stringValue(cs.getString(15)),
+          readResourceArray(cs.getArray(2))
+      );
+    });
+  }
+
+  /**
+   * Resolves a checklist id from a resource value, mirroring legacy
+   * {@code frep_get_checklist}.
+   */
+  public String resolveChecklistId(String resourceValueId, String resourceType) {
+    if (resourceValueId == null || resourceValueId.isBlank()
+        || resourceType == null || resourceType.isBlank()) {
+      return "";
+    }
+    List<String> rows = jdbcTemplate.query(
+        "SELECT frep_get_checklist(?, ?) FROM dual",
+        (rs, rowNum) -> rs.getString(1),
+        resourceValueId.trim(),
+        resourceType.trim()
+    );
+    return rows.isEmpty() || rows.get(0) == null ? "" : rows.get(0).trim();
+  }
+
+  private static void setEmptyResourceArray(CallableStatement cs, int index) throws SQLException {
+    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
+    cs.setArray(index, connection.createOracleArray(RESOURCE_ARRAY_TYPE, new Object[0]));
+    cs.registerOutParameter(index, Types.ARRAY, RESOURCE_ARRAY_TYPE);
+  }
+
+  private static List<SiteResourceRow> readResourceArray(Array array) throws SQLException {
+    if (array == null) {
+      return List.of();
+    }
+    Object[] elements = (Object[]) array.getArray();
+    List<SiteResourceRow> rows = new ArrayList<>(elements.length);
+    for (Object element : elements) {
+      if (element instanceof Struct struct) {
+        rows.add(fromResourceStruct(struct));
+      }
+    }
+    return rows;
+  }
+
+  static SiteResourceRow fromResourceStruct(Struct struct) throws SQLException {
+    Object[] attrs = struct.getAttributes();
+    return new SiteResourceRow(
+        stringAttr(attrs, 0),
+        stringAttr(attrs, 1),
+        stringAttr(attrs, 2),
+        stringAttr(attrs, 3),
+        stringAttr(attrs, 4),
+        stringAttr(attrs, 5),
+        stringAttr(attrs, 6),
+        stringAttr(attrs, 7),
+        stringAttr(attrs, 8)
+    );
+  }
+
+  private static String stringAttr(Object[] attrs, int index) {
+    if (attrs == null || index >= attrs.length || attrs[index] == null) {
+      return "";
+    }
+    String value = attrs[index].toString().trim();
+    if (value.endsWith(".0")) {
+      try {
+        Double.parseDouble(value);
+        value = value.substring(0, value.length() - 2);
+      } catch (NumberFormatException ignored) {
+        // keep original string
+      }
+    }
+    return value;
+  }
+
+  private static String stringValue(String value) {
+    return value == null ? "" : value.trim();
+  }
+}

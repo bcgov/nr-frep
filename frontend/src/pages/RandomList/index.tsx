@@ -3,7 +3,6 @@ import {
   Column,
   DataTable,
   Grid,
-  Link,
   Select,
   SelectItem,
   SkeletonText,
@@ -24,7 +23,6 @@ import type { RandomListSite } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
-import { buildLegacyRandomListUrl } from '@/services/randomList.service';
 
 import './randomList.scss';
 
@@ -138,16 +136,12 @@ const RandomListPage: FC = () => {
   }, [loadRandomList]);
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
-  const legacyUrl = buildLegacyRandomListUrl();
 
   return (
     <Grid fullWidth className="default-grid random-list-grid">
       <Column sm={4} md={8} lg={16}>
         <div className="random-list__header">
-          <h1>FREP100 — District Random List</h1>
-          <Link href={legacyUrl} target="_blank" rel="noopener noreferrer">
-            Open in legacy FREP
-          </Link>
+          <h1>District Random List</h1>
         </div>
         <p className="random-list__subtitle">
           Randomly selected sites for the chosen master list year and district. Pick a row to view

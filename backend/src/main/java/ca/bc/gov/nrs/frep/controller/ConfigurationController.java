@@ -1,10 +1,12 @@
 package ca.bc.gov.nrs.frep.controller;
 
-import ca.bc.gov.nrs.frep.dto.MasterListYearResponse;
-import ca.bc.gov.nrs.frep.dto.OrgUnitResponse;
-import ca.bc.gov.nrs.frep.dto.ProtocolResponse;
-import ca.bc.gov.nrs.frep.service.ConfigurationService;
+import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
+import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
+import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
+
 import java.util.List;
+
+import ca.bc.gov.nrs.frep.service.frep.ConfigurationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

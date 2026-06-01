@@ -16,7 +16,6 @@ test.describe('page coverage', () => {
     await expect(page.getByTestId('side-nav-link-Dashboard')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Accepted Sites' })).toBeVisible();
     await expect(page.getByTestId('accepted-sites-table')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Edit in legacy FREP' })).toBeVisible();
     await assertNoGlobalError(page);
   });
 

@@ -3,7 +3,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Link,
   SkeletonText,
   Tab,
   TabList,
@@ -24,16 +23,9 @@ import type {
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
-import { buildLegacyChecklistUrl } from '@/services/protocolChecklist.service';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
 
 import './protocolChecklist.scss';
-
-const PROTOCOL_LEGACY_RANGE: Record<ProtocolType, string> = {
-  biodiversity: 'FREP210–212',
-  riparian: 'FREP230–235',
-  water: 'FREP250–254',
-};
 
 function isProtocolType(value: string | undefined): value is ProtocolType {
   return value === 'biodiversity' || value === 'riparian' || value === 'water';
@@ -122,18 +114,8 @@ const ProtocolChecklistPage: FC = () => {
             <ArrowLeft /> Back
           </button>
           <h1>
-            {protocolType ? PROTOCOL_LEGACY_RANGE[protocolType] : 'Protocol checklist'} —{' '}
-            {protocolType ? PROTOCOL_TYPE_LABEL[protocolType] : 'Unknown'}
+            {protocolType ? PROTOCOL_TYPE_LABEL[protocolType] : 'Protocol checklist'}
           </h1>
-          {protocolType && id && (
-            <Link
-              href={buildLegacyChecklistUrl(PROTOCOL_TYPE_TO_BACKEND[protocolType], id)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Edit in legacy FREP
-            </Link>
-          )}
         </div>
       </Column>
 

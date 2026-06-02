@@ -36,6 +36,39 @@ const FeatureList: FC<{
 
   const current = features[selected];
 
+  /**
+   * Toggle an association between the selected feature and a sibling. Associations are stored
+   * (bidirectionally) as the *other* feature's label in each feature's {@code associatedFeatures}
+   * list, matching the legacy CHR ModalAssociateToggle behaviour.
+   */
+  const toggleAssociated = (siblingLabel: string) => {
+    const currentLabel = current?.featureLabel;
+    if (!currentLabel) return;
+    const wasAssociated = (current.associatedFeatures ?? []).includes(siblingLabel);
+    const apply = (list: string[] | undefined, label: string): string[] => {
+      const set = new Set(list ?? []);
+      if (wasAssociated) set.delete(label);
+      else set.add(label);
+      return [...set].sort();
+    };
+    onChange(
+      features.map((f, i) => {
+        if (i === selected) {
+          return { ...f, associatedFeatures: apply(f.associatedFeatures, siblingLabel) };
+        }
+        if (f.featureLabel === siblingLabel) {
+          return { ...f, associatedFeatures: apply(f.associatedFeatures, currentLabel) };
+        }
+        return f;
+      }),
+    );
+  };
+
+  const siblingLabels = features
+    .filter((_, i) => i !== selected)
+    .map((f) => f.featureLabel)
+    .filter((label): label is string => Boolean(label));
+
   return (
     <Grid fullWidth className="chr-checklist__section">
       <Column sm={4} md={2} lg={4}>
@@ -73,7 +106,13 @@ const FeatureList: FC<{
                 Delete feature
               </Button>
             )}
-            <FeatureEditor feature={current} onPatch={patchSelected} readOnly={readOnly} />
+            <FeatureEditor
+              feature={current}
+              onPatch={patchSelected}
+              readOnly={readOnly}
+              siblingLabels={siblingLabels}
+              onToggleAssociated={toggleAssociated}
+            />
           </Tile>
         ) : (
           <p>Select or add a feature to edit its details.</p>

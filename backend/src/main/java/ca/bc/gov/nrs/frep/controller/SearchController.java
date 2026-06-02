@@ -2,8 +2,10 @@ package ca.bc.gov.nrs.frep.controller;
 
 import ca.bc.gov.nrs.frep.dto.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.dto.frep.ClientSearchResult;
+import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
 import ca.bc.gov.nrs.frep.service.frep.SearchService;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,18 +35,40 @@ public class SearchController {
       @RequestParam(required = false) String cutBlockId,
       @RequestParam(required = false) String openingId,
       @RequestParam(required = false) String clientNumber,
-      @RequestParam(required = false) String checklistStatusCode
+      @RequestParam(required = false) String checklistStatusCode,
+      @RequestParam(required = false) String checklistId,
+      @RequestParam(required = false) String evaluationDateFrom,
+      @RequestParam(required = false) String evaluationDateTo
   ) {
     return ResponseEntity.ok(searchService.searchChecklists(
         effectiveYear, orgUnit, protocolType, licenceId,
-        cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode));
+        cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode,
+        checklistId, evaluationDateFrom, evaluationDateTo));
   }
 
   @GetMapping("/clients")
   public ResponseEntity<List<ClientSearchResult>> searchClients(
       @RequestParam(required = false) String clientNumber,
-      @RequestParam(required = false) String clientName
+      @RequestParam(required = false) String clientAcronym,
+      @RequestParam(required = false) String clientName,
+      @RequestParam(required = false) String legalFirstName,
+      @RequestParam(required = false) String legalMiddleName
   ) {
-    return ResponseEntity.ok(searchService.searchClients(clientNumber, clientName));
+    return ResponseEntity.ok(searchService.searchClients(
+        clientNumber, clientAcronym, clientName, legalFirstName, legalMiddleName));
+  }
+
+  /**
+   * Export checklist-search results to Excel/CSV (legacy "Export to Excel" button on
+   * {@code frep400ChecklistSearch.jsp}).
+   *
+   * <p>TODO: implement server-side CSV/XLSX generation from the same criteria used by
+   * {@link #searchChecklists}. Returns HTTP 501 until then.
+   */
+  @GetMapping("/checklists/export")
+  public ResponseEntity<NotImplementedResponse> exportChecklists() {
+    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(NotImplementedResponse.of(
+        "export-checklists",
+        "Export to Excel for checklist search is not yet available."));
   }
 }

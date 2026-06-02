@@ -5,6 +5,7 @@ import ca.bc.gov.nrs.frep.dto.frep.MasterListAdminResponse;
 import ca.bc.gov.nrs.frep.service.frep.MasterListAdminService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,5 +49,41 @@ public class MasterListAdminController {
       return ResponseEntity.badRequest().build();
     }
     return ResponseEntity.ok(masterListAdminService.generateMasterList(request));
+  }
+
+  /** Regenerate a single district's selection for the year. */
+  @PostMapping("/regenerate")
+  public ResponseEntity<MasterListAdminResponse> regenerateDistrict(
+      @RequestParam String effectiveYear,
+      @RequestParam String orgUnitNo
+  ) {
+    if (StringUtils.isBlank(effectiveYear) || StringUtils.isBlank(orgUnitNo)) {
+      return ResponseEntity.badRequest().build();
+    }
+    return ResponseEntity.ok(
+        masterListAdminService.regenerateDistrict(effectiveYear.trim(), orgUnitNo.trim()));
+  }
+
+  /** Save generation comments for the year without regenerating. */
+  @PostMapping("/comments")
+  public ResponseEntity<MasterListAdminResponse> saveComments(
+      @RequestBody GenerateMasterListRequest request
+  ) {
+    if (request == null || StringUtils.isBlank(request.effectiveYear())) {
+      return ResponseEntity.badRequest().build();
+    }
+    return ResponseEntity.ok(
+        masterListAdminService.saveComments(request.effectiveYear().trim(), request.comments()));
+  }
+
+  /** Delete the generated master list for the year. */
+  @DeleteMapping
+  public ResponseEntity<MasterListAdminResponse> deleteMasterList(
+      @RequestParam String effectiveYear
+  ) {
+    if (StringUtils.isBlank(effectiveYear)) {
+      return ResponseEntity.badRequest().build();
+    }
+    return ResponseEntity.ok(masterListAdminService.deleteList(effectiveYear.trim()));
   }
 }

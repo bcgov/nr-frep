@@ -24,10 +24,13 @@ import API from '@/services/APIs';
 import './clientSearch.scss';
 
 const TABLE_HEADERS = [
+  { key: 'clientAcronym', header: 'Acronym' },
   { key: 'clientNumber', header: 'Client #' },
+  { key: 'clientLocnCode', header: 'Locn' },
   { key: 'clientName', header: 'Name' },
+  { key: 'clientLocnName', header: 'Location' },
+  { key: 'city', header: 'City' },
   { key: 'clientStatus', header: 'Status' },
-  { key: 'locationCount', header: 'Locations' },
 ] as const;
 
 const ClientSearchPage: FC = () => {
@@ -64,19 +67,34 @@ const ClientSearchPage: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tableRows = useMemo(() => results.map((r) => ({ id: r.clientNumber, ...r })), [results]);
+  const tableRows = useMemo(
+    () =>
+      results.map((r, index) => ({
+        id: `${r.clientNumber}-${r.clientLocnCode}-${index}`,
+        ...r,
+      })),
+    [results],
+  );
 
   return (
     <Grid fullWidth className="default-grid client-search-grid">
       <Column sm={4} md={8} lg={16}>
         <h1 className="client-search__title">Client Search</h1>
         <p className="client-search__subtitle">
-          Find Forest Client records by client number or name (substring, case-insensitive).
+          Find Forest Client records by acronym, client number, or name (substring,
+          case-insensitive). Results list one row per client location.
         </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <div className="client-search__filters">
+          <TextInput
+            id="client-search-acronym"
+            labelText="Client acronym"
+            placeholder="e.g. TOLKO"
+            value={filters.clientAcronym ?? ''}
+            onChange={(e) => setFilters({ ...filters, clientAcronym: e.target.value || undefined })}
+          />
           <TextInput
             id="client-search-number"
             labelText="Client number"
@@ -86,10 +104,26 @@ const ClientSearchPage: FC = () => {
           />
           <TextInput
             id="client-search-name"
-            labelText="Client name"
+            labelText="Client / last name"
             placeholder="e.g. tolko"
             value={filters.clientName ?? ''}
             onChange={(e) => setFilters({ ...filters, clientName: e.target.value || undefined })}
+          />
+          <TextInput
+            id="client-search-first-name"
+            labelText="First name"
+            value={filters.legalFirstName ?? ''}
+            onChange={(e) =>
+              setFilters({ ...filters, legalFirstName: e.target.value || undefined })
+            }
+          />
+          <TextInput
+            id="client-search-middle-name"
+            labelText="Middle name"
+            value={filters.legalMiddleName ?? ''}
+            onChange={(e) =>
+              setFilters({ ...filters, legalMiddleName: e.target.value || undefined })
+            }
           />
           <div className="client-search__actions">
             <Button onClick={() => void runSearch()} disabled={loading}>

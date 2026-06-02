@@ -22,6 +22,7 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { runTodoFeature } from '@/utils/featureTodo';
 
 import './acceptedSites.scss';
 
@@ -37,6 +38,7 @@ const TABLE_HEADERS = [
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'harvestCompleteDate', header: 'Harvest complete' },
   { key: 'checklistStatus', header: 'Status' },
+  { key: 'mapView', header: 'Map' },
 ] as const;
 
 function formatChecklistType(site: AcceptedSite): string {
@@ -59,6 +61,7 @@ function toTableRows(sites: AcceptedSite[]) {
     harvestCompleteDate: site.harvestCompleteDate,
     checklistStatus: site.checklistStatus,
     statusCode: site.checklistStatusCode,
+    mapView: site.openingId,
   }));
 }
 
@@ -208,6 +211,15 @@ const AcceptedSitesPage: FC = () => {
           >
             Refresh
           </Button>
+          <Button
+            kind="tertiary"
+            onClick={() =>
+              void runTodoFeature(() => API.acceptedSites.printAcceptedSites(), display, 'Print')
+            }
+            disabled={loading || configLoading || sites.length === 0}
+          >
+            Print
+          </Button>
         </div>
       </Column>
 
@@ -259,6 +271,27 @@ const AcceptedSitesPage: FC = () => {
                                   <RouterLink to={`/site-detail/${rowMeta.id}`}>
                                     {cell.value}
                                   </RouterLink>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'mapView') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={!cell.value}
+                                    onClick={() =>
+                                      void runTodoFeature(
+                                        () =>
+                                          API.acceptedSites.getOpeningMapView(String(cell.value)),
+                                        display,
+                                        'Map / GIS view',
+                                      )
+                                    }
+                                  >
+                                    Map
+                                  </Button>
                                 </TableCell>
                               );
                             }

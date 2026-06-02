@@ -1,4 +1,4 @@
-import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@carbon/react';
+import { Checkbox, Tab, TabList, TabPanel, TabPanels, Tabs } from '@carbon/react';
 
 import {
   CodeSelect,
@@ -148,11 +148,13 @@ const WINDTHROW_TECHNIQUES: Array<{ label: string; field: string }> = [
   { label: 'Topping', field: 'windthrowTechniqueTopping' },
 ];
 
-const FeatureEditor: FC<{ feature: Feature; onPatch: PatchFn; readOnly: boolean }> = ({
-  feature,
-  onPatch,
-  readOnly,
-}) => {
+const FeatureEditor: FC<{
+  feature: Feature;
+  onPatch: PatchFn;
+  readOnly: boolean;
+  siblingLabels?: string[];
+  onToggleAssociated?: (siblingLabel: string) => void;
+}> = ({ feature, onPatch, readOnly, siblingLabels = [], onToggleAssociated }) => {
   const ind = (field: string): Indicator | undefined => feature[field] as Indicator | undefined;
   const str = (field: string): string | undefined => feature[field] as string | undefined;
   const chk = (field: string, label: string) => (
@@ -214,6 +216,21 @@ const FeatureEditor: FC<{ feature: Feature; onPatch: PatchFn; readOnly: boolean 
               disabled={readOnly}
               onChange={(v) => onPatch({ compositeFeature: v })}
             />
+            {siblingLabels.length > 0 && (
+              <fieldset className="chr-checklist__fieldset">
+                <legend>Associated features</legend>
+                {siblingLabels.map((label) => (
+                  <Checkbox
+                    key={`assoc-${label}`}
+                    id={`feat-assoc-${label}`}
+                    labelText={`Feature ${label}`}
+                    checked={(feature.associatedFeatures ?? []).includes(label)}
+                    disabled={readOnly}
+                    onChange={() => onToggleAssociated?.(label)}
+                  />
+                ))}
+              </fieldset>
+            )}
             {chk('chrRegisteredSite', 'Registered archaeological site')}
             <TextField
               id="feat-borden"

@@ -5,6 +5,7 @@ package ca.bc.gov.nrs.frep.repository.frep;
  * {@code THE.FREP_GENERATION_RESULTS_OBJECT}.
  */
 public record MasterListGenerationRow(
+    String orgUnitNo,
     String orgUnitDisplay,
     int totalSites,
     int totalAvailableSites,

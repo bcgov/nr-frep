@@ -59,6 +59,35 @@ public class MasterListAdminService {
     return getMasterListCriteria(effectiveYear);
   }
 
+  /** Regenerate the master list for a single district (FREP_700_GEN_MASTER.regenerate). */
+  public MasterListAdminResponse regenerateDistrict(String effectiveYear, String orgUnitNo) {
+    if (StringUtils.isBlank(effectiveYear) || StringUtils.isBlank(orgUnitNo)) {
+      throw new IllegalArgumentException("effectiveYear and orgUnitNo are required");
+    }
+    masterListRepository.regenerateDistrict(
+        effectiveYear.trim(), orgUnitNo.trim(), loggedUserHelper.getLoggedUserId());
+    return getMasterListCriteria(effectiveYear.trim());
+  }
+
+  /** Save generation comments without regenerating (FREP_700_GEN_MASTER.save_comments). */
+  public MasterListAdminResponse saveComments(String effectiveYear, String comments) {
+    if (StringUtils.isBlank(effectiveYear)) {
+      throw new IllegalArgumentException("effectiveYear is required");
+    }
+    masterListRepository.saveComments(
+        effectiveYear.trim(), blankToEmpty(comments), loggedUserHelper.getLoggedUserId());
+    return getMasterListCriteria(effectiveYear.trim());
+  }
+
+  /** Delete the generated master list for a year (FREP_700_GEN_MASTER.delete_list). */
+  public MasterListAdminResponse deleteList(String effectiveYear) {
+    if (StringUtils.isBlank(effectiveYear)) {
+      throw new IllegalArgumentException("effectiveYear is required");
+    }
+    masterListRepository.deleteList(effectiveYear.trim());
+    return getMasterListCriteria(effectiveYear.trim());
+  }
+
   static MasterListAdminResponse toResponse(String effectiveYear, MasterListCriteriaData data) {
     List<MasterListGenerationStat> stats = data.generationStats().stream()
         .map(MasterListAdminService::toGenerationStat)
@@ -79,6 +108,7 @@ public class MasterListAdminService {
   static MasterListGenerationStat toGenerationStat(MasterListGenerationRow row) {
     String[] orgUnit = parseOrgUnitDisplay(row.orgUnitDisplay());
     return new MasterListGenerationStat(
+        row.orgUnitNo(),
         orgUnit[0],
         orgUnit[1],
         row.totalAvailableSites(),

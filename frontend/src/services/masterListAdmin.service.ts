@@ -24,4 +24,29 @@ export class MasterListAdminService extends HttpClient {
       mediaType: 'application/json',
     });
   }
+
+  regenerateDistrict(effectiveYear: string, orgUnitNo: string): CancelablePromise<MasterListAdmin> {
+    return this.doRequest<MasterListAdmin>(this.config, {
+      method: 'POST',
+      url: '/v1/admin/master-list/regenerate',
+      query: { effectiveYear, orgUnitNo },
+    });
+  }
+
+  saveComments(effectiveYear: string, comments: string): CancelablePromise<MasterListAdmin> {
+    return this.doRequest<MasterListAdmin>(this.config, {
+      method: 'POST',
+      url: '/v1/admin/master-list/comments',
+      body: { effectiveYear, comments },
+      mediaType: 'application/json',
+    });
+  }
+
+  deleteMasterList(effectiveYear: string): CancelablePromise<MasterListAdmin> {
+    return this.doRequest<MasterListAdmin>(this.config, {
+      method: 'DELETE',
+      url: '/v1/admin/master-list',
+      query: { effectiveYear },
+    });
+  }
 }

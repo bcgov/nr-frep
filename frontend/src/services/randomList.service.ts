@@ -20,4 +20,18 @@ export class RandomListService extends HttpClient {
       },
     });
   }
+
+  /** Export the district random list to Excel. Backend endpoint is a TODO (responds 501). */
+  exportRandomList(query: RandomListQuery): CancelablePromise<void> {
+    const { effectiveYear, orgUnit } = query;
+
+    return this.doRequest<void>(this.config, {
+      method: 'GET',
+      url: '/v1/random-list/export',
+      query: {
+        effectiveYear,
+        ...(orgUnit ? { orgUnit } : {}),
+      },
+    });
+  }
 }

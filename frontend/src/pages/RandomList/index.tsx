@@ -23,6 +23,7 @@ import type { RandomListSite } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { runTodoFeature } from '@/utils/featureTodo';
 
 import './randomList.scss';
 
@@ -37,6 +38,7 @@ const TABLE_HEADERS = [
   { key: 'disturbanceEndDate', header: 'Harvest complete' },
   { key: 'existingChecklists', header: 'Existing checklists' },
   { key: 'underReview', header: 'Status' },
+  { key: 'mapView', header: 'Map' },
 ] as const;
 
 const formatArea = (value: number | null): string => (value == null ? '' : value.toFixed(1));
@@ -54,6 +56,7 @@ function toTableRows(sites: RandomListSite[]) {
     disturbanceEndDate: site.disturbanceEndDate ?? '',
     existingChecklists: site.existingChecklists.join(', '),
     underReview: site.underReview,
+    mapView: site.openingId,
   }));
 }
 
@@ -185,6 +188,23 @@ const RandomListPage: FC = () => {
           >
             Refresh
           </Button>
+          <Button
+            kind="tertiary"
+            onClick={() =>
+              void runTodoFeature(
+                () =>
+                  API.randomList.exportRandomList({
+                    effectiveYear,
+                    orgUnit: orgUnit || undefined,
+                  }),
+                display,
+                'Export to Excel',
+              )
+            }
+            disabled={loading || configLoading || !effectiveYear}
+          >
+            Export to Excel
+          </Button>
         </div>
       </Column>
 
@@ -244,6 +264,27 @@ const RandomListPage: FC = () => {
                                       Pending
                                     </Tag>
                                   )}
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'mapView') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={!cell.value}
+                                    onClick={() =>
+                                      void runTodoFeature(
+                                        () =>
+                                          API.acceptedSites.getOpeningMapView(String(cell.value)),
+                                        display,
+                                        'Map / GIS view',
+                                      )
+                                    }
+                                  >
+                                    Map
+                                  </Button>
                                 </TableCell>
                               );
                             }

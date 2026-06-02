@@ -66,4 +66,11 @@ class RandomListControllerTest {
     mockMvc.perform(get("/api/v1/random-list"))
         .andExpect(status().isBadRequest());
   }
+
+  @Test
+  void exportRandomListIsNotYetImplemented() throws Exception {
+    mockMvc.perform(get("/api/v1/random-list/export"))
+        .andExpect(status().isNotImplemented())
+        .andExpect(jsonPath("$.feature").value("export-random-list"));
+  }
 }

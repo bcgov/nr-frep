@@ -13,5 +13,8 @@ public record ChecklistSearchCriteria(
     String cutBlockId,
     String openingId,
     String clientNumber,
-    String checklistStatusCode
+    String checklistStatusCode,
+    String checklistId,
+    String evaluationDateFrom,
+    String evaluationDateTo
 ) {}

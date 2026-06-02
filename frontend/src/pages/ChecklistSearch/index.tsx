@@ -23,6 +23,7 @@ import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { runTodoFeature } from '@/utils/featureTodo';
 
 import './checklistSearch.scss';
 
@@ -229,6 +230,26 @@ const ChecklistSearchPage: FC = () => {
             value={filters.clientNumber ?? ''}
             onChange={(e) => updateFilter('clientNumber', e.target.value || undefined)}
           />
+          <TextInput
+            id="checklist-search-checklist-id"
+            labelText="Checklist ID"
+            value={filters.checklistId ?? ''}
+            onChange={(e) => updateFilter('checklistId', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-eval-from"
+            labelText="Eval. date from"
+            placeholder="YYYY-MM-DD"
+            value={filters.evaluationDateFrom ?? ''}
+            onChange={(e) => updateFilter('evaluationDateFrom', e.target.value || undefined)}
+          />
+          <TextInput
+            id="checklist-search-eval-to"
+            labelText="Eval. date to"
+            placeholder="YYYY-MM-DD"
+            value={filters.evaluationDateTo ?? ''}
+            onChange={(e) => updateFilter('evaluationDateTo', e.target.value || undefined)}
+          />
           <div className="checklist-search__actions">
             <Button onClick={() => void runSearch()} disabled={loading}>
               Search
@@ -241,6 +262,18 @@ const ChecklistSearchPage: FC = () => {
               }}
             >
               Clear
+            </Button>
+            <Button
+              kind="tertiary"
+              onClick={() =>
+                void runTodoFeature(
+                  () => API.search.exportChecklists(filters),
+                  display,
+                  'Export to Excel',
+                )
+              }
+            >
+              Export to Excel
             </Button>
           </div>
         </div>

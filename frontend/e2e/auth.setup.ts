@@ -5,13 +5,22 @@ import { test as setup, expect } from '@playwright/test';
 import { STORAGE_STATE } from './utils';
 
 /**
- * One-time IDIR sign-in bootstrap. Parks the browser at the FAM/IDIR login
- * page and waits for the operator to finish authentication; on success the
- * Amplify cookies + localStorage are persisted to {@link STORAGE_STATE} so
- * subsequent test runs start already logged in.
+ * Auth setup. Runs once per `playwright test` invocation, as a dependency of
+ * every browser project. Three behaviours, in priority order:
  *
- * Triggered by {@code npm run e2e:login}. Should be re-run whenever the saved
- * session expires (tests start failing with 401 or redirect loops).
+ *   1. e2e/.auth/user.json already exists (and E2E_FORCE_LOGIN is unset) → do
+ *      nothing (cached state).
+ *   2. E2E_IDIR_USER + E2E_IDIR_PASSWORD env vars are set → drive IDIR login
+ *      programmatically. Used in CI (reusable-tests.yml passes these from
+ *      GitHub Actions secrets) so the suite runs unattended.
+ *   3. Neither of the above → fall back to the interactive flow: open the
+ *      headed browser and wait up to 5 minutes for a human to complete the
+ *      IDIR sign-in. Used locally via `npm run e2e:login`.
+ *
+ * On success the Amplify cookies + localStorage are persisted to
+ * {@link STORAGE_STATE} so subsequent test runs start already logged in.
+ * Re-run `npm run e2e:login` whenever the saved Cognito tokens expire
+ * (symptom: tests bouncing to the IDIR domain or hitting 401s).
  */
 setup('authenticate via IDIR', async ({ page }) => {
   if (existsSync(STORAGE_STATE) && !process.env.E2E_FORCE_LOGIN) {
@@ -19,16 +28,35 @@ setup('authenticate via IDIR', async ({ page }) => {
     return;
   }
 
+  const idirUser = process.env.E2E_IDIR_USER;
+  const idirPassword = process.env.E2E_IDIR_PASSWORD;
+  const programmatic = Boolean(idirUser && idirPassword);
+
   await page.goto('/');
 
   // The landing page exposes a Log in button that kicks off Cognito/IDIR.
-  const loginButton = page.getByRole('button', { name: /log in with idir/i });
-  await loginButton.click();
+  await page.getByTestId('landing-button__idir').click();
 
-  // The operator now completes IDIR auth (username, password, MFA) by hand.
-  // The flow eventually redirects back to /dashboard with Amplify cookies set.
-  await expect(page).toHaveURL(/\/dashboard$/i, { timeout: 5 * 60_000 });
-  await page.getByTestId('bc-header__header').waitFor({ timeout: 60_000 });
+  if (programmatic) {
+    // The BC Gov SSO login page is on a different origin than the SPA.
+    // Selectors below match the Logon7 / IDIR login form fields. If the
+    // upstream form ever changes its `name` attributes, this is the place
+    // to update them.
+    await page.waitForURL(/logon|loginproxy|amazoncognito/i, { timeout: 60_000 });
+
+    await page.locator('input[name="user"]').fill(idirUser!);
+    await page.locator('input[name="password"]').fill(idirPassword!);
+    await page.locator('input[type="submit"], button[type="submit"]').first().click();
+  }
+
+  // Whether interactive or programmatic, we wait for the redirect back to
+  // /dashboard. Interactive flow gets 5 min for a human; programmatic gets 2.
+  await page.waitForURL((url) => url.pathname.startsWith('/dashboard'), {
+    timeout: programmatic ? 2 * 60_000 : 5 * 60_000,
+  });
+
+  // Sanity check: the Layout header renders once auth + roles resolve.
+  await expect(page.getByTestId('bc-header__header')).toBeVisible({ timeout: 60_000 });
 
   await page.context().storageState({ path: STORAGE_STATE });
 });

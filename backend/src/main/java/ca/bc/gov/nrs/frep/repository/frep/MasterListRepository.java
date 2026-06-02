@@ -88,6 +88,57 @@ public class MasterListRepository extends AbstractFrepRepository {
     });
   }
 
+  /**
+   * Regenerate the master list for a single district. Legacy equivalent:
+   * {@code Frep700MasterListDataManager.regenerate} ({@code regenerate(year, org_unit_no,
+   * error OUT, user_id)}).
+   */
+  public void regenerateDistrict(String effectiveYear, String orgUnitNo, String userId) {
+    String call = "{call " + PACKAGE_NAME + ".regenerate (?,?,?,?)}";
+    executeCall(call, cs -> {
+      cs.setString(1, effectiveYear);
+      cs.setString(2, orgUnitNo);
+      cs.registerOutParameter(3, Types.VARCHAR);
+      cs.setString(4, userId);
+    }, cs -> {
+      throwIfError(PACKAGE_NAME, "regenerate", cs.getString(3));
+      return null;
+    });
+  }
+
+  /**
+   * Save the generation comments for a year without regenerating. Legacy equivalent:
+   * {@code Frep700MasterListDataManager.save_comments} ({@code save_comments(year, comments,
+   * user_id, error OUT)}).
+   */
+  public void saveComments(String effectiveYear, String generationComments, String userId) {
+    String call = "{call " + PACKAGE_NAME + ".save_comments (?,?,?,?)}";
+    executeCall(call, cs -> {
+      cs.setString(1, effectiveYear);
+      cs.setString(2, generationComments);
+      cs.setString(3, userId);
+      cs.registerOutParameter(4, Types.VARCHAR);
+    }, cs -> {
+      throwIfError(PACKAGE_NAME, "save_comments", cs.getString(4));
+      return null;
+    });
+  }
+
+  /**
+   * Delete the generated master list for a year. Legacy equivalent:
+   * {@code Frep700MasterListDataManager.delete_list} ({@code delete_list(year, error OUT)}).
+   */
+  public void deleteList(String effectiveYear) {
+    String call = "{call " + PACKAGE_NAME + ".delete_list (?,?)}";
+    executeCall(call, cs -> {
+      cs.setString(1, effectiveYear);
+      cs.registerOutParameter(2, Types.VARCHAR);
+    }, cs -> {
+      throwIfError(PACKAGE_NAME, "delete_list", cs.getString(2));
+      return null;
+    });
+  }
+
   private static List<MasterListGenerationRow> readGenerationResultsArray(Array array)
       throws SQLException {
     if (array == null) {
@@ -109,6 +160,7 @@ public class MasterListRepository extends AbstractFrepRepository {
   static MasterListGenerationRow fromGenerationStruct(Struct struct) throws SQLException {
     Object[] attrs = struct.getAttributes();
     return new MasterListGenerationRow(
+        stringAttr(attrs, 0),
         stringAttr(attrs, 1),
         intAttr(attrs, 4),
         intAttr(attrs, 5),

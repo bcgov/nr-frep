@@ -25,16 +25,25 @@ export type ChecklistSearchQuery = {
   openingId?: string;
   clientNumber?: string;
   checklistStatusCode?: string;
+  checklistId?: string;
+  evaluationDateFrom?: string;
+  evaluationDateTo?: string;
 };
 
 export type ClientSearchResult = {
+  clientAcronym: string;
   clientNumber: string;
+  clientLocnCode: string;
   clientName: string;
+  clientLocnName: string;
+  city: string;
   clientStatus: string;
-  locationCount: number;
 };
 
 export type ClientSearchQuery = {
   clientNumber?: string;
+  clientAcronym?: string;
   clientName?: string;
+  legalFirstName?: string;
+  legalMiddleName?: string;
 };

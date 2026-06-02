@@ -1,16 +1,23 @@
 package ca.bc.gov.nrs.frep.dto.frep;
 
 /**
- * One row of the FREP410 client search results.
+ * One row of the FREP410 client search results — one row per client location,
+ * mirroring the legacy {@code frep410ClientSearch.jsp} results grid.
  *
- * @param clientNumber  8-digit client number
- * @param clientName    legal name
- * @param clientStatus  {@code ACT} active / {@code DAC} deactivated
- * @param locationCount number of distinct locations on file
+ * @param clientAcronym  client acronym
+ * @param clientNumber   display client number (8-digit)
+ * @param clientLocnCode 2-char location code
+ * @param clientName     legal name
+ * @param clientLocnName location name
+ * @param city           city
+ * @param clientStatus   {@code ACT} active / {@code DAC} deactivated
  */
 public record ClientSearchResult(
+    String clientAcronym,
     String clientNumber,
+    String clientLocnCode,
     String clientName,
-    String clientStatus,
-    int locationCount
+    String clientLocnName,
+    String city,
+    String clientStatus
 ) {}

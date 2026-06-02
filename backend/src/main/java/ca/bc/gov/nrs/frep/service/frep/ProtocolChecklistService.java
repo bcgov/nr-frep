@@ -1,6 +1,20 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
+import ca.bc.gov.nrs.frep.dto.frep.BioPlot;
+import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.dto.frep.BioStratum;
+import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianSpecificImpacts;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
+import ca.bc.gov.nrs.frep.dto.frep.WaterAssessment;
+import ca.bc.gov.nrs.frep.dto.frep.WaterRange;
+import ca.bc.gov.nrs.frep.dto.frep.WaterSampleArea;
+import ca.bc.gov.nrs.frep.dto.frep.WaterSampleSite;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
@@ -83,6 +97,191 @@ public class ProtocolChecklistService {
         ? opening.withIdentity(checklistId, opening.revisionCount())
         : opening;
     return writeRepository.saveBiodiversityOpening(toSave, loggedUserHelper.getLoggedUserId());
+  }
+
+  public List<BioStratumRow> listBioStrata(String checklistId) {
+    return writeRepository.listBioStrata(checklistId);
+  }
+
+  public BioStratum getBioStratum(String stratumId) {
+    BioStratum stratum = writeRepository.getBioStratum(stratumId);
+    if (stratum == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Stratum not found: " + stratumId);
+    }
+    return stratum;
+  }
+
+  public BioStratum saveBioStratum(BioStratum stratum) {
+    assertCanWrite();
+    return writeRepository.saveBioStratum(stratum, loggedUserHelper.getLoggedUserId());
+  }
+
+  public void deleteBioStratum(String stratumId, String revisionCount) {
+    assertCanWrite();
+    String error = writeRepository.deleteBioStratum(stratumId, revisionCount);
+    if (StringUtils.isNotBlank(error)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+    }
+  }
+
+  public String nextStratumNumber() {
+    assertCanWrite();
+    return writeRepository.nextStratumNumber();
+  }
+
+  // --- Biodiversity plots (FREP screen 212) ---
+
+  public List<BioPlotRow> listBioPlots(String stratumId) {
+    return writeRepository.listBioPlots(stratumId);
+  }
+
+  public BioPlot getBioPlot(String plotId) {
+    BioPlot plot = writeRepository.getBioPlot(plotId);
+    if (plot == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plot not found: " + plotId);
+    }
+    return plot;
+  }
+
+  public BioPlot saveBioPlot(BioPlot plot) {
+    assertCanWrite();
+    return writeRepository.saveBioPlot(plot, loggedUserHelper.getLoggedUserId());
+  }
+
+  public void deleteBioPlot(String plotId, String revisionCount) {
+    assertCanWrite();
+    String error = writeRepository.deleteBioPlot(plotId, revisionCount);
+    if (StringUtils.isNotBlank(error)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+    }
+  }
+
+  // --- Riparian stream opening (FREP screen 230) ---
+
+  public RiparianStreamOpening getRipStreamOpening(String checklistId) {
+    RiparianStreamOpening opening = writeRepository.getRipStreamOpening(checklistId);
+    if (opening == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
+    }
+    return opening;
+  }
+
+  public RiparianStreamOpening saveRipStreamOpening(String checklistId, RiparianStreamOpening opening) {
+    assertCanWrite();
+    return writeRepository.saveRipStreamOpening(
+        opening.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Riparian final comments (FREP screen 235) ---
+
+  public RiparianFinalComments getRipFinalComments(String checklistId) {
+    RiparianFinalComments comments = writeRepository.getRipFinalComments(checklistId);
+    if (comments == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
+    }
+    return comments;
+  }
+
+  public RiparianFinalComments saveRipFinalComments(String checklistId, RiparianFinalComments comments) {
+    assertCanWrite();
+    return writeRepository.saveRipFinalComments(
+        comments.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Riparian field data / other indicators / questions / specific impacts (231-234) ---
+
+  public RiparianFieldData getRipFieldData(String checklistId) {
+    RiparianFieldData data = writeRepository.getRipFieldData(checklistId);
+    if (data == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
+    }
+    return data;
+  }
+
+  public RiparianFieldData saveRipFieldData(String checklistId, RiparianFieldData data) {
+    assertCanWrite();
+    return writeRepository.saveRipFieldData(
+        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public RiparianOtherIndicators getRipOtherIndicators(String checklistId) {
+    return writeRepository.getRipOtherIndicators(checklistId);
+  }
+
+  public RiparianOtherIndicators saveRipOtherIndicators(String checklistId, RiparianOtherIndicators data) {
+    assertCanWrite();
+    return writeRepository.saveRipOtherIndicators(
+        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public RiparianQuestions getRipQuestions(String checklistId) {
+    return writeRepository.getRipQuestions(checklistId);
+  }
+
+  public RiparianQuestions saveRipQuestions(String checklistId, RiparianQuestions data) {
+    assertCanWrite();
+    return writeRepository.saveRipQuestions(
+        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public RiparianSpecificImpacts getRipSpecificImpacts(String checklistId) {
+    return writeRepository.getRipSpecificImpacts(checklistId);
+  }
+
+  public RiparianSpecificImpacts saveRipSpecificImpacts(String checklistId, RiparianSpecificImpacts data) {
+    assertCanWrite();
+    return writeRepository.saveRipSpecificImpacts(
+        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Water (FREP screens 250-253) ---
+
+  public WaterSampleArea getWaterSampleArea(String checklistId) {
+    WaterSampleArea area = writeRepository.getWaterSampleArea(checklistId);
+    if (area == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Water checklist not found: " + checklistId);
+    }
+    return area;
+  }
+
+  public WaterSampleArea saveWaterSampleArea(String checklistId, WaterSampleArea area) {
+    assertCanWrite();
+    return writeRepository.saveWaterSampleArea(
+        area.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public WaterSampleSite getWaterSampleSite(String checklistId) {
+    WaterSampleSite site = writeRepository.getWaterSampleSite(checklistId);
+    if (site == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Water sample site not found: " + checklistId);
+    }
+    return site;
+  }
+
+  public WaterSampleSite saveWaterSampleSite(String checklistId, WaterSampleSite site) {
+    assertCanWrite();
+    return writeRepository.saveWaterSampleSite(
+        site.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public WaterAssessment getWaterAssessment(String sampleSiteId) {
+    return writeRepository.getWaterAssessment(sampleSiteId);
+  }
+
+  public WaterAssessment saveWaterAssessment(String sampleSiteId, WaterAssessment data) {
+    assertCanWrite();
+    return writeRepository.saveWaterAssessment(
+        data.withSampleSite(sampleSiteId), loggedUserHelper.getLoggedUserId());
+  }
+
+  public WaterRange getWaterRange(String sampleSiteId) {
+    return writeRepository.getWaterRange(sampleSiteId);
+  }
+
+  public WaterRange saveWaterRange(String sampleSiteId, WaterRange data) {
+    assertCanWrite();
+    return writeRepository.saveWaterRange(
+        data.withSampleSite(sampleSiteId), loggedUserHelper.getLoggedUserId());
   }
 
   private String resolveResourceType(String protocolType) {

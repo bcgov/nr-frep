@@ -7,8 +7,9 @@ import java.util.List;
  */
 public record SiteDetailData(
     String frepSelectedSiteId,
-    String effectiveYear,
+    String masterList,
     String orgUnit,
+    String orgUnitNo,
     String client,
     String clientName,
     String opening,

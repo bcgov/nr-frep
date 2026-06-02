@@ -6,7 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.dto.frep.BioPlot;
+import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
@@ -189,6 +193,96 @@ class ProtocolChecklistServiceTest {
 
     assertEquals("9001", saved.checklistId());
     verify(writeRepository).saveBiodiversityOpening(opening, "u");
+  }
+
+  @Test
+  void listBioStrataDelegatesToRepository() {
+    BioStratumRow row = new BioStratumRow("900", "1", "MAT", "2024-05-01", "5", "3.2");
+    when(writeRepository.listBioStrata("1001")).thenReturn(List.of(row));
+
+    assertEquals(1, service.listBioStrata("1001").size());
+  }
+
+  @Test
+  void getBioStratumThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBioStratum("900")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBioStratum("900"));
+  }
+
+  @Test
+  void saveBioStratumForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.saveBioStratum(null));
+  }
+
+  @Test
+  void deleteBioStratumDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.deleteBioStratum("900", "2")).thenReturn("");
+
+    service.deleteBioStratum("900", "2");
+
+    verify(writeRepository).deleteBioStratum("900", "2");
+  }
+
+  @Test
+  void nextStratumNumberDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.nextStratumNumber()).thenReturn("5");
+
+    assertEquals("5", service.nextStratumNumber());
+  }
+
+  @Test
+  void listBioPlotsDelegatesToRepository() {
+    when(writeRepository.listBioPlots("900")).thenReturn(List.of(new BioPlotRow("500", "1", "jdoe")));
+
+    assertEquals(1, service.listBioPlots("900").size());
+  }
+
+  @Test
+  void getBioPlotThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBioPlot("500")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBioPlot("500"));
+  }
+
+  @Test
+  void saveBioPlotForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.saveBioPlot(new BioPlot(
+        null, "900", null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null)));
+  }
+
+  @Test
+  void deleteBioPlotDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.deleteBioPlot("500", "2")).thenReturn("");
+
+    service.deleteBioPlot("500", "2");
+
+    verify(writeRepository).deleteBioPlot("500", "2");
+  }
+
+  @Test
+  void getRipStreamOpeningThrowsNotFoundWhenMissing() {
+    when(writeRepository.getRipStreamOpening("2002")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getRipStreamOpening("2002"));
+  }
+
+  @Test
+  void saveRipStreamOpeningForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveRipStreamOpening("2002", riparianStreamOpening()));
+  }
+
+  private static RiparianStreamOpening riparianStreamOpening() {
+    return new RiparianStreamOpening(
+        "2002", null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        List.of());
   }
 
   private static ChecklistSectionData sectionWithHeader(

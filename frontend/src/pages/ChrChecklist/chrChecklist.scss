@@ -1,0 +1,127 @@
+.chr-checklist {
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+
+  &__section {
+    margin-top: 1rem;
+  }
+
+  &__form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+    align-items: end;
+  }
+
+  &__fieldset {
+    grid-column: 1 / -1;
+    border: 1px solid var(--cds-border-subtle, #e0e0e0);
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.5rem 1rem;
+
+    legend {
+      font-weight: 600;
+      padding: 0 0.5rem;
+    }
+  }
+
+  &__ro-field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0.5rem;
+  }
+
+  &__ro-label {
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary, #525252);
+  }
+
+  &__row {
+    margin-bottom: 1rem;
+  }
+
+  &__photo {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+
+    .chr-checklist__form {
+      flex: 1;
+    }
+  }
+
+  &__thumb {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border: 1px solid var(--cds-border-subtle, #e0e0e0);
+
+    &--placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.75rem;
+      padding: 0.5rem;
+      color: var(--cds-text-secondary, #525252);
+    }
+  }
+
+  &__planning {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+
+    th,
+    td {
+      text-align: left;
+      padding: 0.25rem 0.5rem;
+      border-bottom: 1px solid var(--cds-border-subtle, #e0e0e0);
+    }
+
+    th:not(:first-child),
+    td:not(:first-child) {
+      text-align: center;
+      width: 6rem;
+    }
+  }
+
+  &__feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  &__feature-item {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  &__feature-editor {
+    position: relative;
+  }
+
+  &__feature-delete {
+    margin-bottom: 0.5rem;
+  }
+
+  &__errors {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

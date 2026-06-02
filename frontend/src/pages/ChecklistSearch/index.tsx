@@ -283,15 +283,19 @@ const ChecklistSearchPage: FC = () => {
                     {rows.map((row) => {
                       const data = results.find((r) => r.checklistId === row.id);
                       const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
+                      const isChr = data?.protocolCode === 'CHR';
+                      const checklistLink = isChr
+                        ? `/chr/checklists/${row.id}`
+                        : protoPath
+                          ? `/protocol-checklists/${protoPath}/${row.id}`
+                          : undefined;
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
                           {row.cells.map((cell) => {
-                            if (cell.info.header === 'checklistId' && protoPath) {
+                            if (cell.info.header === 'checklistId' && checklistLink) {
                               return (
                                 <TableCell key={cell.id}>
-                                  <RouterLink to={`/protocol-checklists/${protoPath}/${row.id}`}>
-                                    {cell.value}
-                                  </RouterLink>
+                                  <RouterLink to={checklistLink}>{cell.value}</RouterLink>
                                 </TableCell>
                               );
                             }

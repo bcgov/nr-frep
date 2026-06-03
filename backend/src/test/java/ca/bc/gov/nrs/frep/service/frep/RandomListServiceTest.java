@@ -10,7 +10,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.repository.frep.RandomListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.RandomListResult;
 import ca.bc.gov.nrs.frep.repository.frep.RandomListRow;
+import ca.bc.gov.nrs.frep.repository.frep.RandomListSummary;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,10 +40,12 @@ class RandomListServiceTest {
         "L1234",
         "CP-8891",
         "CB-442",
-        "24.5",
-        "22.1",
+        "12.5",
         "2023-09-15",
         "2024-06-15",
+        "MU1",
+        "24.5",
+        "22.1",
         List.of("SLB", "RIP")
     ));
 
@@ -49,46 +53,58 @@ class RandomListServiceTest {
     assertTrue(response.underReview());
     assertEquals("DCK", response.orgUnitCode());
     assertEquals("A12345", response.openingNumber());
+    assertEquals("987654", response.openingId());
+    assertEquals(12.5, response.exhibitArea());
     assertEquals(24.5, response.grossArea());
     assertEquals(22.1, response.netArea());
     assertEquals("2023-09-15", response.disturbanceStartDate());
     assertEquals("2024-06-15", response.disturbanceEndDate());
+    assertEquals("MU1", response.managementUnit());
     assertEquals(List.of("SLB", "RIP"), response.existingChecklists());
   }
 
   @Test
   void toResponseTreatsBlankNumericAndDateFieldsAsNull() {
     var response = RandomListService.toResponse(new RandomListRow(
-        "1002", "N", "DCK", "", "B67890", "", "", "", "", "", "", "", List.of()
+        "1002", "N", "DCK", "", "B67890", "", "", "", "", "", "", "", "", "", List.of()
     ));
 
     assertFalse(response.underReview());
+    assertNull(response.exhibitArea());
     assertNull(response.grossArea());
     assertNull(response.netArea());
     assertNull(response.disturbanceStartDate());
     assertNull(response.disturbanceEndDate());
+    assertNull(response.managementUnit());
     assertTrue(response.existingChecklists().isEmpty());
   }
 
   @Test
-  void findRandomListDelegatesToRepository() {
-    when(randomListRepository.findRandomList("2024", "56")).thenReturn(List.of(
-        new RandomListRow(
+  void findRandomListDelegatesToRepositoryAndMapsSummary() {
+    when(randomListRepository.findRandomList("2024", "56")).thenReturn(new RandomListResult(
+        new RandomListSummary("Cariboo-Chilcotin", "3", "0", "1", "2"),
+        List.of(new RandomListRow(
             "1001", "Y", "DCK", "987654", "A12345", "L1234", "CP-8891", "CB-442",
-            "24.5", "22.1", "2023-09-15", "2024-06-15", List.of("SLB")
-        )
+            "12.5", "2023-09-15", "2024-06-15", "MU1", "24.5", "22.1", List.of("SLB")
+        ))
     ));
 
-    var sites = service.findRandomList("2024", "56");
+    var response = service.findRandomList("2024", "56");
 
-    assertEquals(1, sites.size());
-    assertEquals("A12345", sites.get(0).openingNumber());
+    assertEquals(1, response.sites().size());
+    assertEquals("A12345", response.sites().get(0).openingNumber());
+    assertEquals("Cariboo-Chilcotin", response.summary().orgUnitDescription());
+    assertEquals(3, response.summary().biodiversity());
+    assertEquals(2, response.summary().culturalHeritage());
+    assertEquals(0, response.summary().riparian());
+    assertEquals(1, response.summary().water());
     verify(randomListRepository).findRandomList("2024", "56");
   }
 
   @Test
   void findRandomListPassesNullOrgUnitThrough() {
-    when(randomListRepository.findRandomList("2024", null)).thenReturn(List.of());
+    when(randomListRepository.findRandomList("2024", null)).thenReturn(
+        new RandomListResult(new RandomListSummary("", "", "", "", ""), List.of()));
 
     service.findRandomList("2024", null);
 

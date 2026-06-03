@@ -1,8 +1,10 @@
+import { Map as MapIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
   DataTable,
   Grid,
+  Pagination,
   Select,
   SelectItem,
   SkeletonText,
@@ -19,7 +21,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import type { MasterListYear, OrgUnit } from '@/types/configuration';
-import type { RandomListSite } from '@/types/randomList';
+import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
@@ -28,34 +30,45 @@ import { runTodoFeature } from '@/utils/featureTodo';
 import './randomList.scss';
 
 const TABLE_HEADERS = [
+  { key: 'underReview', header: 'Status' },
   { key: 'openingNumber', header: 'Opening' },
-  { key: 'orgUnitCode', header: 'District' },
+  { key: 'orgUnitCode', header: 'Org Unit' },
+  { key: 'openingId', header: 'Opening ID' },
   { key: 'licenceId', header: 'Licence' },
   { key: 'cuttingPermitId', header: 'CP' },
-  { key: 'cutBlockId', header: 'Cut block' },
+  { key: 'cutBlockId', header: 'Blk' },
+  { key: 'exhibitArea', header: 'Exhibit A (ha)' },
+  { key: 'disturbanceStartDate', header: 'Harvest start date' },
+  { key: 'disturbanceEndDate', header: 'Harvest complete date' },
+  { key: 'managementUnit', header: 'Mgmt. unit' },
   { key: 'grossArea', header: 'Gross area (ha)' },
   { key: 'netArea', header: 'Net area (ha)' },
-  { key: 'disturbanceEndDate', header: 'Harvest complete' },
   { key: 'existingChecklists', header: 'Existing checklists' },
-  { key: 'underReview', header: 'Status' },
-  { key: 'mapView', header: 'Map' },
+  { key: 'mapView', header: '' },
 ] as const;
 
 const formatArea = (value: number | null): string => (value == null ? '' : value.toFixed(1));
 
+// Exhibit-A area is shown at its stored precision (legacy displays up to 4 dp).
+const formatExhibit = (value: number | null): string => (value == null ? '' : String(value));
+
 function toTableRows(sites: RandomListSite[]) {
-  return sites.map((site) => ({
+  return (sites ?? []).map((site) => ({
     id: site.frepSelectedSiteId,
+    underReview: site.underReview,
     openingNumber: site.openingNumber,
     orgUnitCode: site.orgUnitCode,
+    openingId: site.openingId,
     licenceId: site.licenceId,
     cuttingPermitId: site.cuttingPermitId,
     cutBlockId: site.cutBlockId,
+    exhibitArea: formatExhibit(site.exhibitArea),
+    disturbanceStartDate: site.disturbanceStartDate ?? '',
+    disturbanceEndDate: site.disturbanceEndDate ?? '',
+    managementUnit: site.managementUnit ?? '',
     grossArea: formatArea(site.grossArea),
     netArea: formatArea(site.netArea),
-    disturbanceEndDate: site.disturbanceEndDate ?? '',
     existingChecklists: site.existingChecklists.join(', '),
-    underReview: site.underReview,
     mapView: site.openingId,
   }));
 }
@@ -71,8 +84,12 @@ const RandomListPage: FC = () => {
   const [orgUnit, setOrgUnit] = useState<string>('');
 
   const [sites, setSites] = useState<RandomListSite[]>([]);
+  const [summary, setSummary] = useState<RandomListSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +135,8 @@ const RandomListPage: FC = () => {
         effectiveYear,
         orgUnit: orgUnit || undefined,
       });
-      setSites(data);
+      setSites(data.sites ?? []);
+      setSummary(data.summary ?? null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       display({
@@ -129,6 +147,7 @@ const RandomListPage: FC = () => {
       });
       setHasError(true);
       setSites([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -140,16 +159,22 @@ const RandomListPage: FC = () => {
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 
+  // Reset to the first page whenever a new result set loads.
+  useEffect(() => {
+    setPage(1);
+  }, [sites]);
+
+  const paginatedRows = useMemo(
+    () => tableRows.slice((page - 1) * pageSize, page * pageSize),
+    [tableRows, page, pageSize],
+  );
+
   return (
     <Grid fullWidth className="default-grid random-list-grid">
       <Column sm={4} md={8} lg={16}>
         <div className="random-list__header">
           <h1>District Random List</h1>
         </div>
-        <p className="random-list__subtitle">
-          Randomly selected sites for the chosen master list year and district. Pick a row to view
-          site details.
-        </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -188,23 +213,6 @@ const RandomListPage: FC = () => {
           >
             Refresh
           </Button>
-          <Button
-            kind="tertiary"
-            onClick={() =>
-              void runTodoFeature(
-                () =>
-                  API.randomList.exportRandomList({
-                    effectiveYear,
-                    orgUnit: orgUnit || undefined,
-                  }),
-                display,
-                'Export to Excel',
-              )
-            }
-            disabled={loading || configLoading || !effectiveYear}
-          >
-            Export to Excel
-          </Button>
         </div>
       </Column>
 
@@ -221,12 +229,46 @@ const RandomListPage: FC = () => {
           <p data-testid="random-list-empty">No sites match the selected filters.</p>
         )}
         {!loading && !configLoading && !hasError && sites.length > 0 && (
-          <DataTable rows={tableRows} headers={[...TABLE_HEADERS]} data-testid="random-list-table">
+          <DataTable
+            rows={paginatedRows}
+            headers={[...TABLE_HEADERS]}
+            data-testid="random-list-table"
+          >
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
-              <TableContainer
-                title="District random list"
-                description="Sites generated for evaluation"
-              >
+              <TableContainer>
+                <div className="random-list__table-header">
+                  {summary ? (
+                    <p className="random-list__summary" data-testid="random-list-summary">
+                      <strong># of Sites Accepted</strong>
+                      {summary.orgUnitDescription ? ` — ${summary.orgUnitDescription}` : ''}
+                      {' — '}
+                      Biodiversity: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
+                      {summary.culturalHeritage} &nbsp; Riparian: {summary.riparian} &nbsp; Water:{' '}
+                      {summary.water}
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <Button
+                    kind="tertiary"
+                    size="md"
+                    className="random-list__export-btn"
+                    onClick={() =>
+                      void runTodoFeature(
+                        () =>
+                          API.randomList.exportRandomList({
+                            effectiveYear,
+                            orgUnit: orgUnit || undefined,
+                          }),
+                        display,
+                        'Export to Excel',
+                      )
+                    }
+                    disabled={loading || configLoading || !effectiveYear}
+                  >
+                    Export to Excel
+                  </Button>
+                </div>
                 <Table {...getTableProps()}>
                   <TableHead>
                     <TableRow>
@@ -243,6 +285,13 @@ const RandomListPage: FC = () => {
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
                           {row.cells.map((cell) => {
+                            // The Opening value links to the internal FREP site-detail page.
+                            // TODO(frep-external-links): Legacy linked Opening ID to the external
+                            // openings viewer (ECAS, resultsLnkAction.do?userAction=Opening) and
+                            // Licence to FTA (ftaLnkAction.do?userAction=Licence). Those corporate
+                            // integrations are not wired in the new app yet, so Opening ID and
+                            // Licence render as plain text — wire the real external URLs once
+                            // available.
                             if (cell.info.header === 'openingNumber' && meta) {
                               return (
                                 <TableCell key={cell.id}>
@@ -269,22 +318,25 @@ const RandomListPage: FC = () => {
                             }
                             if (cell.info.header === 'mapView') {
                               return (
-                                <TableCell key={cell.id}>
+                                <TableCell key={cell.id} className="random-list__map-cell">
                                   <Button
                                     kind="ghost"
                                     size="sm"
+                                    hasIconOnly
+                                    renderIcon={MapIcon}
+                                    iconDescription="Site Map"
+                                    tooltipPosition="left"
+                                    className="random-list__map-btn"
                                     disabled={!cell.value}
                                     onClick={() =>
                                       void runTodoFeature(
                                         () =>
                                           API.acceptedSites.getOpeningMapView(String(cell.value)),
                                         display,
-                                        'Map / GIS view',
+                                        'Site Map',
                                       )
                                     }
-                                  >
-                                    Map
-                                  </Button>
+                                  />
                                 </TableCell>
                               );
                             }
@@ -295,6 +347,17 @@ const RandomListPage: FC = () => {
                     })}
                   </TableBody>
                 </Table>
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  pageSizes={[15, 25, 50, 100]}
+                  totalItems={tableRows.length}
+                  size="md"
+                  onChange={({ page: nextPage, pageSize: nextPageSize }) => {
+                    setPage(nextPage);
+                    setPageSize(nextPageSize);
+                  }}
+                />
               </TableContainer>
             )}
           </DataTable>

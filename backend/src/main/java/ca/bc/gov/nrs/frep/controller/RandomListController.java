@@ -1,9 +1,8 @@
 package ca.bc.gov.nrs.frep.controller;
 
 import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
-import ca.bc.gov.nrs.frep.dto.frep.RandomListSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.RandomListResponse;
 import ca.bc.gov.nrs.frep.service.frep.RandomListService;
-import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +28,7 @@ public class RandomListController {
   }
 
   @GetMapping("/random-list")
-  public ResponseEntity<List<RandomListSiteResponse>> getRandomList(
+  public ResponseEntity<RandomListResponse> getRandomList(
       @RequestParam String effectiveYear,
       @RequestParam(required = false) String orgUnit
   ) {

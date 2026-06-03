@@ -17,10 +17,12 @@ import java.util.List;
  * @param licenceId           tenure / forest file id
  * @param cuttingPermitId     CP id
  * @param cutBlockId          cut block id
+ * @param exhibitArea         exhibit-A area in hectares
  * @param grossArea           gross area in hectares
  * @param netArea             net area in hectares
- * @param disturbanceStartDate  start of harvest disturbance window
+ * @param disturbanceStartDate  start of harvest disturbance window (harvest-start date)
  * @param disturbanceEndDate    end of harvest disturbance window (harvest-complete date)
+ * @param managementUnit      management unit (e.g. TSA/TFL designation)
  * @param existingChecklists  protocol codes already evaluated on this site, e.g. {@code ["BIO", "RIP"]}
  */
 public record RandomListSiteResponse(
@@ -32,9 +34,11 @@ public record RandomListSiteResponse(
     String licenceId,
     String cuttingPermitId,
     String cutBlockId,
+    Double exhibitArea,
     Double grossArea,
     Double netArea,
     String disturbanceStartDate,
     String disturbanceEndDate,
+    String managementUnit,
     List<String> existingChecklists
 ) {}

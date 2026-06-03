@@ -32,7 +32,7 @@ public class RandomListRepository extends AbstractFrepRepository {
    *
    * <p>Legacy equivalent: {@code Frep100DataManager.getSelectedSites}.
    */
-  public List<RandomListRow> findRandomList(String effectiveYear, String orgUnitNo) {
+  public RandomListResult findRandomList(String effectiveYear, String orgUnitNo) {
     String call = "{call " + PACKAGE_NAME + ".GET (?,?,?,?,?,?,?,?,?,?)}";
     return executeCall(call, cs -> {
       cs.setString(1, effectiveYear);
@@ -48,8 +48,19 @@ public class RandomListRepository extends AbstractFrepRepository {
       cs.registerOutParameter(10, Types.ARRAY, ARRAY_TYPE_NAME);
     }, cs -> {
       throwIfError(PACKAGE_NAME, "GET", cs.getString(9));
-      return readRandomListArray(cs.getArray(10));
+      RandomListSummary summary = new RandomListSummary(
+          nullToEmpty(cs.getString(8)),
+          nullToEmpty(cs.getString(4)),
+          nullToEmpty(cs.getString(5)),
+          nullToEmpty(cs.getString(6)),
+          nullToEmpty(cs.getString(7))
+      );
+      return new RandomListResult(summary, readRandomListArray(cs.getArray(10)));
     });
+  }
+
+  private static String nullToEmpty(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private static void setEmptyRandomListArray(CallableStatement cs, int index) throws SQLException {
@@ -82,10 +93,12 @@ public class RandomListRepository extends AbstractFrepRepository {
         stringAttr(attrs, 6),
         stringAttr(attrs, 8),
         stringAttr(attrs, 9),
-        stringAttr(attrs, 14),
-        stringAttr(attrs, 15),
+        stringAttr(attrs, 10),
         stringAttr(attrs, 11),
         stringAttr(attrs, 12),
+        stringAttr(attrs, 13),
+        stringAttr(attrs, 14),
+        stringAttr(attrs, 15),
         readExistingChecklistTypes(attrs, 23)
     );
   }

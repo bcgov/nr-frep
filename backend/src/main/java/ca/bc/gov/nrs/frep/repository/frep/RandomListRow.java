@@ -16,9 +16,11 @@ public record RandomListRow(
     String licenceId,
     String cuttingPermitId,
     String cutBlockId,
-    String grossArea,
-    String netArea,
+    String exhibitArea,
     String disturbanceStartDate,
     String disturbanceEndDate,
+    String managementUnit,
+    String grossArea,
+    String netArea,
     List<String> existingChecklistTypes
 ) {}

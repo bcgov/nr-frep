@@ -32,6 +32,8 @@ class RandomListRepositoryTest {
     assertEquals("DCK", row.orgUnitCode());
     assertEquals("A12345", row.openingNumber());
     assertEquals("987654", row.openingId());
+    assertEquals("12.5", row.exhibitArea());
+    assertEquals("MU1", row.managementUnit());
     assertEquals("24.5", row.grossArea());
     assertEquals("22.1", row.netArea());
     assertEquals("2023-09-15", row.disturbanceStartDate());

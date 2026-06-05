@@ -7,11 +7,26 @@ export type RandomListSite = {
   licenceId: string;
   cuttingPermitId: string;
   cutBlockId: string;
+  exhibitArea: number | null;
   grossArea: number | null;
   netArea: number | null;
   disturbanceStartDate: string | null;
   disturbanceEndDate: string | null;
+  managementUnit: string | null;
   existingChecklists: string[];
+};
+
+export type RandomListSummary = {
+  orgUnitDescription: string | null;
+  biodiversity: number;
+  culturalHeritage: number;
+  riparian: number;
+  water: number;
+};
+
+export type RandomListResponse = {
+  summary: RandomListSummary;
+  sites: RandomListSite[];
 };
 
 export type RandomListQuery = {

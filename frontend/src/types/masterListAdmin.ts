@@ -1,4 +1,5 @@
 export type MasterListGenerationStat = {
+  orgUnitNo: string;
   orgUnitCode: string;
   orgUnitName: string;
   eligibleSites: number;

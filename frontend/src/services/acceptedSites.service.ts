@@ -21,4 +21,21 @@ export class AcceptedSitesService extends HttpClient {
       },
     });
   }
+
+  /** Printable accepted-sites view. Backend endpoint is a TODO (responds 501). */
+  printAcceptedSites(): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
+      method: 'GET',
+      url: '/v1/accepted-sites/print',
+    });
+  }
+
+  /** GIS map-view URL for an opening's extent. Backend endpoint is a TODO (responds 501). */
+  getOpeningMapView(openingId: string): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
+      method: 'GET',
+      url: '/v1/openings/{openingId}/map-view',
+      path: { openingId },
+    });
+  }
 }

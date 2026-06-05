@@ -32,11 +32,14 @@ class RandomListRepositoryTest {
     assertEquals("DCK", row.orgUnitCode());
     assertEquals("A12345", row.openingNumber());
     assertEquals("987654", row.openingId());
+    assertEquals("12.5", row.exhibitArea());
+    assertEquals("MU1", row.managementUnit());
     assertEquals("24.5", row.grossArea());
     assertEquals("22.1", row.netArea());
     assertEquals("2023-09-15", row.disturbanceStartDate());
     assertEquals("2024-06-15", row.disturbanceEndDate());
-    assertEquals(List.of("SLB"), row.existingChecklistTypes());
+    // Existing checklists now surface the display label (attr 5), not the bare type code.
+    assertEquals(List.of("Biodiversity"), row.existingChecklists());
   }
 
   @Test
@@ -54,7 +57,7 @@ class RandomListRepositoryTest {
 
     assertEquals("1001", row.frepSelectedSiteId());
     assertEquals("987654", row.openingId());
-    assertTrue(row.existingChecklistTypes().isEmpty());
+    assertTrue(row.existingChecklists().isEmpty());
   }
 
   private static Struct checklistStruct(String checklistId, String resourceValueType) throws Exception {

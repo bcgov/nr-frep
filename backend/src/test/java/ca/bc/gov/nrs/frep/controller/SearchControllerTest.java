@@ -35,7 +35,7 @@ class SearchControllerTest {
   @Test
   void returnsChecklistSearchResults() throws Exception {
     when(searchService.searchChecklists(
-        any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(List.of(new ChecklistSearchResult(
             "9001", "SLB", "Biodiversity", "2024", "DCK",
             "L1234", "CP-8891", "CB-442", "987654", "00010001",
@@ -49,12 +49,22 @@ class SearchControllerTest {
 
   @Test
   void returnsClientSearchResults() throws Exception {
-    when(searchService.searchClients(eq("000100"), eq(null)))
+    when(searchService.searchClients(eq("000100"), any(), any(), any(), any()))
         .thenReturn(List.of(new ClientSearchResult(
-            "00010001", "GORMAN BROS. LUMBER LTD.", "ACT", 4)));
+            "GORMAN", "00010001", "01", "GORMAN BROS. LUMBER LTD.",
+            "Head Office", "Kelowna", "ACT")));
 
     mockMvc.perform(get("/api/v1/search/clients").param("clientNumber", "000100"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].clientNumber").value("00010001"));
+        .andExpect(jsonPath("$[0].clientNumber").value("00010001"))
+        .andExpect(jsonPath("$[0].clientLocnName").value("Head Office"));
+  }
+
+  @Test
+  void exportChecklistsIsNotYetImplemented() throws Exception {
+    mockMvc.perform(get("/api/v1/search/checklists/export"))
+        .andExpect(status().isNotImplemented())
+        .andExpect(jsonPath("$.status").value("NOT_IMPLEMENTED"))
+        .andExpect(jsonPath("$.feature").value("export-checklists"));
   }
 }

@@ -1,9 +1,10 @@
 package ca.bc.gov.nrs.frep.controller;
 
-import ca.bc.gov.nrs.frep.dto.frep.RandomListSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
+import ca.bc.gov.nrs.frep.dto.frep.RandomListResponse;
 import ca.bc.gov.nrs.frep.service.frep.RandomListService;
-import java.util.List;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,7 +28,7 @@ public class RandomListController {
   }
 
   @GetMapping("/random-list")
-  public ResponseEntity<List<RandomListSiteResponse>> getRandomList(
+  public ResponseEntity<RandomListResponse> getRandomList(
       @RequestParam String effectiveYear,
       @RequestParam(required = false) String orgUnit
   ) {
@@ -41,5 +42,19 @@ public class RandomListController {
             StringUtils.isBlank(orgUnit) ? null : orgUnit.trim()
         )
     );
+  }
+
+  /**
+   * Export the district random list to Excel/CSV (legacy "Export to Excel" button on
+   * {@code frep100RandomList.jsp}).
+   *
+   * <p>TODO: implement server-side CSV/XLSX generation from the random-list rows.
+   * Returns HTTP 501 until then.
+   */
+  @GetMapping("/random-list/export")
+  public ResponseEntity<NotImplementedResponse> exportRandomList() {
+    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(NotImplementedResponse.of(
+        "export-random-list",
+        "Export to Excel for the district random list is not yet available."));
   }
 }

@@ -40,9 +40,12 @@ class SearchRepositoryTest {
     ClientSearchRow row = SearchRepository.fromClientSearchStruct(struct);
 
     assertEquals("10001", row.clientNumber());
+    assertEquals("TOLKO", row.clientAcronym());
     assertEquals("00010001", row.displayClientNumber());
     assertEquals("TOLKO INDUSTRIES LTD.", row.clientName());
     assertEquals("01", row.clientLocnCode());
+    assertEquals("Head Office", row.clientLocnName());
+    assertEquals("Kelowna", row.city());
     assertEquals("ACT", row.clientStatusCode());
   }
 

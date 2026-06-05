@@ -88,6 +88,34 @@ class AcceptedSiteServiceTest {
   }
 
   @Test
+  void findAcceptedSitesMergesCulturalHeritage() {
+    when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
+        new AcceptedSiteRow(
+            "1001", "Biodiversity", "", "ACC", "RDY",
+            "A12345", "987654", "1234567", "CP-8891", "CB-442", "2024-06-15"
+        )
+    ));
+    when(acceptedSitesRepository.findCulturalHeritageSites("56", "2024")).thenReturn(List.of(
+        new AcceptedSiteRow(
+            "9001", "Cultural Heritage", "", "ACC", "ACT",
+            "C11111", "987656", "L9", "CP-9", "CB-9", "2024-08-01"
+        )
+    ));
+    Map<String, Object> slb = new LinkedHashMap<>();
+    slb.put("CODE", "SLB");
+    slb.put("DESCRIPTION", "Biodiversity");
+    Map<String, Object> chr = new LinkedHashMap<>();
+    chr.put("CODE", "CHR");
+    chr.put("DESCRIPTION", "Cultural Heritage");
+    when(codeListRepository.getResourceValue()).thenReturn(List.of(slb, chr));
+
+    var sites = service.findAcceptedSites("2024", "56", null);
+
+    assertEquals(2, sites.size());
+    assertTrue(sites.stream().anyMatch(s -> "CHR".equals(s.protocolCode())));
+  }
+
+  @Test
   void findAcceptedSitesMarksTargetedRows() {
     when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
         new AcceptedSiteRow(

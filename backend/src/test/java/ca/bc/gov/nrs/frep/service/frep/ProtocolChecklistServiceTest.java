@@ -1,13 +1,23 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.dto.frep.BioPlot;
+import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
+import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.ProtocolChecklistWriteRepository;
+import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.frep.ProtocolChecklistService.ProtocolSubmitValidationException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class ProtocolChecklistServiceTest {
@@ -26,6 +37,12 @@ class ProtocolChecklistServiceTest {
 
   @Mock
   private CodeListRepository codeListRepository;
+
+  @Mock
+  private ProtocolChecklistWriteRepository writeRepository;
+
+  @Mock
+  private LoggedUserHelper loggedUserHelper;
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -113,8 +130,184 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void findChecklistDegradesSectionWithNoData() {
+    Map<String, Object> slb = new LinkedHashMap<>();
+    slb.put("CODE", "SLB");
+    slb.put("DESCRIPTION", "Biodiversity");
+    when(codeListRepository.getResourceValue()).thenReturn(List.of(slb));
+
+    when(checklistRepository.getBioOpening("9001")).thenReturn(sectionWithHeader(
+        new ChecklistHeaderData("", "A12345", "2024", "RDY", "IDIR\\JDOE", "2024-08-12"),
+        Map.of("Stand age (yrs)", "82")
+    ));
+    // FREP_211 raises ORA-01403 (no data found) when the stratum/resource ids can't be resolved.
+    when(checklistRepository.getBioStratum("9001")).thenThrow(
+        new org.springframework.dao.DataIntegrityViolationException(
+            "no data", new java.sql.SQLException("ORA-01403: no data found", "99999", 1403)));
+    when(checklistRepository.getBioPlots("9001")).thenReturn(ChecklistSectionData.fieldsOnly(Map.of()));
+
+    var response = service.findChecklist("bio", "9001");
+
+    assertTrue(response.isPresent());
+    assertEquals(3, response.get().sections().size());
+    assertEquals("stratum", response.get().sections().get(1).id());
+    assertTrue(response.get().sections().get(1).fields().isEmpty());
+  }
+
+  @Test
   void findChecklistReturnsEmptyForUnknownProtocol() {
     assertTrue(service.findChecklist("CHR", "9001").isEmpty());
+  }
+
+  @Test
+  void submitMapsBioToSlbAndSucceedsWhenNoValidationError() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\u");
+    when(writeRepository.submit("SLB", "9001", "IDIR\\u")).thenReturn("");
+
+    service.submit("bio", "9001");
+
+    verify(writeRepository).submit("SLB", "9001", "IDIR\\u");
+  }
+
+  @Test
+  void submitThrowsValidationExceptionWithSplitMessages() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    when(writeRepository.submit("RIP", "9001", "u"))
+        .thenReturn("frep.submit.common.evaluation;frep.submit.common.teamlead;");
+
+    ProtocolSubmitValidationException ex = assertThrows(
+        ProtocolSubmitValidationException.class, () -> service.submit("rip", "9001"));
+    assertEquals(2, ex.getMessages().size());
+    assertTrue(ex.getMessages().contains("frep.submit.common.teamlead"));
+  }
+
+  @Test
+  void submitForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.submit("bio", "9001"));
+  }
+
+  @Test
+  void unsubmitMapsWaterToWtr() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    when(writeRepository.unsubmit("WTR", "9001", "u")).thenReturn("");
+
+    service.unsubmit("wat", "9001");
+
+    verify(writeRepository).unsubmit("WTR", "9001", "u");
+  }
+
+  @Test
+  void getBiodiversityOpeningThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBiodiversityOpening("9001"));
+  }
+
+  @Test
+  void saveBiodiversityOpeningDelegatesToRepositoryWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening opening = new BiodiversityOpening(
+        "9001", "500", "ACT", "N", "loc", "N", "N", "N", null, "N", null, "W", "ok", "3");
+    when(writeRepository.saveBiodiversityOpening(opening, "u")).thenReturn(opening);
+
+    BiodiversityOpening saved = service.saveBiodiversityOpening("9001", opening);
+
+    assertEquals("9001", saved.checklistId());
+    verify(writeRepository).saveBiodiversityOpening(opening, "u");
+  }
+
+  @Test
+  void listBioStrataDelegatesToRepository() {
+    BioStratumRow row = new BioStratumRow("900", "1", "MAT", "2024-05-01", "5", "3.2");
+    when(writeRepository.listBioStrata("1001")).thenReturn(List.of(row));
+
+    assertEquals(1, service.listBioStrata("1001").size());
+  }
+
+  @Test
+  void getBioStratumThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBioStratum("900")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBioStratum("900"));
+  }
+
+  @Test
+  void saveBioStratumForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.saveBioStratum(null));
+  }
+
+  @Test
+  void deleteBioStratumDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.deleteBioStratum("900", "2")).thenReturn("");
+
+    service.deleteBioStratum("900", "2");
+
+    verify(writeRepository).deleteBioStratum("900", "2");
+  }
+
+  @Test
+  void nextStratumNumberDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.nextStratumNumber()).thenReturn("5");
+
+    assertEquals("5", service.nextStratumNumber());
+  }
+
+  @Test
+  void listBioPlotsDelegatesToRepository() {
+    when(writeRepository.listBioPlots("900")).thenReturn(List.of(new BioPlotRow("500", "1", "jdoe")));
+
+    assertEquals(1, service.listBioPlots("900").size());
+  }
+
+  @Test
+  void getBioPlotThrowsNotFoundWhenMissing() {
+    when(writeRepository.getBioPlot("500")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getBioPlot("500"));
+  }
+
+  @Test
+  void saveBioPlotForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class, () -> service.saveBioPlot(new BioPlot(
+        null, "900", null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null)));
+  }
+
+  @Test
+  void deleteBioPlotDelegatesWhenWritable() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(writeRepository.deleteBioPlot("500", "2")).thenReturn("");
+
+    service.deleteBioPlot("500", "2");
+
+    verify(writeRepository).deleteBioPlot("500", "2");
+  }
+
+  @Test
+  void getRipStreamOpeningThrowsNotFoundWhenMissing() {
+    when(writeRepository.getRipStreamOpening("2002")).thenReturn(null);
+    assertThrows(ResponseStatusException.class, () -> service.getRipStreamOpening("2002"));
+  }
+
+  @Test
+  void saveRipStreamOpeningForbiddenWhenUserCannotWrite() {
+    when(loggedUserHelper.canWrite()).thenReturn(false);
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveRipStreamOpening("2002", riparianStreamOpening()));
+  }
+
+  private static RiparianStreamOpening riparianStreamOpening() {
+    return new RiparianStreamOpening(
+        "2002", null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        List.of());
   }
 
   private static ChecklistSectionData sectionWithHeader(

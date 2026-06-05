@@ -1,8 +1,11 @@
 import { ArrowLeft } from '@carbon/icons-react';
 import {
+  Button,
   Column,
   Grid,
   InlineNotification,
+  Select,
+  SelectItem,
   SkeletonText,
   Table,
   TableBody,
@@ -12,6 +15,7 @@ import {
   TableHeader,
   TableRow,
   Tag,
+  TextInput,
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
@@ -19,6 +23,7 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 
 import './siteDetail.scss';
@@ -78,6 +83,44 @@ function renderResourceCell(key: string, resource: SiteResource): React.ReactNod
   return value ?? '—';
 }
 
+function renderEditableCell(
+  key: string,
+  resource: SiteResource,
+  index: number,
+  patchRow: (index: number, patch: Partial<SiteResource>) => void,
+): React.ReactNode {
+  if (key === 'statusCode') {
+    return (
+      <Select
+        id={`status-${index}`}
+        labelText=""
+        hideLabel
+        size="sm"
+        value={resource.statusCode}
+        onChange={(e) => patchRow(index, { statusCode: e.target.value })}
+      >
+        <SelectItem value="ACC" text="Accepted" />
+        <SelectItem value="REJ" text="Rejected" />
+        <SelectItem value="TAR" text="Targeted" />
+      </Select>
+    );
+  }
+  if (key === 'rejectionReasonCode' || key === 'rationale' || key === 'otherComments') {
+    return (
+      <TextInput
+        id={`${key}-${index}`}
+        labelText=""
+        hideLabel
+        size="sm"
+        value={(resource[key as keyof SiteResource] as string | null) ?? ''}
+        onChange={(e) => patchRow(index, { [key]: e.target.value })}
+      />
+    );
+  }
+  // resourceName / checklistStatusCode stay read-only
+  return renderResourceCell(key, resource);
+}
+
 const HeaderRow: FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
   <div className="site-detail__field">
     <span className="site-detail__field-label">{label}</span>
@@ -89,11 +132,53 @@ const SiteDetailPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { display } = useNotification();
+  const { canEdit } = useAuthorization();
 
   const [detail, setDetail] = useState<SiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [draft, setDraft] = useState<SiteResource[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const editing = draft !== null;
+
+  const startEdit = () => setDraft(detail ? detail.resources.map((r) => ({ ...r })) : []);
+  const cancelEdit = () => setDraft(null);
+
+  const patchRow = (index: number, patch: Partial<SiteResource>) =>
+    setDraft((prev) => (prev ? prev.map((r, i) => (i === index ? { ...r, ...patch } : r)) : prev));
+
+  const handleSave = async () => {
+    if (!draft) return;
+    setBusy(true);
+    try {
+      const saved = await API.siteDetail.saveResources(
+        id,
+        draft.map((r) => ({
+          resourceValueId: r.resourceValueId,
+          resourceType: r.resourceType,
+          statusCode: r.statusCode,
+          rejectionReasonCode: r.rejectionReasonCode,
+          rationale: r.rationale,
+          otherComments: r.otherComments,
+          revisionCount: r.revisionCount,
+        })),
+      );
+      setDetail(saved);
+      setDraft(null);
+      display({ kind: 'success', title: 'Site resources saved', timeout: 4000 });
+    } catch (err) {
+      display({
+        kind: 'error',
+        title: 'Save failed',
+        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        timeout: 9000,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -202,7 +287,28 @@ const SiteDetailPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <section className="site-detail__panel">
-              <h2 className="site-detail__panel-title">Resource values</h2>
+              <div className="site-detail__panel-header">
+                <h2 className="site-detail__panel-title">Resource values</h2>
+                {canEdit && detail.resources.length > 0 && (
+                  <div className="site-detail__actions">
+                    {!editing && (
+                      <Button kind="tertiary" size="sm" onClick={startEdit}>
+                        Edit resources
+                      </Button>
+                    )}
+                    {editing && (
+                      <>
+                        <Button size="sm" disabled={busy} onClick={() => void handleSave()}>
+                          Save
+                        </Button>
+                        <Button kind="ghost" size="sm" disabled={busy} onClick={cancelEdit}>
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
               {detail.resources.length === 0 ? (
                 <p>No resource values have been evaluated for this site.</p>
               ) : (
@@ -219,11 +325,13 @@ const SiteDetailPage: FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {detail.resources.map((resource) => (
-                        <TableRow key={resource.resourceType}>
+                      {(editing && draft ? draft : detail.resources).map((resource, index) => (
+                        <TableRow key={resource.resourceValueId ?? resource.resourceType ?? index}>
                           {RESOURCE_HEADERS.map((header) => (
                             <TableCell key={header.key}>
-                              {renderResourceCell(header.key, resource)}
+                              {editing
+                                ? renderEditableCell(header.key, resource, index, patchRow)
+                                : renderResourceCell(header.key, resource)}
                             </TableCell>
                           ))}
                         </TableRow>

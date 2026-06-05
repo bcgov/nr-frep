@@ -7,8 +7,11 @@ package ca.bc.gov.nrs.frep.repository.frep;
  */
 public record ClientSearchRow(
     String clientNumber,
+    String clientAcronym,
     String displayClientNumber,
     String clientName,
     String clientLocnCode,
+    String clientLocnName,
+    String city,
     String clientStatusCode
 ) {}

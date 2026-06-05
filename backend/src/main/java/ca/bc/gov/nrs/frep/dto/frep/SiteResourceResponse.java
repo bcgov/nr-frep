@@ -16,6 +16,7 @@ package ca.bc.gov.nrs.frep.dto.frep;
  * @param checklistStatusCode {@code RDY} / {@code SUB} / etc., or {@code null} if no checklist yet
  */
 public record SiteResourceResponse(
+    String resourceValueId,
     String resourceType,
     String resourceName,
     String statusCode,
@@ -23,5 +24,6 @@ public record SiteResourceResponse(
     String rationale,
     String otherComments,
     String checklistId,
-    String checklistStatusCode
+    String checklistStatusCode,
+    String revisionCount
 ) {}

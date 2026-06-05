@@ -57,4 +57,18 @@ class AcceptedSiteControllerTest {
             .param("effectiveYear", "2024"))
         .andExpect(status().isBadRequest());
   }
+
+  @Test
+  void printAcceptedSitesIsNotYetImplemented() throws Exception {
+    mockMvc.perform(get("/api/v1/accepted-sites/print"))
+        .andExpect(status().isNotImplemented())
+        .andExpect(jsonPath("$.feature").value("print-accepted-sites"));
+  }
+
+  @Test
+  void openingMapViewIsNotYetImplemented() throws Exception {
+    mockMvc.perform(get("/api/v1/openings/987654/map-view"))
+        .andExpect(status().isNotImplemented())
+        .andExpect(jsonPath("$.feature").value("map-view"));
+  }
 }

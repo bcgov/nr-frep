@@ -1,8 +1,12 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
+import ca.bc.gov.nrs.frep.dto.frep.RandomListResponse;
 import ca.bc.gov.nrs.frep.dto.frep.RandomListSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.RandomListSummaryResponse;
 import ca.bc.gov.nrs.frep.repository.frep.RandomListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.RandomListResult;
 import ca.bc.gov.nrs.frep.repository.frep.RandomListRow;
+import ca.bc.gov.nrs.frep.repository.frep.RandomListSummary;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -29,10 +33,33 @@ public class RandomListService {
    * @param effectiveYear  master list year ({@code FREP_EVALUATION_YEAR.effective_year})
    * @param orgUnit        district org unit number; {@code null} or blank → all districts
    */
-  public List<RandomListSiteResponse> findRandomList(String effectiveYear, String orgUnit) {
-    return randomListRepository.findRandomList(effectiveYear, orgUnit).stream()
-        .map(RandomListService::toResponse)
-        .toList();
+  public RandomListResponse findRandomList(String effectiveYear, String orgUnit) {
+    RandomListResult result = randomListRepository.findRandomList(effectiveYear, orgUnit);
+    return new RandomListResponse(
+        toSummaryResponse(result.summary()),
+        result.rows().stream().map(RandomListService::toResponse).toList()
+    );
+  }
+
+  static RandomListSummaryResponse toSummaryResponse(RandomListSummary summary) {
+    return new RandomListSummaryResponse(
+        blankToNull(summary.orgUnitDesc()),
+        parseCount(summary.biodiversity()),
+        parseCount(summary.culturalHeritage()),
+        parseCount(summary.riparian()),
+        parseCount(summary.water())
+    );
+  }
+
+  private static int parseCount(String value) {
+    if (value == null || value.isBlank()) {
+      return 0;
+    }
+    try {
+      return Integer.parseInt(value.trim());
+    } catch (NumberFormatException e) {
+      return 0;
+    }
   }
 
   static RandomListSiteResponse toResponse(RandomListRow row) {
@@ -45,11 +72,13 @@ public class RandomListService {
         row.licenceId(),
         row.cuttingPermitId(),
         row.cutBlockId(),
+        parseDouble(row.exhibitArea()),
         parseDouble(row.grossArea()),
         parseDouble(row.netArea()),
         blankToNull(row.disturbanceStartDate()),
         blankToNull(row.disturbanceEndDate()),
-        List.copyOf(row.existingChecklistTypes())
+        blankToNull(row.managementUnit()),
+        List.copyOf(row.existingChecklists())
     );
   }
 

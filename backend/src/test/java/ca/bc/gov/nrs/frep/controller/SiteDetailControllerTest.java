@@ -50,8 +50,8 @@ class SiteDetailControllerTest {
             "FSP-101",
             "2024",
             List.of(
-                new SiteResourceResponse("SLB", "Biodiversity", "ACC", null,
-                    "Site within target stratum", null, "9001", "RDY")
+                new SiteResourceResponse("8001", "SLB", "Biodiversity", "ACC", null,
+                    "Site within target stratum", null, "9001", "RDY", "3")
             )
         )));
 

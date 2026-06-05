@@ -14,5 +14,6 @@ public record SiteResourceRow(
     String checklistStatusCode,
     String rationale,
     String rejectionReasonCode,
-    String otherComments
+    String otherComments,
+    String revisionCount
 ) {}

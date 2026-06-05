@@ -17,6 +17,7 @@
  */
 
 import {
+  CloudOffline,
   DashboardReference,
   DocumentTasks,
   Document,
@@ -32,6 +33,8 @@ import { Navigate, type RouteObject } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import AcceptedSitesPage from '@/pages/AcceptedSites';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
+import ChrChecklistPage from '@/pages/ChrChecklist';
+import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
 import ClientSearchPage from '@/pages/ClientSearch';
 import DashboardPage from '@/pages/Dashboard';
 import GlobalErrorPage from '@/pages/GlobalError';
@@ -39,6 +42,19 @@ import LandingPage from '@/pages/Landing';
 import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
 import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
+import BioOpeningEditPage from '@/pages/ProtocolChecklist/BioOpeningEdit';
+import BioPlotsEditPage from '@/pages/ProtocolChecklist/BioPlotsEdit';
+import BioStrataEditPage from '@/pages/ProtocolChecklist/BioStrataEdit';
+import RipFieldDataEditPage from '@/pages/ProtocolChecklist/RipFieldDataEdit';
+import RipFinalCommentsEditPage from '@/pages/ProtocolChecklist/RipFinalCommentsEdit';
+import RipOtherIndicatorsEditPage from '@/pages/ProtocolChecklist/RipOtherIndicatorsEdit';
+import RipQuestionsEditPage from '@/pages/ProtocolChecklist/RipQuestionsEdit';
+import RipSpecificImpactsEditPage from '@/pages/ProtocolChecklist/RipSpecificImpactsEdit';
+import RipStreamOpeningEditPage from '@/pages/ProtocolChecklist/RipStreamOpeningEdit';
+import WaterAssessmentEditPage from '@/pages/ProtocolChecklist/WaterAssessmentEdit';
+import WaterRangeEditPage from '@/pages/ProtocolChecklist/WaterRangeEdit';
+import WaterSampleAreaEditPage from '@/pages/ProtocolChecklist/WaterSampleAreaEdit';
+import WaterSampleSiteEditPage from '@/pages/ProtocolChecklist/WaterSampleSiteEdit';
 import RandomListPage from '@/pages/RandomList';
 import ReportsPage from '@/pages/Reports';
 import RoleErrorPage from '@/pages/RoleError';
@@ -148,6 +164,184 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: false,
+  },
+  {
+    path: '/protocol-checklists/biodiversity/:id/edit',
+    id: 'Biodiversity Opening Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <BioOpeningEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/biodiversity/:id/strata',
+    id: 'Biodiversity Strata Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <BioStrataEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/biodiversity/:id/strata/:stratumId/plots',
+    id: 'Biodiversity Plots Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <BioPlotsEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/stream-opening',
+    id: 'Riparian Stream Opening Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipStreamOpeningEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/final-comments',
+    id: 'Riparian Final Comments Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipFinalCommentsEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/field-data',
+    id: 'Riparian Field Data Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipFieldDataEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/other-indicators',
+    id: 'Riparian Other Indicators Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipOtherIndicatorsEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/questions',
+    id: 'Riparian Questions Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipQuestionsEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/riparian/:id/specific-impacts',
+    id: 'Riparian Specific Impacts Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <RipSpecificImpactsEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/water/:id/sample-area',
+    id: 'Water Sample Area Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <WaterSampleAreaEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/water/:id/sample-site',
+    id: 'Water Sample Site Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <WaterSampleSiteEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/water/:id/assessment',
+    id: 'Water Assessment Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <WaterAssessmentEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/protocol-checklists/water/:id/range',
+    id: 'Water Range Edit',
+    icon: Tree,
+    element: (
+      <Layout>
+        <WaterRangeEditPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
+    path: '/chr/checklists/:id',
+    id: 'CHR Checklist',
+    icon: Tree,
+    element: (
+      <Layout>
+        <ChrChecklistPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+  },
+  {
+    path: '/chr/offline',
+    id: 'Offline Checklists',
+    icon: CloudOffline,
+    element: (
+      <Layout>
+        <ChrOfflineListPage />
+      </Layout>
+    ),
+    isSideMenu: true,
   },
   {
     path: '/search/checklists',

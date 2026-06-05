@@ -1,12 +1,15 @@
 package ca.bc.gov.nrs.frep.repository.frep;
 
 import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
+import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Struct;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import oracle.jdbc.OracleConnection;
 import oracle.jdbc.OracleTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -149,5 +152,64 @@ public abstract class AbstractFrepRepository {
 
   protected static String emptyIfNull(@Nullable String s) {
     return s == null ? "" : s;
+  }
+
+  /** Maps one DTO row to the ordered attribute array of an Oracle OBJECT (exact .tps order). */
+  @FunctionalInterface
+  protected interface StructMapper<T> {
+    Object[] toAttributes(T row) throws SQLException;
+  }
+
+  /** Reads one DTO row from an Oracle STRUCT's attribute array (indexed by .tps position). */
+  @FunctionalInterface
+  protected interface StructReader<T> {
+    T read(Object[] attributes) throws SQLException;
+  }
+
+  /**
+   * Build an Oracle VARRAY of OBJECTs from a list of DTO rows for use as an IN/IN OUT proc
+   * parameter. Each row is turned into a STRUCT via {@code createStruct(objectType, attrs)} where
+   * {@code attrs} must be in the exact declared order of the Oracle object type. Generalises the
+   * windthrow VARRAY build already used for the BIO Stratum save.
+   */
+  protected static <T> Array buildStructArray(
+      CallableStatement cs,
+      String varrayType,
+      String objectType,
+      @Nullable List<T> rows,
+      StructMapper<T> mapper
+  ) throws SQLException {
+    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
+    List<T> safeRows = rows == null ? List.of() : rows;
+    Object[] structs = new Object[safeRows.size()];
+    int i = 0;
+    for (T row : safeRows) {
+      structs[i++] = connection.createStruct(objectType, mapper.toAttributes(row));
+    }
+    return connection.createOracleArray(varrayType, structs);
+  }
+
+  /** Read a VARRAY OUT/IN OUT parameter into typed rows. Returns an empty list for a null array. */
+  protected static <T> List<T> readStructList(@Nullable Array array, StructReader<T> reader)
+      throws SQLException {
+    List<T> out = new ArrayList<>();
+    if (array == null) {
+      return out;
+    }
+    Object[] elements = (Object[]) array.getArray();
+    for (Object element : elements) {
+      if (element instanceof Struct struct) {
+        out.add(reader.read(struct.getAttributes()));
+      }
+    }
+    return out;
+  }
+
+  /** Null-safe read of a STRUCT attribute as a trimmed String (Oracle returns numbers as BigDecimal). */
+  protected static String attrString(Object[] attrs, int index) {
+    if (attrs == null || index < 0 || index >= attrs.length || attrs[index] == null) {
+      return null;
+    }
+    return attrs[index].toString().trim();
   }
 }

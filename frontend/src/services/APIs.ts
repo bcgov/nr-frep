@@ -4,6 +4,7 @@ import type { APIConfig } from '@/config/api/types';
 
 import { env } from '@/env';
 import { AcceptedSitesService } from '@/services/acceptedSites.service';
+import { ChrChecklistService } from '@/services/chrChecklist.service';
 import { ConfigurationService } from '@/services/configuration.service';
 import { MasterListAdminService } from '@/services/masterListAdmin.service';
 import { ProtocolChecklistService } from '@/services/protocolChecklist.service';
@@ -47,6 +48,7 @@ const serviceConstructors = {
   randomList: new RandomListService(BackendApiConfig),
   siteDetail: new SiteDetailService(BackendApiConfig),
   protocolChecklist: new ProtocolChecklistService(BackendApiConfig),
+  chrChecklist: new ChrChecklistService(BackendApiConfig),
   search: new SearchService(BackendApiConfig),
   masterListAdmin: new MasterListAdminService(BackendApiConfig),
 } as const;

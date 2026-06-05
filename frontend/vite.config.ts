@@ -3,6 +3,7 @@ import { resolve } from 'path';
 
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { configDefaults } from 'vitest/config';
 
@@ -26,7 +27,43 @@ export default defineConfig(({ mode }) => {
         '@': resolve(projectRootDir, 'src'),
       },
     },
-    plugins: [react(), tsconfigPaths()],
+    plugins: [
+      react(),
+      tsconfigPaths(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        // App shell is precached so the CHR editor loads with zero connectivity.
+        // Disabled in dev so HMR/dev server is unaffected; active for build/preview.
+        devOptions: { enabled: false },
+        manifest: {
+          name: 'FREP — FRPA Resource Evaluation Program',
+          short_name: 'FREP',
+          description: 'Forest and Range Evaluation Program checklists',
+          theme_color: '#036',
+          background_color: '#ffffff',
+          display: 'standalone',
+          start_url: '/',
+          icons: [{ src: '/vite.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+        },
+        workbox: {
+          navigateFallback: '/index.html',
+          globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // The bundled app (Carbon + Amplify) exceeds Workbox's 2 MiB default; raise the
+          // precache ceiling so the full app shell is cached for offline field use.
+          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+          // CHR checklists are persisted in IndexedDB; this just lets read-only
+          // GETs resolve from cache when briefly offline.
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/'),
+              method: 'GET',
+              handler: 'NetworkFirst',
+              options: { cacheName: 'frep-api-get', networkTimeoutSeconds: 5 },
+            },
+          ],
+        },
+      }),
+    ],
     base: env.VITE_BASE_PATH || '/',
     build: {
       chunkSizeWarningLimit: 1024,

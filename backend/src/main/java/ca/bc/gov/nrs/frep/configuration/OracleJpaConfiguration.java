@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -30,6 +31,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  */
 @Configuration
 @Profile("oracle")
+@EnableConfigurationProperties(ChrObjectStorageProperties.class)
 @Slf4j
 public class OracleJpaConfiguration {
 

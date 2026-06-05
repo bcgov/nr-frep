@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.repository.frep;
 
+import ca.bc.gov.nrs.frep.dto.frep.SiteResourceSaveRequest;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
@@ -22,6 +23,7 @@ public class SiteDetailRepository extends AbstractFrepRepository {
 
   static final String PACKAGE_NAME = "FREP_110_SITE_DETAILS";
   static final String RESOURCE_ARRAY_TYPE = "THE.FREP_RESOURCE_VARRAY";
+  static final String RESOURCE_OBJECT_TYPE = "THE.FREP_RESOURCE_OBJECT";
 
   public SiteDetailRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -63,6 +65,7 @@ public class SiteDetailRepository extends AbstractFrepRepository {
           stringValue(cs.getString(1)),
           stringValue(cs.getString(8)),
           stringValue(cs.getString(18)),
+          stringValue(cs.getString(19)),
           stringValue(cs.getString(5)),
           stringValue(cs.getString(6)),
           stringValue(cs.getString(20)),
@@ -77,6 +80,48 @@ public class SiteDetailRepository extends AbstractFrepRepository {
           readResourceArray(cs.getArray(2))
       );
     });
+  }
+
+  /**
+   * Persist resource-value evaluations via {@code FREP_110_SITE_DETAILS.SAVE} (7 params; the
+   * resource VARRAY drives accept/reject/target — ACC/TAR spawns a checklist, REJ removes it). The
+   * proc reads resource_id, resource_type, stat_code, rejection_rationale,
+   * frep_site_resource_reason_code, resource_comment and revision_count from each struct. Returns
+   * the (possibly echoed) site id; throws {@code StoredProcedureException} on a proc error.
+   */
+  public String saveResources(
+      String frepSelectedSiteId,
+      String openingId,
+      String orgUnitNo,
+      String effectiveYear,
+      List<SiteResourceSaveRequest> resources,
+      String userId
+  ) {
+    return executeCall(
+        "{call " + PACKAGE_NAME + ".SAVE (?,?,?,?,?,?,?)}",
+        cs -> {
+          setInOutString(cs, 1, frepSelectedSiteId);
+          cs.setString(2, openingId);
+          cs.setString(3, orgUnitNo);
+          cs.setString(4, effectiveYear);
+          cs.setObject(5, buildStructArray(cs, RESOURCE_ARRAY_TYPE, RESOURCE_OBJECT_TYPE, resources,
+              r -> new Object[] {
+                  // resource_id + revision_count are NUMBER attributes — a blank string can't
+                  // convert (Oracle 17059), and a new resource must send a null id so the proc
+                  // takes its insert branch. Null all blanks, mirroring the legacy array bean.
+                  blankToNull(r.resourceValueId()), null, blankToNull(r.resourceType()), null,
+                  blankToNull(r.statusCode()), null, blankToNull(r.rationale()),
+                  blankToNull(r.rejectionReasonCode()), blankToNull(r.otherComments()),
+                  blankToNull(r.revisionCount()), null, blankToNull(userId)
+              }));
+          setInOutString(cs, 6, userId);
+          setInOutString(cs, 7, null);
+        },
+        cs -> {
+          throwIfError(PACKAGE_NAME, "SAVE", cs.getString(7));
+          return stringValue(cs.getString(1));
+        }
+    );
   }
 
   /**
@@ -128,7 +173,8 @@ public class SiteDetailRepository extends AbstractFrepRepository {
         stringAttr(attrs, 5),
         stringAttr(attrs, 6),
         stringAttr(attrs, 7),
-        stringAttr(attrs, 8)
+        stringAttr(attrs, 8),
+        stringAttr(attrs, 9)
     );
   }
 
@@ -150,5 +196,10 @@ public class SiteDetailRepository extends AbstractFrepRepository {
 
   private static String stringValue(String value) {
     return value == null ? "" : value.trim();
+  }
+
+  /** Null for blank values so they don't get pushed into NUMBER/typed struct attributes. */
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
   }
 }

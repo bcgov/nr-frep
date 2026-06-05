@@ -5,6 +5,19 @@
   row-gap: 2rem;
 }
 
+.protocol-checklist__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.protocol-checklist__errors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .protocol-checklist__header {
   display: flex;
   flex-direction: column;

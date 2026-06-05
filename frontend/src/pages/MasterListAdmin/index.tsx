@@ -2,7 +2,6 @@ import {
   Button,
   Column,
   Grid,
-  InlineNotification,
   NumberInput,
   Select,
   SelectItem,
@@ -145,6 +144,43 @@ const MasterListAdminPage: FC = () => {
     }
   };
 
+  const runMutation = async (action: () => Promise<MasterListAdmin>, successTitle: string) => {
+    setGenerating(true);
+    try {
+      setCriteria(await action());
+      display({ kind: 'success', title: successTitle, timeout: 5000 });
+    } catch (err) {
+      display({
+        kind: 'error',
+        title: 'Action failed',
+        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        timeout: 9000,
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRegenerateDistrict = (orgUnitNo: string) =>
+    runMutation(
+      () => API.masterListAdmin.regenerateDistrict(effectiveYear, orgUnitNo),
+      `District ${orgUnitNo} regenerated`,
+    );
+
+  const handleSaveComments = () =>
+    runMutation(
+      () => API.masterListAdmin.saveComments(effectiveYear, form.comments ?? ''),
+      'Comments saved',
+    );
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete the generated master list for ${effectiveYear}?`)) return;
+    void runMutation(
+      () => API.masterListAdmin.deleteMasterList(effectiveYear),
+      'Master list deleted',
+    );
+  };
+
   return (
     <Grid fullWidth className="default-grid master-list-admin-grid">
       <Column sm={4} md={8} lg={16}>
@@ -153,16 +189,6 @@ const MasterListAdminPage: FC = () => {
           Sys-admin only. Review eligibility criteria for a master list year and (re-)generate the
           provincial random list of evaluation sites.
         </p>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <InlineNotification
-          kind="info"
-          title="Stub generation"
-          subtitle="This screen calls a stub backend; it does not currently mutate any data."
-          hideCloseButton
-          lowContrast
-        />
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -248,6 +274,18 @@ const MasterListAdminPage: FC = () => {
                 <Button onClick={() => void handleGenerate()} disabled={generating}>
                   {criteria.generated ? 'Re-generate master list' : 'Generate master list'}
                 </Button>
+                <Button
+                  kind="tertiary"
+                  onClick={() => void handleSaveComments()}
+                  disabled={generating}
+                >
+                  Save comments
+                </Button>
+                {criteria.generated && (
+                  <Button kind="danger--tertiary" onClick={handleDelete} disabled={generating}>
+                    Delete list
+                  </Button>
+                )}
               </div>
             </Tile>
           </Column>
@@ -290,15 +328,26 @@ const MasterListAdminPage: FC = () => {
                       <TableHeader>Name</TableHeader>
                       <TableHeader>Eligible</TableHeader>
                       <TableHeader>Selected</TableHeader>
+                      <TableHeader>Action</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {criteria.generationStats.map((stat) => (
-                      <TableRow key={stat.orgUnitCode}>
+                      <TableRow key={stat.orgUnitNo || stat.orgUnitCode}>
                         <TableCell>{stat.orgUnitCode}</TableCell>
                         <TableCell>{stat.orgUnitName}</TableCell>
                         <TableCell>{stat.eligibleSites}</TableCell>
                         <TableCell>{stat.selectedSites}</TableCell>
+                        <TableCell>
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={generating || !stat.orgUnitNo}
+                            onClick={() => void handleRegenerateDistrict(stat.orgUnitNo)}
+                          >
+                            Regenerate
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

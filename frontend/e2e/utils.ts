@@ -22,15 +22,6 @@ export const uniqueSuffix = (): string => {
 };
 
 /**
- * Format a 9-digit Parcel Identifier string from a numeric seed.
- * The form auto-formats `999999999` to `999-999-999`; we feed it the digits.
- */
-export const buildTestPid = (seed: number = Date.now()): string => {
-  const digits = Math.abs(seed).toString().padStart(9, '9').slice(-9);
-  return digits;
-};
-
-/**
  * Navigate to a route on the protected side of the SPA and wait until the
  * Layout header has rendered — that means AuthProvider has finished
  * bootstrapping and we're past the white `<Loading withOverlay>` screen.

@@ -49,10 +49,16 @@ public class SearchRepository extends AbstractFrepRepository {
    *
    * <p>Legacy equivalent: {@code Frep410DataManager.getSearchClients}.
    */
-  public List<ClientSearchRow> searchClients(String clientNumber, String clientName) {
+  public List<ClientSearchRow> searchClients(ClientSearchCriteria criteria) {
     String call = "{call " + CLIENT_SEARCH_PROC + "(?,?)}";
     return executeCall(call, cs -> {
-      cs.setObject(1, createClientSearchStruct(cs, clientNumber, clientName));
+      cs.setObject(1, createClientSearchStruct(
+          cs,
+          criteria.clientNumber(),
+          criteria.clientAcronym(),
+          criteria.clientName(),
+          criteria.legalFirstName(),
+          criteria.legalMiddleName()));
       cs.registerOutParameter(2, Types.ARRAY, CLIENT_SEARCH_ARRAY);
     }, cs -> readClientSearchArray(cs.getArray(2)));
   }
@@ -63,6 +69,7 @@ public class SearchRepository extends AbstractFrepRepository {
   ) throws SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
     Object[] attrs = new Object[18];
+    attrs[0] = structValue(criteria.checklistId());
     attrs[3] = structValue(criteria.protocolTypeCode());
     attrs[5] = structValue(criteria.effectiveYear());
     attrs[6] = structValue(criteria.openingId());
@@ -72,18 +79,26 @@ public class SearchRepository extends AbstractFrepRepository {
     attrs[11] = structValue(criteria.cutBlockId());
     attrs[12] = structValue(criteria.cuttingPermitId());
     attrs[13] = structValue(criteria.clientNumber());
+    attrs[14] = dateStructValue(criteria.evaluationDateFrom());
+    attrs[15] = dateStructValue(criteria.evaluationDateTo());
     return connection.createStruct(CHECKLIST_SEARCH_TYPE, attrs);
   }
 
   private static Struct createClientSearchStruct(
       CallableStatement cs,
       String clientNumber,
-      String clientName
+      String clientAcronym,
+      String clientName,
+      String legalFirstName,
+      String legalMiddleName
   ) throws SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
     Object[] attrs = new Object[10];
     attrs[0] = structValue(clientNumber);
+    attrs[1] = structValue(clientAcronym);
     attrs[3] = structValue(clientName);
+    attrs[4] = structValue(legalFirstName);
+    attrs[5] = structValue(legalMiddleName);
     return connection.createStruct(CLIENT_SEARCH_TYPE, attrs);
   }
 
@@ -138,9 +153,12 @@ public class SearchRepository extends AbstractFrepRepository {
     Object[] attrs = struct.getAttributes();
     return new ClientSearchRow(
         stringAttr(attrs, 0),
+        stringAttr(attrs, 1),
         stringAttr(attrs, 2),
         stringAttr(attrs, 3),
         stringAttr(attrs, 6),
+        stringAttr(attrs, 7),
+        stringAttr(attrs, 8),
         stringAttr(attrs, 9)
     );
   }
@@ -157,6 +175,18 @@ public class SearchRepository extends AbstractFrepRepository {
       return null;
     }
     return value.trim();
+  }
+
+  /**
+   * Marshals a {@code yyyy-MM-dd} criteria string into the DATE attribute format the
+   * legacy struct uses ({@code Frep400DataManager} appends {@code " 00:00:00.0"} so
+   * Oracle parses the value as a timestamp at midnight).
+   */
+  private static Object dateStructValue(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return value.trim() + " 00:00:00.0";
   }
 
   private static String stringAttr(Object[] attrs, int index) {

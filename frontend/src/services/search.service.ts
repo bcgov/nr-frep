@@ -34,4 +34,13 @@ export class SearchService extends HttpClient {
       query: stripBlank(query),
     });
   }
+
+  /** Export checklist-search results to Excel. Backend endpoint is a TODO (responds 501). */
+  exportChecklists(query: ChecklistSearchQuery): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
+      method: 'GET',
+      url: '/v1/search/checklists/export',
+      query: stripBlank(query),
+    });
+  }
 }

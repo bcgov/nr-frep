@@ -69,6 +69,59 @@ public class CodeListRepository extends AbstractFrepRepository {
         cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
   }
 
+  /**
+   * Site-resource rejection reason codes for the FREP110 rejection-reason dropdown.
+   *
+   * <p>Legacy procedure {@code get_site_resource_reason_code} returns
+   * {@code frep_site_resource_reason_code} (code) and {@code description},
+   * from table {@code frep_site_resource_reason_code}.
+   */
+  public List<Map<String, Object>> getSiteResourceReasonCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_site_resource_reason_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Riparian stream RMA class codes for the FREP230 stream-class dropdowns.
+   *
+   * <p>Legacy procedure {@code get_stream_class_code} returns
+   * {@code code} = {@code riparian_stream_rma_class_code} and
+   * {@code description} = {@code code || ' - ' || description}, from table
+   * {@code riparian_stream_rma_class_code} (only non-expired rows).
+   */
+  public List<Map<String, Object>> getStreamClassCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_stream_class_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * FREP checklist answer codes (Yes/No/etc.) for indicator dropdowns such as the
+   * FREP230 invasive-plant answer.
+   *
+   * <p>Legacy procedure {@code get_checklist_answer_code(p_exclude_answer_code, cursor)}
+   * returns {@code code} = {@code frep_checklist_answer_code} and {@code description},
+   * excluding the supplied code (pass {@code ""} to return every answer).
+   */
+  public List<Map<String, Object>> getChecklistAnswerCode(String excludeAnswerCode) {
+    String call = "{call " + PACKAGE_NAME + ".get_checklist_answer_code(?,?)}";
+    // The proc filters WHERE frep_checklist_answer_code != p_exclude. An empty string binds as NULL
+    // in Oracle, making the comparison UNKNOWN for every row (returns nothing). When no exclusion is
+    // wanted, pass a sentinel that matches no real answer code so the full list comes back.
+    String exclude = (excludeAnswerCode == null || excludeAnswerCode.isBlank())
+        ? "~~~"
+        : excludeAnswerCode;
+    return executeCall(call,
+        cs -> {
+          cs.setString(1, exclude);
+          registerOutCursor(cs, 2);
+        },
+        cs -> readCursor(cs, 2, CodeListRepository::rowToMap));
+  }
+
   private static Map<String, Object> rowToMap(ResultSet rs) throws java.sql.SQLException {
     ResultSetMetaData md = rs.getMetaData();
     Map<String, Object> row = new LinkedHashMap<>(md.getColumnCount());

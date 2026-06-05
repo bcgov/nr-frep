@@ -29,3 +29,9 @@ spring:
 frep:
   package-name: FREP
   codelist-package-name: FREP_CODE_LISTS
+  chr:
+    object-storage:
+      host: ${CHR_OBJECT_STORAGE_HOST:}
+      bucket: ${CHR_OBJECT_STORAGE_BUCKET:}
+      access-key: ${CHR_OBJECT_STORAGE_ACCESS_KEY:}
+      secret-key: ${CHR_OBJECT_STORAGE_SECRET_KEY:}

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchRow;
+import ca.bc.gov.nrs.frep.repository.frep.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.SearchRepository;
 import java.util.List;
@@ -52,23 +53,28 @@ class SearchServiceTest {
   }
 
   @Test
-  void aggregateClientRowsGroupsByClientAndCountsLocations() {
-    var results = SearchService.aggregateClientRows(List.of(
-        new ClientSearchRow("10001", "00010001", "TOLKO INDUSTRIES LTD.", "01", "ACT"),
-        new ClientSearchRow("10001", "00010001", "TOLKO INDUSTRIES LTD.", "02", "ACT"),
-        new ClientSearchRow("10001", "00010001", "TOLKO INDUSTRIES LTD.", "01", "ACT")
+  void toClientSearchResultMapsLocationRowFields() {
+    var result = SearchService.toClientSearchResult(new ClientSearchRow(
+        "10001", "TOLKO", "00010001", "TOLKO INDUSTRIES LTD.",
+        "01", "VERNON OFFICE", "VERNON", "ACT"
     ));
 
-    assertEquals(1, results.size());
-    assertEquals("00010001", results.get(0).clientNumber());
-    assertEquals(2, results.get(0).locationCount());
+    assertEquals("TOLKO", result.clientAcronym());
+    assertEquals("00010001", result.clientNumber());
+    assertEquals("01", result.clientLocnCode());
+    assertEquals("TOLKO INDUSTRIES LTD.", result.clientName());
+    assertEquals("VERNON OFFICE", result.clientLocnName());
+    assertEquals("VERNON", result.city());
+    assertEquals("ACT", result.clientStatus());
   }
 
   @Test
   void searchChecklistsBuildsCriteriaForRepository() {
     when(searchRepository.searchChecklists(any())).thenReturn(List.of());
 
-    service.searchChecklists("2024", "56", "bio", "L1234", null, null, null, null, "RDY");
+    service.searchChecklists(
+        "2024", "56", "bio", "L1234", null, null, null, null, "RDY",
+        "9001", "2024-01-01", "2024-12-31");
 
     ArgumentCaptor<ChecklistSearchCriteria> captor = ArgumentCaptor.forClass(ChecklistSearchCriteria.class);
     verify(searchRepository).searchChecklists(captor.capture());
@@ -78,17 +84,28 @@ class SearchServiceTest {
     assertEquals("SLB", criteria.protocolTypeCode());
     assertEquals("L1234", criteria.licenceId());
     assertEquals("RDY", criteria.checklistStatusCode());
+    assertEquals("9001", criteria.checklistId());
+    assertEquals("2024-01-01", criteria.evaluationDateFrom());
+    assertEquals("2024-12-31", criteria.evaluationDateTo());
   }
 
   @Test
-  void searchClientsDelegatesToRepository() {
-    when(searchRepository.searchClients("000100", "tolko")).thenReturn(List.of(
-        new ClientSearchRow("10001", "00010001", "TOLKO INDUSTRIES LTD.", "01", "ACT")
+  void searchClientsBuildsCriteriaForRepository() {
+    when(searchRepository.searchClients(any())).thenReturn(List.of(
+        new ClientSearchRow("10001", "TOLKO", "00010001", "TOLKO INDUSTRIES LTD.",
+            "01", "VERNON OFFICE", "VERNON", "ACT")
     ));
 
-    var results = service.searchClients("000100", "tolko");
+    var results = service.searchClients("000100", "TOLKO", "tolko", "John", "Q");
 
     assertEquals(1, results.size());
-    verify(searchRepository).searchClients("000100", "tolko");
+    ArgumentCaptor<ClientSearchCriteria> captor = ArgumentCaptor.forClass(ClientSearchCriteria.class);
+    verify(searchRepository).searchClients(captor.capture());
+    ClientSearchCriteria criteria = captor.getValue();
+    assertEquals("000100", criteria.clientNumber());
+    assertEquals("TOLKO", criteria.clientAcronym());
+    assertEquals("tolko", criteria.clientName());
+    assertEquals("John", criteria.legalFirstName());
+    assertEquals("Q", criteria.legalMiddleName());
   }
 }

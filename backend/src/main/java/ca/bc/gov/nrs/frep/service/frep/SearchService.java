@@ -4,12 +4,10 @@ import ca.bc.gov.nrs.frep.dto.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.dto.frep.ClientSearchResult;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchRow;
+import ca.bc.gov.nrs.frep.repository.frep.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.SearchRepository;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
@@ -41,7 +39,10 @@ public class SearchService {
       String cutBlockId,
       String openingId,
       String clientNumber,
-      String checklistStatusCode
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo
   ) {
     return searchRepository.searchChecklists(new ChecklistSearchCriteria(
         trimToNull(effectiveYear),
@@ -52,20 +53,35 @@ public class SearchService {
         trimToNull(cutBlockId),
         trimToNull(openingId),
         trimToNull(clientNumber),
-        trimToNull(checklistStatusCode)
+        trimToNull(checklistStatusCode),
+        trimToNull(checklistId),
+        trimToNull(evaluationDateFrom),
+        trimToNull(evaluationDateTo)
     )).stream()
         .map(SearchService::toChecklistSearchResult)
         .toList();
   }
 
   /**
-   * Run a client search using legacy {@code FREP_410_CLIENT_SEARCH}.
+   * Run a client search using legacy {@code FREP_410_CLIENT_SEARCH}. Returns one row per
+   * client location, matching the legacy {@code frep410ClientSearch.jsp} results grid.
    */
-  public List<ClientSearchResult> searchClients(String clientNumber, String clientName) {
-    return aggregateClientRows(searchRepository.searchClients(
+  public List<ClientSearchResult> searchClients(
+      String clientNumber,
+      String clientAcronym,
+      String clientName,
+      String legalFirstName,
+      String legalMiddleName
+  ) {
+    return searchRepository.searchClients(new ClientSearchCriteria(
         trimToNull(clientNumber),
-        trimToNull(clientName)
-    ));
+        trimToNull(clientAcronym),
+        trimToNull(clientName),
+        trimToNull(legalFirstName),
+        trimToNull(legalMiddleName)
+    )).stream()
+        .map(SearchService::toClientSearchResult)
+        .toList();
   }
 
   static ChecklistSearchResult toChecklistSearchResult(ChecklistSearchRow row) {
@@ -88,14 +104,19 @@ public class SearchService {
     );
   }
 
-  static List<ClientSearchResult> aggregateClientRows(List<ClientSearchRow> rows) {
-    Map<String, AggregatedClient> grouped = new LinkedHashMap<>();
-    for (ClientSearchRow row : rows) {
-      String key = preferredClientNumber(row);
-      grouped.computeIfAbsent(key, ignored -> new AggregatedClient(row))
-          .recordLocation(row.clientLocnCode());
-    }
-    return grouped.values().stream().map(AggregatedClient::toResult).toList();
+  static ClientSearchResult toClientSearchResult(ClientSearchRow row) {
+    String displayNumber = row.displayClientNumber().isBlank()
+        ? row.clientNumber()
+        : row.displayClientNumber();
+    return new ClientSearchResult(
+        row.clientAcronym(),
+        displayNumber,
+        row.clientLocnCode(),
+        row.clientName(),
+        row.clientLocnName(),
+        row.city(),
+        row.clientStatusCode()
+    );
   }
 
   static Optional<String> normalizeProtocolType(String protocolType) {
@@ -111,13 +132,6 @@ public class SearchService {
     };
   }
 
-  private static String preferredClientNumber(ClientSearchRow row) {
-    if (!row.displayClientNumber().isBlank()) {
-      return row.displayClientNumber();
-    }
-    return row.clientNumber();
-  }
-
   private static String trimToNull(String value) {
     if (StringUtils.isBlank(value)) {
       return null;
@@ -127,34 +141,5 @@ public class SearchService {
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value.trim();
-  }
-
-  private static final class AggregatedClient {
-    private final ClientSearchRow firstRow;
-    private int rowCount;
-    private final List<String> locationCodes = new ArrayList<>();
-
-    private AggregatedClient(ClientSearchRow firstRow) {
-      this.firstRow = firstRow;
-    }
-
-    private void recordLocation(String locationCode) {
-      rowCount++;
-      if (locationCode != null && !locationCode.isBlank()) {
-        locationCodes.add(locationCode.trim());
-      }
-    }
-
-    private ClientSearchResult toResult() {
-      int locationCount = locationCodes.isEmpty()
-          ? rowCount
-          : (int) locationCodes.stream().distinct().count();
-      return new ClientSearchResult(
-          preferredClientNumber(firstRow),
-          firstRow.clientName(),
-          firstRow.clientStatusCode(),
-          locationCount
-      );
-    }
   }
 }

@@ -4,6 +4,7 @@ import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
 import ca.bc.gov.nrs.frep.repository.frep.AcceptedSiteRow;
 import ca.bc.gov.nrs.frep.repository.frep.AcceptedSitesRepository;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 public class AcceptedSiteService {
 
   private static final String TARGETED_STATUS_CODE = "TAR";
+  private static final String CHR_CODE = "CHR";
 
   private final AcceptedSitesRepository acceptedSitesRepository;
   private final CodeListRepository codeListRepository;
@@ -40,10 +42,24 @@ public class AcceptedSiteService {
       String protocolType
   ) {
     Map<String, String> protocolNameToCode = loadProtocolNameToCode();
-    return acceptedSitesRepository.findAcceptedSites(orgUnit, effectiveYear).stream()
+
+    // The FREP200 proc returns BIO/RIP/WTR only (it hard-excludes CHR). Cultural Heritage is
+    // fetched via a supplementary query and merged in — a deliberate divergence from legacy,
+    // which surfaces CHR only on its separate dashboard.
+    List<AcceptedSiteRow> rows = new ArrayList<>(
+        acceptedSitesRepository.findAcceptedSites(orgUnit, effectiveYear));
+    if (includesCulturalHeritage(protocolType)) {
+      rows.addAll(acceptedSitesRepository.findCulturalHeritageSites(orgUnit, effectiveYear));
+    }
+
+    return rows.stream()
         .map(row -> toResponse(row, effectiveYear, orgUnit, protocolNameToCode))
         .filter(site -> matchesProtocol(site, protocolType))
         .toList();
+  }
+
+  private static boolean includesCulturalHeritage(String protocolType) {
+    return StringUtils.isBlank(protocolType) || CHR_CODE.equalsIgnoreCase(protocolType);
   }
 
   static AcceptedSiteResponse toResponse(

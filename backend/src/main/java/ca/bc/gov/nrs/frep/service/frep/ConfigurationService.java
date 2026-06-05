@@ -1,9 +1,11 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.dto.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
 import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
+import ca.bc.gov.nrs.frep.dto.frep.RejectionReasonResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +59,73 @@ public class ConfigurationService {
         .map(ConfigurationService::toProtocolResponse)
         .filter(p -> p.code() != null)
         .toList();
+  }
+
+  public List<RejectionReasonResponse> getRejectionReasons() {
+    return codeListRepository.getSiteResourceReasonCode().stream()
+        .map(ConfigurationService::toRejectionReasonResponse)
+        .filter(r -> r.code() != null)
+        .toList();
+  }
+
+  /** Riparian stream RMA class options for the FREP230 stream-class dropdowns. */
+  public List<CodeOptionResponse> getStreamClasses() {
+    return codeListRepository.getStreamClassCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /**
+   * FREP checklist answer options (Yes/No/etc.) for indicator dropdowns. Pass the code to exclude,
+   * or {@code null}/blank to return every answer.
+   */
+  public List<CodeOptionResponse> getChecklistAnswers(String excludeAnswerCode) {
+    return codeListRepository.getChecklistAnswerCode(excludeAnswerCode).stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Maps a generic code-list cursor row ({@code code}, {@code description}). */
+  static CodeOptionResponse toCodeOption(Map<String, Object> row) {
+    String code = firstNonBlank(row, "CODE", "code");
+    String description = firstNonBlank(row, DESC_KEYS);
+
+    if (code == null || description == null) {
+      List<Object> ordered = List.copyOf(row.values());
+      if (code == null && !ordered.isEmpty()) {
+        code = blankToNull(ordered.get(0));
+      }
+      if (description == null && ordered.size() >= 2) {
+        description = blankToNull(ordered.get(1));
+      }
+    }
+
+    return new CodeOptionResponse(code, description != null ? description : "");
+  }
+
+  /**
+   * Maps cursor columns returned by {@code get_site_resource_reason_code}:
+   * {@code code} = {@code frep_site_resource_reason_code} (first column),
+   * {@code description}.
+   */
+  static RejectionReasonResponse toRejectionReasonResponse(Map<String, Object> row) {
+    String code = firstNonBlank(row, "FREP_SITE_RESOURCE_REASON_CODE",
+        "frep_site_resource_reason_code", "CODE", "code");
+    String description = firstNonBlank(row, DESC_KEYS);
+
+    if (code == null || description == null) {
+      List<Object> ordered = List.copyOf(row.values());
+      if (code == null && !ordered.isEmpty()) {
+        code = blankToNull(ordered.get(0));
+      }
+      if (description == null && ordered.size() >= 2) {
+        description = blankToNull(ordered.get(1));
+      }
+    }
+
+    return new RejectionReasonResponse(code, description != null ? description : "");
   }
 
   /**

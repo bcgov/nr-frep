@@ -130,6 +130,31 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void findChecklistDegradesSectionWithNoData() {
+    Map<String, Object> slb = new LinkedHashMap<>();
+    slb.put("CODE", "SLB");
+    slb.put("DESCRIPTION", "Biodiversity");
+    when(codeListRepository.getResourceValue()).thenReturn(List.of(slb));
+
+    when(checklistRepository.getBioOpening("9001")).thenReturn(sectionWithHeader(
+        new ChecklistHeaderData("", "A12345", "2024", "RDY", "IDIR\\JDOE", "2024-08-12"),
+        Map.of("Stand age (yrs)", "82")
+    ));
+    // FREP_211 raises ORA-01403 (no data found) when the stratum/resource ids can't be resolved.
+    when(checklistRepository.getBioStratum("9001")).thenThrow(
+        new org.springframework.dao.DataIntegrityViolationException(
+            "no data", new java.sql.SQLException("ORA-01403: no data found", "99999", 1403)));
+    when(checklistRepository.getBioPlots("9001")).thenReturn(ChecklistSectionData.fieldsOnly(Map.of()));
+
+    var response = service.findChecklist("bio", "9001");
+
+    assertTrue(response.isPresent());
+    assertEquals(3, response.get().sections().size());
+    assertEquals("stratum", response.get().sections().get(1).id());
+    assertTrue(response.get().sections().get(1).fields().isEmpty());
+  }
+
+  @Test
   void findChecklistReturnsEmptyForUnknownProtocol() {
     assertTrue(service.findChecklist("CHR", "9001").isEmpty());
   }

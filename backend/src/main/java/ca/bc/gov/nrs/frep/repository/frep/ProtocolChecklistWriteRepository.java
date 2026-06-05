@@ -56,7 +56,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   private static final String BIO_OPENING_SELECT =
       "SELECT frep_resource_value_id, frep_checklist_status_code, frep_wtp_override, "
           + "location_description, patch_reserves_on_block, patch_reserves_sampled, "
-          + "innovative_practice_ind, innovative_practices_comment, invasive_plant_indicator, "
+          + "innovtv_practice_answer_code, innovative_practices_comment, invasive_plant_answer_code, "
           + "invasive_plant_comment, frep_site_evaluation_code, evaluator_opinion_comment, "
           + "revision_count "
           + "FROM the.biodiversity_checklist WHERE biodiversity_checklist_id = ?";
@@ -116,9 +116,9 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
               rs.getString("location_description"),
               rs.getString("patch_reserves_on_block"),
               rs.getString("patch_reserves_sampled"),
-              rs.getString("innovative_practice_ind"),
+              rs.getString("innovtv_practice_answer_code"),
               rs.getString("innovative_practices_comment"),
-              rs.getString("invasive_plant_indicator"),
+              rs.getString("invasive_plant_answer_code"),
               rs.getString("invasive_plant_comment"),
               rs.getString("frep_site_evaluation_code"),
               rs.getString("evaluator_opinion_comment"),
@@ -579,8 +579,9 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, STAND_VARRAY_TYPE, STAND_OBJECT_TYPE, rows,
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, row.treeNumber(), row.dbh(), row.height(),
-                  row.comments(), row.decayClassCode(), null, row.revisionCount(), null, userId
+                  null, plotId, row.speciesCode(), null, blankToNull(row.treeNumber()),
+                  blankToNull(row.dbh()), blankToNull(row.height()), row.comments(),
+                  row.decayClassCode(), null, blankToNull(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },
@@ -596,9 +597,9 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, CWD_VARRAY_TYPE, CWD_OBJECT_TYPE, rows,
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, row.logNumber(), row.logDiameter(),
-                  row.logLength(), row.decayClassCode(), null, row.comments(), row.revisionCount(),
-                  null, userId
+                  null, plotId, row.speciesCode(), null, blankToNull(row.logNumber()),
+                  blankToNull(row.logDiameter()), blankToNull(row.logLength()), row.decayClassCode(),
+                  null, row.comments(), blankToNull(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },
@@ -728,8 +729,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.setString(8, o.actRiparianStrmRmaCls());
           cs.setObject(9, buildStructArray(cs, STRM_EDGE_VARRAY_TYPE, STRM_EDGE_OBJECT_TYPE,
               o.streamEdge(), row -> new Object[] {
-                  o.checklistId(), row.measureType(), row.measurement(), null, row.revisionCount(),
-                  null, userId
+                  o.checklistId(), row.measureType(), blankToNull(row.measurement()), null,
+                  blankToNull(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(9, Types.ARRAY, STRM_EDGE_VARRAY_TYPE);
           cs.setString(10, o.channelWidth());
@@ -895,17 +896,20 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
         cs -> {
           cs.setString(1, o.checklistId());
           cs.setString(2, o.fieldDataStreamReachDry());
+          // measure_1..6, mean, ids and revision_count are NUMBER attrs — blank "" raises ORA-17059,
+          // so empty values must be sent as null.
           cs.setObject(3, buildStructArray(cs, POINT_IND_VARRAY, POINT_IND_OBJECT, o.points(),
               r -> new Object[] {
-                  r.pointIndicatorId(), r.questionNo(), r.pointIndType(), r.transectNo(),
-                  r.measure1(), r.measure2(), r.measure3(), r.measure4(), r.measure5(), r.measure6(),
-                  r.threshold(), r.mean(), r.revisionCount()
+                  blankToNull(r.pointIndicatorId()), r.questionNo(), r.pointIndType(), r.transectNo(),
+                  blankToNull(r.measure1()), blankToNull(r.measure2()), blankToNull(r.measure3()),
+                  blankToNull(r.measure4()), blankToNull(r.measure5()), blankToNull(r.measure6()),
+                  r.threshold(), blankToNull(r.mean()), blankToNull(r.revisionCount())
               }));
           cs.registerOutParameter(3, Types.ARRAY, POINT_IND_VARRAY);
           cs.setObject(4, buildStructArray(cs, CONTINUOUS_IND_VARRAY, CONTINUOUS_IND_OBJECT,
               o.continuous(), r -> new Object[] {
-                  r.continuousIndId(), r.questionNo(), r.continuousIndType(), r.question(),
-                  r.total(), r.comments(), r.threshold(), r.revisionCount()
+                  blankToNull(r.continuousIndId()), r.questionNo(), r.continuousIndType(), r.question(),
+                  blankToNull(r.total()), r.comments(), r.threshold(), blankToNull(r.revisionCount())
               }));
           cs.registerOutParameter(4, Types.ARRAY, CONTINUOUS_IND_VARRAY);
           cs.setString(5, userId);
@@ -940,7 +944,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.setObject(2, buildStructArray(cs, OTHER_IND_VARRAY, OTHER_IND_OBJECT, o.indicators(),
               r -> new Object[] {
                   r.otherIndTypeId(), r.quesSectCode(), r.headerQuestionInd(), r.question(),
-                  r.otherIndicatorId(), r.otherAnswerInd(), r.revisionCount(), null, userId
+                  blankToNull(r.otherIndicatorId()), r.otherAnswerInd(),
+                  blankToNull(r.revisionCount()), null, userId
               }));
           cs.setString(3, userId);
           setInOutString(cs, 4, null);
@@ -985,9 +990,10 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.setString(1, checklistId);
           cs.setObject(2, buildStructArray(cs, QUESTIONS_VARRAY, QUESTIONS_OBJECT, o.questions(),
               q -> new Object[] {
-                  checklistId, q.checklistQuestionId(), q.questionNo(), q.question(),
+                  checklistId, blankToNull(q.checklistQuestionId()), q.questionNo(), q.question(),
                   q.chanMorphologyCode(), q.applicableInd(), q.morphologyDesc(), q.questionType(),
-                  q.questionDesc(), q.subQuestion(), q.answerCode(), q.revisionCount(), null, userId
+                  q.questionDesc(), q.subQuestion(), q.answerCode(), blankToNull(q.revisionCount()),
+                  null, userId
               }));
           cs.setString(3, userId);
           setInOutString(cs, 4, null);
@@ -1003,9 +1009,10 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.setString(1, checklistId);
           cs.setObject(2, buildStructArray(cs, NO_ANSWERS_VARRAY, NO_ANSWERS_OBJECT, o.noAnswers(),
               r -> new Object[] {
-                  r.answerImpactId(), checklistId, r.checklistQuestionId(), r.questionNo(),
-                  r.answerImpactType(), r.answerImpactDesc(), r.sortOrder(), r.answerInd(),
-                  r.revisionCount(), null, userId
+                  blankToNull(r.answerImpactId()), checklistId, blankToNull(r.checklistQuestionId()),
+                  r.questionNo(), r.answerImpactType(), r.answerImpactDesc(),
+                  blankToNull(r.sortOrder()), r.answerInd(), blankToNull(r.revisionCount()), null,
+                  userId
               }));
           cs.registerOutParameter(2, Types.ARRAY, NO_ANSWERS_VARRAY);
           cs.setString(3, userId);
@@ -1049,13 +1056,15 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.registerOutParameter(3, Types.VARCHAR);
           cs.setObject(4, buildStructArray(cs, OPEN_SPEC_VARRAY, OPEN_SPEC_OBJECT, o.openImpacts(),
               r -> new Object[] {
-                  r.openingSpecificImpactId(), r.openingSpecificImpactType(), r.specImpactInd(),
-                  r.revisionCount()
+                  blankToNull(r.openingSpecificImpactId()),
+                  blankToNull(r.openingSpecificImpactType()), r.specImpactInd(),
+                  blankToNull(r.revisionCount())
               }));
           cs.registerOutParameter(4, Types.ARRAY, OPEN_SPEC_VARRAY);
           cs.setObject(5, buildStructArray(cs, OTHER_SPEC_VARRAY, OTHER_SPEC_OBJECT, o.otherImpacts(),
               r -> new Object[] {
-                  r.otherRiparianSpecImpactId(), r.description(), r.specImpactInd(), r.revisionCount()
+                  blankToNull(r.otherRiparianSpecImpactId()), r.description(), r.specImpactInd(),
+                  blankToNull(r.revisionCount())
               }));
           cs.registerOutParameter(5, Types.ARRAY, OTHER_SPEC_VARRAY);
         },
@@ -1137,16 +1146,17 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.registerOutParameter(1, Types.STRUCT, WTR_CHECKLIST_TYPE);
           cs.setObject(2, buildStructArray(cs, WTR_ACCESS_ROAD_VARRAY, WTR_ACCESS_ROAD_OBJECT,
               o.accessRoads(), r -> new Object[] {
-                  r.accessRoadId(), o.waterChecklistId(), r.accessRoadType(), r.accessRoadDesc(),
-                  r.accessRoadStatusCode(), r.approximateRoadLength(), r.approximateRoadAge(),
-                  r.revisionCount(), r.entryUserid(), userId
+                  blankToNull(r.accessRoadId()), o.waterChecklistId(), r.accessRoadType(),
+                  r.accessRoadDesc(), r.accessRoadStatusCode(),
+                  blankToNull(r.approximateRoadLength()), blankToNull(r.approximateRoadAge()),
+                  blankToNull(r.revisionCount()), r.entryUserid(), userId
               }));
           cs.registerOutParameter(2, Types.ARRAY, WTR_ACCESS_ROAD_VARRAY);
           cs.setObject(3, buildStructArray(cs, WTR_DISTURBANCE_VARRAY, WTR_DISTURBANCE_OBJECT,
               o.disturbances(), r -> new Object[] {
-                  r.disturbanceId(), o.waterChecklistId(), r.disturbanceCode(),
-                  r.disturbanceAgeCode(), r.disturbanceNumber(), r.revisionCount(), r.entryUserid(),
-                  userId
+                  blankToNull(r.disturbanceId()), o.waterChecklistId(), r.disturbanceCode(),
+                  r.disturbanceAgeCode(), blankToNull(r.disturbanceNumber()),
+                  blankToNull(r.revisionCount()), r.entryUserid(), userId
               }));
           cs.registerOutParameter(3, Types.ARRAY, WTR_DISTURBANCE_VARRAY);
         },
@@ -1327,9 +1337,9 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
       throws java.sql.SQLException {
     return buildStructArray(cs, WTR_ASSESSMENT_VARRAY, WTR_ASSESSMENT_OBJECT, rows,
         r -> new Object[] {
-            sampleSiteId, r.activityGrpCode(), r.activityGrpDesc(), r.activityGrpCount(),
-            r.assessmentType(), r.assessmentDesc(), r.assessmentInd(), r.revisionCount(),
-            r.entryUserid(), userId
+            sampleSiteId, r.activityGrpCode(), r.activityGrpDesc(),
+            blankToNull(r.activityGrpCount()), r.assessmentType(), r.assessmentDesc(),
+            r.assessmentInd(), blankToNull(r.revisionCount()), r.entryUserid(), userId
         });
   }
 
@@ -1341,6 +1351,11 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     Object[] attrs = new Object[size];
     attrs[idIndex] = idValue;
     return connection.createStruct(type, attrs);
+  }
+
+  /** Null for a blank string, so empty values are not passed to NUMBER struct attrs (ORA-17059). */
+  private static Object blankToNull(String value) {
+    return (value == null || value.isBlank()) ? null : value;
   }
 
 }

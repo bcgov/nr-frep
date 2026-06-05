@@ -56,6 +56,79 @@ public class AcceptedSitesRepository extends AbstractFrepRepository {
     });
   }
 
+  /**
+   * Supplementary lookup for Cultural Heritage (CHR) accepted/targeted sites for a district and
+   * master-list year. The deployed {@code FREP_200_ACCEPTED_SITES.get} proc <em>excludes</em> CHR
+   * ({@code frep_resource_value_type_code <> 'CHR'}); this query mirrors the proc's site/opening
+   * joins but for {@code chr_checklist}, so CHR can be merged into the accepted-sites list.
+   *
+   * <p><b>Divergence from legacy:</b> legacy surfaces CHR only via its separate dashboard, not on
+   * the FREP200 list.
+   */
+  public List<AcceptedSiteRow> findCulturalHeritageSites(String orgUnitNo, String effectiveYear) {
+    return jdbcTemplate.query(
+        CHR_ACCEPTED_SITES_SQL,
+        (rs, rowNum) -> new AcceptedSiteRow(
+            cleanString(rs.getString("checklist_id")),
+            cleanString(rs.getString("checklist_type")),
+            cleanString(rs.getString("sample_number")),
+            cleanString(rs.getString("resource_value_stat_code")),
+            cleanString(rs.getString("checklist_status_code")),
+            cleanString(rs.getString("opening_number")),
+            cleanString(rs.getString("opening_id")),
+            cleanString(rs.getString("licence_id")),
+            cleanString(rs.getString("cutting_permit_id")),
+            cleanString(rs.getString("cut_block_id")),
+            cleanString(rs.getString("harvest_complete_date"))),
+        effectiveYear,
+        orgUnitNo);
+  }
+
+  private static final String CHR_ACCEPTED_SITES_SQL = """
+      SELECT cc.chr_checklist_id                       AS checklist_id
+           , frvtc.description                         AS checklist_type
+           , NULL                                      AS sample_number
+           , frv.frep_resource_value_stat_code         AS resource_value_stat_code
+           , cc.frep_checklist_status_code             AS checklist_status_code
+           , THE.frep_formatted_mapsheet(fss.mapsheet_grid, fss.mapsheet_letter, fss.mapsheet_square,
+                                         fss.mapsheet_quad, fss.mapsheet_sub_quad, fss.opening_number)
+                                                       AS opening_number
+           , fss.opening_id                            AS opening_id
+           , fss.forest_file_id                        AS licence_id
+           , fss.cutting_permit_id                     AS cutting_permit_id
+           , fss.cut_block_id                          AS cut_block_id
+           , TO_CHAR(fss.disturbance_end_date, 'YYYY-MM-DD')
+                                                       AS harvest_complete_date
+        FROM THE.frep_selected_site fss
+           , THE.frep_resource_value frv
+           , THE.chr_checklist cc
+           , THE.frep_resource_value_type_code frvtc
+       WHERE fss.frep_selected_site_id = frv.frep_selected_site_id
+         AND frv.frep_resource_value_id = cc.frep_resource_value_id
+         AND frv.frep_resource_value_type_code = frvtc.frep_resource_value_type_code
+         AND fss.effective_year = to_number(?)
+         AND fss.org_unit_no = to_number(?)
+         AND frv.frep_resource_value_stat_code <> 'REJ'
+         AND frv.frep_resource_value_type_code = 'CHR'
+       ORDER BY fss.opening_id
+      """;
+
+  private static String cleanString(String value) {
+    if (value == null) {
+      return "";
+    }
+    String trimmed = value.trim();
+    if (trimmed.endsWith(".0")) {
+      try {
+        Double.parseDouble(trimmed);
+        return trimmed.substring(0, trimmed.length() - 2);
+      } catch (NumberFormatException ignored) {
+        // keep original
+      }
+    }
+    return trimmed;
+  }
+
   private static void setEmptyAcceptedSitesArray(CallableStatement cs, int index) throws SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
     cs.setArray(index, connection.createOracleArray(ARRAY_TYPE_NAME, new Object[0]));

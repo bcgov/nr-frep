@@ -106,9 +106,13 @@ public class SiteDetailRepository extends AbstractFrepRepository {
           cs.setString(4, effectiveYear);
           cs.setObject(5, buildStructArray(cs, RESOURCE_ARRAY_TYPE, RESOURCE_OBJECT_TYPE, resources,
               r -> new Object[] {
-                  r.resourceValueId(), null, r.resourceType(), null, r.statusCode(), null,
-                  r.rationale(), r.rejectionReasonCode(), r.otherComments(), r.revisionCount(),
-                  null, userId
+                  // resource_id + revision_count are NUMBER attributes — a blank string can't
+                  // convert (Oracle 17059), and a new resource must send a null id so the proc
+                  // takes its insert branch. Null all blanks, mirroring the legacy array bean.
+                  blankToNull(r.resourceValueId()), null, blankToNull(r.resourceType()), null,
+                  blankToNull(r.statusCode()), null, blankToNull(r.rationale()),
+                  blankToNull(r.rejectionReasonCode()), blankToNull(r.otherComments()),
+                  blankToNull(r.revisionCount()), null, blankToNull(userId)
               }));
           setInOutString(cs, 6, userId);
           setInOutString(cs, 7, null);
@@ -192,5 +196,10 @@ public class SiteDetailRepository extends AbstractFrepRepository {
 
   private static String stringValue(String value) {
     return value == null ? "" : value.trim();
+  }
+
+  /** Null for blank values so they don't get pushed into NUMBER/typed struct attributes. */
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
   }
 }

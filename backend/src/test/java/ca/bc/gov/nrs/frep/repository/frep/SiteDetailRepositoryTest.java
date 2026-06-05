@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.repository.frep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -19,6 +20,7 @@ import oracle.jdbc.OracleConnection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -85,5 +87,26 @@ class SiteDetailRepositoryTest {
     verify(oracleConnection).createStruct(eq("THE.FREP_RESOURCE_OBJECT"), any());
     verify(oracleConnection).createOracleArray(eq("THE.FREP_RESOURCE_VARRAY"), any());
     assertEquals("1001", siteId);
+  }
+
+  @Test
+  void saveResourcesNullsBlankNumericAttributesForNewResource() throws Exception {
+    when(cs.getString(7)).thenReturn(null);
+    when(cs.getString(1)).thenReturn("1001");
+
+    // New resource: blank resourceValueId + blank revisionCount must marshal to null (not ""),
+    // or Oracle raises 17059 "fail to convert to internal representation" on the NUMBER attrs.
+    repository.saveResources(
+        "1001", "987654", "43", "2019",
+        List.of(new SiteResourceSaveRequest("", "SLB", "ACC", null, null, null, "")),
+        "idir");
+
+    ArgumentCaptor<Object[]> attrs = ArgumentCaptor.forClass(Object[].class);
+    verify(oracleConnection).createStruct(eq("THE.FREP_RESOURCE_OBJECT"), attrs.capture());
+    Object[] values = attrs.getValue();
+    assertNull(values[0]); // resource_id (NUMBER)
+    assertEquals("SLB", values[2]); // resource_type
+    assertEquals("ACC", values[4]); // stat_code
+    assertNull(values[9]); // revision_count (NUMBER)
   }
 }

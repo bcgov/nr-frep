@@ -22,5 +22,5 @@ public record RandomListRow(
     String managementUnit,
     String grossArea,
     String netArea,
-    List<String> existingChecklistTypes
+    List<String> existingChecklists
 ) {}

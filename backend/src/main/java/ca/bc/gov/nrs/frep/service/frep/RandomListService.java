@@ -78,7 +78,7 @@ public class RandomListService {
         blankToNull(row.disturbanceStartDate()),
         blankToNull(row.disturbanceEndDate()),
         blankToNull(row.managementUnit()),
-        List.copyOf(row.existingChecklistTypes())
+        List.copyOf(row.existingChecklists())
     );
   }
 

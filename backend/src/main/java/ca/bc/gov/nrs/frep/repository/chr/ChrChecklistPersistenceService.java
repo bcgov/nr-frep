@@ -85,8 +85,12 @@ public class ChrChecklistPersistenceService {
 
   @SuppressWarnings("unchecked")
   public ChrChecklist getAcceptedSiteForChr(long checklistId, String protocolTypeCode) {
+    // SELECT chr.* (not *): FREP_SELECTED_SITE and FREP_RESOURCE_VALUE also carry an
+    // ENTRY_TIMESTAMP column, and a bare * yields duplicate aliases that break Hibernate's
+    // entity auto-discovery (NonUniqueDiscoveredSqlAliasException). The result maps only to
+    // ChrChecklist, so the join tables are filters, not projected columns.
     List<ChrChecklist> results = entityManager.createNativeQuery(
-            "SELECT * FROM THE.CHR_CHECKLIST chr, THE.FREP_SELECTED_SITE fss, THE.frep_resource_value frv "
+            "SELECT chr.* FROM THE.CHR_CHECKLIST chr, THE.FREP_SELECTED_SITE fss, THE.frep_resource_value frv "
                 + "WHERE fss.frep_selected_site_id = frv.frep_selected_site_id "
                 + "AND chr.frep_resource_value_id = frv.frep_resource_value_id "
                 + "AND frv.frep_resource_value_type_code = :protocolTypeCode "

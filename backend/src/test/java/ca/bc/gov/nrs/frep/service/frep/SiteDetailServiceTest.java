@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,11 +108,104 @@ class SiteDetailServiceTest {
         eq("1001"), eq("987654"), eq("43"), eq("2019"), any(), eq("IDIR\\u"))).thenReturn("1001");
 
     SiteResourceSaveRequest req = new SiteResourceSaveRequest(
-        "8001", "SLB", "ACC", null, "ok", null, "3");
+        "8001", "SLB", "ACC", null, null, null, "3");
     SiteDetailResponse response = service.saveResources("1001", List.of(req));
 
     assertEquals("1001", response.frepSelectedSiteId());
     verify(siteDetailRepository).saveResources(
         eq("1001"), eq("987654"), eq("43"), eq("2019"), any(), eq("IDIR\\u"));
+  }
+
+  private static SiteResourceSaveRequest req(
+      String status, String reason, String rationale, String comments) {
+    return new SiteResourceSaveRequest("8001", "SLB", status, reason, rationale, comments, "3");
+  }
+
+  private static void expectInvalid(SiteResourceSaveRequest request) {
+    assertThrows(
+        ResponseStatusException.class,
+        () -> SiteDetailService.validateResources(List.of(request), siteDetailData(List.of())));
+  }
+
+  @Test
+  void validateRejectsAcceptedWithReasonOrRationale() {
+    expectInvalid(req("ACC", "OTH", null, null));
+    expectInvalid(req("ACC", null, "should be blank", null));
+  }
+
+  @Test
+  void validateRequiresReasonForRejected() {
+    expectInvalid(req("REJ", null, null, null));
+  }
+
+  @Test
+  void validateRequiresRationaleWhenRejectionReasonIsOther() {
+    expectInvalid(req("REJ", "OTH", null, null));
+  }
+
+  @Test
+  void validateRequiresRationaleForTargeted() {
+    expectInvalid(req("TAR", null, null, null));
+    expectInvalid(req("TAR", "OTH", "any", null)); // reason must be blank for TAR
+  }
+
+  @Test
+  void validateEnforcesLengthCaps() {
+    expectInvalid(req("REJ", "OTH", "x".repeat(51), null));
+    expectInvalid(req("ACC", null, null, "y".repeat(2001)));
+  }
+
+  @Test
+  void validateAcceptsValidRows() {
+    SiteDetailService.validateResources(
+        List.of(
+            req("ACC", null, null, "some comment"),
+            req("REJ", "NSTR", null, null),
+            req("REJ", "OTH", "needs a reason", null),
+            req("TAR", null, "targeted rationale", null)),
+        siteDetailData(List.of()));
+  }
+
+  @Test
+  void saveResourcesRejectedWhenAllResourcesSubmitted() {
+    when(loggedUserHelper.canWrite()).thenReturn(true);
+    when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(List.of(
+        new SiteResourceRow("8001", "R", "SLB", "Biodiversity", "REJ", "SUB", "", "", "", "3"))));
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class,
+        () -> service.saveResources("1001", List.of(req("REJ", "NSTR", null, null))));
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+    verify(siteDetailRepository, never()).saveResources(any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void validateAllowsEmptyStatusRows() {
+    // Empty status must not raise errors even with no reason/rationale (it just won't be saved).
+    SiteDetailService.validateResources(
+        List.of(req("", null, null, null)), siteDetailData(List.of()));
+  }
+
+  @Test
+  void resourcesToPersistDropsEmptyStatusAndSubmittedRows() {
+    SiteDetailData current = siteDetailData(List.of(new SiteResourceRow(
+        "8002", "R", "RIP", "Riparian", "REJ", "SUB", "", "", "", "1")));
+    var toPersist = SiteDetailService.resourcesToPersist(
+        List.of(
+            new SiteResourceSaveRequest("8001", "SLB", "ACC", null, null, null, "3"), // keep
+            new SiteResourceSaveRequest(null, "WAT", "", null, null, null, null), // empty → drop
+            new SiteResourceSaveRequest("8002", "RIP", "REJ", "NSTR", null, null, "1")), // submitted → drop
+        current);
+
+    assertEquals(1, toPersist.size());
+    assertEquals("8001", toPersist.get(0).resourceValueId());
+  }
+
+  @Test
+  void validateSkipsSubmittedResources() {
+    SiteDetailData current = siteDetailData(List.of(new SiteResourceRow(
+        "8001", "R", "SLB", "Biodiversity", "REJ", "SUB", "", "", "", "3")));
+    // A REJ row missing its reason would normally fail, but it is submitted → skipped.
+    SiteDetailService.validateResources(List.of(req("REJ", null, null, null)), current);
   }
 }

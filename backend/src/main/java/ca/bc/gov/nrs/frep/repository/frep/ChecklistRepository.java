@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.sql.Struct;
 import java.sql.Types;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import oracle.jdbc.OracleConnection;
 import oracle.jdbc.OracleTypes;
@@ -93,7 +94,71 @@ public class ChecklistRepository extends AbstractFrepRepository {
     });
   }
 
+  /** The checklist's resource value id (required by FREP_211's status SELECT). */
+  private String resolveBioResourceValueId(String checklistId) {
+    List<String> ids = jdbcTemplate.query(
+        "SELECT frep_resource_value_id FROM the.biodiversity_checklist "
+            + "WHERE biodiversity_checklist_id = ?",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return ids.isEmpty() ? "" : trimId(ids.get(0));
+  }
+
+  /**
+   * The riparian checklist's resource value id. FREP_230's tombstone block (org unit, opening,
+   * licence, client, etc.) is joined through {@code frep_selected_site} via this id, so passing it
+   * empty leaves those header fields blank.
+   */
+  private String resolveRipResourceValueId(String checklistId) {
+    List<String> ids = jdbcTemplate.query(
+        "SELECT frep_resource_value_id FROM the.riparian_checklist "
+            + "WHERE riparian_checklist_id = ?",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return ids.isEmpty() ? "" : trimId(ids.get(0));
+  }
+
+  /** The checklist's first stratum id (a checklist may have 0..n strata); "" when none. */
+  private String resolveFirstBioStratumId(String checklistId) {
+    List<String> ids = jdbcTemplate.query(
+        "SELECT stratum_id FROM the.biodiversity_stratum WHERE biodiversity_checklist_id = ? "
+            + "ORDER BY stratum_number, stratum_id",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return ids.isEmpty() ? "" : trimId(ids.get(0));
+  }
+
+  /** The checklist's first water sample site id (a checklist may have 0..n sites); "" when none. */
+  private String resolveFirstWaterSampleSiteId(String checklistId) {
+    List<String> ids = jdbcTemplate.query(
+        "SELECT water_sample_site_id FROM the.water_sample_site WHERE water_checklist_id = ? "
+            + "ORDER BY sample_site_number, water_sample_site_id",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return ids.isEmpty() ? "" : trimId(ids.get(0));
+  }
+
+  private static String trimId(String value) {
+    if (value == null) {
+      return "";
+    }
+    String trimmed = value.trim();
+    return trimmed.endsWith(".0") ? trimmed.substring(0, trimmed.length() - 2) : trimmed;
+  }
+
+  /** Null for a blank string so empty values are not passed to NUMBER struct attrs (avoids ORA-17059). */
+  private static Object blankToNull(String value) {
+    return (value == null || value.isBlank()) ? null : value;
+  }
+
   public ChecklistSectionData getBioStratum(String checklistId) {
+    // FREP_211_BioStratum.get is a single-stratum GET keyed on resource_value_id (its status
+    // SELECT INTO) + stratum_id; passing empty ids raises ORA-01403. Resolve the checklist's
+    // resource value id and its first stratum id (a checklist may have 0..n strata) so the section
+    // populates instead of erroring.
+    String resourceValueId = resolveBioResourceValueId(checklistId);
+    String stratumId = resolveFirstBioStratumId(checklistId);
+
     // Layout per legacy Frep211DataManager (deployed signature): 82 params, leading OUT block 1-15,
     // stratum_id IN @16, checklist_id IN @17, resource_value_id IN @18, fields 19-80, error @81,
     // wind-treatment REF CURSOR @82.
@@ -102,9 +167,9 @@ public class ChecklistRepository extends AbstractFrepRepository {
       for (int i = 1; i <= 15; i++) {
         cs.registerOutParameter(i, Types.VARCHAR);
       }
-      cs.setString(16, "");
+      cs.setString(16, stratumId);
       cs.setString(17, checklistId);
-      cs.setString(18, EMPTY_RESOURCE_VALUE_ID);
+      cs.setString(18, resourceValueId);
       for (int i = 19; i <= 81; i++) {
         cs.registerOutParameter(i, Types.VARCHAR);
       }
@@ -226,12 +291,15 @@ public class ChecklistRepository extends AbstractFrepRepository {
     // signature): 69 params, leading OUT block 1-21, resource_value_id IN @22, checklist_id IN @23,
     // status @24, stream fields, stream-edge VARRAY @31, ... invasive @66/67, revision @68, error
     // @69. (The fixed-18 tombstone helper left params 19-21 unbound.)
+    // Resolve the real resource_value_id so the proc's tombstone join (org unit, opening, licence,
+    // client, etc.) populates instead of returning blanks.
+    String resourceValueId = resolveRipResourceValueId(checklistId);
     String call = callSql(RIP_STREAM_PACKAGE, "GET", 69);
     return executeCall(call, cs -> {
       for (int i = 1; i <= 21; i++) {
         cs.registerOutParameter(i, Types.VARCHAR);
       }
-      cs.setString(22, EMPTY_RESOURCE_VALUE_ID);
+      cs.setString(22, resourceValueId);
       cs.setString(23, checklistId);
       for (int i = 24; i <= 68; i++) {
         if (i == 31) {
@@ -245,6 +313,18 @@ public class ChecklistRepository extends AbstractFrepRepository {
       throwIfError(RIP_STREAM_PACKAGE, "GET", cs.getString(69));
       ChecklistHeaderData header = headerFromRipTombstone(cs, 24);
       Map<String, String> fields = ChecklistSectionData.linkedFields();
+      // Header context fields the legacy FREP230 screen shows (tombstone block, proc params 1-20):
+      // org unit, tenure (licence/CP/block), opening id, client, sample #, FSP, harvest date.
+      putIfPresent(fields, "Org unit", cs.getString(2));
+      putIfPresent(fields, "Opening ID", cs.getString(5));
+      putIfPresent(fields, "Licence", cs.getString(7));
+      putIfPresent(fields, "Cutting permit", cs.getString(9));
+      putIfPresent(fields, "Cut block", cs.getString(10));
+      putIfPresent(fields, "Client", cs.getString(13));
+      putIfPresent(fields, "Client name", cs.getString(14));
+      putIfPresent(fields, "Sample #", cs.getString(17));
+      putIfPresent(fields, "FSP", cs.getString(19));
+      putIfPresent(fields, "Harvest complete date", cs.getString(20));
       putIfPresent(fields, "Range use plan", cs.getString(25));
       putIfPresent(fields, "Pasture id", cs.getString(26));
       putIfPresent(fields, "Stream name", cs.getString(27));
@@ -252,11 +332,11 @@ public class ChecklistRepository extends AbstractFrepRepository {
       putIfPresent(fields, "Planned riparian stream RMA class", cs.getString(29));
       putIfPresent(fields, "Actual riparian stream RMA class", cs.getString(30));
       putArrayFields(fields, cs.getArray(31), "Stream edge ", STRM_EDGE_COLS);
-      putIfPresent(fields, "Channel width", cs.getString(32));
-      putIfPresent(fields, "Channel gradient pct", cs.getString(33));
-      putIfPresent(fields, "Channel depth", cs.getString(34));
-      putIfPresent(fields, "Reach location to", cs.getString(35));
-      putIfPresent(fields, "Reach location from", cs.getString(36));
+      putIfPresent(fields, "Channel width (m)", cs.getString(32));
+      putIfPresent(fields, "Channel gradient (%)", cs.getString(33));
+      putIfPresent(fields, "Channel depth (m)", cs.getString(34));
+      putIfPresent(fields, "Reach location to (m)", cs.getString(35));
+      putIfPresent(fields, "Reach location from (m)", cs.getString(36));
       putIfPresent(fields, "Reach location u/s-d/s ind", cs.getString(37));
       putIfPresent(fields, "Reach location from desc", cs.getString(38));
       putIfPresent(fields, "UTM signal", cs.getString(39));
@@ -288,7 +368,8 @@ public class ChecklistRepository extends AbstractFrepRepository {
       putIfPresent(fields, "Planned riparian N/A ind", cs.getString(65));
       putIfPresent(fields, "Invasive plant", cs.getString(66));
       putIfPresent(fields, "Invasive plant comment", cs.getString(67));
-      return ChecklistSectionData.of(header.mergedWith(getTombstone(checklistId, "RIP", "")), fields);
+      return ChecklistSectionData.of(
+          header.mergedWith(getTombstone(checklistId, "RIP", resourceValueId)), fields);
     });
   }
 
@@ -441,9 +522,13 @@ public class ChecklistRepository extends AbstractFrepRepository {
   }
 
   public ChecklistSectionData getWaterSampleSite(String checklistId) {
+    // FREP_251 -> FREP_WATER_SAMPLE_SITE.GET keys its main SELECT INTO on BOTH water_checklist_id
+    // AND water_sample_site_id; passing an empty sample-site id raises ORA-01403. Resolve the
+    // checklist's first sample site (a checklist may have 0..n) so the section populates.
+    String sampleSiteId = resolveFirstWaterSampleSiteId(checklistId);
     String call = "{call " + WTR_SAMPLE_SITE_PROC + "(?)}";
     return executeCall(call, cs -> {
-      cs.setObject(1, createWaterSampleSiteStruct(cs, checklistId));
+      cs.setObject(1, createWaterSampleSiteStruct(cs, checklistId, sampleSiteId));
       cs.registerOutParameter(1, Types.STRUCT, WTR_SAMPLE_SITE_TYPE);
     }, cs -> {
       Struct sampleSite = (Struct) cs.getObject(1);
@@ -596,15 +681,21 @@ public class ChecklistRepository extends AbstractFrepRepository {
 
   private static Struct createWaterChecklistStruct(CallableStatement cs, String checklistId) throws SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    Object[] attrs = new Object[38]; // FREP_WTR_CHKLST_OBJECT has 38 attributes (no evaluation_date)
+    // FREP_WTR_CHKLST_OBJECT has 39 attributes (incl. EVALUATION_DATE @34); createStruct requires
+    // the array length to match the type exactly or Oracle raises ORA-00600 [kope2_readstr232].
+    Object[] attrs = new Object[39];
+    // FREP_WATER_CHECKLIST.GET keys only on water_checklist_id (attr 1); frep_resource_value_id
+    // (attr 2) is a NUMBER, so it must be left null — an empty string raises ORA-17059.
     attrs[0] = checklistId;
-    attrs[1] = EMPTY_RESOURCE_VALUE_ID;
     return connection.createStruct(WTR_CHECKLIST_TYPE, attrs);
   }
 
-  private static Struct createWaterSampleSiteStruct(CallableStatement cs, String checklistId) throws SQLException {
+  private static Struct createWaterSampleSiteStruct(
+      CallableStatement cs, String checklistId, String sampleSiteId) throws SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
     Object[] attrs = new Object[28];
+    // FREP_WTR_SAMPLE_SITE_OBJECT: attr 1 = water_sample_site_id, attr 2 = water_checklist_id.
+    attrs[0] = blankToNull(sampleSiteId);
     attrs[1] = checklistId;
     return connection.createStruct(WTR_SAMPLE_SITE_TYPE, attrs);
   }
@@ -613,8 +704,8 @@ public class ChecklistRepository extends AbstractFrepRepository {
     if (struct == null) {
       return;
     }
-    // FREP_WTR_CHKLST_OBJECT is 38 attrs (no evaluation_date); invasive plant answer/comment are at
-    // 33/34 (revision_count @35, userids @36/37).
+    // FREP_WTR_CHKLST_OBJECT is 39 attrs: evaluation_date @33, invasive plant answer/comment @34/35
+    // (revision_count @36, userids @37/38) — 0-based per the .tps.
     Object[] attrs = struct.getAttributes();
     putIfPresent(fields, "Site access code", stringValue(attrs, 3));
     putIfPresent(fields, "Main access road number", stringValue(attrs, 4));
@@ -646,8 +737,9 @@ public class ChecklistRepository extends AbstractFrepRepository {
     putIfPresent(fields, "Block access time", stringValue(attrs, 30));
     putIfPresent(fields, "Hours on block", stringValue(attrs, 31));
     putIfPresent(fields, "People on block", stringValue(attrs, 32));
-    putIfPresent(fields, "Invasive plant answer", stringValue(attrs, 33));
-    putIfPresent(fields, "Invasive plant comment", stringValue(attrs, 34));
+    putIfPresent(fields, "Evaluation date", stringValue(attrs, 33));
+    putIfPresent(fields, "Invasive plant answer", stringValue(attrs, 34));
+    putIfPresent(fields, "Invasive plant comment", stringValue(attrs, 35));
   }
 
   private static void putWaterSampleSiteFields(Map<String, String> fields, Struct struct) throws SQLException {

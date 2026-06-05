@@ -24,14 +24,17 @@ import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -415,25 +418,25 @@ public class ProtocolChecklistService {
 
   private List<SectionDefinition> bioSections(String checklistId) {
     return List.of(
-        section("opening", "Opening info (FREP210)", checklistRepository.getBioOpening(checklistId)),
-        section("stratum", "Stratum summary (FREP211)", checklistRepository.getBioStratum(checklistId)),
-        section("plots", "Plots (FREP212)", checklistRepository.getBioPlots(checklistId))
+        section("opening", "Opening info (FREP210)", () -> checklistRepository.getBioOpening(checklistId)),
+        section("stratum", "Stratum summary (FREP211)", () -> checklistRepository.getBioStratum(checklistId)),
+        section("plots", "Plots (FREP212)", () -> checklistRepository.getBioPlots(checklistId))
     );
   }
 
   private List<SectionDefinition> ripSections(String checklistId) {
     return List.of(
-        section("stream", "Stream / opening (FREP230)", checklistRepository.getRipStreamOpening(checklistId)),
-        section("field-data", "Field data (FREP231)", checklistRepository.getRipFieldData(checklistId)),
-        section("other-inds", "Other indicators (FREP232)", checklistRepository.getRipOtherIndicators(checklistId)),
-        section("questions", "Questions (FREP233)", checklistRepository.getRipQuestions(checklistId)),
-        section("specific-impacts", "Specific impacts (FREP234)", checklistRepository.getRipSpecificImpacts(checklistId)),
-        section("final-cmts", "Final comments (FREP235)", checklistRepository.getRipFinalComments(checklistId))
+        section("stream", "Stream / opening (FREP230)", () -> checklistRepository.getRipStreamOpening(checklistId)),
+        section("field-data", "Field data (FREP231)", () -> checklistRepository.getRipFieldData(checklistId)),
+        section("other-inds", "Other indicators (FREP232)", () -> checklistRepository.getRipOtherIndicators(checklistId)),
+        section("questions", "Questions (FREP233)", () -> checklistRepository.getRipQuestions(checklistId)),
+        section("specific-impacts", "Specific impacts (FREP234)", () -> checklistRepository.getRipSpecificImpacts(checklistId)),
+        section("final-cmts", "Final comments (FREP235)", () -> checklistRepository.getRipFinalComments(checklistId))
     );
   }
 
   private List<SectionDefinition> wtrSections(String checklistId) {
-    ChecklistSectionData sampleSite = checklistRepository.getWaterSampleSite(checklistId);
+    ChecklistSectionData sampleSite = safeRead(() -> checklistRepository.getWaterSampleSite(checklistId));
     String waterSampleSiteId = sampleSite.fields().stream()
         .filter(entry -> "Water sample site id".equals(entry.getKey()))
         .map(Map.Entry::getValue)
@@ -441,16 +444,38 @@ public class ProtocolChecklistService {
         .orElse("");
 
     return List.of(
-        section("sample-area", "Sample area (FREP250)", checklistRepository.getWaterSampleArea(checklistId)),
-        section("site-control", "Site control / details (FREP251)", sampleSite),
-        section("assessment", "Assessment (FREP252)", checklistRepository.getWaterAssessment(waterSampleSiteId)),
-        section("range", "Range (FREP253)", checklistRepository.getWaterRange(waterSampleSiteId)),
-        section("summary", "Summary (FREP254)", checklistRepository.getWaterSummary(checklistId))
+        section("sample-area", "Sample area (FREP250)", () -> checklistRepository.getWaterSampleArea(checklistId)),
+        section("site-control", "Site control / details (FREP251)", () -> sampleSite),
+        section("assessment", "Assessment (FREP252)", () -> checklistRepository.getWaterAssessment(waterSampleSiteId)),
+        section("range", "Range (FREP253)", () -> checklistRepository.getWaterRange(waterSampleSiteId)),
+        section("summary", "Summary (FREP254)", () -> checklistRepository.getWaterSummary(checklistId))
     );
   }
 
-  private static SectionDefinition section(String id, String title, ChecklistSectionData data) {
-    return new SectionDefinition(id, title, data);
+  private static SectionDefinition section(
+      String id, String title, Supplier<ChecklistSectionData> read) {
+    return new SectionDefinition(id, title, safeRead(read));
+  }
+
+  /**
+   * Reads a section, degrading to an empty section when the underlying proc raises
+   * {@code ORA-01403 (NO_DATA_FOUND)} — e.g. a checklist with no rows for that section, or a
+   * single-row GET proc that requires ids the read-only overview can't supply. Keeps the whole
+   * checklist load from failing because one section has no data. Other errors propagate.
+   */
+  private static ChecklistSectionData safeRead(Supplier<ChecklistSectionData> read) {
+    try {
+      return read.get();
+    } catch (DataAccessException ex) {
+      if (isNoDataFound(ex)) {
+        return ChecklistSectionData.fieldsOnly(ChecklistSectionData.linkedFields());
+      }
+      throw ex;
+    }
+  }
+
+  private static boolean isNoDataFound(DataAccessException ex) {
+    return ex.getMostSpecificCause() instanceof SQLException sqlEx && sqlEx.getErrorCode() == 1403;
   }
 
   private record SectionDefinition(String id, String title, ChecklistSectionData data) {}

@@ -99,11 +99,17 @@ public class RandomListRepository extends AbstractFrepRepository {
         stringAttr(attrs, 13),
         stringAttr(attrs, 14),
         stringAttr(attrs, 15),
-        readExistingChecklistTypes(attrs, 23)
+        readExistingChecklistLabels(attrs, 23)
     );
   }
 
-  private static List<String> readExistingChecklistTypes(Object[] attrs, int index) throws SQLException {
+  /**
+   * Reads each existing checklist's display label from the {@code checklist_common_varray}
+   * ({@code FREP_CHECKLIST_COMMON_OBJECT.display_checkList}, attr 5) — one entry per checklist,
+   * so multi-instance protocols (e.g. multiple riparian checklists) are distinguishable rather
+   * than collapsing to a repeated type code.
+   */
+  private static List<String> readExistingChecklistLabels(Object[] attrs, int index) throws SQLException {
     if (attrs == null || index >= attrs.length || attrs[index] == null) {
       return List.of();
     }
@@ -111,16 +117,16 @@ public class RandomListRepository extends AbstractFrepRepository {
       return List.of();
     }
     Object[] elements = (Object[]) checklistArray.getArray();
-    List<String> types = new ArrayList<>(elements.length);
+    List<String> labels = new ArrayList<>(elements.length);
     for (Object element : elements) {
       if (element instanceof Struct checklistStruct) {
-        String type = stringAttr(checklistStruct.getAttributes(), 1);
-        if (!type.isBlank()) {
-          types.add(type);
+        String label = stringAttr(checklistStruct.getAttributes(), 5);
+        if (!label.isBlank()) {
+          labels.add(label);
         }
       }
     }
-    return types;
+    return labels;
   }
 
   private static String stringAttr(Object[] attrs, int index) {

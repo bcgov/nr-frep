@@ -19,6 +19,10 @@ import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
+import ca.bc.gov.nrs.frep.dto.frep.AdministrationData;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
@@ -173,6 +177,64 @@ public class ProtocolChecklistService {
     assertCanWrite();
     return writeRepository.saveRipStreamOpening(
         opening.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Administration (FREP301), shared cost/resource + evaluation team ---
+
+  public AdministrationData getRipAdministration(String checklistId) {
+    return writeRepository.getRipAdministration(checklistId);
+  }
+
+  public AdministrationData saveRipAdministration(String checklistId, AdministrationData admin) {
+    assertCanWrite();
+    return writeRepository.saveRipAdministration(admin, loggedUserHelper.getLoggedUserId());
+  }
+
+  public AdministrationData addRipTeamMember(String checklistId, String evaluator, boolean teamLead) {
+    assertCanWrite();
+    return writeRepository.addRipTeamMember(
+        checklistId, evaluator, teamLead, loggedUserHelper.getLoggedUserId());
+  }
+
+  public AdministrationData removeRipTeamMember(
+      String checklistId, String evaluatorUserid, String revisionCount) {
+    assertCanWrite();
+    return writeRepository.deleteRipTeamMember(checklistId, evaluatorUserid, revisionCount);
+  }
+
+  // --- Notes (legacy Notes tab) ---
+
+  public RiparianNotes getRipNotes(String checklistId) {
+    return writeRepository.getRipNotes(checklistId);
+  }
+
+  public RiparianNotes saveRipNotes(String checklistId, RiparianNotes notes) {
+    assertCanWrite();
+    return writeRepository.saveRipNotes(notes, loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Attachments (legacy Attachments tab) ---
+
+  public List<AttachmentRow> getRipAttachments(String checklistId) {
+    return writeRepository.getRipAttachments(checklistId);
+  }
+
+  public AttachmentContent getRipAttachmentContent(String checklistId, String attachmentId) {
+    return writeRepository.getRipAttachmentContent(checklistId, attachmentId);
+  }
+
+  public List<AttachmentRow> saveRipAttachment(
+      String checklistId, String fileName, String description, String mimeType, byte[] bytes) {
+    assertCanWrite();
+    writeRepository.saveRipAttachment(
+        checklistId, fileName, description, mimeType, bytes, loggedUserHelper.getLoggedUserId());
+    return writeRepository.getRipAttachments(checklistId);
+  }
+
+  public List<AttachmentRow> deleteRipAttachment(String checklistId, String attachmentId) {
+    assertCanWrite();
+    writeRepository.deleteRipAttachment(checklistId, attachmentId);
+    return writeRepository.getRipAttachments(checklistId);
   }
 
   // --- Riparian final comments (FREP screen 235) ---
@@ -425,13 +487,17 @@ public class ProtocolChecklistService {
   }
 
   private List<SectionDefinition> ripSections(String checklistId) {
+    // Other Indicators (FREP232) is intentionally omitted — the legacy tab bar
+    // (FrepTabs.getRiparianTabs) retired it. Administration (FREP301) leads, as in legacy.
     return List.of(
+        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
         section("stream", "Stream / opening (FREP230)", () -> checklistRepository.getRipStreamOpening(checklistId)),
         section("field-data", "Field data (FREP231)", () -> checklistRepository.getRipFieldData(checklistId)),
-        section("other-inds", "Other indicators (FREP232)", () -> checklistRepository.getRipOtherIndicators(checklistId)),
         section("questions", "Questions (FREP233)", () -> checklistRepository.getRipQuestions(checklistId)),
         section("specific-impacts", "Specific impacts (FREP234)", () -> checklistRepository.getRipSpecificImpacts(checklistId)),
-        section("final-cmts", "Final comments (FREP235)", () -> checklistRepository.getRipFinalComments(checklistId))
+        section("final-cmts", "Final comments (FREP235)", () -> checklistRepository.getRipFinalComments(checklistId)),
+        section("notes", "Notes", ChecklistSectionData::emptySection),
+        section("attachments", "Attachments", ChecklistSectionData::emptySection)
     );
   }
 

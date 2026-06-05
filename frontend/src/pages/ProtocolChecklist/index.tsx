@@ -16,6 +16,9 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import BioOpeningView from './BioOpeningView';
+import BioPlotsView from './BioPlotsView';
+import BioStratumView from './BioStratumView';
 import RipAdministrationView from './RipAdministrationView';
 import RipAttachmentsView from './RipAttachmentsView';
 import RipChecklistGridEdit from './RipChecklistGridEdit';
@@ -42,10 +45,8 @@ import './protocolChecklist.scss';
 // without an entry (e.g. biodiversity "plots", water "summary") have no editor yet and render no
 // edit icon.
 const SECTION_EDIT_ROUTES: Record<string, Record<string, string>> = {
-  biodiversity: {
-    opening: 'edit',
-    stratum: 'strata',
-  },
+  // Biodiversity opening / stratum / plots edit inline (see the inlineSection list below).
+  biodiversity: {},
   riparian: {
     'stream': 'stream-opening',
     'field-data': 'field-data',
@@ -403,6 +404,9 @@ const ProtocolChecklistPage: FC = () => {
                   // edit page.
                   const inlineSection = [
                     'administration',
+                    'opening',
+                    'stratum',
+                    'plots',
                     'stream',
                     'field-data',
                     'questions',
@@ -431,18 +435,31 @@ const ProtocolChecklistPage: FC = () => {
                       )}
                       {section.id === 'administration' ? (
                         <RipAdministrationView
+                          protocol={backendCode ?? ''}
                           checklistId={id}
                           canEdit={canEdit}
                           submitted={submitted}
                         />
                       ) : section.id === 'notes' ? (
-                        <RipNotesView checklistId={id} canEdit={canEdit} submitted={submitted} />
-                      ) : section.id === 'attachments' ? (
-                        <RipAttachmentsView
+                        <RipNotesView
+                          protocol={backendCode ?? ''}
                           checklistId={id}
                           canEdit={canEdit}
                           submitted={submitted}
                         />
+                      ) : section.id === 'attachments' ? (
+                        <RipAttachmentsView
+                          protocol={backendCode ?? ''}
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : section.id === 'opening' ? (
+                        <BioOpeningView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      ) : section.id === 'stratum' ? (
+                        <BioStratumView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      ) : section.id === 'plots' ? (
+                        <BioPlotsView checklistId={id} canEdit={canEdit} submitted={submitted} />
                       ) : section.id === 'stream' ? (
                         <RipStreamOpeningView
                           checklistId={id}

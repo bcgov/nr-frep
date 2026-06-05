@@ -14,6 +14,7 @@ import API from '@/services/APIs';
  */
 
 type Props = {
+  protocol: string;
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
@@ -32,7 +33,7 @@ function toBase64(file: File): Promise<string> {
   });
 }
 
-const RipAttachmentsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
   const [rows, setRows] = useState<AttachmentRow[]>([]);
   const [description, setDescription] = useState('');
@@ -54,7 +55,7 @@ const RipAttachmentsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     let cancelled = false;
     setLoading(true);
     API.protocolChecklist
-      .getRipAttachments(checklistId)
+      .getAttachments(protocol, checklistId)
       .then((list) => {
         if (!cancelled) setRows(list);
       })
@@ -67,13 +68,13 @@ const RipAttachmentsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return () => {
       cancelled = true;
     };
-  }, [checklistId, reportError]);
+  }, [protocol, checklistId, reportError]);
 
   const handleUpload = async (file: File) => {
     setBusy(true);
     try {
       const data = await toBase64(file);
-      const updated = await API.protocolChecklist.uploadRipAttachment(checklistId, {
+      const updated = await API.protocolChecklist.uploadAttachment(protocol, checklistId, {
         fileName: file.name,
         description,
         contentType: file.type,
@@ -93,7 +94,8 @@ const RipAttachmentsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     if (!row.checklistAttachmentId) return;
     setBusy(true);
     try {
-      const content = await API.protocolChecklist.getRipAttachmentContent(
+      const content = await API.protocolChecklist.getAttachmentContent(
+        protocol,
         checklistId,
         row.checklistAttachmentId,
       );
@@ -116,7 +118,8 @@ const RipAttachmentsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     if (!row.checklistAttachmentId) return;
     setBusy(true);
     try {
-      const updated = await API.protocolChecklist.deleteRipAttachment(
+      const updated = await API.protocolChecklist.deleteAttachment(
+        protocol,
         checklistId,
         row.checklistAttachmentId,
       );

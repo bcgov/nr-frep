@@ -30,6 +30,7 @@ import API from '@/services/APIs';
  */
 
 type Props = {
+  protocol: string;
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
@@ -43,7 +44,7 @@ const SCALARS: { key: keyof AdministrationData; label: string }[] = [
   { key: 'peopleOnBlock', label: 'People on block' },
 ];
 
-const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
   const [data, setData] = useState<AdministrationData | null>(null);
   const [selectedEvaluator, setSelectedEvaluator] = useState('');
@@ -67,7 +68,7 @@ const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) =
     (signal?: { cancelled: boolean }) => {
       setLoading(true);
       API.protocolChecklist
-        .getRipAdministration(checklistId)
+        .getAdministration(protocol, checklistId)
         .then((d) => {
           if (!signal?.cancelled) setData(d);
         })
@@ -78,7 +79,7 @@ const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) =
           if (!signal?.cancelled) setLoading(false);
         });
     },
-    [checklistId, reportError],
+    [protocol, checklistId, reportError],
   );
 
   useEffect(() => {
@@ -93,7 +94,8 @@ const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) =
     if (!selectedEvaluator) return;
     setBusy(true);
     try {
-      const updated = await API.protocolChecklist.addRipTeamMember(
+      const updated = await API.protocolChecklist.addTeamMember(
+        protocol,
         checklistId,
         selectedEvaluator,
         addAsLead,
@@ -113,7 +115,8 @@ const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) =
     if (!evaluatorUserid) return;
     setBusy(true);
     try {
-      const updated = await API.protocolChecklist.removeRipTeamMember(
+      const updated = await API.protocolChecklist.removeTeamMember(
+        protocol,
         checklistId,
         evaluatorUserid,
         revisionCount,
@@ -136,7 +139,7 @@ const RipAdministrationView: FC<Props> = ({ checklistId, canEdit, submitted }) =
     if (!data) return;
     setBusy(true);
     try {
-      const saved = await API.protocolChecklist.saveRipAdministration(checklistId, data);
+      const saved = await API.protocolChecklist.saveAdministration(protocol, checklistId, data);
       setData(saved);
       setEditing(false);
       display({ kind: 'success', title: 'Administration saved', timeout: 4000 });

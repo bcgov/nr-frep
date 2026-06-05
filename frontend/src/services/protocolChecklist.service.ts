@@ -158,111 +158,121 @@ export class ProtocolChecklistService extends HttpClient {
     });
   }
 
-  getRipAdministration(checklistId: string): CancelablePromise<AdministrationData> {
+  getAdministration(protocol: string, checklistId: string): CancelablePromise<AdministrationData> {
     return this.doRequest<AdministrationData>(this.config, {
       method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/administration',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration',
+      path: { protocol, checklistId },
     });
   }
 
-  saveRipAdministration(
+  saveAdministration(
+    protocol: string,
     checklistId: string,
     admin: AdministrationData,
   ): CancelablePromise<AdministrationData> {
     return this.doRequest<AdministrationData>(this.config, {
       method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/administration',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration',
+      path: { protocol, checklistId },
       body: admin,
       mediaType: 'application/json',
     });
   }
 
-  addRipTeamMember(
+  addTeamMember(
+    protocol: string,
     checklistId: string,
     evaluator: string,
     teamLead: boolean,
   ): CancelablePromise<AdministrationData> {
     return this.doRequest<AdministrationData>(this.config, {
       method: 'POST',
-      url: '/v1/protocol-checklists/rip/{checklistId}/administration/team',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration/team',
+      path: { protocol, checklistId },
       query: { evaluator, teamLead },
     });
   }
 
-  removeRipTeamMember(
+  removeTeamMember(
+    protocol: string,
     checklistId: string,
     evaluatorUserid: string,
     revisionCount?: string,
   ): CancelablePromise<AdministrationData> {
     return this.doRequest<AdministrationData>(this.config, {
       method: 'DELETE',
-      url: '/v1/protocol-checklists/rip/{checklistId}/administration/team/{evaluatorUserid}',
-      path: { checklistId, evaluatorUserid },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration/team/{evaluatorUserid}',
+      path: { protocol, checklistId, evaluatorUserid },
       query: revisionCount ? { revisionCount } : undefined,
     });
   }
 
-  getRipNotes(checklistId: string): CancelablePromise<RiparianNotes> {
+  getNotes(protocol: string, checklistId: string): CancelablePromise<RiparianNotes> {
     return this.doRequest<RiparianNotes>(this.config, {
       method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/notes',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/notes',
+      path: { protocol, checklistId },
     });
   }
 
-  saveRipNotes(checklistId: string, notes: RiparianNotes): CancelablePromise<RiparianNotes> {
+  saveNotes(
+    protocol: string,
+    checklistId: string,
+    notes: RiparianNotes,
+  ): CancelablePromise<RiparianNotes> {
     return this.doRequest<RiparianNotes>(this.config, {
       method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/notes',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/notes',
+      path: { protocol, checklistId },
       body: notes,
       mediaType: 'application/json',
     });
   }
 
-  getRipAttachments(checklistId: string): CancelablePromise<AttachmentRow[]> {
+  getAttachments(protocol: string, checklistId: string): CancelablePromise<AttachmentRow[]> {
     return this.doRequest<AttachmentRow[]>(this.config, {
       method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/attachments',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments',
+      path: { protocol, checklistId },
     });
   }
 
-  getRipAttachmentContent(
+  getAttachmentContent(
+    protocol: string,
     checklistId: string,
     attachmentId: string,
   ): CancelablePromise<AttachmentContent> {
     return this.doRequest<AttachmentContent>(this.config, {
       method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}/content',
-      path: { checklistId, attachmentId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}/content',
+      path: { protocol, checklistId, attachmentId },
     });
   }
 
-  uploadRipAttachment(
+  uploadAttachment(
+    protocol: string,
     checklistId: string,
     request: AttachmentUploadRequest,
   ): CancelablePromise<AttachmentRow[]> {
     return this.doRequest<AttachmentRow[]>(this.config, {
       method: 'POST',
-      url: '/v1/protocol-checklists/rip/{checklistId}/attachments',
-      path: { checklistId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments',
+      path: { protocol, checklistId },
       body: request,
       mediaType: 'application/json',
     });
   }
 
-  deleteRipAttachment(
+  deleteAttachment(
+    protocol: string,
     checklistId: string,
     attachmentId: string,
   ): CancelablePromise<AttachmentRow[]> {
     return this.doRequest<AttachmentRow[]>(this.config, {
       method: 'DELETE',
-      url: '/v1/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}',
-      path: { checklistId, attachmentId },
+      url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}',
+      path: { protocol, checklistId, attachmentId },
     });
   }
 

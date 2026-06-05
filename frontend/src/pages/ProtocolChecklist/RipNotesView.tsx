@@ -13,12 +13,13 @@ import API from '@/services/APIs';
  */
 
 type Props = {
+  protocol: string;
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
 };
 
-const RipNotesView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
   const [data, setData] = useState<RiparianNotes | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +41,7 @@ const RipNotesView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     (signal?: { cancelled: boolean }) => {
       setLoading(true);
       API.protocolChecklist
-        .getRipNotes(checklistId)
+        .getNotes(protocol, checklistId)
         .then((d) => {
           if (!signal?.cancelled) setData(d);
         })
@@ -51,7 +52,7 @@ const RipNotesView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           if (!signal?.cancelled) setLoading(false);
         });
     },
-    [checklistId, reportError],
+    [protocol, checklistId, reportError],
   );
 
   useEffect(() => {
@@ -66,7 +67,7 @@ const RipNotesView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     if (!data) return;
     setBusy(true);
     try {
-      const saved = await API.protocolChecklist.saveRipNotes(checklistId, data);
+      const saved = await API.protocolChecklist.saveNotes(protocol, checklistId, data);
       setData(saved);
       setEditing(false);
       display({ kind: 'success', title: 'Notes saved', timeout: 4000 });

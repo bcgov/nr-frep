@@ -116,6 +116,30 @@
   white-space: pre-line;
 }
 
+// Biodiversity master-detail (FREP211 strata / FREP212 plots) — a record-selector rail beside the
+// inline detail editor.
+.bio-master {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.bio-master__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  .cds--btn {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+.bio-master__detail {
+  min-width: 0;
+}
+
 // Riparian inline form (FREP230) — grouped fieldsets with a responsive grid of controls.
 .rip-form__group {
   border: none;

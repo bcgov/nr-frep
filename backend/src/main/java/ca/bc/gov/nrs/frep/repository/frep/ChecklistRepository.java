@@ -64,12 +64,15 @@ public class ChecklistRepository extends AbstractFrepRepository {
   public ChecklistSectionData getBioOpening(String checklistId) {
     // Layout per legacy BiodiversityDataManager (deployed signature): 35 params, leading OUT block
     // 1-18, resource_value_id IN @19, checklist_id IN @20, then checklist fields 21-34, error @35.
+    // The tombstone block (org unit, opening, licence, client, etc.) is joined through
+    // frep_resource_value_id, so resolve the real id rather than passing it empty.
+    String resourceValueId = resolveBioResourceValueId(checklistId);
     String call = callSql(BIO_OPENING_PACKAGE, "GET", 35);
     return executeCall(call, cs -> {
       for (int i = 1; i <= 18; i++) {
         cs.registerOutParameter(i, Types.VARCHAR);
       }
-      cs.setString(19, EMPTY_RESOURCE_VALUE_ID);
+      cs.setString(19, resourceValueId);
       cs.setString(20, checklistId);
       for (int i = 21; i <= 35; i++) {
         cs.registerOutParameter(i, Types.VARCHAR);
@@ -78,6 +81,14 @@ public class ChecklistRepository extends AbstractFrepRepository {
       throwIfError(BIO_OPENING_PACKAGE, "GET", cs.getString(35));
       ChecklistHeaderData header = headerFromBioTombstone(cs, 21);
       Map<String, String> fields = ChecklistSectionData.linkedFields();
+      // Header context fields the legacy Administration tombstone shows (proc params 1-14).
+      putIfPresent(fields, "Org unit", cs.getString(2));
+      putIfPresent(fields, "Opening ID", cs.getString(5));
+      putIfPresent(fields, "Licence", cs.getString(7));
+      putIfPresent(fields, "Cutting permit", cs.getString(9));
+      putIfPresent(fields, "Cut block", cs.getString(10));
+      putIfPresent(fields, "Client", cs.getString(13));
+      putIfPresent(fields, "Client name", cs.getString(14));
       putIfPresent(fields, "Gross area", cs.getString(22));
       putIfPresent(fields, "Location description", cs.getString(23));
       putIfPresent(fields, "Net area", cs.getString(24));
@@ -90,7 +101,8 @@ public class ChecklistRepository extends AbstractFrepRepository {
       putIfPresent(fields, "Invasive plant comment", cs.getString(31));
       putIfPresent(fields, "Rating", cs.getString(32));
       putIfPresent(fields, "Rationale", cs.getString(33));
-      return ChecklistSectionData.of(header.mergedWith(getTombstone(checklistId, "SLB", "")), fields);
+      return ChecklistSectionData.of(
+          header.mergedWith(getTombstone(checklistId, "SLB", resourceValueId)), fields);
     });
   }
 

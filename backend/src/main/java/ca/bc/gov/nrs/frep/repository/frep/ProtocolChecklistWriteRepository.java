@@ -43,6 +43,7 @@ import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -54,6 +55,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("oracle")
 public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
+
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(ProtocolChecklistWriteRepository.class);
 
   private static final String TOMBSTONE = "FREP_TOMBSTONE";
   private static final String BIO_OPENING_PACKAGE = "frep_210_bio_opening";
@@ -135,12 +139,39 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   /**
+   * Reads the live {@code revision_count} for a biodiversity checklist (the optimistic-lock token
+   * the SAVE proc compares against). Returns null when the row is absent. Used only for diagnostics.
+   */
+  private String currentBioRevisionCount(String checklistId) {
+    try {
+      return jdbcTemplate.queryForObject(
+          "SELECT revision_count FROM the.biodiversity_checklist "
+              + "WHERE biodiversity_checklist_id = ?",
+          String.class, checklistId);
+    } catch (EmptyResultDataAccessException ex) {
+      return null;
+    }
+  }
+
+  /**
    * Persist the Opening via {@code FREP_210_BIO_OPENING.SAVE} (16 positional params; checklist id,
    * resource id and revision_count are IN OUT; error_message is OUT). Returns the opening with the
    * id + revision the proc echoes back. Throws {@code StoredProcedureException} on a proc error
    * (includes the optimistic-lock conflict the proc raises on a stale revision_count).
    */
   public BiodiversityOpening saveBiodiversityOpening(BiodiversityOpening o, String userId) {
+    // Diagnostic for the FREP_210_BIO_OPENING.SAVE optimistic-lock failure
+    // (frep.web.usr.database.record.modified2): the proc's CHANGE updates
+    // WHERE biodiversity_checklist_id = id AND revision_count = <token>, so a mismatch (or an
+    // empty/NULL token, which Oracle TO_NUMBER('') turns into NULL → matches no rows) raises it.
+    // Re-read the live token and compare it to what the client is sending.
+    String dbRevision = currentBioRevisionCount(o.checklistId());
+    if (dbRevision == null || !dbRevision.equals(nullIfBlank(o.revisionCount()))) {
+      log.warn(
+          "BIO 210 SAVE revision check: checklistId=[{}] sending revisionCount=[{}] "
+              + "but current DB revision_count=[{}] (mismatch/blank → record.modified2)",
+          o.checklistId(), o.revisionCount(), dbRevision);
+    }
     return executeCall(
         callSql(BIO_OPENING_PACKAGE, "SAVE", 16),
         cs -> {
@@ -1095,28 +1126,40 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     );
   }
 
-  // --- Administration (FREP301 / checklistCostResource), shared across protocols ---
+  // --- Administration / Notes / Attachments (shared across bio / riparian / water) ---
+  //
+  // Each protocol's checklist row carries the frep_resource_value_id the shared procs join on, so
+  // resolve it from the right table per resourceType ('SLB' | 'RIP' | 'WTR').
 
   private static final String COST_RESOURCE_PKG = "FREP_CHECKLIST_COST_RESOURCES";
 
-  private String resolveRipResourceValueId(String checklistId) {
+  private String resolveResourceValueId(String checklistId, String resourceType) {
+    String table = switch (resourceType) {
+      case "SLB" -> "the.biodiversity_checklist";
+      case "WTR" -> "the.water_checklist";
+      default -> "the.riparian_checklist";
+    };
+    String idColumn = switch (resourceType) {
+      case "SLB" -> "biodiversity_checklist_id";
+      case "WTR" -> "water_checklist_id";
+      default -> "riparian_checklist_id";
+    };
     List<String> ids = jdbcTemplate.query(
-        "SELECT frep_resource_value_id FROM the.riparian_checklist WHERE riparian_checklist_id = ?",
+        "SELECT frep_resource_value_id FROM " + table + " WHERE " + idColumn + " = ?",
         (rs, n) -> rs.getString(1),
         checklistId);
     return ids.isEmpty() ? "" : ids.get(0);
   }
 
   /**
-   * Read the Administration (cost/resource) data for a riparian checklist via
-   * {@code FREP_CHECKLIST_COST_RESOURCES.GET} (35 params per the legacy FrepCostResourceDataManager:
-   * tombstone 1-16, selectedSiteId @17, resourceValueId IN @18, type @19, status @20, checklistId IN
-   * @21, ... siteAccessCode @25, blockAccessTime @26, hoursOnBlock @27, peopleOnBlock @28,
-   * additionalComments @29, teamLeadNameId @30, revisionCount @32, revisionCountAccess @33, error
-   * @34, team-member cursor @35).
+   * Read the Administration (cost/resource) data via {@code FREP_CHECKLIST_COST_RESOURCES.GET} (35
+   * params per the legacy FrepCostResourceDataManager: tombstone 1-16, selectedSiteId @17,
+   * resourceValueId IN @18, type @19, status @20, checklistId IN @21, ... siteAccessCode @25,
+   * blockAccessTime @26, hoursOnBlock @27, peopleOnBlock @28, additionalComments @29, teamLeadNameId
+   * @30, revisionCount @32, revisionCountAccess @33, error @34, team-member cursor @35).
    */
-  public AdministrationData getRipAdministration(String checklistId) {
-    String resourceValueId = resolveRipResourceValueId(checklistId);
+  public AdministrationData getAdministration(String checklistId, String resourceType) {
+    String resourceValueId = resolveResourceValueId(checklistId, resourceType);
     return executeCall(
         callSql(COST_RESOURCE_PKG, "GET", 35),
         cs -> {
@@ -1163,7 +1206,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * blockAccessTime, hoursOnBlock, peopleOnBlock, revisionCount, revisionCountAccess, userid, error).
    * Team membership is read-only here.
    */
-  public AdministrationData saveRipAdministration(AdministrationData o, String userId) {
+  public AdministrationData saveAdministration(AdministrationData o, String userId) {
     executeCall(
         callSql(COST_RESOURCE_PKG, "SAVE", 14),
         cs -> {
@@ -1186,7 +1229,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           throwIfError(COST_RESOURCE_PKG, "SAVE", cs.getString(14));
           return null;
         });
-    return getRipAdministration(o.checklistId());
+    return getAdministration(o.checklistId(), o.resourceValueType());
   }
 
   private static String nullIfBlank(String value) {
@@ -1194,13 +1237,13 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   /** Add (or re-flag) an evaluator on the team via {@code save_team_member} (6 params). */
-  public AdministrationData addRipTeamMember(
-      String checklistId, String evaluator, boolean teamLead, String userId) {
+  public AdministrationData addTeamMember(
+      String checklistId, String resourceType, String evaluator, boolean teamLead, String userId) {
     executeCall(
         callSql(COST_RESOURCE_PKG, "save_team_member", 6),
         cs -> {
           cs.setString(1, checklistId);
-          cs.setString(2, "RIP");
+          cs.setString(2, resourceType);
           cs.setString(3, evaluator);
           cs.setString(4, teamLead ? "Y" : "N");
           cs.setString(5, userId);
@@ -1210,18 +1253,18 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           throwIfError(COST_RESOURCE_PKG, "save_team_member", cs.getString(6));
           return null;
         });
-    return getRipAdministration(checklistId);
+    return getAdministration(checklistId, resourceType);
   }
 
   /** Remove an evaluator from the team via {@code delete_team_member} (5 params). */
-  public AdministrationData deleteRipTeamMember(
-      String checklistId, String evaluatorUserid, String revisionCount) {
+  public AdministrationData deleteTeamMember(
+      String checklistId, String resourceType, String evaluatorUserid, String revisionCount) {
     executeCall(
         callSql(COST_RESOURCE_PKG, "delete_team_member", 5),
         cs -> {
           cs.setString(1, evaluatorUserid);
           cs.setString(2, checklistId);
-          cs.setString(3, "RIP");
+          cs.setString(3, resourceType);
           cs.setString(4, nullIfBlank(revisionCount));
           cs.registerOutParameter(5, Types.VARCHAR);
         },
@@ -1229,7 +1272,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           throwIfError(COST_RESOURCE_PKG, "delete_team_member", cs.getString(5));
           return null;
         });
-    return getRipAdministration(checklistId);
+    return getAdministration(checklistId, resourceType);
   }
 
   // --- Notes (FREP checklistNote / FREP_CHECKLIST_NOTES) ---
@@ -1241,8 +1284,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * tombstone 1-18, checklist_id IN OUT @19, status @20, resource_value_id IN OUT @21, type IN OUT
    * @22, note_description @23, revision_count @24, error @25).
    */
-  public RiparianNotes getRipNotes(String checklistId) {
-    String resourceValueId = resolveRipResourceValueId(checklistId);
+  public RiparianNotes getNotes(String checklistId, String resourceType) {
+    String resourceValueId = resolveResourceValueId(checklistId, resourceType);
     return executeCall(
         callSql(NOTES_PKG, "GET", 25),
         cs -> {
@@ -1252,7 +1295,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           setInOutString(cs, 19, checklistId);
           cs.registerOutParameter(20, Types.VARCHAR);
           setInOutString(cs, 21, resourceValueId);
-          setInOutString(cs, 22, "RIP");
+          setInOutString(cs, 22, resourceType);
           cs.registerOutParameter(23, Types.VARCHAR);
           cs.registerOutParameter(24, Types.VARCHAR);
           cs.registerOutParameter(25, Types.VARCHAR);
@@ -1263,25 +1306,30 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
         });
   }
 
-  /** Save the checklist note via {@code save_riparian_notes} (7 params). */
-  public RiparianNotes saveRipNotes(RiparianNotes o, String userId) {
-    String resourceValueId = resolveRipResourceValueId(o.checklistId());
+  /**
+   * Save the checklist note via the public {@code FREP_CHECKLIST_NOTES.SAVE} (7 params). SAVE is the
+   * only public save proc — it {@code CASE}-dispatches on {@code p_resource_value_type} to the
+   * package-private {@code save_riparian_notes}/{@code save_biodiversity_notes}/
+   * {@code save_water_notes}, which are NOT callable directly (PLS-00302).
+   */
+  public RiparianNotes saveNotes(RiparianNotes o, String resourceType, String userId) {
+    String resourceValueId = resolveResourceValueId(o.checklistId(), resourceType);
     executeCall(
-        callSql(NOTES_PKG, "save_riparian_notes", 7),
+        callSql(NOTES_PKG, "SAVE", 7),
         cs -> {
           setInOutString(cs, 1, o.checklistId());
           setInOutString(cs, 2, resourceValueId);
-          cs.setString(3, "RIP");
+          cs.setString(3, resourceType);
           cs.setString(4, nullIfBlank(o.noteDescription()));
           setInOutString(cs, 5, nullIfBlank(o.revisionCount()));
           cs.setString(6, userId);
           cs.registerOutParameter(7, Types.VARCHAR);
         },
         cs -> {
-          throwIfError(NOTES_PKG, "save_riparian_notes", cs.getString(7));
+          throwIfError(NOTES_PKG, "SAVE", cs.getString(7));
           return null;
         });
-    return getRipNotes(o.checklistId());
+    return getNotes(o.checklistId(), resourceType);
   }
 
   // --- Attachments (FREP checklistAttachment / FREP_CHECKLIST_ATTACHMENTS) ---
@@ -1293,8 +1341,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * (24 params: tombstone 1-18, resource_value_id IN @19, checklist_id IN @20, type @21, status
    * @22, error @23, results cursor @24). Cursor columns per the legacy DataManager.
    */
-  public List<AttachmentRow> getRipAttachments(String checklistId) {
-    String resourceValueId = resolveRipResourceValueId(checklistId);
+  public List<AttachmentRow> getAttachments(String checklistId, String resourceType) {
+    String resourceValueId = resolveResourceValueId(checklistId, resourceType);
     return executeCall(
         callSql(ATTACH_PKG, "GET", 24),
         cs -> {
@@ -1321,13 +1369,14 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * Download an attachment's bytes via {@code GET_BLOB} (10 params: id/checklist/type/name/desc/
    * mime-code/mime-type IN OUT 1-7, file_contents BLOB @8, userid @9, error @10).
    */
-  public AttachmentContent getRipAttachmentContent(String checklistId, String attachmentId) {
+  public AttachmentContent getAttachmentContent(
+      String checklistId, String resourceType, String attachmentId) {
     return executeCall(
         callSql(ATTACH_PKG, "GET_BLOB", 10),
         cs -> {
           setInOutString(cs, 1, attachmentId);
           setInOutString(cs, 2, checklistId);
-          setInOutString(cs, 3, "RIP");
+          setInOutString(cs, 3, resourceType);
           setInOutString(cs, 4, null);
           setInOutString(cs, 5, null);
           setInOutString(cs, 6, null);
@@ -1349,15 +1398,15 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * type @3, file_name @4, description @5, mime_type_code @6, mime_type IN OUT @7, BLOB @8, userid
    * @9, error @10).
    */
-  public void saveRipAttachment(
-      String checklistId, String fileName, String description, String mimeType, byte[] bytes,
-      String userId) {
+  public void saveAttachment(
+      String checklistId, String resourceType, String fileName, String description, String mimeType,
+      byte[] bytes, String userId) {
     executeCall(
         callSql(ATTACH_PKG, "SAVE", 10),
         cs -> {
           setInOutString(cs, 1, null);
           setInOutString(cs, 2, checklistId);
-          setInOutString(cs, 3, "RIP");
+          setInOutString(cs, 3, resourceType);
           cs.setString(4, fileName);
           cs.setString(5, nullIfBlank(description));
           cs.setString(6, mimeTypeCode(fileName));
@@ -1375,13 +1424,13 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   /** Delete an attachment via {@code REMOVE} (4 params: id, checklist, type, error). */
-  public void deleteRipAttachment(String checklistId, String attachmentId) {
+  public void deleteAttachment(String checklistId, String resourceType, String attachmentId) {
     executeCall(
         callSql(ATTACH_PKG, "REMOVE", 4),
         cs -> {
           cs.setString(1, attachmentId);
           cs.setString(2, checklistId);
-          cs.setString(3, "RIP");
+          cs.setString(3, resourceType);
           cs.registerOutParameter(4, Types.VARCHAR);
         },
         cs -> {

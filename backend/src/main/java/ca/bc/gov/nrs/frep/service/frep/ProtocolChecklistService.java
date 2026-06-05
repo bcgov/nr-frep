@@ -179,62 +179,76 @@ public class ProtocolChecklistService {
         opening.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
   }
 
-  // --- Administration (FREP301), shared cost/resource + evaluation team ---
+  // --- Administration / Notes / Attachments (shared across bio / riparian / water) ---
+  //
+  // The {protocol} path segment ('bio'/'rip'/'wat') maps to the resource value type used by the
+  // shared procs.
 
-  public AdministrationData getRipAdministration(String checklistId) {
-    return writeRepository.getRipAdministration(checklistId);
+  static String resourceTypeForProtocol(String protocol) {
+    return normalizeProtocolType(protocol)
+        .orElseThrow(() -> new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Unknown protocol: " + protocol));
   }
 
-  public AdministrationData saveRipAdministration(String checklistId, AdministrationData admin) {
+  public AdministrationData getAdministration(String protocol, String checklistId) {
+    return writeRepository.getAdministration(checklistId, resourceTypeForProtocol(protocol));
+  }
+
+  public AdministrationData saveAdministration(String protocol, AdministrationData admin) {
     assertCanWrite();
-    return writeRepository.saveRipAdministration(admin, loggedUserHelper.getLoggedUserId());
+    return writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId());
   }
 
-  public AdministrationData addRipTeamMember(String checklistId, String evaluator, boolean teamLead) {
+  public AdministrationData addTeamMember(
+      String protocol, String checklistId, String evaluator, boolean teamLead) {
     assertCanWrite();
-    return writeRepository.addRipTeamMember(
-        checklistId, evaluator, teamLead, loggedUserHelper.getLoggedUserId());
+    return writeRepository.addTeamMember(checklistId, resourceTypeForProtocol(protocol), evaluator,
+        teamLead, loggedUserHelper.getLoggedUserId());
   }
 
-  public AdministrationData removeRipTeamMember(
-      String checklistId, String evaluatorUserid, String revisionCount) {
+  public AdministrationData removeTeamMember(
+      String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
     assertCanWrite();
-    return writeRepository.deleteRipTeamMember(checklistId, evaluatorUserid, revisionCount);
+    return writeRepository.deleteTeamMember(
+        checklistId, resourceTypeForProtocol(protocol), evaluatorUserid, revisionCount);
   }
 
-  // --- Notes (legacy Notes tab) ---
-
-  public RiparianNotes getRipNotes(String checklistId) {
-    return writeRepository.getRipNotes(checklistId);
+  public RiparianNotes getNotes(String protocol, String checklistId) {
+    return writeRepository.getNotes(checklistId, resourceTypeForProtocol(protocol));
   }
 
-  public RiparianNotes saveRipNotes(String checklistId, RiparianNotes notes) {
+  public RiparianNotes saveNotes(String protocol, String checklistId, RiparianNotes notes) {
     assertCanWrite();
-    return writeRepository.saveRipNotes(notes, loggedUserHelper.getLoggedUserId());
+    return writeRepository.saveNotes(
+        notes, resourceTypeForProtocol(protocol), loggedUserHelper.getLoggedUserId());
   }
 
-  // --- Attachments (legacy Attachments tab) ---
-
-  public List<AttachmentRow> getRipAttachments(String checklistId) {
-    return writeRepository.getRipAttachments(checklistId);
+  public List<AttachmentRow> getAttachments(String protocol, String checklistId) {
+    return writeRepository.getAttachments(checklistId, resourceTypeForProtocol(protocol));
   }
 
-  public AttachmentContent getRipAttachmentContent(String checklistId, String attachmentId) {
-    return writeRepository.getRipAttachmentContent(checklistId, attachmentId);
+  public AttachmentContent getAttachmentContent(
+      String protocol, String checklistId, String attachmentId) {
+    return writeRepository.getAttachmentContent(
+        checklistId, resourceTypeForProtocol(protocol), attachmentId);
   }
 
-  public List<AttachmentRow> saveRipAttachment(
-      String checklistId, String fileName, String description, String mimeType, byte[] bytes) {
+  public List<AttachmentRow> saveAttachment(
+      String protocol, String checklistId, String fileName, String description, String mimeType,
+      byte[] bytes) {
     assertCanWrite();
-    writeRepository.saveRipAttachment(
-        checklistId, fileName, description, mimeType, bytes, loggedUserHelper.getLoggedUserId());
-    return writeRepository.getRipAttachments(checklistId);
+    String resourceType = resourceTypeForProtocol(protocol);
+    writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
+        loggedUserHelper.getLoggedUserId());
+    return writeRepository.getAttachments(checklistId, resourceType);
   }
 
-  public List<AttachmentRow> deleteRipAttachment(String checklistId, String attachmentId) {
+  public List<AttachmentRow> deleteAttachment(
+      String protocol, String checklistId, String attachmentId) {
     assertCanWrite();
-    writeRepository.deleteRipAttachment(checklistId, attachmentId);
-    return writeRepository.getRipAttachments(checklistId);
+    String resourceType = resourceTypeForProtocol(protocol);
+    writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
+    return writeRepository.getAttachments(checklistId, resourceType);
   }
 
   // --- Riparian final comments (FREP screen 235) ---
@@ -480,9 +494,12 @@ public class ProtocolChecklistService {
 
   private List<SectionDefinition> bioSections(String checklistId) {
     return List.of(
+        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
         section("opening", "Opening info (FREP210)", () -> checklistRepository.getBioOpening(checklistId)),
         section("stratum", "Stratum summary (FREP211)", () -> checklistRepository.getBioStratum(checklistId)),
-        section("plots", "Plots (FREP212)", () -> checklistRepository.getBioPlots(checklistId))
+        section("plots", "Plots (FREP212)", () -> checklistRepository.getBioPlots(checklistId)),
+        section("notes", "Notes", ChecklistSectionData::emptySection),
+        section("attachments", "Attachments", ChecklistSectionData::emptySection)
     );
   }
 
@@ -510,11 +527,14 @@ public class ProtocolChecklistService {
         .orElse("");
 
     return List.of(
+        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
         section("sample-area", "Sample area (FREP250)", () -> checklistRepository.getWaterSampleArea(checklistId)),
         section("site-control", "Site control / details (FREP251)", () -> sampleSite),
         section("assessment", "Assessment (FREP252)", () -> checklistRepository.getWaterAssessment(waterSampleSiteId)),
         section("range", "Range (FREP253)", () -> checklistRepository.getWaterRange(waterSampleSiteId)),
-        section("summary", "Summary (FREP254)", () -> checklistRepository.getWaterSummary(checklistId))
+        section("summary", "Summary (FREP254)", () -> checklistRepository.getWaterSummary(checklistId)),
+        section("notes", "Notes", ChecklistSectionData::emptySection),
+        section("attachments", "Attachments", ChecklistSectionData::emptySection)
     );
   }
 

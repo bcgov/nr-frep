@@ -102,6 +102,24 @@ class ProtocolChecklistWriteRepositoryTest {
   }
 
   @Test
+  void saveNotesCallsPublicSaveDispatcherWithResourceType() throws Exception {
+    // resolveResourceValueId() lookup (used by save + the round-trip read).
+    lenient()
+        .when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any()))
+        .thenReturn(List.of("500"));
+
+    // The private save_<protocol>_notes procs aren't callable directly (PLS-00302) — only the public
+    // SAVE dispatcher, which routes on the resource_value_type at param 3.
+    repository.saveNotes(
+        new ca.bc.gov.nrs.frep.dto.frep.RiparianNotes("1001", "a note", "2"), "SLB", "idir");
+
+    verify(connection).prepareCall("{call FREP_CHECKLIST_NOTES.SAVE(?,?,?,?,?,?,?)}");
+    verify(cs).setString(3, "SLB"); // resource_value_type drives the internal dispatch
+    verify(cs).setString(4, "a note");
+    verify(cs).setString(6, "idir"); // update_userid — unique to the SAVE call
+  }
+
+  @Test
   void saveBiodiversityOpeningWiresSixteenParamsAndEchoesIdentity() throws Exception {
     when(cs.getString(16)).thenReturn(null); // no error
     when(cs.getString(1)).thenReturn("1001"); // checklist id echoed

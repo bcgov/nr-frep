@@ -1,3 +1,4 @@
+import { Search as SearchIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -15,8 +16,11 @@ import {
   TableRow,
   TextInput,
 } from '@carbon/react';
-import { useEffect, useMemo, useState, type FC } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+
+import ClientSearchModal from '@/components/core/ClientSearchModal';
+import TableHeaderBar from '@/components/core/TableHeaderBar';
 
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search';
@@ -48,9 +52,13 @@ const STATUS_OPTIONS = [
   { value: 'SUB', label: 'Submitted' },
 ];
 
+// Codes match the legacy app (`Constants.java`: SLB = biodiversity, RIP = riparian,
+// WTR = water; CHR handled separately). BIO/WAT aliases kept as a safety net.
 const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
-  BIO: 'biodiversity',
+  SLB: 'biodiversity',
   RIP: 'riparian',
+  WTR: 'water',
+  BIO: 'biodiversity',
   WAT: 'water',
 };
 
@@ -66,6 +74,7 @@ const ChecklistSearchPage: FC = () => {
   const [results, setResults] = useState<ChecklistSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [clientLookupOpen, setClientLookupOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +90,21 @@ const ChecklistSearchPage: FC = () => {
         setMasterListYears(years);
         setOrgUnits(units);
         setProtocols(fetchedProtocols);
+        // Default the year filter to the latest year in the list.
+        const latestYear = years.reduce<string | undefined>(
+          (latest, year) =>
+            latest === undefined || Number(year.effectiveYear) > Number(latest)
+              ? year.effectiveYear
+              : latest,
+          undefined,
+        );
+        if (latestYear) {
+          setFilters((current) =>
+            current.effectiveYear === undefined
+              ? { ...current, effectiveYear: latestYear }
+              : current,
+          );
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -122,10 +146,15 @@ const ChecklistSearchPage: FC = () => {
     }
   };
 
+  const initialSearchDone = useRef(false);
   useEffect(() => {
+    // Run the first search only after config (incl. the defaulted latest year) has loaded, so the
+    // initial results match the selected year.
+    if (configLoading || initialSearchDone.current) return;
+    initialSearchDone.current = true;
     void runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [configLoading]);
 
   const updateFilter = <K extends keyof ChecklistSearchQuery>(
     key: K,
@@ -224,12 +253,23 @@ const ChecklistSearchPage: FC = () => {
             value={filters.openingId ?? ''}
             onChange={(e) => updateFilter('openingId', e.target.value || undefined)}
           />
-          <TextInput
-            id="checklist-search-client"
-            labelText="Client #"
-            value={filters.clientNumber ?? ''}
-            onChange={(e) => updateFilter('clientNumber', e.target.value || undefined)}
-          />
+          <div className="checklist-search__client">
+            <TextInput
+              id="checklist-search-client"
+              labelText="Client #"
+              value={filters.clientNumber ?? ''}
+              onChange={(e) => updateFilter('clientNumber', e.target.value || undefined)}
+            />
+            <Button
+              hasIconOnly
+              kind="tertiary"
+              size="md"
+              renderIcon={SearchIcon}
+              iconDescription="Look up client"
+              tooltipPosition="top"
+              onClick={() => setClientLookupOpen(true)}
+            />
+          </div>
           <TextInput
             id="checklist-search-checklist-id"
             labelText="Checklist ID"
@@ -263,18 +303,6 @@ const ChecklistSearchPage: FC = () => {
             >
               Clear
             </Button>
-            <Button
-              kind="tertiary"
-              onClick={() =>
-                void runTodoFeature(
-                  () => API.search.exportChecklists(filters),
-                  display,
-                  'Export to Excel',
-                )
-              }
-            >
-              Export to Excel
-            </Button>
           </div>
         </div>
       </Column>
@@ -298,10 +326,25 @@ const ChecklistSearchPage: FC = () => {
             data-testid="checklist-search-table"
           >
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
-              <TableContainer
-                title="Checklists"
-                description={`${results.length} match${results.length === 1 ? '' : 'es'}`}
-              >
+              <TableContainer>
+                <TableHeaderBar
+                  title={`Checklists — ${results.length} match${results.length === 1 ? '' : 'es'}`}
+                  actions={
+                    <Button
+                      kind="tertiary"
+                      size="md"
+                      onClick={() =>
+                        void runTodoFeature(
+                          () => API.search.exportChecklists(filters),
+                          display,
+                          'Export to Excel',
+                        )
+                      }
+                    >
+                      Export to Excel
+                    </Button>
+                  }
+                />
                 <Table {...getTableProps()}>
                   <TableHead>
                     <TableRow>
@@ -344,6 +387,12 @@ const ChecklistSearchPage: FC = () => {
           </DataTable>
         )}
       </Column>
+
+      <ClientSearchModal
+        open={clientLookupOpen}
+        onClose={() => setClientLookupOpen(false)}
+        onSelect={(clientNumber) => updateFilter('clientNumber', clientNumber || undefined)}
+      />
     </Grid>
   );
 };

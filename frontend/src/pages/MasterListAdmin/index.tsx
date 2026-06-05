@@ -20,6 +20,8 @@ import {
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
 
+import TableHeaderBar from '@/components/core/TableHeaderBar';
+
 import type { MasterListYear } from '@/types/configuration';
 import type { GenerateMasterListRequest, MasterListAdmin } from '@/types/masterListAdmin';
 
@@ -320,7 +322,8 @@ const MasterListAdminPage: FC = () => {
             {criteria.generationStats.length === 0 ? (
               <p>No generation stats yet — generate the list to see per-district counts.</p>
             ) : (
-              <TableContainer title="Generation results" description="Sites generated per district">
+              <TableContainer>
+                <TableHeaderBar title="Generation results" />
                 <Table>
                   <TableHead>
                     <TableRow>

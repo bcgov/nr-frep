@@ -24,28 +24,10 @@
   align-items: end;
 }
 
-// Lay the "# of Sites Accepted" summary and the Export button on the same row,
-// the button vertically centered against the summary and pushed to the right
-// edge. The Carbon header background ($layer) is on the wrapper so it spans the
-// full width (up to and around the button).
-.random-list__table-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  background-color: var(--cds-layer);
-  padding: 0.75rem 1rem;
-}
-
-// Keep the Export button white against the now-gray header band.
-.random-list__export-btn {
-  background-color: var(--cds-background);
-}
-
-// "# of Sites Accepted" summary line, shown in the table header band.
+// "# of Sites Accepted" summary line, shown in the shared table header band.
 .random-list__summary {
-  margin: 0;
   font-size: 0.875rem;
+  font-weight: 400;
 }
 
 // Slightly enlarge the map icon in the Map column action button.

@@ -26,7 +26,6 @@ import {
   SettingsAdjust,
   TableSplit,
   Tree,
-  UserMultiple,
 } from '@carbon/icons-react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 
@@ -35,7 +34,6 @@ import AcceptedSitesPage from '@/pages/AcceptedSites';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
 import ChrChecklistPage from '@/pages/ChrChecklist';
 import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
-import ClientSearchPage from '@/pages/ClientSearch';
 import DashboardPage from '@/pages/Dashboard';
 import GlobalErrorPage from '@/pages/GlobalError';
 import LandingPage from '@/pages/Landing';
@@ -45,12 +43,6 @@ import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
 import BioOpeningEditPage from '@/pages/ProtocolChecklist/BioOpeningEdit';
 import BioPlotsEditPage from '@/pages/ProtocolChecklist/BioPlotsEdit';
 import BioStrataEditPage from '@/pages/ProtocolChecklist/BioStrataEdit';
-import RipFieldDataEditPage from '@/pages/ProtocolChecklist/RipFieldDataEdit';
-import RipFinalCommentsEditPage from '@/pages/ProtocolChecklist/RipFinalCommentsEdit';
-import RipOtherIndicatorsEditPage from '@/pages/ProtocolChecklist/RipOtherIndicatorsEdit';
-import RipQuestionsEditPage from '@/pages/ProtocolChecklist/RipQuestionsEdit';
-import RipSpecificImpactsEditPage from '@/pages/ProtocolChecklist/RipSpecificImpactsEdit';
-import RipStreamOpeningEditPage from '@/pages/ProtocolChecklist/RipStreamOpeningEdit';
 import WaterAssessmentEditPage from '@/pages/ProtocolChecklist/WaterAssessmentEdit';
 import WaterRangeEditPage from '@/pages/ProtocolChecklist/WaterRangeEdit';
 import WaterSampleAreaEditPage from '@/pages/ProtocolChecklist/WaterSampleAreaEdit';
@@ -202,78 +194,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     roles: ['FREP_ADMIN', 'FREP_EDITOR'],
   },
   {
-    path: '/protocol-checklists/riparian/:id/stream-opening',
-    id: 'Riparian Stream Opening Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipStreamOpeningEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/riparian/:id/final-comments',
-    id: 'Riparian Final Comments Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipFinalCommentsEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/riparian/:id/field-data',
-    id: 'Riparian Field Data Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipFieldDataEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/riparian/:id/other-indicators',
-    id: 'Riparian Other Indicators Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipOtherIndicatorsEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/riparian/:id/questions',
-    id: 'Riparian Questions Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipQuestionsEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/riparian/:id/specific-impacts',
-    id: 'Riparian Specific Impacts Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <RipSpecificImpactsEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
     path: '/protocol-checklists/water/:id/sample-area',
     id: 'Water Sample Area Edit',
     icon: Tree,
@@ -350,17 +270,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ChecklistSearchPage />
-      </Layout>
-    ),
-    isSideMenu: true,
-  },
-  {
-    path: '/search/clients',
-    id: 'Client Search',
-    icon: UserMultiple,
-    element: (
-      <Layout>
-        <ClientSearchPage />
       </Layout>
     ),
     isSideMenu: true,

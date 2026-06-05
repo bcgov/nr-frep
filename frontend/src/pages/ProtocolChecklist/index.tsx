@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@carbon/icons-react';
+import { ArrowLeft, Edit } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -13,8 +13,17 @@ import {
   Tag,
   Tile,
 } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+
+import RipAdministrationView from './RipAdministrationView';
+import RipAttachmentsView from './RipAttachmentsView';
+import RipChecklistGridEdit from './RipChecklistGridEdit';
+import RipFieldDataView from './RipFieldDataView';
+import RipFinalCommentsView from './RipFinalCommentsView';
+import RipNotesView from './RipNotesView';
+import RipSpecificImpactsView from './RipSpecificImpactsView';
+import RipStreamOpeningView from './RipStreamOpeningView';
 
 import type {
   ProtocolChecklist,
@@ -28,6 +37,29 @@ import API from '@/services/APIs';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
 
 import './protocolChecklist.scss';
+
+// Maps a section id (as emitted by the backend) to its edit-route segment, per protocol. Sections
+// without an entry (e.g. biodiversity "plots", water "summary") have no editor yet and render no
+// edit icon.
+const SECTION_EDIT_ROUTES: Record<string, Record<string, string>> = {
+  biodiversity: {
+    opening: 'edit',
+    stratum: 'strata',
+  },
+  riparian: {
+    'stream': 'stream-opening',
+    'field-data': 'field-data',
+    'questions': 'questions',
+    'specific-impacts': 'specific-impacts',
+    'final-cmts': 'final-comments',
+  },
+  water: {
+    'sample-area': 'sample-area',
+    'site-control': 'sample-site',
+    'assessment': 'assessment',
+    'range': 'range',
+  },
+};
 
 const extractValidationErrors = (err: unknown): string[] | null => {
   const body = (err as { body?: { validationErrors?: string[] } })?.body;
@@ -53,6 +85,44 @@ function renderFieldValue(field: ProtocolChecklistField): React.ReactNode {
   return field.value || '—';
 }
 
+// Coded view fields whose stored value should display as a description. Keyed by the field label
+// the backend emits. Fixed enumerations are resolved here; data-driven codes (stream class,
+// checklist answers) come from fetched code lists, applied by label below.
+const STATIC_CODE_LABELS: Record<string, Record<string, string>> = {
+  'Channel morphology': { RC: 'Riffle/pool or Cascade/pool', SP: 'Step/pool', NA: 'Non-alluvial' },
+  'Reach location u/s-d/s ind': { U: 'U/S', D: 'D/S' },
+  'UTM at reference': { US: 'U/S', DS: 'D/S' },
+  'Planned riparian N/A ind': { Y: 'Yes', N: 'No' },
+  'UTM signal': { N: 'No signal available', Y: 'Signal available' },
+};
+const STREAM_CLASS_LABELS = new Set([
+  'Planned riparian stream RMA class',
+  'Actual riparian stream RMA class',
+]);
+const ANSWER_LABELS = new Set(['Invasive plant']);
+
+// Tombstone fields the legacy screen shows in the page header band rather than in a section. The
+// backend returns these inside the section reads; we promote them to the header (in legacy order)
+// and hide them from the section field list to mirror the legacy layout.
+const HEADER_EXTRA_LABELS = [
+  'Org unit',
+  'Client',
+  'Client name',
+  'Opening ID',
+  'Licence',
+  'Cutting permit',
+  'Cut block',
+  'Sample #',
+] as const;
+const HEADER_EXTRA_LABEL_SET = new Set<string>(HEADER_EXTRA_LABELS);
+
+// Section ids rendered as grids (collections) rather than flat field lists.
+const GRID_SECTION_IDS = new Set(['questions', 'specific-impacts']);
+// A repeated-collection field, e.g. "Question 3 - Answer code" — these are rendered by the grid,
+// so they are excluded from the flat scalar field list.
+const ARRAY_ROW_LABEL =
+  /^(Point indicator|Continuous indicator|Other indicator|Question|No answer|Specific impact|Other specific impact) \d+ - /;
+
 const ProtocolChecklistPage: FC = () => {
   const { type, id = '' } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
@@ -66,6 +136,8 @@ const ProtocolChecklistPage: FC = () => {
   const [busy, setBusy] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [streamClassMap, setStreamClassMap] = useState<Record<string, string>>({});
+  const [answerMap, setAnswerMap] = useState<Record<string, string>>({});
 
   const protocolType: ProtocolType | null = isProtocolType(type) ? type : null;
   const backendCode = protocolType ? PROTOCOL_TYPE_TO_BACKEND[protocolType] : null;
@@ -112,6 +184,52 @@ const ProtocolChecklistPage: FC = () => {
       cancelled = true;
     };
   }, [display, id, protocolType, reloadKey]);
+
+  // Code lists for resolving coded view values (stream class, checklist answers) to descriptions.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      API.configuration.getStreamClasses().catch(() => []),
+      API.configuration.getChecklistAnswers().catch(() => []),
+    ]).then(([classes, answers]) => {
+      if (cancelled) return;
+      setStreamClassMap(Object.fromEntries(classes.map((o) => [o.code, o.description])));
+      setAnswerMap(Object.fromEntries(answers.map((o) => [o.code, o.description])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Resolve a coded field value to its human-readable description (falls back to the raw value).
+  const resolveDisplay = (label: string, value: string): string => {
+    if (!value) return value;
+    if (STREAM_CLASS_LABELS.has(label)) return streamClassMap[value] ?? value;
+    if (ANSWER_LABELS.has(label)) return answerMap[value] ?? value;
+    return STATIC_CODE_LABELS[label]?.[value] ?? value;
+  };
+
+  // Tombstone fields the backend returns inside section reads, lifted to the page header band.
+  const headerExtras = useMemo(() => {
+    const map: Record<string, string> = {};
+    checklist?.sections.forEach((section) =>
+      section.fields.forEach((field) => {
+        if (HEADER_EXTRA_LABEL_SET.has(field.label) && !map[field.label] && field.value) {
+          map[field.label] = field.value;
+        }
+      }),
+    );
+    return map;
+  }, [checklist]);
+
+  // Render a header cell; core fields are always shown, promoted extras only when they have a value.
+  const headerCell = (label: string, value: string | undefined, always = false) =>
+    always || value ? (
+      <div key={label}>
+        <span className="protocol-checklist__label">{label}</span>
+        <span>{value ?? ''}</span>
+      </div>
+    ) : null;
 
   const handleSubmit = async () => {
     if (!backendCode) return;
@@ -211,32 +329,26 @@ const ProtocolChecklistPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile className="protocol-checklist__summary">
               <div className="protocol-checklist__summary-grid">
-                <div>
-                  <span className="protocol-checklist__label">Checklist</span>
-                  <span>{checklist.checklistId}</span>
-                </div>
-                <div>
-                  <span className="protocol-checklist__label">Opening</span>
-                  <span>{checklist.openingNumber}</span>
-                </div>
-                <div>
-                  <span className="protocol-checklist__label">Master list year</span>
-                  <span>{checklist.effectiveYear}</span>
-                </div>
+                {/* Tombstone header laid out like the legacy screen. */}
+                {headerCell('Master list year', checklist.effectiveYear, true)}
+                {headerCell('Org unit', headerExtras['Org unit'])}
+                {headerCell('Checklist', checklist.checklistId, true)}
+                {headerCell('Client', headerExtras['Client'])}
+                {headerCell('Client name', headerExtras['Client name'])}
+                {headerCell('Opening', checklist.openingNumber, true)}
+                {headerCell('Opening ID', headerExtras['Opening ID'])}
+                {headerCell('Licence', headerExtras['Licence'])}
+                {headerCell('Cutting permit', headerExtras['Cutting permit'])}
+                {headerCell('Cut block', headerExtras['Cut block'])}
                 <div>
                   <span className="protocol-checklist__label">Status</span>
                   <Tag type={checklist.statusCode === 'SUB' ? 'green' : 'blue'} size="sm">
                     {checklist.statusLabel}
                   </Tag>
                 </div>
-                <div>
-                  <span className="protocol-checklist__label">Evaluator</span>
-                  <span>{checklist.evaluatorUserid}</span>
-                </div>
-                <div>
-                  <span className="protocol-checklist__label">Evaluation date</span>
-                  <span>{checklist.evaluationDate}</span>
-                </div>
+                {headerCell('Evaluator', checklist.evaluatorUserid, true)}
+                {headerCell('Evaluation date', checklist.evaluationDate, true)}
+                {headerCell('Sample #', headerExtras['Sample #'])}
               </div>
             </Tile>
           </Column>
@@ -244,102 +356,6 @@ const ProtocolChecklistPage: FC = () => {
           {canEdit && (
             <Column sm={4} md={8} lg={16}>
               <div className="protocol-checklist__actions">
-                {protocolType === 'biodiversity' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/biodiversity/${id}/edit`)}
-                  >
-                    Edit opening
-                  </Button>
-                )}
-                {protocolType === 'biodiversity' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/biodiversity/${id}/strata`)}
-                  >
-                    Edit strata
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/stream-opening`)}
-                  >
-                    Edit stream opening
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/field-data`)}
-                  >
-                    Edit field data
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/other-indicators`)}
-                  >
-                    Edit other indicators
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/questions`)}
-                  >
-                    Edit questions
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/specific-impacts`)}
-                  >
-                    Edit specific impacts
-                  </Button>
-                )}
-                {protocolType === 'riparian' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/riparian/${id}/final-comments`)}
-                  >
-                    Edit final comments
-                  </Button>
-                )}
-                {protocolType === 'water' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/water/${id}/sample-area`)}
-                  >
-                    Edit sample area
-                  </Button>
-                )}
-                {protocolType === 'water' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/water/${id}/sample-site`)}
-                  >
-                    Edit sample site
-                  </Button>
-                )}
-                {protocolType === 'water' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/water/${id}/assessment`)}
-                  >
-                    Edit assessment
-                  </Button>
-                )}
-                {protocolType === 'water' && !submitted && (
-                  <Button
-                    kind="tertiary"
-                    onClick={() => navigate(`/protocol-checklists/water/${id}/range`)}
-                  >
-                    Edit range
-                  </Button>
-                )}
                 {!submitted && (
                   <Button onClick={() => void handleSubmit()} disabled={busy}>
                     Submit
@@ -373,26 +389,136 @@ const ProtocolChecklistPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <Tabs>
-              <TabList aria-label="Checklist sections">
+              <TabList aria-label="Checklist sections" contained>
                 {checklist.sections.map((section) => (
                   <Tab key={section.id}>{section.title}</Tab>
                 ))}
               </TabList>
               <TabPanels>
-                {checklist.sections.map((section) => (
-                  <TabPanel key={section.id}>
-                    <div className="protocol-checklist__fields">
-                      {section.fields.map((field) => (
-                        <div className="protocol-checklist__field" key={field.label}>
-                          <span className="protocol-checklist__label">{field.label}</span>
-                          <span className="protocol-checklist__value">
-                            {renderFieldValue(field)}
-                          </span>
+                {checklist.sections.map((section) => {
+                  const editSegment = protocolType
+                    ? SECTION_EDIT_ROUTES[protocolType]?.[section.id]
+                    : undefined;
+                  // These sections edit inline (their own Edit/Save); the rest navigate to an
+                  // edit page.
+                  const inlineSection = [
+                    'administration',
+                    'stream',
+                    'field-data',
+                    'questions',
+                    'specific-impacts',
+                    'final-cmts',
+                    'notes',
+                    'attachments',
+                  ].includes(section.id);
+                  const showEdit = canEdit && !submitted && Boolean(editSegment) && !inlineSection;
+                  return (
+                    <TabPanel key={section.id}>
+                      {showEdit && (
+                        <div className="protocol-checklist__section-actions">
+                          <Button
+                            kind="tertiary"
+                            size="lg"
+                            onClick={() =>
+                              navigate(`/protocol-checklists/${protocolType}/${id}/${editSegment}`)
+                            }
+                          >
+                            <span className="protocol-checklist__edit-label">
+                              <Edit /> Edit
+                            </span>
+                          </Button>
                         </div>
-                      ))}
-                    </div>
-                  </TabPanel>
-                ))}
+                      )}
+                      {section.id === 'administration' ? (
+                        <RipAdministrationView
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : section.id === 'notes' ? (
+                        <RipNotesView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      ) : section.id === 'attachments' ? (
+                        <RipAttachmentsView
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : section.id === 'stream' ? (
+                        <RipStreamOpeningView
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : section.id === 'field-data' ? (
+                        <RipFieldDataView
+                          fields={section.fields}
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : section.id === 'final-cmts' ? (
+                        <RipFinalCommentsView
+                          checklistId={id}
+                          canEdit={canEdit}
+                          submitted={submitted}
+                        />
+                      ) : (
+                        <>
+                          {(() => {
+                            const isGrid = GRID_SECTION_IDS.has(section.id);
+                            // Flat scalar fields: drop the promoted header fields, and (for grid
+                            // sections) the collection rows the grid renders.
+                            const scalars = section.fields.filter(
+                              (field) =>
+                                !HEADER_EXTRA_LABEL_SET.has(field.label) &&
+                                !(isGrid && ARRAY_ROW_LABEL.test(field.label)),
+                            );
+                            return scalars.length > 0 ? (
+                              <div className="protocol-checklist__fields">
+                                {scalars.map((field) => {
+                                  // Resolve coded scalar values to descriptions; leave YES_NO /
+                                  // MULTILINE fields to their dedicated renderers.
+                                  const display =
+                                    field.kind === 'YES_NO' || field.kind === 'MULTILINE'
+                                      ? field
+                                      : {
+                                          ...field,
+                                          value: resolveDisplay(field.label, field.value),
+                                        };
+                                  return (
+                                    <div className="protocol-checklist__field" key={field.label}>
+                                      <span className="protocol-checklist__label">
+                                        {field.label}
+                                      </span>
+                                      <span className="protocol-checklist__value">
+                                        {renderFieldValue(display)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null;
+                          })()}
+                          {section.id === 'questions' ? (
+                            <RipChecklistGridEdit
+                              section={section}
+                              checklistId={id}
+                              canEdit={canEdit}
+                              submitted={submitted}
+                            />
+                          ) : section.id === 'specific-impacts' ? (
+                            <RipSpecificImpactsView
+                              section={section}
+                              checklistId={id}
+                              canEdit={canEdit}
+                              submitted={submitted}
+                            />
+                          ) : null}
+                        </>
+                      )}
+                    </TabPanel>
+                  );
+                })}
               </TabPanels>
             </Tabs>
           </Column>

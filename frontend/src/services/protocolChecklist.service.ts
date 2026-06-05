@@ -1,4 +1,8 @@
 import type {
+  AdministrationData,
+  AttachmentContent,
+  AttachmentRow,
+  AttachmentUploadRequest,
   BiodiversityOpening,
   BioPlot,
   BioPlotRow,
@@ -7,6 +11,7 @@ import type {
   ProtocolChecklist,
   RiparianFieldData,
   RiparianFinalComments,
+  RiparianNotes,
   RiparianOtherIndicators,
   RiparianQuestions,
   RiparianSpecificImpacts,
@@ -150,6 +155,114 @@ export class ProtocolChecklistService extends HttpClient {
       url: '/v1/protocol-checklists/bio/plots/{plotId}',
       path: { plotId },
       query: { revisionCount },
+    });
+  }
+
+  getRipAdministration(checklistId: string): CancelablePromise<AdministrationData> {
+    return this.doRequest<AdministrationData>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/rip/{checklistId}/administration',
+      path: { checklistId },
+    });
+  }
+
+  saveRipAdministration(
+    checklistId: string,
+    admin: AdministrationData,
+  ): CancelablePromise<AdministrationData> {
+    return this.doRequest<AdministrationData>(this.config, {
+      method: 'PUT',
+      url: '/v1/protocol-checklists/rip/{checklistId}/administration',
+      path: { checklistId },
+      body: admin,
+      mediaType: 'application/json',
+    });
+  }
+
+  addRipTeamMember(
+    checklistId: string,
+    evaluator: string,
+    teamLead: boolean,
+  ): CancelablePromise<AdministrationData> {
+    return this.doRequest<AdministrationData>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/rip/{checklistId}/administration/team',
+      path: { checklistId },
+      query: { evaluator, teamLead },
+    });
+  }
+
+  removeRipTeamMember(
+    checklistId: string,
+    evaluatorUserid: string,
+    revisionCount?: string,
+  ): CancelablePromise<AdministrationData> {
+    return this.doRequest<AdministrationData>(this.config, {
+      method: 'DELETE',
+      url: '/v1/protocol-checklists/rip/{checklistId}/administration/team/{evaluatorUserid}',
+      path: { checklistId, evaluatorUserid },
+      query: revisionCount ? { revisionCount } : undefined,
+    });
+  }
+
+  getRipNotes(checklistId: string): CancelablePromise<RiparianNotes> {
+    return this.doRequest<RiparianNotes>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/rip/{checklistId}/notes',
+      path: { checklistId },
+    });
+  }
+
+  saveRipNotes(checklistId: string, notes: RiparianNotes): CancelablePromise<RiparianNotes> {
+    return this.doRequest<RiparianNotes>(this.config, {
+      method: 'PUT',
+      url: '/v1/protocol-checklists/rip/{checklistId}/notes',
+      path: { checklistId },
+      body: notes,
+      mediaType: 'application/json',
+    });
+  }
+
+  getRipAttachments(checklistId: string): CancelablePromise<AttachmentRow[]> {
+    return this.doRequest<AttachmentRow[]>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/rip/{checklistId}/attachments',
+      path: { checklistId },
+    });
+  }
+
+  getRipAttachmentContent(
+    checklistId: string,
+    attachmentId: string,
+  ): CancelablePromise<AttachmentContent> {
+    return this.doRequest<AttachmentContent>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}/content',
+      path: { checklistId, attachmentId },
+    });
+  }
+
+  uploadRipAttachment(
+    checklistId: string,
+    request: AttachmentUploadRequest,
+  ): CancelablePromise<AttachmentRow[]> {
+    return this.doRequest<AttachmentRow[]>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/rip/{checklistId}/attachments',
+      path: { checklistId },
+      body: request,
+      mediaType: 'application/json',
+    });
+  }
+
+  deleteRipAttachment(
+    checklistId: string,
+    attachmentId: string,
+  ): CancelablePromise<AttachmentRow[]> {
+    return this.doRequest<AttachmentRow[]>(this.config, {
+      method: 'DELETE',
+      url: '/v1/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}',
+      path: { checklistId, attachmentId },
     });
   }
 

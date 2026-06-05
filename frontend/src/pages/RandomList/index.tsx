@@ -20,6 +20,8 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
+import TableHeaderBar from '@/components/core/TableHeaderBar';
+
 import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
@@ -236,39 +238,40 @@ const RandomListPage: FC = () => {
           >
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
               <TableContainer>
-                <div className="random-list__table-header">
-                  {summary ? (
-                    <p className="random-list__summary" data-testid="random-list-summary">
-                      <strong># of Sites Accepted</strong>
-                      {summary.orgUnitDescription ? ` — ${summary.orgUnitDescription}` : ''}
-                      {' — '}
-                      Biodiversity: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
-                      {summary.culturalHeritage} &nbsp; Riparian: {summary.riparian} &nbsp; Water:{' '}
-                      {summary.water}
-                    </p>
-                  ) : (
-                    <span />
-                  )}
-                  <Button
-                    kind="tertiary"
-                    size="md"
-                    className="random-list__export-btn"
-                    onClick={() =>
-                      void runTodoFeature(
-                        () =>
-                          API.randomList.exportRandomList({
-                            effectiveYear,
-                            orgUnit: orgUnit || undefined,
-                          }),
-                        display,
-                        'Export to Excel',
-                      )
-                    }
-                    disabled={loading || configLoading || !effectiveYear}
-                  >
-                    Export to Excel
-                  </Button>
-                </div>
+                <TableHeaderBar
+                  title={
+                    summary ? (
+                      <span className="random-list__summary" data-testid="random-list-summary">
+                        <strong># of Sites Accepted</strong>
+                        {summary.orgUnitDescription ? ` — ${summary.orgUnitDescription}` : ''}
+                        {' — '}
+                        Biodiversity: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
+                        {summary.culturalHeritage} &nbsp; Riparian: {summary.riparian} &nbsp; Water:{' '}
+                        {summary.water}
+                      </span>
+                    ) : null
+                  }
+                  actions={
+                    <Button
+                      kind="tertiary"
+                      size="md"
+                      onClick={() =>
+                        void runTodoFeature(
+                          () =>
+                            API.randomList.exportRandomList({
+                              effectiveYear,
+                              orgUnit: orgUnit || undefined,
+                            }),
+                          display,
+                          'Export to Excel',
+                        )
+                      }
+                      disabled={loading || configLoading || !effectiveYear}
+                    >
+                      Export to Excel
+                    </Button>
+                  }
+                />
                 <Table {...getTableProps()}>
                   <TableHead>
                     <TableRow>

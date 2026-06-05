@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@carbon/icons-react';
+import { ArrowLeft, Locked } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -16,10 +16,12 @@ import {
   TableRow,
   Tag,
   TextInput,
+  Tooltip,
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import type { RejectionReason } from '@/types/configuration';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
 import { useNotification } from '@/context/notification/useNotification';
@@ -28,19 +30,12 @@ import API from '@/services/APIs';
 
 import './siteDetail.scss';
 
-const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
-  BIO: 'biodiversity',
-  RIP: 'riparian',
-  WAT: 'water',
-};
-
 const RESOURCE_HEADERS = [
   { key: 'resourceName', header: 'Resource value' },
   { key: 'statusCode', header: 'Status' },
   { key: 'rejectionReasonCode', header: 'Rejection reason' },
   { key: 'rationale', header: 'Rationale' },
   { key: 'otherComments', header: 'Other comments' },
-  { key: 'checklistStatusCode', header: 'Checklist' },
 ] as const;
 
 const STATUS_LABEL: Record<string, string> = {
@@ -55,28 +50,38 @@ const STATUS_TAG_TYPE: Record<string, 'green' | 'red' | 'blue' | 'gray'> = {
   TAR: 'blue',
 };
 
+const SUBMITTED = 'SUB';
+const OTHER_REASON = 'OTH';
+const MAX_RATIONALE_LENGTH = 50;
+const MAX_COMMENTS_LENGTH = 2000;
+
+const isSubmitted = (resource: SiteResource): boolean => resource.checklistStatusCode === SUBMITTED;
+
 function renderResourceCell(key: string, resource: SiteResource): React.ReactNode {
   const value = resource[key as keyof SiteResource];
 
+  if (key === 'resourceName') {
+    return (
+      <span className="site-detail__resource-name">
+        {isSubmitted(resource) && (
+          <Tooltip label="Submitted" align="right">
+            <button type="button" className="site-detail__lock" aria-label="Submitted">
+              <Locked />
+            </button>
+          </Tooltip>
+        )}
+        {resource.resourceName || '—'}
+      </span>
+    );
+  }
+
   if (key === 'statusCode') {
-    const statusCode = resource.statusCode;
+    const statusCode = (resource.statusCode ?? '').trim();
+    if (!statusCode) return '—';
     return (
       <Tag type={STATUS_TAG_TYPE[statusCode] ?? 'gray'} size="sm">
         {STATUS_LABEL[statusCode] ?? statusCode}
       </Tag>
-    );
-  }
-
-  if (key === 'checklistStatusCode') {
-    if (!resource.checklistId) return '—';
-    const protocolPath = PROTOCOL_TO_PATH[resource.resourceType];
-    const label = `${resource.checklistStatusCode ?? ''} (#${resource.checklistId})`;
-    return protocolPath ? (
-      <RouterLink to={`/protocol-checklists/${protocolPath}/${resource.checklistId}`}>
-        {label}
-      </RouterLink>
-    ) : (
-      label
     );
   }
 
@@ -88,6 +93,7 @@ function renderEditableCell(
   resource: SiteResource,
   index: number,
   patchRow: (index: number, patch: Partial<SiteResource>) => void,
+  rejectionReasons: RejectionReason[],
 ): React.ReactNode {
   if (key === 'statusCode') {
     return (
@@ -96,16 +102,34 @@ function renderEditableCell(
         labelText=""
         hideLabel
         size="sm"
-        value={resource.statusCode}
+        value={resource.statusCode ?? ''}
         onChange={(e) => patchRow(index, { statusCode: e.target.value })}
       >
+        <SelectItem value="" text="" />
         <SelectItem value="ACC" text="Accepted" />
         <SelectItem value="REJ" text="Rejected" />
         <SelectItem value="TAR" text="Targeted" />
       </Select>
     );
   }
-  if (key === 'rejectionReasonCode' || key === 'rationale' || key === 'otherComments') {
+  if (key === 'rejectionReasonCode') {
+    return (
+      <Select
+        id={`rejectionReasonCode-${index}`}
+        labelText=""
+        hideLabel
+        size="sm"
+        value={resource.rejectionReasonCode ?? ''}
+        onChange={(e) => patchRow(index, { rejectionReasonCode: e.target.value || null })}
+      >
+        <SelectItem value="" text="" />
+        {rejectionReasons.map((reason) => (
+          <SelectItem key={reason.code} value={reason.code} text={reason.description} />
+        ))}
+      </Select>
+    );
+  }
+  if (key === 'rationale' || key === 'otherComments') {
     return (
       <TextInput
         id={`${key}-${index}`}
@@ -117,8 +141,52 @@ function renderEditableCell(
       />
     );
   }
-  // resourceName / checklistStatusCode stay read-only
+  // resourceName stays read-only
   return renderResourceCell(key, resource);
+}
+
+/**
+ * Per-resource save rules ported from legacy {@code Frep110ValidationManager}. Submitted
+ * (locked) rows are skipped — they can't be edited. Returns a list of human-readable errors.
+ */
+function validateResources(rows: SiteResource[]): string[] {
+  const errors: string[] = [];
+  rows.forEach((r, i) => {
+    if (isSubmitted(r)) return;
+    const status = (r.statusCode ?? '').trim();
+    if (!status) return; // empty status is allowed — the row simply isn't saved
+    const n = i + 1;
+    const reason = (r.rejectionReasonCode ?? '').trim();
+    const rationale = (r.rationale ?? '').trim();
+    const comments = (r.otherComments ?? '').trim();
+
+    if (status === 'TAR') {
+      if (reason)
+        errors.push(`Resource ${n}: rejection reason must be blank for targeted resources.`);
+      if (!rationale) errors.push(`Resource ${n}: rationale is required for targeted resources.`);
+      else if (rationale.length > MAX_RATIONALE_LENGTH)
+        errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+    } else if (status === 'REJ') {
+      if (!reason) {
+        errors.push(`Resource ${n}: rejection reason is required for rejected resources.`);
+      } else if (reason === OTHER_REASON) {
+        if (!rationale)
+          errors.push(`Resource ${n}: rationale is required when the rejection reason is Other.`);
+        else if (rationale.length > MAX_RATIONALE_LENGTH)
+          errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+      } else if (rationale.length > MAX_RATIONALE_LENGTH) {
+        errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+      }
+    } else {
+      if (reason)
+        errors.push(`Resource ${n}: rejection reason must be blank for accepted resources.`);
+      if (rationale) errors.push(`Resource ${n}: rationale must be blank for accepted resources.`);
+    }
+
+    if (comments.length > MAX_COMMENTS_LENGTH)
+      errors.push(`Resource ${n}: other comments must be 2000 characters or fewer.`);
+  });
+  return errors;
 }
 
 const HeaderRow: FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
@@ -140,22 +208,48 @@ const SiteDetailPage: FC = () => {
   const [hasError, setHasError] = useState(false);
   const [draft, setDraft] = useState<SiteResource[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rejectionReasons, setRejectionReasons] = useState<RejectionReason[]>([]);
 
-  const editing = draft !== null;
+  // The resource form is editable by default for authorized users — `draft` is
+  // initialized from the loaded detail (see effect below), so there is no edit toggle.
+  const editing = canEdit && draft !== null;
 
-  const startEdit = () => setDraft(detail ? detail.resources.map((r) => ({ ...r })) : []);
-  const cancelEdit = () => setDraft(null);
+  // Legacy FREP110 disables Save when every resource is already submitted (nothing editable).
+  const allSubmitted =
+    !!detail && detail.resources.length > 0 && detail.resources.every(isSubmitted);
 
   const patchRow = (index: number, patch: Partial<SiteResource>) =>
     setDraft((prev) => (prev ? prev.map((r, i) => (i === index ? { ...r, ...patch } : r)) : prev));
 
   const handleSave = async () => {
     if (!draft) return;
+    const errors = validateResources(draft);
+    if (errors.length > 0) {
+      display({
+        kind: 'error',
+        title: 'Please fix the following before saving',
+        subtitle: errors.join(' '),
+        timeout: 9000,
+      });
+      return;
+    }
+    // Only save rows the user picked a status for; empty-status rows are left untouched,
+    // and submitted (locked) rows are not re-sent.
+    const toSave = draft.filter((r) => !isSubmitted(r) && (r.statusCode ?? '').trim() !== '');
+    if (toSave.length === 0) {
+      display({
+        kind: 'info',
+        title: 'Nothing to save',
+        subtitle: 'Select a status (Accept, Reject, or Target) for at least one resource.',
+        timeout: 6000,
+      });
+      return;
+    }
     setBusy(true);
     try {
       const saved = await API.siteDetail.saveResources(
         id,
-        draft.map((r) => ({
+        toSave.map((r) => ({
           resourceValueId: r.resourceValueId,
           resourceType: r.resourceType,
           statusCode: r.statusCode,
@@ -166,7 +260,6 @@ const SiteDetailPage: FC = () => {
         })),
       );
       setDetail(saved);
-      setDraft(null);
       display({ kind: 'success', title: 'Site resources saved', timeout: 4000 });
     } catch (err) {
       display({
@@ -218,6 +311,33 @@ const SiteDetailPage: FC = () => {
     };
   }, [display, id]);
 
+  // Keep the editable draft in sync with the loaded detail (and re-seed it after a
+  // save). Authorized users edit in place; everyone else sees a read-only table.
+  useEffect(() => {
+    if (detail && canEdit) {
+      setDraft(detail.resources.map((r) => ({ ...r })));
+    } else {
+      setDraft(null);
+    }
+  }, [detail, canEdit]);
+
+  // Rejection-reason dropdown options (legacy FREP_CODE_LISTS.get_site_resource_reason_code).
+  useEffect(() => {
+    let cancelled = false;
+    API.configuration
+      .getRejectionReasons()
+      .then((reasons) => {
+        if (!cancelled) setRejectionReasons(reasons);
+      })
+      .catch(() => {
+        // Non-fatal: the dropdown just renders empty if reasons can't be loaded.
+        if (!cancelled) setRejectionReasons([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <Grid fullWidth className="default-grid site-detail-grid">
       <Column sm={4} md={8} lg={16}>
@@ -267,8 +387,7 @@ const SiteDetailPage: FC = () => {
       {!loading && !notFound && !hasError && detail && (
         <>
           <Column sm={4} md={8} lg={16}>
-            <section className="site-detail__panel">
-              <h2 className="site-detail__panel-title">Site header</h2>
+            <section className="site-detail__header-fields">
               <div className="site-detail__grid">
                 <HeaderRow label="Master list" value={detail.masterList} />
                 <HeaderRow label="Org unit" value={detail.orgUnit} />
@@ -286,59 +405,61 @@ const SiteDetailPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <section className="site-detail__panel">
-              <div className="site-detail__panel-header">
-                <h2 className="site-detail__panel-title">Resource values</h2>
-                {canEdit && detail.resources.length > 0 && (
-                  <div className="site-detail__actions">
-                    {!editing && (
-                      <Button kind="tertiary" size="sm" onClick={startEdit}>
-                        Edit resources
-                      </Button>
-                    )}
-                    {editing && (
-                      <>
-                        <Button size="sm" disabled={busy} onClick={() => void handleSave()}>
-                          Save
-                        </Button>
-                        <Button kind="ghost" size="sm" disabled={busy} onClick={cancelEdit}>
-                          Cancel
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+            <section className="site-detail__resources">
               {detail.resources.length === 0 ? (
                 <p>No resource values have been evaluated for this site.</p>
               ) : (
-                <TableContainer
-                  title="Resource evaluations"
-                  description="Accept / reject / target decisions for each protocol"
-                >
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        {RESOURCE_HEADERS.map((header) => (
-                          <TableHeader key={header.key}>{header.header}</TableHeader>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {(editing && draft ? draft : detail.resources).map((resource, index) => (
-                        <TableRow key={resource.resourceValueId ?? resource.resourceType ?? index}>
+                <>
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
                           {RESOURCE_HEADERS.map((header) => (
-                            <TableCell key={header.key}>
-                              {editing
-                                ? renderEditableCell(header.key, resource, index, patchRow)
-                                : renderResourceCell(header.key, resource)}
-                            </TableCell>
+                            <TableHeader key={header.key}>{header.header}</TableHeader>
                           ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                      </TableHead>
+                      <TableBody>
+                        {(editing && draft ? draft : detail.resources).map((resource, index) => (
+                          <TableRow
+                            // resourceType is unique per row on FREP110 (one row per resource
+                            // value type) and always present, so it's a stable, collision-free key.
+                            // (resourceValueId is "" for un-evaluated rows — `??` wouldn't catch
+                            // that, leaving duplicate keys that ghost-duplicate rows after a save.)
+                            key={
+                              resource.resourceType || resource.resourceValueId || `row-${index}`
+                            }
+                          >
+                            {RESOURCE_HEADERS.map((header) => (
+                              <TableCell key={header.key}>
+                                {editing && !isSubmitted(resource)
+                                  ? renderEditableCell(
+                                      header.key,
+                                      resource,
+                                      index,
+                                      patchRow,
+                                      rejectionReasons,
+                                    )
+                                  : renderResourceCell(header.key, resource)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  {editing && (
+                    <div className="site-detail__resource-actions">
+                      <Button
+                        size="md"
+                        disabled={busy || allSubmitted}
+                        onClick={() => void handleSave()}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           </Column>

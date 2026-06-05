@@ -5,11 +5,16 @@ import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratum;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentUploadRequest;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianSpecificImpacts;
+import ca.bc.gov.nrs.frep.dto.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
 import ca.bc.gov.nrs.frep.dto.frep.WaterAssessment;
 import ca.bc.gov.nrs.frep.dto.frep.WaterRange;
@@ -160,6 +165,92 @@ public class ProtocolChecklistController {
   ) {
     protocolChecklistService.deleteBioPlot(plotId, revisionCount);
     return ResponseEntity.ok().build();
+  }
+
+  // --- Administration (FREP301) ---
+
+  @GetMapping("/protocol-checklists/rip/{checklistId}/administration")
+  public ResponseEntity<AdministrationData> getRipAdministration(@PathVariable String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.getRipAdministration(checklistId));
+  }
+
+  @PutMapping("/protocol-checklists/rip/{checklistId}/administration")
+  public ResponseEntity<AdministrationData> saveRipAdministration(
+      @PathVariable String checklistId,
+      @RequestBody AdministrationData admin
+  ) {
+    return ResponseEntity.ok(protocolChecklistService.saveRipAdministration(checklistId, admin));
+  }
+
+  @PostMapping("/protocol-checklists/rip/{checklistId}/administration/team")
+  public ResponseEntity<AdministrationData> addRipTeamMember(
+      @PathVariable String checklistId,
+      @RequestParam String evaluator,
+      @RequestParam(defaultValue = "false") boolean teamLead
+  ) {
+    return ResponseEntity.ok(
+        protocolChecklistService.addRipTeamMember(checklistId, evaluator, teamLead));
+  }
+
+  @DeleteMapping("/protocol-checklists/rip/{checklistId}/administration/team/{evaluatorUserid}")
+  public ResponseEntity<AdministrationData> removeRipTeamMember(
+      @PathVariable String checklistId,
+      @PathVariable String evaluatorUserid,
+      @RequestParam(required = false) String revisionCount
+  ) {
+    return ResponseEntity.ok(
+        protocolChecklistService.removeRipTeamMember(checklistId, evaluatorUserid, revisionCount));
+  }
+
+  // --- Notes ---
+
+  @GetMapping("/protocol-checklists/rip/{checklistId}/notes")
+  public ResponseEntity<RiparianNotes> getRipNotes(@PathVariable String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.getRipNotes(checklistId));
+  }
+
+  @PutMapping("/protocol-checklists/rip/{checklistId}/notes")
+  public ResponseEntity<RiparianNotes> saveRipNotes(
+      @PathVariable String checklistId,
+      @RequestBody RiparianNotes notes
+  ) {
+    return ResponseEntity.ok(protocolChecklistService.saveRipNotes(checklistId, notes));
+  }
+
+  // --- Attachments ---
+
+  @GetMapping("/protocol-checklists/rip/{checklistId}/attachments")
+  public ResponseEntity<List<AttachmentRow>> getRipAttachments(@PathVariable String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.getRipAttachments(checklistId));
+  }
+
+  // Content is returned as JSON; Jackson base64-encodes the byte[] data (like the CHR photo flow).
+  @GetMapping("/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}/content")
+  public ResponseEntity<AttachmentContent> getRipAttachmentContent(
+      @PathVariable String checklistId,
+      @PathVariable String attachmentId
+  ) {
+    return ResponseEntity.ok(
+        protocolChecklistService.getRipAttachmentContent(checklistId, attachmentId));
+  }
+
+  @PostMapping("/protocol-checklists/rip/{checklistId}/attachments")
+  public ResponseEntity<List<AttachmentRow>> uploadRipAttachment(
+      @PathVariable String checklistId,
+      @RequestBody AttachmentUploadRequest request
+  ) {
+    return ResponseEntity.ok(protocolChecklistService.saveRipAttachment(
+        checklistId, request.fileName(), request.description(), request.contentType(),
+        request.data() == null ? new byte[0] : request.data()));
+  }
+
+  @DeleteMapping("/protocol-checklists/rip/{checklistId}/attachments/{attachmentId}")
+  public ResponseEntity<List<AttachmentRow>> deleteRipAttachment(
+      @PathVariable String checklistId,
+      @PathVariable String attachmentId
+  ) {
+    return ResponseEntity.ok(
+        protocolChecklistService.deleteRipAttachment(checklistId, attachmentId));
   }
 
   // --- Riparian stream opening (FREP screen 230) ---

@@ -23,4 +23,9 @@ public record ChecklistSectionData(
   public static Map<String, String> linkedFields() {
     return new LinkedHashMap<>();
   }
+
+  /** An empty section — used for tabs whose content is loaded by a dedicated inline editor. */
+  public static ChecklistSectionData emptySection() {
+    return fieldsOnly(Map.of());
+  }
 }

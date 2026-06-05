@@ -16,7 +16,12 @@ import ca.bc.gov.nrs.frep.dto.frep.RipOtherSpecImpactRow;
 import ca.bc.gov.nrs.frep.dto.frep.RipPointIndRow;
 import ca.bc.gov.nrs.frep.dto.frep.RipQuestionRow;
 import ca.bc.gov.nrs.frep.dto.frep.RipStreamEdgeRow;
+import ca.bc.gov.nrs.frep.dto.frep.AdministrationData;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.dto.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.dto.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
+import ca.bc.gov.nrs.frep.dto.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
@@ -1003,26 +1008,30 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           return null;
         }
     );
-    executeCall(
-        callSql(RIP_QUESTIONS_PACKAGE, "save_no_answers", 4),
-        cs -> {
-          cs.setString(1, checklistId);
-          cs.setObject(2, buildStructArray(cs, NO_ANSWERS_VARRAY, NO_ANSWERS_OBJECT, o.noAnswers(),
-              r -> new Object[] {
-                  blankToNull(r.answerImpactId()), checklistId, blankToNull(r.checklistQuestionId()),
-                  r.questionNo(), r.answerImpactType(), r.answerImpactDesc(),
-                  blankToNull(r.sortOrder()), r.answerInd(), blankToNull(r.revisionCount()), null,
-                  userId
-              }));
-          cs.registerOutParameter(2, Types.ARRAY, NO_ANSWERS_VARRAY);
-          cs.setString(3, userId);
-          setInOutString(cs, 4, null);
-        },
-        cs -> {
-          throwIfError(RIP_QUESTIONS_PACKAGE, "save_no_answers", cs.getString(4));
-          return null;
-        }
-    );
+    // save_no_answers loops FOR i IN array.FIRST..array.LAST; an empty VARRAY gives NULL bounds,
+    // which raises ORA-06502. Only call it when there are cause rows to persist.
+    if (o.noAnswers() != null && !o.noAnswers().isEmpty()) {
+      executeCall(
+          callSql(RIP_QUESTIONS_PACKAGE, "save_no_answers", 4),
+          cs -> {
+            cs.setString(1, checklistId);
+            cs.setObject(2, buildStructArray(cs, NO_ANSWERS_VARRAY, NO_ANSWERS_OBJECT, o.noAnswers(),
+                r -> new Object[] {
+                    blankToNull(r.answerImpactId()), checklistId,
+                    blankToNull(r.checklistQuestionId()), r.questionNo(), r.answerImpactType(),
+                    r.answerImpactDesc(), blankToNull(r.sortOrder()), r.answerInd(),
+                    blankToNull(r.revisionCount()), null, userId
+                }));
+            cs.registerOutParameter(2, Types.ARRAY, NO_ANSWERS_VARRAY);
+            cs.setString(3, userId);
+            setInOutString(cs, 4, null);
+          },
+          cs -> {
+            throwIfError(RIP_QUESTIONS_PACKAGE, "save_no_answers", cs.getString(4));
+            return null;
+          }
+      );
+    }
     return getRipQuestions(checklistId);
   }
 
@@ -1048,20 +1057,31 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   public RiparianSpecificImpacts saveRipSpecificImpacts(RiparianSpecificImpacts o, String userId) {
+    // FREP_234.SAVE loops both arrays with FOR i IN array.FIRST..LAST; an empty VARRAY gives NULL
+    // bounds (ORA-06502). "Other impacts" is commonly empty, so substitute a single all-null
+    // sentinel row — the proc's loop treats a null id / null indicator as a no-op.
+    List<RipOpenSpecImpactRow> openImpacts =
+        (o.openImpacts() == null || o.openImpacts().isEmpty())
+            ? List.of(new RipOpenSpecImpactRow(null, null, null, null))
+            : o.openImpacts();
+    List<RipOtherSpecImpactRow> otherImpacts =
+        (o.otherImpacts() == null || o.otherImpacts().isEmpty())
+            ? List.of(new RipOtherSpecImpactRow(null, null, null, null))
+            : o.otherImpacts();
     return executeCall(
         callSql(RIP_IMPACTS_PACKAGE, "SAVE", 5),
         cs -> {
           setInOutString(cs, 1, o.checklistId());
           setInOutString(cs, 2, userId);
           cs.registerOutParameter(3, Types.VARCHAR);
-          cs.setObject(4, buildStructArray(cs, OPEN_SPEC_VARRAY, OPEN_SPEC_OBJECT, o.openImpacts(),
+          cs.setObject(4, buildStructArray(cs, OPEN_SPEC_VARRAY, OPEN_SPEC_OBJECT, openImpacts,
               r -> new Object[] {
                   blankToNull(r.openingSpecificImpactId()),
                   blankToNull(r.openingSpecificImpactType()), r.specImpactInd(),
                   blankToNull(r.revisionCount())
               }));
           cs.registerOutParameter(4, Types.ARRAY, OPEN_SPEC_VARRAY);
-          cs.setObject(5, buildStructArray(cs, OTHER_SPEC_VARRAY, OTHER_SPEC_OBJECT, o.otherImpacts(),
+          cs.setObject(5, buildStructArray(cs, OTHER_SPEC_VARRAY, OTHER_SPEC_OBJECT, otherImpacts,
               r -> new Object[] {
                   blankToNull(r.otherRiparianSpecImpactId()), r.description(), r.specImpactInd(),
                   blankToNull(r.revisionCount())
@@ -1073,6 +1093,314 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           return getRipSpecificImpacts(o.checklistId());
         }
     );
+  }
+
+  // --- Administration (FREP301 / checklistCostResource), shared across protocols ---
+
+  private static final String COST_RESOURCE_PKG = "FREP_CHECKLIST_COST_RESOURCES";
+
+  private String resolveRipResourceValueId(String checklistId) {
+    List<String> ids = jdbcTemplate.query(
+        "SELECT frep_resource_value_id FROM the.riparian_checklist WHERE riparian_checklist_id = ?",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return ids.isEmpty() ? "" : ids.get(0);
+  }
+
+  /**
+   * Read the Administration (cost/resource) data for a riparian checklist via
+   * {@code FREP_CHECKLIST_COST_RESOURCES.GET} (35 params per the legacy FrepCostResourceDataManager:
+   * tombstone 1-16, selectedSiteId @17, resourceValueId IN @18, type @19, status @20, checklistId IN
+   * @21, ... siteAccessCode @25, blockAccessTime @26, hoursOnBlock @27, peopleOnBlock @28,
+   * additionalComments @29, teamLeadNameId @30, revisionCount @32, revisionCountAccess @33, error
+   * @34, team-member cursor @35).
+   */
+  public AdministrationData getRipAdministration(String checklistId) {
+    String resourceValueId = resolveRipResourceValueId(checklistId);
+    return executeCall(
+        callSql(COST_RESOURCE_PKG, "GET", 35),
+        cs -> {
+          for (int i = 1; i <= 17; i++) {
+            cs.registerOutParameter(i, Types.VARCHAR);
+          }
+          cs.setString(18, resourceValueId);
+          cs.registerOutParameter(19, Types.VARCHAR);
+          cs.registerOutParameter(20, Types.VARCHAR);
+          cs.setString(21, checklistId);
+          for (int i = 22; i <= 34; i++) {
+            cs.registerOutParameter(i, Types.VARCHAR);
+          }
+          registerOutCursor(cs, 35);
+        },
+        cs -> {
+          throwIfError(COST_RESOURCE_PKG, "GET", cs.getString(34));
+          List<EvaluatorRow> team = readCursor(cs, 35, rs -> new EvaluatorRow(
+              rs.getString("EVALUATOR_USERID"), rs.getString("FREP_RESOURCE_VALUE_ID"),
+              rs.getString("EVALUATOR_TEAM_LEAD_IND"), rs.getString("EVALUATOR_DESCRIPTION"),
+              rs.getString("REVISION_COUNT")));
+          return new AdministrationData(
+              checklistId,
+              cs.getString(17),
+              resourceValueId,
+              cs.getString(19),
+              cs.getString(20),
+              cs.getString(11),
+              cs.getString(25),
+              cs.getString(26),
+              cs.getString(27),
+              cs.getString(28),
+              cs.getString(29),
+              cs.getString(30),
+              cs.getString(32),
+              cs.getString(33),
+              team);
+        });
+  }
+
+  /**
+   * Save the Administration scalar fields via {@code FREP_CHECKLIST_COST_RESOURCES.SAVE} (14 params:
+   * selectedSiteId, resourceValueId, type, checklistId, statusCode, evaluationDate, siteAccessCode,
+   * blockAccessTime, hoursOnBlock, peopleOnBlock, revisionCount, revisionCountAccess, userid, error).
+   * Team membership is read-only here.
+   */
+  public AdministrationData saveRipAdministration(AdministrationData o, String userId) {
+    executeCall(
+        callSql(COST_RESOURCE_PKG, "SAVE", 14),
+        cs -> {
+          cs.setString(1, o.selectedSiteId());
+          cs.setString(2, o.resourceValueId());
+          cs.setString(3, o.resourceValueType());
+          cs.setString(4, o.checklistId());
+          cs.setString(5, o.statusCode());
+          cs.setString(6, nullIfBlank(o.evaluationDate()));
+          cs.setString(7, nullIfBlank(o.siteAccessCode()));
+          cs.setString(8, nullIfBlank(o.blockAccessTime()));
+          cs.setString(9, nullIfBlank(o.hoursOnBlock()));
+          cs.setString(10, nullIfBlank(o.peopleOnBlock()));
+          cs.setString(11, nullIfBlank(o.revisionCount()));
+          cs.setString(12, nullIfBlank(o.revisionCountAccess()));
+          cs.setString(13, userId);
+          cs.registerOutParameter(14, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(COST_RESOURCE_PKG, "SAVE", cs.getString(14));
+          return null;
+        });
+    return getRipAdministration(o.checklistId());
+  }
+
+  private static String nullIfBlank(String value) {
+    return (value == null || value.isBlank()) ? null : value;
+  }
+
+  /** Add (or re-flag) an evaluator on the team via {@code save_team_member} (6 params). */
+  public AdministrationData addRipTeamMember(
+      String checklistId, String evaluator, boolean teamLead, String userId) {
+    executeCall(
+        callSql(COST_RESOURCE_PKG, "save_team_member", 6),
+        cs -> {
+          cs.setString(1, checklistId);
+          cs.setString(2, "RIP");
+          cs.setString(3, evaluator);
+          cs.setString(4, teamLead ? "Y" : "N");
+          cs.setString(5, userId);
+          cs.registerOutParameter(6, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(COST_RESOURCE_PKG, "save_team_member", cs.getString(6));
+          return null;
+        });
+    return getRipAdministration(checklistId);
+  }
+
+  /** Remove an evaluator from the team via {@code delete_team_member} (5 params). */
+  public AdministrationData deleteRipTeamMember(
+      String checklistId, String evaluatorUserid, String revisionCount) {
+    executeCall(
+        callSql(COST_RESOURCE_PKG, "delete_team_member", 5),
+        cs -> {
+          cs.setString(1, evaluatorUserid);
+          cs.setString(2, checklistId);
+          cs.setString(3, "RIP");
+          cs.setString(4, nullIfBlank(revisionCount));
+          cs.registerOutParameter(5, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(COST_RESOURCE_PKG, "delete_team_member", cs.getString(5));
+          return null;
+        });
+    return getRipAdministration(checklistId);
+  }
+
+  // --- Notes (FREP checklistNote / FREP_CHECKLIST_NOTES) ---
+
+  private static final String NOTES_PKG = "FREP_CHECKLIST_NOTES";
+
+  /**
+   * Read the single note for a riparian checklist via {@code FREP_CHECKLIST_NOTES.GET} (25 params:
+   * tombstone 1-18, checklist_id IN OUT @19, status @20, resource_value_id IN OUT @21, type IN OUT
+   * @22, note_description @23, revision_count @24, error @25).
+   */
+  public RiparianNotes getRipNotes(String checklistId) {
+    String resourceValueId = resolveRipResourceValueId(checklistId);
+    return executeCall(
+        callSql(NOTES_PKG, "GET", 25),
+        cs -> {
+          for (int i = 1; i <= 18; i++) {
+            cs.registerOutParameter(i, Types.VARCHAR);
+          }
+          setInOutString(cs, 19, checklistId);
+          cs.registerOutParameter(20, Types.VARCHAR);
+          setInOutString(cs, 21, resourceValueId);
+          setInOutString(cs, 22, "RIP");
+          cs.registerOutParameter(23, Types.VARCHAR);
+          cs.registerOutParameter(24, Types.VARCHAR);
+          cs.registerOutParameter(25, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(NOTES_PKG, "GET", cs.getString(25));
+          return new RiparianNotes(checklistId, cs.getString(23), cs.getString(24));
+        });
+  }
+
+  /** Save the checklist note via {@code save_riparian_notes} (7 params). */
+  public RiparianNotes saveRipNotes(RiparianNotes o, String userId) {
+    String resourceValueId = resolveRipResourceValueId(o.checklistId());
+    executeCall(
+        callSql(NOTES_PKG, "save_riparian_notes", 7),
+        cs -> {
+          setInOutString(cs, 1, o.checklistId());
+          setInOutString(cs, 2, resourceValueId);
+          cs.setString(3, "RIP");
+          cs.setString(4, nullIfBlank(o.noteDescription()));
+          setInOutString(cs, 5, nullIfBlank(o.revisionCount()));
+          cs.setString(6, userId);
+          cs.registerOutParameter(7, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(NOTES_PKG, "save_riparian_notes", cs.getString(7));
+          return null;
+        });
+    return getRipNotes(o.checklistId());
+  }
+
+  // --- Attachments (FREP checklistAttachment / FREP_CHECKLIST_ATTACHMENTS) ---
+
+  private static final String ATTACH_PKG = "FREP_CHECKLIST_ATTACHMENTS";
+
+  /**
+   * List attachment metadata for a riparian checklist via {@code FREP_CHECKLIST_ATTACHMENTS.GET}
+   * (24 params: tombstone 1-18, resource_value_id IN @19, checklist_id IN @20, type @21, status
+   * @22, error @23, results cursor @24). Cursor columns per the legacy DataManager.
+   */
+  public List<AttachmentRow> getRipAttachments(String checklistId) {
+    String resourceValueId = resolveRipResourceValueId(checklistId);
+    return executeCall(
+        callSql(ATTACH_PKG, "GET", 24),
+        cs -> {
+          for (int i = 1; i <= 18; i++) {
+            cs.registerOutParameter(i, Types.VARCHAR);
+          }
+          cs.setString(19, resourceValueId);
+          cs.setString(20, checklistId);
+          cs.registerOutParameter(21, Types.VARCHAR);
+          cs.registerOutParameter(22, Types.VARCHAR);
+          cs.registerOutParameter(23, Types.VARCHAR);
+          registerOutCursor(cs, 24);
+        },
+        cs -> {
+          throwIfError(ATTACH_PKG, "GET", cs.getString(23));
+          return readCursor(cs, 24, rs -> new AttachmentRow(
+              rs.getString("chklst_attach_id"), rs.getString("file_name"),
+              rs.getString("description"), rs.getString("MIME_TYPE_CODE"),
+              rs.getString("file_size")));
+        });
+  }
+
+  /**
+   * Download an attachment's bytes via {@code GET_BLOB} (10 params: id/checklist/type/name/desc/
+   * mime-code/mime-type IN OUT 1-7, file_contents BLOB @8, userid @9, error @10).
+   */
+  public AttachmentContent getRipAttachmentContent(String checklistId, String attachmentId) {
+    return executeCall(
+        callSql(ATTACH_PKG, "GET_BLOB", 10),
+        cs -> {
+          setInOutString(cs, 1, attachmentId);
+          setInOutString(cs, 2, checklistId);
+          setInOutString(cs, 3, "RIP");
+          setInOutString(cs, 4, null);
+          setInOutString(cs, 5, null);
+          setInOutString(cs, 6, null);
+          setInOutString(cs, 7, null);
+          cs.registerOutParameter(8, Types.BLOB);
+          setInOutString(cs, 9, null);
+          cs.registerOutParameter(10, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(ATTACH_PKG, "GET_BLOB", cs.getString(10));
+          java.sql.Blob blob = cs.getBlob(8);
+          byte[] bytes = blob == null ? new byte[0] : blob.getBytes(1, (int) blob.length());
+          return new AttachmentContent(cs.getString(4), cs.getString(7), bytes);
+        });
+  }
+
+  /**
+   * Upload a new attachment via {@code SAVE} (10 params; id IN OUT @1 null for new, checklist @2,
+   * type @3, file_name @4, description @5, mime_type_code @6, mime_type IN OUT @7, BLOB @8, userid
+   * @9, error @10).
+   */
+  public void saveRipAttachment(
+      String checklistId, String fileName, String description, String mimeType, byte[] bytes,
+      String userId) {
+    executeCall(
+        callSql(ATTACH_PKG, "SAVE", 10),
+        cs -> {
+          setInOutString(cs, 1, null);
+          setInOutString(cs, 2, checklistId);
+          setInOutString(cs, 3, "RIP");
+          cs.setString(4, fileName);
+          cs.setString(5, nullIfBlank(description));
+          cs.setString(6, mimeTypeCode(fileName));
+          setInOutString(cs, 7, mimeType);
+          java.sql.Blob blob = cs.getConnection().createBlob();
+          blob.setBytes(1, bytes);
+          cs.setBlob(8, blob);
+          cs.setString(9, userId);
+          cs.registerOutParameter(10, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(ATTACH_PKG, "SAVE", cs.getString(10));
+          return null;
+        });
+  }
+
+  /** Delete an attachment via {@code REMOVE} (4 params: id, checklist, type, error). */
+  public void deleteRipAttachment(String checklistId, String attachmentId) {
+    executeCall(
+        callSql(ATTACH_PKG, "REMOVE", 4),
+        cs -> {
+          cs.setString(1, attachmentId);
+          cs.setString(2, checklistId);
+          cs.setString(3, "RIP");
+          cs.registerOutParameter(4, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(ATTACH_PKG, "REMOVE", cs.getString(4));
+          return null;
+        });
+  }
+
+  /** A short stored mime-type code derived from the file extension (no reference table). */
+  private static String mimeTypeCode(String fileName) {
+    if (fileName == null) {
+      return null;
+    }
+    int dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length() - 1) {
+      return null;
+    }
+    String ext = fileName.substring(dot + 1).toUpperCase();
+    return ext.length() > 20 ? ext.substring(0, 20) : ext;
   }
 
   // --- Water (FREP screens 250-253) ---

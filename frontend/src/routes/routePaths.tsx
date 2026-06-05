@@ -40,9 +40,6 @@ import LandingPage from '@/pages/Landing';
 import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
 import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
-import BioOpeningEditPage from '@/pages/ProtocolChecklist/BioOpeningEdit';
-import BioPlotsEditPage from '@/pages/ProtocolChecklist/BioPlotsEdit';
-import BioStrataEditPage from '@/pages/ProtocolChecklist/BioStrataEdit';
 import WaterAssessmentEditPage from '@/pages/ProtocolChecklist/WaterAssessmentEdit';
 import WaterRangeEditPage from '@/pages/ProtocolChecklist/WaterRangeEdit';
 import WaterSampleAreaEditPage from '@/pages/ProtocolChecklist/WaterSampleAreaEdit';
@@ -156,42 +153,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: false,
-  },
-  {
-    path: '/protocol-checklists/biodiversity/:id/edit',
-    id: 'Biodiversity Opening Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <BioOpeningEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/biodiversity/:id/strata',
-    id: 'Biodiversity Strata Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <BioStrataEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/biodiversity/:id/strata/:stratumId/plots',
-    id: 'Biodiversity Plots Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <BioPlotsEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
   },
   {
     path: '/protocol-checklists/water/:id/sample-area',

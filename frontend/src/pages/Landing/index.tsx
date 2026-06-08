@@ -54,7 +54,7 @@ const LandingPage: FC = () => {
             <div className="buttons-container single-row">
               <Button
                 type="button"
-                onClick={login}
+                onClick={() => login('idir')}
                 renderIcon={Login}
                 size="md"
                 data-testid="landing-button__idir"

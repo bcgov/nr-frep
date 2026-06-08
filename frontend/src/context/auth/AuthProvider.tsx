@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AuthContext, type AuthContextType } from './AuthContext';
 import { getAccessTokenFromCookie, parseToken } from './authUtils';
 
-import type { FamLoginUser } from './types';
+import type { FamLoginUser, LoginProvider } from './types';
 
 import { env } from '@/env';
 
@@ -30,6 +30,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FamLoginUser | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const lastRefreshAtRef = useRef<number>(0);
+
+  // VITE_ZONE drives the Cognito identity_provider prefix (e.g. DEV-IDIR,
+  // TEST-IDIR, IDIR). Numeric zones (PR previews) fall back to TEST so we
+  // don't try to call a non-existent <PR>-IDIR provider. Mirrors nr-fspts.
+  const appEnv = isNaN(Number(env.VITE_ZONE)) ? env.VITE_ZONE || 'TEST' : 'TEST';
 
   // Hydrate the user from the current Amplify session on mount.
   useEffect(() => {
@@ -57,12 +62,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const login = useCallback(() => {
-    const appEnv = (env.VITE_ZONE || 'dev').toLowerCase();
-    void signInWithRedirect({
-      provider: { custom: `${appEnv}-IDIR` },
-    });
-  }, []);
+  const login = useCallback(
+    (provider: LoginProvider) => {
+      // Cognito identity_provider names follow `<ENV>-<PROVIDER>` (e.g. DEV-IDIR,
+      // TEST-BCEIDBUSINESS); the env prefix is omitted in PROD. Mirrors nr-fspts.
+      const prefix = appEnv === 'PROD' ? '' : `${appEnv.toUpperCase()}-`;
+      const providerName = provider === 'idir' ? `${prefix}IDIR` : `${prefix}BCEIDBUSINESS`;
+      void signInWithRedirect({ provider: { custom: providerName } });
+    },
+    [appEnv],
+  );
 
   const logout = useCallback(() => {
     void (async () => {

@@ -19,6 +19,9 @@ export const validIdpProviders = ['IDIR'] as const;
 
 export type IdpProviderType = (typeof validIdpProviders)[number];
 
+/** Identity provider the user picks at login. Mirrors nr-fspts. */
+export type LoginProvider = 'idir' | 'bceid';
+
 export type FamLoginUser = {
   providerUsername?: string;
   userName?: string;

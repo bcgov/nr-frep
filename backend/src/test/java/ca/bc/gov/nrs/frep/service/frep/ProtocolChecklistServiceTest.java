@@ -126,7 +126,9 @@ class ProtocolChecklistServiceTest {
     assertEquals("Biodiversity", response.get().protocolName());
     assertEquals("RDY", response.get().statusCode());
     assertEquals("RDY", response.get().statusLabel());
-    assertEquals("opening", response.get().sections().get(0).id());
+    // Administration (FREP301) leads, mirroring the legacy tab bar; opening follows.
+    assertEquals("administration", response.get().sections().get(0).id());
+    assertEquals("opening", response.get().sections().get(1).id());
   }
 
   @Test
@@ -149,9 +151,10 @@ class ProtocolChecklistServiceTest {
     var response = service.findChecklist("bio", "9001");
 
     assertTrue(response.isPresent());
-    assertEquals(3, response.get().sections().size());
-    assertEquals("stratum", response.get().sections().get(1).id());
-    assertTrue(response.get().sections().get(1).fields().isEmpty());
+    // administration, opening, stratum, plots, notes, attachments
+    assertEquals(6, response.get().sections().size());
+    assertEquals("stratum", response.get().sections().get(2).id());
+    assertTrue(response.get().sections().get(2).fields().isEmpty());
   }
 
   @Test

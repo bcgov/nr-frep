@@ -14,6 +14,10 @@ vi.mock('@/services/APIs', () => ({
       submit: vi.fn(),
       unsubmit: vi.fn(),
     },
+    configuration: {
+      getStreamClasses: vi.fn(() => Promise.resolve([])),
+      getChecklistAnswers: vi.fn(() => Promise.resolve([])),
+    },
   },
 }));
 

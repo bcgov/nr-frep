@@ -1,12 +1,12 @@
 import { createContext, type ReactNode } from 'react';
 
-import type { FamLoginUser } from './types';
+import type { FamLoginUser, LoginProvider } from './types';
 
 export type AuthContextType = {
   user: FamLoginUser | undefined;
   isLoggedIn: boolean;
   isLoading: boolean;
-  login: () => void;
+  login: (provider: LoginProvider) => void;
   logout: () => void;
   userToken: () => string | undefined;
   /** Checks the access token expiry and refreshes via the refresh token if

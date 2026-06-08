@@ -1,11 +1,4 @@
-import {
-  Document,
-  ListChecked,
-  Search,
-  SettingsAdjust,
-  TableSplit,
-  UserMultiple,
-} from '@carbon/icons-react';
+import { Document, ListChecked, Search, SettingsAdjust, TableSplit } from '@carbon/icons-react';
 import { ClickableTile, Column, Grid } from '@carbon/react';
 import { useNavigate } from 'react-router-dom';
 
@@ -40,15 +33,10 @@ const SCREENS: ScreenTile[] = [
   },
   {
     title: 'Checklist Search',
-    description: 'Find any FREP checklist by tenure, opening, client number, protocol, or status.',
+    description:
+      'Find any FREP checklist by tenure, opening, client number (with client lookup), protocol, or status.',
     to: '/search/checklists',
     Icon: Search,
-  },
-  {
-    title: 'Client Search',
-    description: 'Look up Forest Client records by client number or name.',
-    to: '/search/clients',
-    Icon: UserMultiple,
   },
   {
     title: 'Reports',
@@ -77,9 +65,7 @@ const DashboardPage: FC = () => {
     <Grid fullWidth className="default-grid dashboard-grid">
       <Column sm={4} md={8} lg={16}>
         <h1 className="dashboard__title">FREP Dashboard</h1>
-        <p className="dashboard__subtitle">
-          Select a screen to begin.
-        </p>
+        <p className="dashboard__subtitle">Select a screen to begin.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

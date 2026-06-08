@@ -261,6 +261,65 @@ export type RiparianFinalComments = {
   revisionCount?: string;
 };
 
+/** An evaluation-team member (FREP301 Administration); the team lead has teamLeadInd = 'Y'. */
+export type EvaluatorRow = {
+  evaluatorUserid?: string;
+  frepResourceValueId?: string;
+  teamLeadInd?: string;
+  evaluatorDescription?: string;
+  revisionCount?: string;
+};
+
+/** The single free-text note for a checklist (legacy Notes tab). */
+export type RiparianNotes = {
+  checklistId?: string;
+  noteDescription?: string;
+  revisionCount?: string;
+};
+
+/** Metadata for one checklist attachment (legacy Attachments tab). */
+export type AttachmentRow = {
+  checklistAttachmentId?: string;
+  fileName?: string;
+  description?: string;
+  mimeTypeCode?: string;
+  fileSize?: string;
+};
+
+/** A downloaded attachment's bytes (base64) + metadata. */
+export type AttachmentContent = {
+  fileName?: string;
+  mimeType?: string;
+  data?: string;
+};
+
+/** Upload payload — {@code data} is base64-encoded file bytes. */
+export type AttachmentUploadRequest = {
+  fileName?: string;
+  description?: string;
+  contentType?: string;
+  data?: string;
+};
+
+/** Checklist Administration tab (FREP301) — evaluation date, site access/cost data, team. */
+export type AdministrationData = {
+  checklistId?: string;
+  selectedSiteId?: string;
+  resourceValueId?: string;
+  resourceValueType?: string;
+  statusCode?: string;
+  evaluationDate?: string;
+  siteAccessCode?: string;
+  blockAccessTime?: string;
+  hoursOnBlock?: string;
+  peopleOnBlock?: string;
+  additionalComments?: string;
+  teamLeadNameId?: string;
+  revisionCount?: string;
+  revisionCountAccess?: string;
+  teamMembers?: EvaluatorRow[];
+};
+
 /** Riparian field-data (231) indicator rows + aggregate. */
 export type RipPointIndRow = {
   pointIndicatorId?: string;

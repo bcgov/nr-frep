@@ -36,3 +36,17 @@
   background-color: var(--#{vars.$bcgov-prefix}-support-success-inverse);
   color: var(--#{vars.$bcgov-prefix}-text-on-color);
 }
+
+// Map column action button — matches the District Random List map icon.
+.accepted-sites__map-cell {
+  text-align: left;
+}
+
+.accepted-sites__map-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.accepted-sites__map-btn.cds--btn--icon-only {
+  padding-inline-start: 0;
+}

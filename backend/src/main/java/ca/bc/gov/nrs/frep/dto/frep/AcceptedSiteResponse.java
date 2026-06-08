@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.dto.frep;
 
 /**
- * Read-only accepted site row for the Phase 1 portal.
+ * Read-only accepted site row for the Phase 1 portal. -Test deploy
  *
  * <p>Field names align with legacy {@code AcceptedSitesArrayBean} / dashboard columns.
  */

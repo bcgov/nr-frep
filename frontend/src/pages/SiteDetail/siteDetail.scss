@@ -36,15 +36,29 @@
   }
 }
 
-.site-detail__panel {
-  background-color: var(--#{vars.$bcgov-prefix}-layer);
-  padding: 1.5rem;
-  border: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle);
+// Resource table sits on the page (no grey panel box). Save button below, right-aligned.
+.site-detail__resource-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
 }
 
-.site-detail__panel-title {
-  @include type.type-style('heading-03');
-  margin: 0 0 1rem;
+// Resource-value cell: optional "submitted" lock icon before the name.
+.site-detail__resource-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+// Plain (non-button-looking) trigger for the submitted lock icon + tooltip.
+.site-detail__lock {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: default;
+  color: var(--#{vars.$bcgov-prefix}-icon-secondary);
 }
 
 .site-detail__grid {

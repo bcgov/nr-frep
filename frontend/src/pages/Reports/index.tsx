@@ -14,9 +14,11 @@ import {
 } from '@carbon/react';
 import { useMemo, type FC } from 'react';
 
-import { useAuthorization } from '@/hooks/useAuthorization';
+import TableHeaderBar from '@/components/core/TableHeaderBar';
 
 import { FREP_REPORT_DEFINITIONS } from './reportDefinitions';
+
+import { useAuthorization } from '@/hooks/useAuthorization';
 
 import './reports.scss';
 
@@ -53,8 +55,8 @@ const ReportsPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <h1 className="reports__title">Reports</h1>
         <p className="reports__subtitle">
-          Catalog of legacy FREP Jasper reports. Generation is not yet available in this
-          application — browse the list below.
+          Catalog of legacy FREP Jasper reports. Generation is not yet available in this application
+          — browse the list below.
         </p>
       </Column>
 
@@ -69,9 +71,10 @@ const ReportsPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <DataTable rows={tableRows} headers={[...TABLE_HEADERS]} size="md" useZebraStyles>
+        <DataTable rows={tableRows} headers={[...TABLE_HEADERS]}>
           {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-            <TableContainer className="bordered-table">
+            <TableContainer>
+              <TableHeaderBar title="Reports catalog" />
               <Table {...getTableProps()} aria-label="FREP reports catalog">
                 <TableHead>
                   <TableRow>

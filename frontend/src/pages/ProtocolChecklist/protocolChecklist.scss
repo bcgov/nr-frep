@@ -9,12 +9,27 @@
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
   margin-top: 1rem;
 }
 
 .protocol-checklist__errors {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+}
+
+// Per-tab edit button, right-aligned above the section fields.
+.protocol-checklist__section-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+// Pencil icon rendered in front of the "Edit" label.
+.protocol-checklist__edit-label {
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -50,7 +65,10 @@
 }
 
 .protocol-checklist__summary {
-  padding: 1.5rem;
+  // Tombstone info sits directly on the white page (no gray panel), matching
+  // the Site Details look.
+  padding: 1.5rem 0;
+  background: var(--cds-background);
 }
 
 .protocol-checklist__summary-grid {
@@ -62,6 +80,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+
+    // Keep the status Tag at its content width instead of stretching the full column.
+    .cds--tag {
+      align-self: start;
+      margin: 0;
+    }
   }
 }
 
@@ -90,4 +114,144 @@
 .protocol-checklist__multiline {
   margin: 0;
   white-space: pre-line;
+}
+
+// Biodiversity master-detail (FREP211 strata / FREP212 plots) — a record-selector rail beside the
+// inline detail editor.
+.bio-master {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.bio-master__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  .cds--btn {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+.bio-master__detail {
+  min-width: 0;
+}
+
+// Riparian inline form (FREP230) — grouped fieldsets with a responsive grid of controls.
+.rip-form__group {
+  border: none;
+  padding: 0;
+  margin: 0 0 2rem;
+
+  legend {
+    @include type.type-style('heading-compact-01');
+    margin-bottom: 1rem;
+  }
+}
+
+.rip-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem 2rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+// Stacked free-text comment fields (FREP235).
+.rip-form__comments {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.rip-form__hint {
+  margin: 0.75rem 0 0;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
+// Add-evaluator row (FREP301 team management).
+.rip-form__add-evaluator {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+// Riparian field-data grids (FREP231) — point + continuous indicator tables.
+.rip-field-data {
+  overflow-x: auto;
+}
+
+.rip-field-data__flag {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.rip-field-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+
+  caption {
+    @include type.type-style('heading-compact-01');
+    text-align: left;
+    margin-bottom: 0.5rem;
+  }
+
+  th,
+  td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+  }
+
+  thead th {
+    @include type.type-style('label-01');
+    color: var(--#{vars.$bcgov-prefix}-text-secondary);
+    font-weight: 600;
+    vertical-align: bottom;
+  }
+
+  // Section header row (FREP232 grouping) — spans the row, bold.
+  .rip-grid__section th {
+    @include type.type-style('heading-compact-01');
+    padding-top: 1rem;
+  }
+
+  // Centered Yes/No/NA radio + cause checkbox cells.
+  .rip-grid__choice {
+    text-align: center;
+    white-space: nowrap;
+  }
+}
+
+// Riparian retention matrix (FREP230) — row labels + 4 measurement columns.
+.rip-retention {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 0.5rem;
+    text-align: left;
+    vertical-align: bottom;
+  }
+
+  thead th {
+    @include type.type-style('label-01');
+    color: var(--#{vars.$bcgov-prefix}-text-secondary);
+    font-weight: 400;
+  }
+
+  tbody th {
+    @include type.type-style('label-01');
+    font-weight: 400;
+    max-width: 16rem;
+  }
 }

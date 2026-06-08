@@ -1,3 +1,4 @@
+import { Map as MapIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -17,6 +18,8 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
+import TableHeaderBar from '@/components/core/TableHeaderBar';
+
 import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
@@ -28,6 +31,17 @@ import './acceptedSites.scss';
 
 const ALL_PROTOCOLS_VALUE = '';
 
+// Maps a resource-value type code to its checklist route. Codes match the legacy app
+// (`Constants.java`: SLB = biodiversity, RIP = riparian, WTR = water, CHR handled separately).
+// BIO/WAT aliases kept as a safety net for any friendly-code source.
+const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
+  SLB: 'biodiversity',
+  RIP: 'riparian',
+  WTR: 'water',
+  BIO: 'biodiversity',
+  WAT: 'water',
+};
+
 const TABLE_HEADERS = [
   { key: 'checklistType', header: 'Checklist type' },
   { key: 'targeted', header: 'T' },
@@ -38,7 +52,7 @@ const TABLE_HEADERS = [
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'harvestCompleteDate', header: 'Harvest complete' },
   { key: 'checklistStatus', header: 'Status' },
-  { key: 'mapView', header: 'Map' },
+  { key: 'mapView', header: '' },
 ] as const;
 
 function formatChecklistType(site: AcceptedSite): string {
@@ -61,6 +75,7 @@ function toTableRows(sites: AcceptedSite[]) {
     harvestCompleteDate: site.harvestCompleteDate,
     checklistStatus: site.checklistStatus,
     statusCode: site.checklistStatusCode,
+    protocolCode: site.protocolCode,
     mapView: site.openingId,
   }));
 }
@@ -160,7 +175,8 @@ const AcceptedSitesPage: FC = () => {
           <h1>Accepted Sites</h1>
         </div>
         <p className="accepted-sites__subtitle">
-          Read-only view of accepted sites for the selected master list year, district, and protocol.
+          Read-only view of accepted sites for the selected master list year, district, and
+          protocol.
         </p>
       </Column>
 
@@ -211,15 +227,6 @@ const AcceptedSitesPage: FC = () => {
           >
             Refresh
           </Button>
-          <Button
-            kind="tertiary"
-            onClick={() =>
-              void runTodoFeature(() => API.acceptedSites.printAcceptedSites(), display, 'Print')
-            }
-            disabled={loading || configLoading || sites.length === 0}
-          >
-            Print
-          </Button>
         </div>
       </Column>
 
@@ -242,7 +249,26 @@ const AcceptedSitesPage: FC = () => {
             data-testid="accepted-sites-table"
           >
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
-              <TableContainer title="Accepted sites" description="Sites on the current master list">
+              <TableContainer>
+                <TableHeaderBar
+                  title="Accepted sites"
+                  actions={
+                    <Button
+                      kind="tertiary"
+                      size="md"
+                      onClick={() =>
+                        void runTodoFeature(
+                          () => API.acceptedSites.printAcceptedSites(),
+                          display,
+                          'Print',
+                        )
+                      }
+                      disabled={loading || configLoading}
+                    >
+                      Print
+                    </Button>
+                  }
+                />
                 <Table {...getTableProps()}>
                   <TableHead>
                     <TableRow>
@@ -257,6 +283,17 @@ const AcceptedSitesPage: FC = () => {
                     {rows.map((row) => {
                       const rowMeta = tableRows.find((item) => item.id === row.id);
                       const isSubmitted = rowMeta?.statusCode === 'SUB';
+                      // Open the row's checklist (legacy FREP200 "Checklist" link): CHR → its own
+                      // screen, BIO/RIP/WAT → the protocol checklist; otherwise no link.
+                      const protoPath = rowMeta
+                        ? PROTOCOL_TO_PATH[rowMeta.protocolCode]
+                        : undefined;
+                      const checklistLink =
+                        rowMeta && rowMeta.protocolCode === 'CHR'
+                          ? `/chr/checklists/${rowMeta.id}`
+                          : protoPath
+                            ? `/protocol-checklists/${protoPath}/${rowMeta?.id}`
+                            : undefined;
 
                       return (
                         <TableRow
@@ -265,33 +302,34 @@ const AcceptedSitesPage: FC = () => {
                           className={isSubmitted ? 'accepted-sites__row--submitted' : undefined}
                         >
                           {row.cells.map((cell, idx) => {
-                            if (idx === 0 && rowMeta) {
+                            if (idx === 0 && checklistLink) {
                               return (
                                 <TableCell key={cell.id}>
-                                  <RouterLink to={`/site-detail/${rowMeta.id}`}>
-                                    {cell.value}
-                                  </RouterLink>
+                                  <RouterLink to={checklistLink}>{cell.value}</RouterLink>
                                 </TableCell>
                               );
                             }
                             if (cell.info.header === 'mapView') {
                               return (
-                                <TableCell key={cell.id}>
+                                <TableCell key={cell.id} className="accepted-sites__map-cell">
                                   <Button
                                     kind="ghost"
                                     size="sm"
+                                    hasIconOnly
+                                    renderIcon={MapIcon}
+                                    iconDescription="Site Map"
+                                    tooltipPosition="left"
+                                    className="accepted-sites__map-btn"
                                     disabled={!cell.value}
                                     onClick={() =>
                                       void runTodoFeature(
                                         () =>
                                           API.acceptedSites.getOpeningMapView(String(cell.value)),
                                         display,
-                                        'Map / GIS view',
+                                        'Site Map',
                                       )
                                     }
-                                  >
-                                    Map
-                                  </Button>
+                                  />
                                 </TableCell>
                               );
                             }

@@ -239,15 +239,34 @@ $types: "error", "info", "success", "warning";
 }
 
 /* ----------------- Tabs (contained) -------------------
-   Bump form widgets inside the tab panel to white (--cds-field-02), so they
-   stand out against the panel's gray surface. The panel itself keeps using
-   --cds-layer-01 (gray); we deliberately do NOT override --cds-layer here.
+   The contained tab panel keeps a gray surface (like a table's gray frame) so
+   it reads as one piece with the gray tab bar. Inputs that sit directly on the
+   gray panel bump to white (--cds-field-02) to stand out.
 ------------------------------------------------------- */
 .#{variables.$bcgov-prefix}--tab-content {
   --cds-field: var(--cds-field-02);
   --cds-field-hover: var(--cds-field-hover-02);
   --cds-border-subtle: var(--cds-border-subtle-02);
   --cds-border-subtle-selected: var(--cds-border-subtle-selected-02);
+}
+
+/* ----------------- Content Tiles --------------------
+   Tiles are white "cards" everywhere (no gray boxes) — matching the Site
+   Details look — on edit pages, checklist summaries, and as cards on the gray
+   tab panel. Interactive tiles (dashboard ClickableTile, selectable/expandable)
+   keep their own styling.
+----------------------------------------------------- */
+.#{variables.$bcgov-prefix}--tile:not(.#{variables.$bcgov-prefix}--tile--clickable):not(.#{variables.$bcgov-prefix}--tile--selectable):not(.#{variables.$bcgov-prefix}--tile--expandable) {
+  background: var(--cds-background);
+}
+
+/* A white card sitting on the gray tab panel: its inputs revert to gray
+   (--cds-field-01) so they stand out against the white card surface. */
+.#{variables.$bcgov-prefix}--tab-content .#{variables.$bcgov-prefix}--tile {
+  --cds-field: var(--cds-field-01);
+  --cds-field-hover: var(--cds-field-hover-01);
+  --cds-border-subtle: var(--cds-border-subtle-01);
+  --cds-border-subtle-selected: var(--cds-border-subtle-selected-01);
 }
 
 /* ── Inverted nested tabs (Agreement Workspace) ────────

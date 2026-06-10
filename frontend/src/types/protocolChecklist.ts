@@ -1,4 +1,5 @@
-export type ProtocolType = 'biodiversity' | 'riparian' | 'water';
+// Riparian + Water are out of scope for the migration.
+export type ProtocolType = 'biodiversity';
 
 export type ProtocolFieldKind = 'TEXT' | 'NUMBER' | 'DATE' | 'YES_NO' | 'MULTILINE';
 
@@ -61,6 +62,13 @@ export type BioStratumRow = {
   summaryDate?: string;
   plotCount?: string;
   size?: string;
+  revisionCount?: string;
+};
+
+/** Read-only computed values for a stratum (NAR + plots completed), shown in the FREP211 header. */
+export type StratumComputed = {
+  nar?: string;
+  plotsCompleted?: string;
 };
 
 /** Typed, editable biodiversity stratum (FREP 211). All scalar fields round-trip on save. */
@@ -166,6 +174,7 @@ export type BioPlotRow = {
   plotId?: string;
   plotNumber?: string;
   assessorName?: string;
+  revisionCount?: string;
 };
 
 /** Typed, editable biodiversity plot (FREP 212). All scalar fields round-trip on save. */
@@ -189,76 +198,6 @@ export type BioPlot = {
   revisionCount?: string;
   standTable?: BioStandRow[];
   cwdTable?: BioCwdRow[];
-};
-
-/** One riparian stream-edge measurement (mirrors FREP_STRM_EDGE_MEASMNT_OBJECT). */
-export type RipStreamEdgeRow = {
-  measureType?: string;
-  measurement?: string;
-  description?: string;
-  revisionCount?: string;
-};
-
-/** Typed, editable riparian stream opening (FREP 230). All scalar fields round-trip on save. */
-export type RiparianStreamOpening = {
-  checklistId?: string;
-  sampleNumber?: string;
-  rangeUsePlan?: string;
-  pastureId?: string;
-  streamName?: string;
-  streamLocationInd?: string;
-  plnRiparianStrmRmaCls?: string;
-  actRiparianStrmRmaCls?: string;
-  channelWidth?: string;
-  channelGradientPct?: string;
-  channelDepth?: string;
-  reachLocationTo?: string;
-  reachLocationFrom?: string;
-  reachLocationUpsDsInd?: string;
-  reachLocationFromDesc?: string;
-  utmSignal?: string;
-  utmAtReference?: string;
-  utmZone?: string;
-  utmEasting?: string;
-  utmNorthing?: string;
-  riparianChanMorphology?: string;
-  rttnRmaDomsOnPlans?: string;
-  rttnRmaDomsOnPlansInd?: string;
-  rttnRmaDomsInField?: string;
-  rttnRmaUndrstryOnPlans?: string;
-  rttnRmaUndrstryOnPlnI?: string;
-  rttnRmaUndrstryInField?: string;
-  rttnRrzDomsOnPlans?: string;
-  rttnRrzDomsOnPlansInd?: string;
-  rttnRrzDomsInFieldPct?: string;
-  rttnRrzDomsInField?: string;
-  rttnRrzUndrstryOnPlans?: string;
-  rttnRrzUndrstryOnPlnI?: string;
-  rttnRrzUndrstryFldPct?: string;
-  rttnRrzUndrstryInField?: string;
-  rttnRmzDomsOnPlans?: string;
-  rttnRmzDomsOnPlansInd?: string;
-  rttnRmzDomsInField?: string;
-  rttnRmzUndrstryOnPlans?: string;
-  rttnRmzUndrstryOnPlnI?: string;
-  rttnRmzUndrstryInField?: string;
-  plnRiparianStrNaInd?: string;
-  invasivePlantIndicator?: string;
-  invasivePlantComment?: string;
-  revisionCount?: string;
-  streamEdge?: RipStreamEdgeRow[];
-};
-
-/** Typed, editable riparian final comments (FREP 235). */
-export type RiparianFinalComments = {
-  checklistId?: string;
-  conclusionComment?: string;
-  specificImpactComment?: string;
-  assessmentProblemsComment?: string;
-  mapLegibilityComment?: string;
-  leaveStripAssessmentComment?: string;
-  checklistRecommComment?: string;
-  revisionCount?: string;
 };
 
 /** An evaluation-team member (FREP301 Administration); the team lead has teamLeadInd = 'Y'. */
@@ -320,236 +259,10 @@ export type AdministrationData = {
   teamMembers?: EvaluatorRow[];
 };
 
-/** Riparian field-data (231) indicator rows + aggregate. */
-export type RipPointIndRow = {
-  pointIndicatorId?: string;
-  questionNo?: string;
-  pointIndType?: string;
-  transectNo?: string;
-  measure1?: string;
-  measure2?: string;
-  measure3?: string;
-  measure4?: string;
-  measure5?: string;
-  measure6?: string;
-  threshold?: string;
-  mean?: string;
-  revisionCount?: string;
-};
-export type RipContinuousIndRow = {
-  continuousIndId?: string;
-  questionNo?: string;
-  continuousIndType?: string;
-  question?: string;
-  total?: string;
-  comments?: string;
-  threshold?: string;
-  revisionCount?: string;
-};
-export type RiparianFieldData = {
-  checklistId?: string;
-  fieldDataStreamReachDry?: string;
-  points?: RipPointIndRow[];
-  continuous?: RipContinuousIndRow[];
-};
-
-/** Riparian other-indicators (232). */
-export type RipOtherIndRow = {
-  otherIndTypeId?: string;
-  quesSectCode?: string;
-  headerQuestionInd?: string;
-  question?: string;
-  otherIndicatorId?: string;
-  otherAnswerInd?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type RiparianOtherIndicators = {
-  checklistId?: string;
-  indicators?: RipOtherIndRow[];
-};
-
-/** Riparian questions (233). */
-export type RipQuestionRow = {
-  checklistId?: string;
-  checklistQuestionId?: string;
-  questionNo?: string;
-  question?: string;
-  chanMorphologyCode?: string;
-  applicableInd?: string;
-  morphologyDesc?: string;
-  questionType?: string;
-  questionDesc?: string;
-  subQuestion?: string;
-  answerCode?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type RipNoAnswerRow = {
-  answerImpactId?: string;
-  checklistId?: string;
-  checklistQuestionId?: string;
-  questionNo?: string;
-  answerImpactType?: string;
-  answerImpactDesc?: string;
-  sortOrder?: string;
-  answerInd?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type RiparianQuestions = {
-  checklistId?: string;
-  questions?: RipQuestionRow[];
-  noAnswers?: RipNoAnswerRow[];
-};
-
-/** Riparian specific impacts (234). */
-export type RipOpenSpecImpactRow = {
-  openingSpecificImpactId?: string;
-  openingSpecificImpactType?: string;
-  specImpactInd?: string;
-  revisionCount?: string;
-};
-export type RipOtherSpecImpactRow = {
-  otherRiparianSpecImpactId?: string;
-  description?: string;
-  specImpactInd?: string;
-  revisionCount?: string;
-};
-export type RiparianSpecificImpacts = {
-  checklistId?: string;
-  openImpacts?: RipOpenSpecImpactRow[];
-  otherImpacts?: RipOtherSpecImpactRow[];
-};
-
-/** Water (250-253) types. */
-export type WtrDisturbanceRow = {
-  disturbanceId?: string;
-  checklistId?: string;
-  disturbanceCode?: string;
-  disturbanceAgeCode?: string;
-  disturbanceNumber?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type WtrAccessRoadRow = {
-  accessRoadId?: string;
-  checklistId?: string;
-  accessRoadType?: string;
-  accessRoadDesc?: string;
-  accessRoadStatusCode?: string;
-  approximateRoadLength?: string;
-  approximateRoadAge?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type WaterSampleArea = {
-  waterChecklistId?: string;
-  frepResourceValueId?: string;
-  statusCode?: string;
-  siteAccessCode?: string;
-  mainAccessRoadNumber?: string;
-  mainWatershedDescription?: string;
-  drinkingWaterAnswerCode?: string;
-  waterIntakeComment?: string;
-  intakeToCutblockDistance?: string;
-  waterIntakeConnectivityCode?: string;
-  intakeToCutblockComment?: string;
-  specResourceAnswerCode?: string;
-  specialResourceValueComment?: string;
-  reportedDisturbanceInd?: string;
-  fertilizerUseOnRoadInd?: string;
-  fertilizerUseWithinBlckInd?: string;
-  sensitiveSoilAnswerCode?: string;
-  herbicideUseOnRoadInd?: string;
-  herbicideUseWithinBlockInd?: string;
-  pesticideUseOnRoadInd?: string;
-  pesticideUseWithinBlockInd?: string;
-  streamCrossingsInd?: string;
-  roadsParallelToStreamInd?: string;
-  unstableSlopesInd?: string;
-  sensitiveSoilsInd?: string;
-  adjacentHarvestingInd?: string;
-  livestockConcernsInd?: string;
-  otherActivityInd?: string;
-  otherActivityDescription?: string;
-  noteDescription?: string;
-  blockAccessTime?: string;
-  hoursOnBlock?: string;
-  peopleOnBlock?: string;
-  invasivePlantAnswerCode?: string;
-  invasivePlantComment?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-  disturbances?: WtrDisturbanceRow[];
-  accessRoads?: WtrAccessRoadRow[];
-};
-export type WaterSampleSite = {
-  waterSampleSiteId?: string;
-  waterChecklistId?: string;
-  statusCode?: string;
-  waterSiteType?: string;
-  waterStreamWidthCode?: string;
-  evaluatorNameId?: string;
-  domesticIntakeInd?: string;
-  sampleSiteNumber?: string;
-  utmSignal?: string;
-  utmZone?: string;
-  utmEasting?: string;
-  utmNorthing?: string;
-  roadTypeCode?: string;
-  roadUseCode?: string;
-  roadReference?: string;
-  watershedReference?: string;
-  communityWatershedInd?: string;
-  rangeImpactEvaluationInd?: string;
-  waterCompromisedInd?: string;
-  otherObservedConditionInd?: string;
-  otherObservedConditionDesc?: string;
-  otherSolutionInd?: string;
-  otherSolutionDescription?: string;
-  assessmentComment?: string;
-  rangeComment?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type WtrAssessmentRow = {
-  waterSampleSiteId?: string;
-  activityGrpCode?: string;
-  activityGrpDesc?: string;
-  activityGrpCount?: string;
-  assessmentType?: string;
-  assessmentDesc?: string;
-  assessmentInd?: string;
-  revisionCount?: string;
-  entryUserid?: string;
-  updateUserid?: string;
-};
-export type WaterAssessment = {
-  waterSampleSiteId?: string;
-  conditions?: WtrAssessmentRow[];
-  solutions?: WtrAssessmentRow[];
-};
-export type WaterRange = {
-  waterSampleSiteId?: string;
-  ranges?: WtrAssessmentRow[];
-};
-
-export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio' | 'rip' | 'wat'> = {
+export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {
   biodiversity: 'bio',
-  riparian: 'rip',
-  water: 'wat',
 };
 
 export const PROTOCOL_TYPE_LABEL: Record<ProtocolType, string> = {
   biodiversity: 'Biodiversity',
-  riparian: 'Riparian',
-  water: 'Water Quality',
 };

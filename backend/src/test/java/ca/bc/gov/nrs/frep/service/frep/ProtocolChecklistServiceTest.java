@@ -10,7 +10,6 @@ import ca.bc.gov.nrs.frep.dto.frep.BioPlot;
 import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.frep.ChecklistSectionData;
@@ -48,12 +47,13 @@ class ProtocolChecklistServiceTest {
   private ProtocolChecklistService service;
 
   @Test
-  void normalizeProtocolTypeMapsLegacyAliases() {
+  void normalizeProtocolTypeMapsBioAndRejectsOutOfScope() {
     assertEquals(Optional.of("SLB"), ProtocolChecklistService.normalizeProtocolType("bio"));
     assertEquals(Optional.of("SLB"), ProtocolChecklistService.normalizeProtocolType("SLB"));
-    assertEquals(Optional.of("RIP"), ProtocolChecklistService.normalizeProtocolType("rip"));
-    assertEquals(Optional.of("WTR"), ProtocolChecklistService.normalizeProtocolType("wat"));
-    assertEquals(Optional.of("WTR"), ProtocolChecklistService.normalizeProtocolType("wtr"));
+    // Riparian + Water are out of scope — no longer recognised.
+    assertTrue(ProtocolChecklistService.normalizeProtocolType("rip").isEmpty());
+    assertTrue(ProtocolChecklistService.normalizeProtocolType("wat").isEmpty());
+    assertTrue(ProtocolChecklistService.normalizeProtocolType("wtr").isEmpty());
     assertTrue(ProtocolChecklistService.normalizeProtocolType("CHR").isEmpty());
     assertTrue(ProtocolChecklistService.normalizeProtocolType("").isEmpty());
   }
@@ -177,11 +177,11 @@ class ProtocolChecklistServiceTest {
   void submitThrowsValidationExceptionWithSplitMessages() {
     when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
-    when(writeRepository.submit("RIP", "9001", "u"))
+    when(writeRepository.submit("SLB", "9001", "u"))
         .thenReturn("frep.submit.common.evaluation;frep.submit.common.teamlead;");
 
     ProtocolSubmitValidationException ex = assertThrows(
-        ProtocolSubmitValidationException.class, () -> service.submit("rip", "9001"));
+        ProtocolSubmitValidationException.class, () -> service.submit("bio", "9001"));
     assertEquals(2, ex.getMessages().size());
     assertTrue(ex.getMessages().contains("frep.submit.common.teamlead"));
   }
@@ -193,14 +193,14 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void unsubmitMapsWaterToWtr() {
+  void unsubmitMapsBioToSlb() {
     when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
-    when(writeRepository.unsubmit("WTR", "9001", "u")).thenReturn("");
+    when(writeRepository.unsubmit("SLB", "9001", "u")).thenReturn("");
 
-    service.unsubmit("wat", "9001");
+    service.unsubmit("bio", "9001");
 
-    verify(writeRepository).unsubmit("WTR", "9001", "u");
+    verify(writeRepository).unsubmit("SLB", "9001", "u");
   }
 
   @Test
@@ -225,7 +225,7 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void listBioStrataDelegatesToRepository() {
-    BioStratumRow row = new BioStratumRow("900", "1", "MAT", "2024-05-01", "5", "3.2");
+    BioStratumRow row = new BioStratumRow("900", "1", "MAT", "2024-05-01", "5", "3.2", "2");
     when(writeRepository.listBioStrata("1001")).thenReturn(List.of(row));
 
     assertEquals(1, service.listBioStrata("1001").size());
@@ -254,16 +254,9 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void nextStratumNumberDelegatesWhenWritable() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
-    when(writeRepository.nextStratumNumber()).thenReturn("5");
-
-    assertEquals("5", service.nextStratumNumber());
-  }
-
-  @Test
   void listBioPlotsDelegatesToRepository() {
-    when(writeRepository.listBioPlots("900")).thenReturn(List.of(new BioPlotRow("500", "1", "jdoe")));
+    when(writeRepository.listBioPlots("900"))
+        .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", "2")));
 
     assertEquals(1, service.listBioPlots("900").size());
   }
@@ -290,27 +283,6 @@ class ProtocolChecklistServiceTest {
     service.deleteBioPlot("500", "2");
 
     verify(writeRepository).deleteBioPlot("500", "2");
-  }
-
-  @Test
-  void getRipStreamOpeningThrowsNotFoundWhenMissing() {
-    when(writeRepository.getRipStreamOpening("2002")).thenReturn(null);
-    assertThrows(ResponseStatusException.class, () -> service.getRipStreamOpening("2002"));
-  }
-
-  @Test
-  void saveRipStreamOpeningForbiddenWhenUserCannotWrite() {
-    when(loggedUserHelper.canWrite()).thenReturn(false);
-    assertThrows(ResponseStatusException.class,
-        () -> service.saveRipStreamOpening("2002", riparianStreamOpening()));
-  }
-
-  private static RiparianStreamOpening riparianStreamOpening() {
-    return new RiparianStreamOpening(
-        "2002", null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        List.of());
   }
 
   private static ChecklistSectionData sectionWithHeader(

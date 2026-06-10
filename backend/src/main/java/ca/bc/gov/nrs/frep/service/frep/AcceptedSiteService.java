@@ -7,7 +7,9 @@ import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,11 @@ public class AcceptedSiteService {
 
   private static final String TARGETED_STATUS_CODE = "TAR";
   private static final String CHR_CODE = "CHR";
+
+  // Riparian (RIP) and Water (WTR) are out of scope for the migration — the accepted-sites list
+  // surfaces only Biodiversity (SLB) and Cultural Heritage (CHR). The legacy FREP200 proc still
+  // returns RIP/WTR rows, so we drop them here.
+  private static final Set<String> OUT_OF_SCOPE_CODES = Set.of("RIP", "WTR");
 
   private final AcceptedSitesRepository acceptedSitesRepository;
   private final CodeListRepository codeListRepository;
@@ -54,8 +61,14 @@ public class AcceptedSiteService {
 
     return rows.stream()
         .map(row -> toResponse(row, effectiveYear, orgUnit, protocolNameToCode))
+        .filter(site -> !isOutOfScope(site))
         .filter(site -> matchesProtocol(site, protocolType))
         .toList();
+  }
+
+  private static boolean isOutOfScope(AcceptedSiteResponse site) {
+    return site.protocolCode() != null
+        && OUT_OF_SCOPE_CODES.contains(site.protocolCode().toUpperCase(Locale.ROOT));
   }
 
   private static boolean includesCulturalHeritage(String protocolType) {

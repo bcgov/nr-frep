@@ -9,23 +9,15 @@ import type {
   BioStratum,
   BioStratumRow,
   ProtocolChecklist,
-  RiparianFieldData,
-  RiparianFinalComments,
   RiparianNotes,
-  RiparianOtherIndicators,
-  RiparianQuestions,
-  RiparianSpecificImpacts,
-  RiparianStreamOpening,
-  WaterAssessment,
-  WaterRange,
-  WaterSampleArea,
-  WaterSampleSite,
+  StratumComputed,
 } from '@/types/protocolChecklist';
 
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
 
-type ProtocolBackendCode = 'bio' | 'rip' | 'wat';
+// Riparian (rip) / Water (wat) are out of scope; the shared {protocol} segment is bio-only now.
+type ProtocolBackendCode = 'bio';
 
 export class ProtocolChecklistService extends HttpClient {
   constructor(readonly config: APIConfig) {
@@ -97,6 +89,23 @@ export class ProtocolChecklistService extends HttpClient {
     });
   }
 
+  /** Read-only NAR + plots-completed for a stratum (FREP211 header). */
+  getStratumComputed(stratumId: string): CancelablePromise<StratumComputed> {
+    return this.doRequest<StratumComputed>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/bio/strata/{stratumId}/computed',
+      path: { stratumId },
+    });
+  }
+
+  getNewStratumComputed(checklistId: string): CancelablePromise<StratumComputed> {
+    return this.doRequest<StratumComputed>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/bio/{checklistId}/new-stratum-computed',
+      path: { checklistId },
+    });
+  }
+
   saveBioStratum(checklistId: string, stratum: BioStratum): CancelablePromise<BioStratum> {
     return this.doRequest<BioStratum>(this.config, {
       method: 'POST',
@@ -113,13 +122,6 @@ export class ProtocolChecklistService extends HttpClient {
       url: '/v1/protocol-checklists/bio/strata/{stratumId}',
       path: { stratumId },
       query: { revisionCount },
-    });
-  }
-
-  nextStratumNumber(): CancelablePromise<{ stratumNumber: string }> {
-    return this.doRequest<{ stratumNumber: string }>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/bio/strata-next-number',
     });
   }
 
@@ -273,213 +275,6 @@ export class ProtocolChecklistService extends HttpClient {
       method: 'DELETE',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}',
       path: { protocol, checklistId, attachmentId },
-    });
-  }
-
-  getRipStreamOpening(checklistId: string): CancelablePromise<RiparianStreamOpening> {
-    return this.doRequest<RiparianStreamOpening>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/stream-opening',
-      path: { checklistId },
-    });
-  }
-
-  saveRipStreamOpening(
-    checklistId: string,
-    opening: RiparianStreamOpening,
-  ): CancelablePromise<RiparianStreamOpening> {
-    return this.doRequest<RiparianStreamOpening>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/stream-opening',
-      path: { checklistId },
-      body: opening,
-      mediaType: 'application/json',
-    });
-  }
-
-  getRipFinalComments(checklistId: string): CancelablePromise<RiparianFinalComments> {
-    return this.doRequest<RiparianFinalComments>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/final-comments',
-      path: { checklistId },
-    });
-  }
-
-  saveRipFinalComments(
-    checklistId: string,
-    comments: RiparianFinalComments,
-  ): CancelablePromise<RiparianFinalComments> {
-    return this.doRequest<RiparianFinalComments>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/final-comments',
-      path: { checklistId },
-      body: comments,
-      mediaType: 'application/json',
-    });
-  }
-
-  getRipFieldData(checklistId: string): CancelablePromise<RiparianFieldData> {
-    return this.doRequest<RiparianFieldData>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/field-data',
-      path: { checklistId },
-    });
-  }
-
-  saveRipFieldData(
-    checklistId: string,
-    data: RiparianFieldData,
-  ): CancelablePromise<RiparianFieldData> {
-    return this.doRequest<RiparianFieldData>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/field-data',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getRipOtherIndicators(checklistId: string): CancelablePromise<RiparianOtherIndicators> {
-    return this.doRequest<RiparianOtherIndicators>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/other-indicators',
-      path: { checklistId },
-    });
-  }
-
-  saveRipOtherIndicators(
-    checklistId: string,
-    data: RiparianOtherIndicators,
-  ): CancelablePromise<RiparianOtherIndicators> {
-    return this.doRequest<RiparianOtherIndicators>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/other-indicators',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getRipQuestions(checklistId: string): CancelablePromise<RiparianQuestions> {
-    return this.doRequest<RiparianQuestions>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/questions',
-      path: { checklistId },
-    });
-  }
-
-  saveRipQuestions(
-    checklistId: string,
-    data: RiparianQuestions,
-  ): CancelablePromise<RiparianQuestions> {
-    return this.doRequest<RiparianQuestions>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/questions',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getRipSpecificImpacts(checklistId: string): CancelablePromise<RiparianSpecificImpacts> {
-    return this.doRequest<RiparianSpecificImpacts>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/rip/{checklistId}/specific-impacts',
-      path: { checklistId },
-    });
-  }
-
-  saveRipSpecificImpacts(
-    checklistId: string,
-    data: RiparianSpecificImpacts,
-  ): CancelablePromise<RiparianSpecificImpacts> {
-    return this.doRequest<RiparianSpecificImpacts>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/rip/{checklistId}/specific-impacts',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getWaterSampleArea(checklistId: string): CancelablePromise<WaterSampleArea> {
-    return this.doRequest<WaterSampleArea>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/wtr/{checklistId}/sample-area',
-      path: { checklistId },
-    });
-  }
-
-  saveWaterSampleArea(
-    checklistId: string,
-    data: WaterSampleArea,
-  ): CancelablePromise<WaterSampleArea> {
-    return this.doRequest<WaterSampleArea>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/wtr/{checklistId}/sample-area',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getWaterSampleSite(checklistId: string): CancelablePromise<WaterSampleSite> {
-    return this.doRequest<WaterSampleSite>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/wtr/{checklistId}/sample-site',
-      path: { checklistId },
-    });
-  }
-
-  saveWaterSampleSite(
-    checklistId: string,
-    data: WaterSampleSite,
-  ): CancelablePromise<WaterSampleSite> {
-    return this.doRequest<WaterSampleSite>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/wtr/{checklistId}/sample-site',
-      path: { checklistId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getWaterAssessment(sampleSiteId: string): CancelablePromise<WaterAssessment> {
-    return this.doRequest<WaterAssessment>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/wtr/site/{sampleSiteId}/assessment',
-      path: { sampleSiteId },
-    });
-  }
-
-  saveWaterAssessment(
-    sampleSiteId: string,
-    data: WaterAssessment,
-  ): CancelablePromise<WaterAssessment> {
-    return this.doRequest<WaterAssessment>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/wtr/site/{sampleSiteId}/assessment',
-      path: { sampleSiteId },
-      body: data,
-      mediaType: 'application/json',
-    });
-  }
-
-  getWaterRange(sampleSiteId: string): CancelablePromise<WaterRange> {
-    return this.doRequest<WaterRange>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/wtr/site/{sampleSiteId}/range',
-      path: { sampleSiteId },
-    });
-  }
-
-  saveWaterRange(sampleSiteId: string, data: WaterRange): CancelablePromise<WaterRange> {
-    return this.doRequest<WaterRange>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/wtr/site/{sampleSiteId}/range',
-      path: { sampleSiteId },
-      body: data,
-      mediaType: 'application/json',
     });
   }
 }

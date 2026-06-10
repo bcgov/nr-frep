@@ -5,16 +5,7 @@ import ca.bc.gov.nrs.frep.dto.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratum;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianSpecificImpacts;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
-import ca.bc.gov.nrs.frep.dto.frep.WaterAssessment;
-import ca.bc.gov.nrs.frep.dto.frep.WaterRange;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleArea;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleSite;
+import ca.bc.gov.nrs.frep.dto.frep.StratumComputed;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistField;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.dto.frep.ProtocolChecklistSection;
@@ -131,9 +122,14 @@ public class ProtocolChecklistService {
     }
   }
 
-  public String nextStratumNumber() {
-    assertCanWrite();
-    return writeRepository.nextStratumNumber();
+  /** Read-only NAR + plots-completed for the FREP211 Stratum Summary header. */
+  public StratumComputed getStratumComputed(String stratumId) {
+    return writeRepository.getStratumComputed(stratumId);
+  }
+
+  /** NAR + plots-completed (0) for a not-yet-saved stratum on the Add form. */
+  public StratumComputed getNewStratumComputed(String checklistId) {
+    return writeRepository.getNewStratumComputed(checklistId);
   }
 
   // --- Biodiversity plots (FREP screen 212) ---
@@ -161,22 +157,6 @@ public class ProtocolChecklistService {
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
     }
-  }
-
-  // --- Riparian stream opening (FREP screen 230) ---
-
-  public RiparianStreamOpening getRipStreamOpening(String checklistId) {
-    RiparianStreamOpening opening = writeRepository.getRipStreamOpening(checklistId);
-    if (opening == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
-    }
-    return opening;
-  }
-
-  public RiparianStreamOpening saveRipStreamOpening(String checklistId, RiparianStreamOpening opening) {
-    assertCanWrite();
-    return writeRepository.saveRipStreamOpening(
-        opening.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
   }
 
   // --- Administration / Notes / Attachments (shared across bio / riparian / water) ---
@@ -251,118 +231,6 @@ public class ProtocolChecklistService {
     return writeRepository.getAttachments(checklistId, resourceType);
   }
 
-  // --- Riparian final comments (FREP screen 235) ---
-
-  public RiparianFinalComments getRipFinalComments(String checklistId) {
-    RiparianFinalComments comments = writeRepository.getRipFinalComments(checklistId);
-    if (comments == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
-    }
-    return comments;
-  }
-
-  public RiparianFinalComments saveRipFinalComments(String checklistId, RiparianFinalComments comments) {
-    assertCanWrite();
-    return writeRepository.saveRipFinalComments(
-        comments.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  // --- Riparian field data / other indicators / questions / specific impacts (231-234) ---
-
-  public RiparianFieldData getRipFieldData(String checklistId) {
-    RiparianFieldData data = writeRepository.getRipFieldData(checklistId);
-    if (data == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Riparian checklist not found: " + checklistId);
-    }
-    return data;
-  }
-
-  public RiparianFieldData saveRipFieldData(String checklistId, RiparianFieldData data) {
-    assertCanWrite();
-    return writeRepository.saveRipFieldData(
-        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public RiparianOtherIndicators getRipOtherIndicators(String checklistId) {
-    return writeRepository.getRipOtherIndicators(checklistId);
-  }
-
-  public RiparianOtherIndicators saveRipOtherIndicators(String checklistId, RiparianOtherIndicators data) {
-    assertCanWrite();
-    return writeRepository.saveRipOtherIndicators(
-        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public RiparianQuestions getRipQuestions(String checklistId) {
-    return writeRepository.getRipQuestions(checklistId);
-  }
-
-  public RiparianQuestions saveRipQuestions(String checklistId, RiparianQuestions data) {
-    assertCanWrite();
-    return writeRepository.saveRipQuestions(
-        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public RiparianSpecificImpacts getRipSpecificImpacts(String checklistId) {
-    return writeRepository.getRipSpecificImpacts(checklistId);
-  }
-
-  public RiparianSpecificImpacts saveRipSpecificImpacts(String checklistId, RiparianSpecificImpacts data) {
-    assertCanWrite();
-    return writeRepository.saveRipSpecificImpacts(
-        data.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  // --- Water (FREP screens 250-253) ---
-
-  public WaterSampleArea getWaterSampleArea(String checklistId) {
-    WaterSampleArea area = writeRepository.getWaterSampleArea(checklistId);
-    if (area == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Water checklist not found: " + checklistId);
-    }
-    return area;
-  }
-
-  public WaterSampleArea saveWaterSampleArea(String checklistId, WaterSampleArea area) {
-    assertCanWrite();
-    return writeRepository.saveWaterSampleArea(
-        area.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public WaterSampleSite getWaterSampleSite(String checklistId) {
-    WaterSampleSite site = writeRepository.getWaterSampleSite(checklistId);
-    if (site == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Water sample site not found: " + checklistId);
-    }
-    return site;
-  }
-
-  public WaterSampleSite saveWaterSampleSite(String checklistId, WaterSampleSite site) {
-    assertCanWrite();
-    return writeRepository.saveWaterSampleSite(
-        site.withChecklist(checklistId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public WaterAssessment getWaterAssessment(String sampleSiteId) {
-    return writeRepository.getWaterAssessment(sampleSiteId);
-  }
-
-  public WaterAssessment saveWaterAssessment(String sampleSiteId, WaterAssessment data) {
-    assertCanWrite();
-    return writeRepository.saveWaterAssessment(
-        data.withSampleSite(sampleSiteId), loggedUserHelper.getLoggedUserId());
-  }
-
-  public WaterRange getWaterRange(String sampleSiteId) {
-    return writeRepository.getWaterRange(sampleSiteId);
-  }
-
-  public WaterRange saveWaterRange(String sampleSiteId, WaterRange data) {
-    assertCanWrite();
-    return writeRepository.saveWaterRange(
-        data.withSampleSite(sampleSiteId), loggedUserHelper.getLoggedUserId());
-  }
-
   private String resolveResourceType(String protocolType) {
     return normalizeProtocolType(protocolType)
         .orElseThrow(() -> new ResponseStatusException(
@@ -396,8 +264,6 @@ public class ProtocolChecklistService {
     Map<String, String> protocolNames = loadProtocolNames();
     List<SectionDefinition> sections = switch (oracleProtocol) {
       case "SLB" -> bioSections(checklistId);
-      case "RIP" -> ripSections(checklistId);
-      case "WTR" -> wtrSections(checklistId);
       default -> List.of();
     };
 
@@ -433,10 +299,10 @@ public class ProtocolChecklistService {
     if (StringUtils.isBlank(protocolType)) {
       return Optional.empty();
     }
+    // Riparian (RIP) and Water (WTR) are out of scope — only Biodiversity (SLB) and the shared
+    // bio/chr protocol segments are recognised.
     return switch (protocolType.trim().toUpperCase()) {
       case "BIO", "SLB" -> Optional.of("SLB");
-      case "RIP" -> Optional.of("RIP");
-      case "WAT", "WTR" -> Optional.of("WTR");
       default -> Optional.empty();
     };
   }
@@ -498,41 +364,6 @@ public class ProtocolChecklistService {
         section("opening", "Opening info (FREP210)", () -> checklistRepository.getBioOpening(checklistId)),
         section("stratum", "Stratum summary (FREP211)", () -> checklistRepository.getBioStratum(checklistId)),
         section("plots", "Plots (FREP212)", () -> checklistRepository.getBioPlots(checklistId)),
-        section("notes", "Notes", ChecklistSectionData::emptySection),
-        section("attachments", "Attachments", ChecklistSectionData::emptySection)
-    );
-  }
-
-  private List<SectionDefinition> ripSections(String checklistId) {
-    // Other Indicators (FREP232) is intentionally omitted — the legacy tab bar
-    // (FrepTabs.getRiparianTabs) retired it. Administration (FREP301) leads, as in legacy.
-    return List.of(
-        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
-        section("stream", "Stream / opening (FREP230)", () -> checklistRepository.getRipStreamOpening(checklistId)),
-        section("field-data", "Field data (FREP231)", () -> checklistRepository.getRipFieldData(checklistId)),
-        section("questions", "Questions (FREP233)", () -> checklistRepository.getRipQuestions(checklistId)),
-        section("specific-impacts", "Specific impacts (FREP234)", () -> checklistRepository.getRipSpecificImpacts(checklistId)),
-        section("final-cmts", "Final comments (FREP235)", () -> checklistRepository.getRipFinalComments(checklistId)),
-        section("notes", "Notes", ChecklistSectionData::emptySection),
-        section("attachments", "Attachments", ChecklistSectionData::emptySection)
-    );
-  }
-
-  private List<SectionDefinition> wtrSections(String checklistId) {
-    ChecklistSectionData sampleSite = safeRead(() -> checklistRepository.getWaterSampleSite(checklistId));
-    String waterSampleSiteId = sampleSite.fields().stream()
-        .filter(entry -> "Water sample site id".equals(entry.getKey()))
-        .map(Map.Entry::getValue)
-        .findFirst()
-        .orElse("");
-
-    return List.of(
-        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
-        section("sample-area", "Sample area (FREP250)", () -> checklistRepository.getWaterSampleArea(checklistId)),
-        section("site-control", "Site control / details (FREP251)", () -> sampleSite),
-        section("assessment", "Assessment (FREP252)", () -> checklistRepository.getWaterAssessment(waterSampleSiteId)),
-        section("range", "Range (FREP253)", () -> checklistRepository.getWaterRange(waterSampleSiteId)),
-        section("summary", "Summary (FREP254)", () -> checklistRepository.getWaterSummary(checklistId)),
         section("notes", "Notes", ChecklistSectionData::emptySection),
         section("attachments", "Attachments", ChecklistSectionData::emptySection)
     );

@@ -109,6 +109,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  // Read-only label/value cells are shorter than input cells; top-align them so their
+  // labels line up with the input labels even when the grid is bottom-aligned (align-items: end).
+  align-self: start;
 }
 
 .protocol-checklist__multiline {
@@ -138,6 +141,120 @@
 
 .bio-master__detail {
   min-width: 0;
+}
+
+// FREP211 strata list — Add button toolbar (top-right) above a full-width table.
+.bio-strata {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bio-strata__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+// + icon leads the label, with a slim gap so the button stays compact.
+.bio-strata__add-icon {
+  margin-right: 0.25rem;
+}
+
+.bio-strata__table {
+  width: 100%;
+}
+
+// Compact stratum read-out (FREP212 edit view): the two values sit close together
+// instead of spreading across a full-width grid.
+.bio-plot__stratum-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 3rem;
+  margin-bottom: 1rem;
+}
+
+// FREP212 plots-table header: two aligned columns — Stratum selector / Stratum type on the
+// left, Add plot / # of plots completed on the right — with a tight gap between them. Row 1
+// bottom-aligns the button to the dropdown; the read-only cells top-align via their own rule.
+.bio-plot__header {
+  display: grid;
+  grid-template-columns: minmax(0, 28rem) auto;
+  align-items: end;
+  column-gap: 1.5rem;
+  row-gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+// FREP attachments upload card: header band + dashed drag-and-drop zone.
+.attach-card {
+  margin-top: 1.5rem;
+  border: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.attach-card__header {
+  padding: 1rem 1.25rem;
+  background: var(--#{vars.$bcgov-prefix}-layer-accent-01, #e8ebef);
+  border-bottom: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+  @include type.type-style('heading-03');
+}
+
+.attach-card__body {
+  padding: 1.25rem;
+}
+
+.attach-card__desc {
+  margin-bottom: 1rem;
+  max-width: 28rem;
+}
+
+.attach-drop {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 2px dashed var(--#{vars.$bcgov-prefix}-border-strong-01, #c6c6c6);
+  border-radius: 4px;
+  background: var(--#{vars.$bcgov-prefix}-field-01, #fff);
+}
+
+.attach-drop--over {
+  border-color: var(--#{vars.$bcgov-prefix}-border-interactive, #2563eb);
+  background: var(--#{vars.$bcgov-prefix}-highlight, #eff4ff);
+}
+
+.attach-drop__icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--#{vars.$bcgov-prefix}-layer-accent-01, #e0e0e0);
+}
+
+.attach-drop__text {
+  flex: 1;
+  margin: 0;
+  @include type.type-style('body-02');
+}
+
+// BEC search modal (FREP211): show normal right-aligned action buttons instead of the
+// default full-width 50/50 modal footer buttons.
+.bec-modal .cds--modal-footer {
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.bec-modal .cds--modal-footer .cds--btn {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+  min-width: 8rem;
+  height: 3rem;
 }
 
 // Riparian inline form (FREP230) — grouped fieldsets with a responsive grid of controls.
@@ -209,6 +326,12 @@
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+  }
+
+  // Row-label / value text uses the same label type as the rest of the form (was the
+  // larger default body font, which looked inconsistent next to the header + field labels).
+  td {
+    @include type.type-style('label-01');
   }
 
   thead th {

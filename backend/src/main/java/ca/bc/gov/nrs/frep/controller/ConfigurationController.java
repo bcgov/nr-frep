@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.controller;
 
+import ca.bc.gov.nrs.frep.dto.frep.BecRow;
 import ca.bc.gov.nrs.frep.dto.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
 import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
@@ -55,9 +56,51 @@ public class ConfigurationController {
     return ResponseEntity.ok(configurationService.getStreamClasses());
   }
 
+  @GetMapping("/strata-types")
+  public ResponseEntity<List<CodeOptionResponse>> getStrataTypes() {
+    return ResponseEntity.ok(configurationService.getStrataTypes());
+  }
+
+  @GetMapping("/bec-search")
+  public ResponseEntity<List<BecRow>> searchBec(
+      @RequestParam(name = "zone", required = false) String zone,
+      @RequestParam(name = "subzone", required = false) String subzone,
+      @RequestParam(name = "variant", required = false) String variant,
+      @RequestParam(name = "phase", required = false) String phase,
+      @RequestParam(name = "siteSeries", required = false) String siteSeries,
+      @RequestParam(name = "siteSeriesPhase", required = false) String siteSeriesPhase,
+      @RequestParam(name = "seral", required = false) String seral) {
+    return ResponseEntity.ok(
+        configurationService.searchBec(zone, subzone, variant, phase, siteSeries, siteSeriesPhase,
+            seral));
+  }
+
   @GetMapping("/checklist-answers")
   public ResponseEntity<List<CodeOptionResponse>> getChecklistAnswers(
       @RequestParam(name = "exclude", required = false) String exclude) {
     return ResponseEntity.ok(configurationService.getChecklistAnswers(exclude));
+  }
+
+  @GetMapping("/species")
+  public ResponseEntity<List<CodeOptionResponse>> getSpecies() {
+    return ResponseEntity.ok(configurationService.getSpeciesCodes());
+  }
+
+  @GetMapping("/wildlife-tree-decay")
+  public ResponseEntity<List<CodeOptionResponse>> getWildlifeTreeDecay() {
+    return ResponseEntity.ok(configurationService.getWildlifeTreeDecayCodes());
+  }
+
+  @GetMapping("/cwd-decay")
+  public ResponseEntity<List<CodeOptionResponse>> getCwdDecay() {
+    return ResponseEntity.ok(configurationService.getCwdDecayCodes());
+  }
+
+  /** Evaluators for a checklist (defaults to biodiversity/SLB) — the FREP212 "Evaluated By" list. */
+  @GetMapping("/evaluators")
+  public ResponseEntity<List<CodeOptionResponse>> getEvaluators(
+      @RequestParam(name = "checklistId") String checklistId,
+      @RequestParam(name = "protocol", required = false, defaultValue = "SLB") String protocol) {
+    return ResponseEntity.ok(configurationService.getEvaluators(checklistId, protocol));
   }
 }

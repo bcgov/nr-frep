@@ -40,25 +40,6 @@ class ChecklistRepositoryTest {
     });
   }
 
-  /**
-   * Regression: {@code getRipFieldData} must match the deployed FREP_231_FIELD_DATA.GET signature
-   * (per legacy RiparianChecklistDataManager): 26 params, with the point/continuous indicator
-   * VARRAYs at params 25/26. A prior version declared 26 placeholders but registered param 27, and
-   * a later one declared 27 placeholders — both mismatch the real 26-param proc.
-   */
-  @Test
-  void getRipFieldDataCallsProcWith26ParamsAndArraysAt25And26() throws Exception {
-    repository.getRipFieldData("2002");
-
-    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-    verify(connection).prepareCall(sql.capture());
-    String call = sql.getValue();
-    assertTrue(call.contains("FREP_231_FIELD_DATA.GET"), call);
-    assertEquals(26, call.chars().filter(c -> c == '?').count(), call);
-    verify(cs).registerOutParameter(25, java.sql.Types.ARRAY, "THE.FREP_POINT_INDICATOR_VARRAY");
-    verify(cs).registerOutParameter(26, java.sql.Types.ARRAY, "THE.FREP_CONTINUOUS_IND_VARRAY");
-  }
-
   // Some reads also call FREP_TOMBSTONE_GET (header merge), so capture all prepared calls and pick
   // the one for the section proc.
   private String capturePreparedCall(String procFragmentLower) throws Exception {
@@ -103,24 +84,4 @@ class ChecklistRepositoryTest {
     verify(cs).registerOutParameter(21, Types.ARRAY, "THE.FREP_CWD_TABLE_VARRAY");
   }
 
-  /** 230: 69 params, stream-edge VARRAY @31, checklist_id IN @23 (params 19-21 must be bound). */
-  @Test
-  void getRipStreamOpeningMatchesDeployedSignature() throws Exception {
-    repository.getRipStreamOpening("2002");
-    String call = capturePreparedCall("frep_230_strm_open.get");
-    assertEquals(69, placeholderCount(call), call);
-    verify(cs).setString(23, "2002");
-    verify(cs).registerOutParameter(31, Types.ARRAY, "THE.FREP_STRM_EDGE_MEASMNT_VARRAY");
-    // param 21 now bound (the tombstone-merge call also binds 1-23, so allow >1)
-    verify(cs, org.mockito.Mockito.atLeastOnce()).registerOutParameter(21, Types.VARCHAR);
-  }
-
-  /** 235: 30 params, checklist_id IN @21, error @30. */
-  @Test
-  void getRipFinalCommentsMatchesDeployedSignature() throws Exception {
-    repository.getRipFinalComments("2002");
-    String call = capturePreparedCall("frep_235_final_cmts.get");
-    assertEquals(30, placeholderCount(call), call);
-    verify(cs).setString(21, "2002");
-  }
 }

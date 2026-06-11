@@ -295,6 +295,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
               />
               <Button
                 kind="tertiary"
+                size="lg"
                 renderIcon={Add}
                 disabled={busy || !selectedEvaluator}
                 onClick={() => void addMember()}

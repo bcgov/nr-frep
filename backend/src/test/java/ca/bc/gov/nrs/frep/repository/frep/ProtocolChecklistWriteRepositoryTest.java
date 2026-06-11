@@ -14,27 +14,6 @@ import ca.bc.gov.nrs.frep.dto.frep.BioStandRow;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratum;
 import ca.bc.gov.nrs.frep.dto.frep.BioWindthrowTreatment;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.dto.frep.RipContinuousIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipNoAnswerRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOpenSpecImpactRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOtherIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOtherSpecImpactRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipPointIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipQuestionRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipStreamEdgeRow;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianSpecificImpacts;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
-import ca.bc.gov.nrs.frep.dto.frep.WaterAssessment;
-import ca.bc.gov.nrs.frep.dto.frep.WaterRange;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleArea;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleSite;
-import ca.bc.gov.nrs.frep.dto.frep.WtrAccessRoadRow;
-import ca.bc.gov.nrs.frep.dto.frep.WtrAssessmentRow;
-import ca.bc.gov.nrs.frep.dto.frep.WtrDisturbanceRow;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -174,6 +153,62 @@ class ProtocolChecklistWriteRepositoryTest {
   }
 
   @Test
+  void saveStratumWithNoWindthrowRowsBackfillsFromCodeCatalogue() throws Exception {
+    when(cs.getString(62)).thenReturn(null); // no error
+    when(cs.getString(1)).thenReturn("900");
+    when(cs.getString(60)).thenReturn("3");
+
+    BioStratum in = new BioStratum(
+        "900", "1001", "MAT", "1", "2024-05-01",
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null,
+        "2",
+        List.of()); // no windthrow rows
+
+    repository.saveBioStratum(in, "idir");
+
+    // An empty array would make SAVE_STRATUM's FIRST..LAST loop bounds NULL (ORA-06502),
+    // so the repo backfills from the windthrow-code catalogue rather than send empty.
+    verify(jdbcTemplate).queryForList(anyString(), eq(String.class));
+  }
+
+  @Test
+  void getStratumComputedReadsNarAndPlotsViaDirectQueries() throws Exception {
+    // checklist id (queryForObject String) and resource value id (query) resolution.
+    when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any())).thenReturn("1001");
+    lenient()
+        .when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any()))
+        .thenReturn(List.of("500")) // resolveResourceValueId
+        .thenReturn(List.of("12.3")); // NAR row
+    // plots-completed COUNT(*).
+    when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any())).thenReturn(2L);
+
+    var out = repository.getStratumComputed("900");
+
+    assertEquals("12.3", out.nar());
+    assertEquals("2", out.plotsCompleted());
+  }
+
+  @Test
+  void getStratumComputedReturnsZeroPlotsAndNoNarWhenNothingFound() throws Exception {
+    when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any())).thenReturn("1001");
+    lenient()
+        .when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any()))
+        .thenReturn(List.of("500")) // resolveResourceValueId
+        .thenReturn(List.of()); // no NAR row → null, not an exception
+    when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any())).thenReturn(0L);
+
+    var out = repository.getStratumComputed("900");
+
+    assertEquals("0", out.plotsCompleted()); // COUNT(*) is never null
+    assertEquals(null, out.nar());
+  }
+
+  @Test
   void deleteStratumCallsDeleteProc() throws Exception {
     when(cs.getString(3)).thenReturn("");
 
@@ -229,177 +264,21 @@ class ProtocolChecklistWriteRepositoryTest {
   }
 
   @Test
-  void saveRipStreamOpeningWires48ParamsAndStreamEdgeArray() throws Exception {
-    when(cs.getString(48)).thenReturn(null); // no error
-    when(cs.getString(1)).thenReturn("2002"); // checklist id echoed
-    when(cs.getString(46)).thenReturn("4"); // revision incremented
+  void saveAttachmentInsertsViaBlobForUpdateThenWritesContentWithNewId() throws Exception {
+    // SAVE only UPDATEs by id, so a new attachment must first be inserted via GET_BLOB_FOR_UPDATE
+    // (which returns the new id @1); SAVE then writes the content onto that id.
+    when(cs.getString(1)).thenReturn("777"); // new attachment id from GET_BLOB_FOR_UPDATE
+    when(cs.getString(10)).thenReturn(null); // no error on either call
+    when(connection.createBlob()).thenReturn(org.mockito.Mockito.mock(java.sql.Blob.class));
 
-    RiparianStreamOpening in = new RiparianStreamOpening(
-        "2002", "S1", null, null, null, null, null, null, // 1-8 (checklistId, sampleNumber, ...)
-        null, null, null, null, null, null, null, null, null, null, null, null, null, // 9-21 scalar
-        null, null, null, null, null, null, // 22-27 RMA
-        null, null, null, null, null, null, null, null, // 28-35 RRZ
-        null, null, null, null, null, null, // 36-41 RMZ
-        null, // 42 plnRiparianStrNaInd
-        null, // 43 invasivePlantIndicator
-        "cmt", // 44 invasivePlantComment
-        "3", // 45 revisionCount
-        List.of(new RipStreamEdgeRow("LFT", "2.5", null, "1")));
-
-    repository.saveRipStreamOpening(in, "idir");
+    repository.saveAttachment("1001", "SLB", "f.pdf", "a note", "application/pdf",
+        new byte[] {1, 2, 3}, "idir");
 
     verify(connection).prepareCall(
-        "{call FREP_230_STRM_OPEN.SAVE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}");
-    verify(cs).setString(2, "S1"); // sample number
-    verify(cs).setString(45, "cmt"); // invasive plant comment
-    verify(cs).setString(47, "idir"); // update userid
-    verify(cs).registerOutParameter(48, Types.VARCHAR); // error message
-    verify(cs).registerOutParameter(9, Types.ARRAY, "THE.FREP_STRM_EDGE_MEASMNT_VARRAY");
-    verify(oracleConnection).createStruct(eq("THE.FREP_STRM_EDGE_MEASMNT_OBJECT"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_STRM_EDGE_MEASMNT_VARRAY"), any());
-  }
-
-  @Test
-  void saveRipFinalCommentsWiresTenParamsAndEchoesIdentity() throws Exception {
-    when(cs.getString(10)).thenReturn(null);
-    when(cs.getString(1)).thenReturn("2002");
-    when(cs.getString(8)).thenReturn("4");
-
-    RiparianFinalComments in = new RiparianFinalComments(
-        "2002", "conc", "spec", "prob", "map", "leave", "recomm", "3");
-
-    RiparianFinalComments out = repository.saveRipFinalComments(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_235_FINAL_CMTS.save(?,?,?,?,?,?,?,?,?,?)}");
-    verify(cs).setString(2, "conc");
-    verify(cs).setString(7, "recomm");
-    verify(cs).setString(9, "idir");
-    verify(cs).registerOutParameter(10, Types.VARCHAR);
-    assertEquals("2002", out.checklistId());
-    assertEquals("4", out.revisionCount());
-  }
-
-  @Test
-  void saveRipFieldDataWiresProcAndBothIndicatorArrays() throws Exception {
-    when(cs.getString(6)).thenReturn(null);
-
-    RiparianFieldData in = new RiparianFieldData("2002", "N",
-        List.of(new RipPointIndRow("1", "Q1", "PT", "T1", "1", "2", "3", "4", "5", "6", "th", "3.5",
-            "1")),
-        List.of(new RipContinuousIndRow("9", "Q2", "CT", "q", "10", "c", "th", "1")));
-
-    repository.saveRipFieldData(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_231_FIELD_DATA.SAVE(?,?,?,?,?,?)}");
-    verify(cs).setString(2, "N");
-    verify(cs).setString(5, "idir");
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_POINT_INDICATOR_VARRAY"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_CONTINUOUS_IND_VARRAY"), any());
-  }
-
-  @Test
-  void saveRipOtherIndicatorsWiresProcAndArray() throws Exception {
-    when(cs.getString(4)).thenReturn(null);
-
-    RiparianOtherIndicators in = new RiparianOtherIndicators("2002",
-        List.of(new RipOtherIndRow("T1", "S1", "N", "q", "5", "Y", "1", null, null)));
-
-    repository.saveRipOtherIndicators(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_232_OTHER_INDS.save(?,?,?,?)}");
-    verify(cs).setString(3, "idir");
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_OTHER_INDICATOR_VARRAY"), any());
-  }
-
-  @Test
-  void saveRipQuestionsCallsBothProcsAndArrays() throws Exception {
-    when(cs.getString(4)).thenReturn(null);
-
-    RiparianQuestions in = new RiparianQuestions("2002",
-        List.of(new RipQuestionRow("2002", "10", "Q1", null, null, null, null, null, null, null,
-            "YES", "1", null, null)),
-        List.of(new RipNoAnswerRow("3", "2002", "10", "Q1", "TYPE", null, "1", "Y", "1", null,
-            null)));
-
-    repository.saveRipQuestions(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_233_QUESTIONS.save_responses(?,?,?,?)}");
-    verify(connection).prepareCall("{call FREP_233_QUESTIONS.save_no_answers(?,?,?,?)}");
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_QUESTIONS_VARRAY"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_NO_ANSWERS_VARRAY"), any());
-  }
-
-  @Test
-  void saveRipSpecificImpactsWiresProcAndBothArrays() throws Exception {
-    when(cs.getString(3)).thenReturn(null);
-
-    RiparianSpecificImpacts in = new RiparianSpecificImpacts("2002",
-        List.of(new RipOpenSpecImpactRow("1", "TYPE", "Y", "1")),
-        List.of(new RipOtherSpecImpactRow("2", "desc", "N", "1")));
-
-    repository.saveRipSpecificImpacts(in, "idir");
-
-    verify(connection).prepareCall(
-        "{call FREP_234_SPECIFIC_IMPACTS.SAVE(?,?,?,?,?)}");
-    verify(cs).registerOutParameter(3, Types.VARCHAR);
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_OPEN_SPEC_IMPACT_VARRAY"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_OTHER_SPEC_IMPACT_VARRAY"), any());
-  }
-
-  @Test
-  void saveWaterSampleAreaWiresObjectAndChildArrays() throws Exception {
-    WaterSampleArea in = new WaterSampleArea(
-        "900", null, null, null, null, null, null, null, null, null, // 0-9
-        null, null, null, null, null, null, null, null, null, null, // 10-19
-        null, null, null, null, null, null, null, null, null, null, // 20-29
-        null, null, null, null, null, "2", null, null, // 30-37 (35 = revisionCount)
-        List.of(new WtrDisturbanceRow(null, "900", "D1", "A1", "2", "1", null, null)),
-        List.of(new WtrAccessRoadRow(null, "900", "R1", "desc", "S1", "5", "3", "1", null, null)));
-
-    repository.saveWaterSampleArea(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_250_WATER_CHKLST_SAVE(?,?,?)}");
-    verify(oracleConnection).createStruct(eq("THE.FREP_WTR_CHKLST_OBJECT"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_WTR_ACCESS_ROAD_VARRAY"), any());
-    verify(oracleConnection).createOracleArray(eq("THE.FREP_WTR_DISTURBANCE_VARRAY"), any());
-  }
-
-  @Test
-  void saveWaterSampleSiteWiresObject() throws Exception {
-    WaterSampleSite in = new WaterSampleSite(
-        "500", "900", null, "T", null, null, null, "1", null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, "2", null, null);
-
-    repository.saveWaterSampleSite(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_251_SAMPLE_SITE_SAVE(?)}");
-    verify(oracleConnection).createStruct(eq("THE.FREP_WTR_SAMPLE_SITE_OBJECT"), any());
-  }
-
-  @Test
-  void saveWaterAssessmentWiresProcAndBothArrays() throws Exception {
-    WaterAssessment in = new WaterAssessment("500",
-        List.of(new WtrAssessmentRow("500", "G", "d", "1", "C1", "cd", "Y", "1", null, null)),
-        List.of(new WtrAssessmentRow("500", "G", "d", "1", "S1", "sd", "N", "1", null, null)));
-
-    repository.saveWaterAssessment(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_WATER_ASSESSMENT.save(?,?,?)}");
-    verify(cs, org.mockito.Mockito.atLeastOnce()).setString(1, "500");
-    verify(oracleConnection, org.mockito.Mockito.atLeast(2))
-        .createOracleArray(eq("THE.FREP_WTR_ASSESSMENT_VW_VARRAY"), any());
-  }
-
-  @Test
-  void saveWaterRangeWiresProcAndArray() throws Exception {
-    WaterRange in = new WaterRange("500",
-        List.of(new WtrAssessmentRow("500", "G", "d", "1", "R1", "rd", "Y", "1", null, null)));
-
-    repository.saveWaterRange(in, "idir");
-
-    verify(connection).prepareCall("{call FREP_WATER_RANGE.save(?,?)}");
-    verify(cs, org.mockito.Mockito.atLeastOnce()).setString(1, "500");
-    verify(oracleConnection, org.mockito.Mockito.atLeastOnce())
-        .createOracleArray(eq("THE.FREP_WTR_ASSESSMENT_VW_VARRAY"), any());
+        "{call FREP_CHECKLIST_ATTACHMENTS.GET_BLOB_FOR_UPDATE(?,?,?,?,?,?,?,?,?,?)}");
+    verify(connection).prepareCall("{call FREP_CHECKLIST_ATTACHMENTS.SAVE(?,?,?,?,?,?,?,?,?,?)}");
+    verify(cs).setString(1, "777"); // SAVE targets the id created in step 1
+    // file name is set on both the create + the content-write calls.
+    verify(cs, org.mockito.Mockito.times(2)).setString(4, "f.pdf");
   }
 }

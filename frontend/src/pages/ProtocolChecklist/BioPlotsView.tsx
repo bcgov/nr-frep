@@ -1,7 +1,22 @@
-import { Add, TrashCan } from '@carbon/icons-react';
-import { Button, Checkbox, Select, SelectItem, SkeletonText, TextInput } from '@carbon/react';
+import { Add, Edit, TrashCan } from '@carbon/icons-react';
+import {
+  Button,
+  Checkbox,
+  InlineNotification,
+  Select,
+  SelectItem,
+  SkeletonText,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TextInput,
+} from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import type { CodeOption } from '@/types/configuration';
 import type {
   BioCwdRow,
   BioPlot,
@@ -14,10 +29,12 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 
 /**
- * Biodiversity Plots section (FREP212) — edited inline in place (no separate page). Plots are
- * stratum-scoped, so a Stratum selector filters the plot rail (mirroring the legacy FREP212
- * stratum dropdown). Pick (or add) a plot, then edit its scalar fields, the stand (tree) table,
- * and the coarse-woody-debris table. Save round-trips the full DTO + revision count.
+ * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
+ * selector drives the plot table; pick (or add) a plot, then edit its scalar fields, the stand
+ * (tree) table, and the coarse-woody-debris table. Mirrors the legacy frep212BIOPlots.jsp:
+ * coded dropdowns (species / WT-class / CWD-decay / evaluator / UTM zone), the "No UTM signal"
+ * checkbox that disables the UTM fields, conditional stand/CWD tables, easting/northing digit
+ * checks, and the stratum type + "# plots completed of expected" read-out.
  */
 
 type Props = {
@@ -26,45 +43,42 @@ type Props = {
   submitted: boolean;
 };
 
-type FieldDef = { key: string; label: string };
+// Sub-table columns. `kind` picks the cell control: index = read-only row number,
+// select-* = coded dropdown, otherwise a (length-capped) text input.
+type Col = {
+  key: string;
+  label: string;
+  kind?: 'index' | 'select-spp' | 'select-wt' | 'select-cwd';
+  maxLength?: number;
+};
 
-const PLOT_FIELDS: FieldDef[] = [
-  { key: 'plotNumber', label: 'Plot number' },
-  { key: 'assessorName', label: 'Assessor name' },
-  { key: 'utmSignal', label: 'UTM signal' },
-  { key: 'utmZone', label: 'UTM zone' },
-  { key: 'utmEasting', label: 'UTM easting' },
-  { key: 'utmNorthing', label: 'UTM northing' },
-  { key: 'basalAreaFactor', label: 'Basal area factor' },
-  { key: 'fixedAreaRadius', label: 'Fixed area radius' },
-  { key: 'fullCountArea', label: 'Full count area' },
-  { key: 'firstLegTransect', label: 'First leg transect' },
-  { key: 'secondLegTransect', label: 'Second leg transect' },
-  { key: 'plotComment', label: 'Plot comment' },
+// Legacy column order: Tree# | Spp. | WT Class | DBH (cm) | Ht (m) | Comments.
+const STAND_COLS: Col[] = [
+  { key: 'treeNumber', label: 'Tree #', kind: 'index' },
+  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp' },
+  { key: 'decayClassCode', label: 'WT Class', kind: 'select-wt' },
+  { key: 'dbh', label: 'DBH (cm)', maxLength: 5 },
+  { key: 'height', label: 'Ht (m)', maxLength: 4 },
+  { key: 'comments', label: 'Comments', maxLength: 50 },
 ];
 
-const PLOT_INDS: FieldDef[] = [
-  { key: 'treeIndicator', label: 'Tree plot' },
-  { key: 'cwdTransectIndicator', label: 'CWD transect' },
+// Legacy column order: Log# | Spp. | Decay Class | Dia. (cm) | Length (m) | Comments.
+const CWD_COLS: Col[] = [
+  { key: 'logNumber', label: 'Log #', kind: 'index' },
+  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp' },
+  { key: 'decayClassCode', label: 'Decay Class', kind: 'select-cwd' },
+  { key: 'logDiameter', label: 'Dia. (cm)', maxLength: 5 },
+  { key: 'logLength', label: 'Length (m)', maxLength: 4 },
+  { key: 'comments', label: 'Comments', maxLength: 50 },
 ];
 
-const STAND_FIELDS: FieldDef[] = [
-  { key: 'speciesCode', label: 'Species code' },
-  { key: 'treeNumber', label: 'Tree #' },
-  { key: 'dbh', label: 'DBH' },
-  { key: 'height', label: 'Height' },
-  { key: 'decayClassCode', label: 'Decay class' },
-  { key: 'comments', label: 'Comments' },
-];
+const UTM_ZONE_OPTIONS: CodeOption[] = ['7', '8', '9', '10', '11'].map((z) => ({
+  code: z,
+  description: z,
+}));
 
-const CWD_FIELDS: FieldDef[] = [
-  { key: 'speciesCode', label: 'Species code' },
-  { key: 'logNumber', label: 'Log #' },
-  { key: 'logDiameter', label: 'Log diameter' },
-  { key: 'logLength', label: 'Log length' },
-  { key: 'decayClassCode', label: 'Decay class' },
-  { key: 'comments', label: 'Comments' },
-];
+const TABLE_MAX = 100;
+const TABLE_WARN = 50;
 
 const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
@@ -74,6 +88,14 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [current, setCurrent] = useState<BioPlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  // Reference data for the coded dropdowns. `evaluators` is null until loaded so we can show the
+  // "no evaluator yet" notice only after the lookup resolves.
+  const [species, setSpecies] = useState<CodeOption[]>([]);
+  const [wtDecay, setWtDecay] = useState<CodeOption[]>([]);
+  const [cwdDecay, setCwdDecay] = useState<CodeOption[]>([]);
+  const [strataTypes, setStrataTypes] = useState<CodeOption[]>([]);
+  const [evaluators, setEvaluators] = useState<CodeOption[] | null>(null);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -106,7 +128,39 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return () => {
       cancelled = true;
     };
-  }, [checklistId, reportError]);
+    // Keyed on checklistId only — reportError is recreated each render and would re-run
+    // (and cancel) the load before it settles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklistId]);
+
+  // Reference data (coded dropdowns + the checklist's evaluator list).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      API.configuration.getSpecies(),
+      API.configuration.getWildlifeTreeDecay(),
+      API.configuration.getCwdDecay(),
+      API.configuration.getStrataTypes(),
+      API.configuration.getEvaluators(checklistId),
+    ])
+      .then(([sp, wt, cwd, st, ev]) => {
+        if (cancelled) return;
+        setSpecies(sp);
+        setWtDecay(wt);
+        setCwdDecay(cwd);
+        setStrataTypes(st);
+        setEvaluators(ev);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setEvaluators([]);
+        reportError("We couldn't load the plot reference data", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklistId]);
 
   const loadPlots = useCallback(async () => {
     const list = await API.protocolChecklist.listBioPlots(stratumId);
@@ -114,8 +168,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return list;
   }, [stratumId]);
 
-  // Reload the plot rail whenever the selected stratum changes. (No stratum selected yet → nothing
-  // to load; `rows` already starts empty, so we avoid a synchronous setState here.)
+  // Reload the plot table whenever the selected stratum changes.
   useEffect(() => {
     if (!stratumId) return;
     let cancelled = false;
@@ -130,7 +183,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return () => {
       cancelled = true;
     };
-  }, [stratumId, reportError]);
+    // Keyed on stratumId only — see the strata-load effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stratumId]);
 
   const readOnly = !canEdit || submitted;
 
@@ -138,6 +193,19 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     ((current as Record<string, unknown>)?.[key] as string | undefined) ?? '';
   const set = (key: string, value: string) =>
     setCurrent((prev) => (prev ? ({ ...prev, [key]: value } as BioPlot) : prev));
+
+  // "No UTM Signal Available" is the legacy checkbox: checked ⇔ utm_signal = 'N', which disables
+  // the UTM zone/easting/northing fields.
+  const noUtmSignal = get('utmSignal') === 'N';
+
+  // --- computed stratum read-out (legacy "Stratum Identification" block) ---
+  const selectedStratum = strata.find((s) => s.stratumId === stratumId);
+  const stratumTypeLabel =
+    strataTypes.find((t) => t.code === selectedStratum?.strataTypeCode)?.description ??
+    selectedStratum?.strataTypeCode ??
+    '';
+  const plotsExpected = selectedStratum?.plotCount ?? '';
+  const plotsCompleted = String(rows.length);
 
   const select = async (plotId: string) => {
     setBusy(true);
@@ -159,12 +227,35 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       cwdTable: [],
     });
 
+  // Easting/Northing digit checks mirror the legacy onblur validation.
+  const validate = (): string[] => {
+    const errs: string[] = [];
+    if (!noUtmSignal && get('utmEasting') && !/^\d{6}$/.test(get('utmEasting'))) {
+      errs.push('Easting must be 6 digits.');
+    }
+    if (!noUtmSignal && get('utmNorthing') && !/^\d{7}$/.test(get('utmNorthing'))) {
+      errs.push('Northing must be 7 digits.');
+    }
+    return errs;
+  };
+
   const handleSave = async () => {
     if (!current) return;
+    const errs = validate();
+    if (errs.length > 0) {
+      reportError('Please fix the following', new Error(errs.join(' ')));
+      return;
+    }
     setBusy(true);
     try {
-      const saved = await API.protocolChecklist.saveBioPlot(stratumId, current);
-      setCurrent(saved);
+      // Tree#/Log# are the row order (legacy shows the row index, not an editable field).
+      const payload: BioPlot = {
+        ...current,
+        standTable: (current.standTable ?? []).map((r, i) => ({ ...r, treeNumber: String(i + 1) })),
+        cwdTable: (current.cwdTable ?? []).map((r, i) => ({ ...r, logNumber: String(i + 1) })),
+      };
+      await API.protocolChecklist.saveBioPlot(stratumId, payload);
+      setCurrent(null); // on save success, close the form and return to the table
       await loadPlots();
       display({ kind: 'success', title: 'Plot saved', timeout: 4000 });
     } catch (err) {
@@ -174,15 +265,11 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!current?.plotId) {
-      setCurrent(null);
-      return;
-    }
+  const deleteRow = async (row: BioPlotRow) => {
+    if (!row.plotId) return;
     setBusy(true);
     try {
-      await API.protocolChecklist.deleteBioPlot(current.plotId, current.revisionCount ?? '');
-      setCurrent(null);
+      await API.protocolChecklist.deleteBioPlot(row.plotId, row.revisionCount ?? '');
       await loadPlots();
       display({ kind: 'success', title: 'Plot deleted', timeout: 4000 });
     } catch (err) {
@@ -190,6 +277,25 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Legacy row caps: hard stop at 100, confirm once past 50.
+  const canAddRow = (count: number, noun: string): boolean => {
+    if (count >= TABLE_MAX) {
+      display({
+        kind: 'warning',
+        title: `Max of ${TABLE_MAX} ${noun} rows reached`,
+        timeout: 5000,
+      });
+      return false;
+    }
+    if (
+      count >= TABLE_WARN &&
+      !window.confirm('Are you sure you REALLY NEED to document this many?')
+    ) {
+      return false;
+    }
+    return true;
   };
 
   // --- stand-table sub-collection ---
@@ -204,8 +310,10 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           }
         : prev,
     );
-  const addStand = () =>
+  const addStand = () => {
+    if (!canAddRow((current?.standTable ?? []).length, 'Stand Table')) return;
     setCurrent((prev) => (prev ? { ...prev, standTable: [...(prev.standTable ?? []), {}] } : prev));
+  };
   const removeStand = (index: number) =>
     setCurrent((prev) =>
       prev ? { ...prev, standTable: (prev.standTable ?? []).filter((_, i) => i !== index) } : prev,
@@ -221,49 +329,147 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           }
         : prev,
     );
-  const addCwd = () =>
+  const addCwd = () => {
+    if (!canAddRow((current?.cwdTable ?? []).length, 'Coarse Woody Debris')) return;
     setCurrent((prev) => (prev ? { ...prev, cwdTable: [...(prev.cwdTable ?? []), {}] } : prev));
+  };
   const removeCwd = (index: number) =>
     setCurrent((prev) =>
       prev ? { ...prev, cwdTable: (prev.cwdTable ?? []).filter((_, i) => i !== index) } : prev,
     );
 
-  const plotField = (key: string, label: string): ReactNode =>
+  const colOptions = (kind: Col['kind']): CodeOption[] =>
+    kind === 'select-spp'
+      ? species
+      : kind === 'select-wt'
+        ? wtDecay
+        : kind === 'select-cwd'
+          ? cwdDecay
+          : [];
+
+  // --- field render helpers ---
+  const roField = (label: string, value: string): ReactNode => (
+    <div className="protocol-checklist__field">
+      <span className="protocol-checklist__label">{label}</span>
+      <span className="protocol-checklist__value">{value || '—'}</span>
+    </div>
+  );
+
+  const textField = (
+    key: string,
+    label: string,
+    maxLength?: number,
+    disabled = false,
+  ): ReactNode =>
     readOnly ? (
-      <div className="protocol-checklist__field" key={key}>
-        <span className="protocol-checklist__label">{label}</span>
-        <span className="protocol-checklist__value">{get(key) || '—'}</span>
-      </div>
+      roField(label, get(key))
     ) : (
       <TextInput
-        key={key}
         id={`plot-${key}`}
         labelText={label}
         value={get(key)}
+        maxLength={maxLength}
+        disabled={disabled}
         onChange={(e) => set(key, e.target.value)}
       />
     );
 
-  // Renders one child-collection grid (stand or CWD). Rows are accessed by string key; the change
-  // callback receives (index, key, value) so each caller keeps its own typed mutator.
+  const selectField = (
+    key: string,
+    label: string,
+    options: CodeOption[],
+    disabled = false,
+  ): ReactNode =>
+    readOnly ? (
+      roField(label, options.find((o) => o.code === get(key))?.description ?? get(key))
+    ) : (
+      <Select
+        id={`plot-${key}`}
+        labelText={label}
+        value={get(key)}
+        disabled={disabled}
+        onChange={(e) => set(key, e.target.value)}
+      >
+        <SelectItem value="" text="—" />
+        {options.map((o) => (
+          <SelectItem key={o.code} value={o.code} text={o.description} />
+        ))}
+      </Select>
+    );
+
+  const checkField = (key: string, label: string): ReactNode =>
+    readOnly ? (
+      roField(label, get(key) === 'Y' ? 'Yes' : 'No')
+    ) : (
+      <Checkbox
+        id={`plot-${key}`}
+        labelText={label}
+        checked={get(key) === 'Y'}
+        onChange={(_e, { checked }) => set(key, checked ? 'Y' : 'N')}
+      />
+    );
+
+  // One sub-table cell control, driven by the column's `kind`.
+  const cell = (
+    caption: string,
+    col: Col,
+    row: Record<string, string | undefined>,
+    index: number,
+    onChange: (index: number, key: string, value: string) => void,
+  ): ReactNode => {
+    if (col.kind === 'index') return String(index + 1); // read-only row number
+    const value = row[col.key] ?? '';
+    if (col.kind) {
+      const options = colOptions(col.kind);
+      if (readOnly) return options.find((o) => o.code === value)?.description ?? value ?? '—';
+      return (
+        <Select
+          id={`${caption}-${index}-${col.key}`}
+          labelText={col.label}
+          hideLabel
+          size="sm"
+          value={value}
+          onChange={(e) => onChange(index, col.key, e.target.value)}
+        >
+          <SelectItem value="" text="—" />
+          {options.map((o) => (
+            <SelectItem key={o.code} value={o.code} text={o.description} />
+          ))}
+        </Select>
+      );
+    }
+    if (readOnly) return value || '—';
+    return (
+      <TextInput
+        id={`${caption}-${index}-${col.key}`}
+        labelText={col.label}
+        hideLabel
+        size="sm"
+        maxLength={col.maxLength}
+        value={value}
+        onChange={(e) => onChange(index, col.key, e.target.value)}
+      />
+    );
+  };
+
+  // One child-collection grid (stand or CWD).
   const childGrid = (
     caption: string,
-    fields: FieldDef[],
+    cols: Col[],
     items: Array<Record<string, string | undefined>>,
     keyOf: (index: number) => string,
     onChange: (index: number, key: string, value: string) => void,
-    removeRow: (index: number) => void,
+    removeRowAt: (index: number) => void,
     addRow: () => void,
     addLabel: string,
   ): ReactNode => (
-    <fieldset className="rip-form__group">
-      <legend>{caption}</legend>
+    <>
       <table className="rip-field-grid">
         <thead>
           <tr>
-            {fields.map((f) => (
-              <th scope="col" key={f.key}>
-                {f.label}
+            {cols.map((c) => (
+              <th scope="col" key={c.key}>
+                {c.label}
               </th>
             ))}
             {!readOnly && <th aria-label="Actions" />}
@@ -272,26 +478,13 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={fields.length + (readOnly ? 0 : 1)}>None.</td>
+              <td colSpan={cols.length + (readOnly ? 0 : 1)}>None.</td>
             </tr>
           )}
           {items.map((row, index) => (
             <tr key={keyOf(index)}>
-              {fields.map((f) => (
-                <td key={f.key}>
-                  {readOnly ? (
-                    (row[f.key] ?? '—')
-                  ) : (
-                    <TextInput
-                      id={`${caption}-${index}-${f.key}`}
-                      labelText={f.label}
-                      hideLabel
-                      size="sm"
-                      value={row[f.key] ?? ''}
-                      onChange={(e) => onChange(index, f.key, e.target.value)}
-                    />
-                  )}
-                </td>
+              {cols.map((c) => (
+                <td key={c.key}>{cell(caption, c, row, index, onChange)}</td>
               ))}
               {!readOnly && (
                 <td>
@@ -301,7 +494,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
                     hasIconOnly
                     renderIcon={TrashCan}
                     iconDescription="Remove row"
-                    onClick={() => removeRow(index)}
+                    onClick={() => removeRowAt(index)}
                   />
                 </td>
               )}
@@ -314,7 +507,16 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           {addLabel}
         </Button>
       )}
-    </fieldset>
+    </>
+  );
+
+  // Read-only stratum context shown in both the table and the open plot form. `tight` uses a
+  // compact flex layout (values sit close together) instead of the full-width spread grid.
+  const stratumInfo = (tight: boolean): ReactNode => (
+    <div className={tight ? 'bio-plot__stratum-info' : 'rip-form__grid'}>
+      {roField('Stratum type', stratumTypeLabel)}
+      {roField('# of plots completed', `${plotsCompleted} of ${plotsExpected || '—'}`)}
+    </div>
   );
 
   if (loading) {
@@ -325,122 +527,205 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return <p>Add a stratum on the Stratum summary tab before adding plots.</p>;
   }
 
+  const noEvaluators = evaluators !== null && evaluators.length === 0;
+
   return (
     <div className="rip-form">
-      <div className="rip-form__grid">
-        <Select
-          id="plots-stratum"
-          labelText="Stratum"
-          value={stratumId}
-          onChange={(e) => {
-            // Switching stratum clears the open plot so the rail + detail reload cleanly.
-            setStratumId(e.target.value);
-            setCurrent(null);
-          }}
-        >
-          {strata.map((s) => (
-            <SelectItem
-              key={s.stratumId}
-              value={s.stratumId ?? ''}
-              text={s.stratumNumber || s.stratumId || ''}
+      {/* The plots table and the plot form are mutually exclusive — the table is hidden
+          while a plot form is open (mirrors the Stratum summary tab). */}
+      {!current && (
+        <>
+          {noEvaluators && (
+            <InlineNotification
+              kind="info"
+              lowContrast
+              hideCloseButton
+              title="No evaluator saved"
+              subtitle="Plots cannot be added until an Evaluator has been saved on the Administration tab."
             />
-          ))}
-        </Select>
-      </div>
-
-      <div className="bio-master">
-        <div className="bio-master__list">
-          {rows.length === 0 && <p>No plots yet.</p>}
-          {rows.map((row) => (
-            <Button
-              key={row.plotId}
-              kind={current?.plotId === row.plotId ? 'primary' : 'ghost'}
-              size="sm"
-              disabled={busy}
-              onClick={() => void select(row.plotId ?? '')}
-            >
-              {row.plotNumber || row.plotId}
-            </Button>
-          ))}
-          {!readOnly && (
-            <Button kind="tertiary" size="sm" renderIcon={Add} disabled={busy} onClick={addPlot}>
-              Add plot
-            </Button>
           )}
-        </div>
 
-        <div className="bio-master__detail">
-          {!current ? (
-            <p>Select or add a plot to edit.</p>
-          ) : (
-            <>
-              <fieldset className="rip-form__group">
-                <legend>Plot</legend>
-                <div className="rip-form__grid">
-                  {PLOT_FIELDS.map((f) => plotField(f.key, f.label))}
-                  {PLOT_INDS.map((f) =>
-                    readOnly ? (
-                      <div className="protocol-checklist__field" key={f.key}>
-                        <span className="protocol-checklist__label">{f.label}</span>
-                        <span className="protocol-checklist__value">
-                          {get(f.key) === 'Y' ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                    ) : (
-                      <Checkbox
-                        key={f.key}
-                        id={`plot-${f.key}`}
-                        labelText={f.label}
-                        checked={get(f.key) === 'Y'}
-                        onChange={(_e, { checked }) => set(f.key, checked ? 'Y' : 'N')}
-                      />
-                    ),
-                  )}
-                </div>
-              </fieldset>
+          {/* Two aligned columns: Stratum / Stratum type on the left, Add plot / # of plots
+              completed on the right. */}
+          <div className="bio-plot__header">
+            <Select
+              id="plots-stratum"
+              labelText="Stratum"
+              value={stratumId}
+              onChange={(e) => setStratumId(e.target.value)}
+            >
+              {strata.map((s) => (
+                <SelectItem
+                  key={s.stratumId}
+                  value={s.stratumId ?? ''}
+                  text={s.stratumNumber || s.stratumId || ''}
+                />
+              ))}
+            </Select>
+            {!readOnly ? (
+              <Button
+                kind="tertiary"
+                size="lg"
+                className="bio-strata__add"
+                disabled={busy || noEvaluators}
+                onClick={addPlot}
+              >
+                <Add size={16} className="bio-strata__add-icon" />
+                Add plot
+              </Button>
+            ) : (
+              <div />
+            )}
+            {roField('Stratum type', stratumTypeLabel)}
+            {roField('# of plots completed', `${plotsCompleted} of ${plotsExpected || '—'}`)}
+          </div>
 
+          <div className="bio-strata">
+            {rows.length > 0 && (
+              <Table size="sm" className="bio-strata__table">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Plot number</TableHeader>
+                    <TableHeader>Assessor name</TableHeader>
+                    <TableHeader>Actions</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.plotId}>
+                      <TableCell>{row.plotNumber || row.plotId}</TableCell>
+                      <TableCell>{row.assessorName}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          renderIcon={Edit}
+                          iconDescription="Edit"
+                          hasIconOnly
+                          disabled={busy}
+                          onClick={() => void select(row.plotId ?? '')}
+                        />
+                        {!readOnly && (
+                          <Button
+                            kind="danger--ghost"
+                            size="sm"
+                            renderIcon={TrashCan}
+                            iconDescription="Delete"
+                            hasIconOnly
+                            disabled={busy}
+                            onClick={() => void deleteRow(row)}
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </>
+      )}
+
+      {current && (
+        <>
+          {/* Actions at the top, mirroring the Stratum summary tab. */}
+          <div className="protocol-checklist__section-actions">
+            {!readOnly && (
+              <Button size="lg" disabled={busy} onClick={() => void handleSave()}>
+                Save
+              </Button>
+            )}
+            <Button kind="ghost" size="lg" disabled={busy} onClick={() => setCurrent(null)}>
+              Cancel
+            </Button>
+          </div>
+
+          {stratumInfo(true)}
+
+          <fieldset className="rip-form__group">
+            <legend>Plot identification</legend>
+            <div className="rip-form__grid">
+              {readOnly ? (
+                roField('No UTM signal available', noUtmSignal ? 'Yes' : 'No')
+              ) : (
+                <Checkbox
+                  id="plot-utmSignal"
+                  labelText="No UTM signal available"
+                  checked={noUtmSignal}
+                  onChange={(_e, { checked }) => set('utmSignal', checked ? 'N' : 'Y')}
+                />
+              )}
+            </div>
+            <div className="rip-form__grid">
+              {textField('plotNumber', 'Plot #', 3)}
+              {selectField('assessorName', 'Evaluated by', evaluators ?? [])}
+              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal)}
+              {textField('utmEasting', 'Easting', 6, noUtmSignal)}
+              {textField('utmNorthing', 'Northing', 7, noUtmSignal)}
+            </div>
+          </fieldset>
+
+          <fieldset className="rip-form__group">
+            <legend>Plot information</legend>
+            <div className="rip-form__grid">{checkField('treeIndicator', 'Trees exist')}</div>
+            <p className="rip-form__hint">Fill in one of:</p>
+            <div className="rip-form__grid">
+              {textField('basalAreaFactor', 'BAF', 2)}
+              {textField('fixedAreaRadius', 'Fixed area radius (m)', 6)}
+              {textField('fullCountArea', 'Full count area (ha)', 7)}
+            </div>
+            <div className="rip-form__grid">
+              {checkField('cwdTransectIndicator', 'CWD in transect')}
+            </div>
+            <div className="rip-form__grid">
+              {textField('firstLegTransect', 'Bearing 1st leg', 3)}
+              {textField('secondLegTransect', '2nd leg', 3)}
+            </div>
+            <div className="rip-form__grid">{textField('plotComment', 'Comments')}</div>
+          </fieldset>
+
+          {/* Stand table only when "Trees exist"; CWD only when "CWD in transect" (legacy). */}
+          {get('treeIndicator') === 'Y' && (
+            <fieldset className="rip-form__group">
+              <legend>Stand table (trees)</legend>
               {childGrid(
-                'Stand table (trees)',
-                STAND_FIELDS,
+                'Stand',
+                STAND_COLS,
                 (current.standTable ?? []) as Array<Record<string, string | undefined>>,
                 (i) => current.standTable?.[i]?.standId ?? `stand-${i}`,
                 (index, key, value) => setStand(index, { [key]: value }),
                 removeStand,
                 addStand,
-                'Add tree',
+                'Add new row',
               )}
+            </fieldset>
+          )}
 
+          {get('cwdTransectIndicator') === 'Y' && (
+            <fieldset className="rip-form__group">
+              <legend>Coarse woody debris (30 m transect)</legend>
+              <div className="rip-form__grid">
+                {roField('Bearing 1st leg', get('firstLegTransect'))}
+                {roField('2nd leg', get('secondLegTransect'))}
+              </div>
               {childGrid(
-                'Coarse woody debris',
-                CWD_FIELDS,
+                'CWD',
+                CWD_COLS,
                 (current.cwdTable ?? []) as Array<Record<string, string | undefined>>,
                 (i) => current.cwdTable?.[i]?.cwdId ?? `cwd-${i}`,
                 (index, key, value) => setCwd(index, { [key]: value }),
                 removeCwd,
                 addCwd,
-                'Add log',
+                'Add new row',
               )}
-
-              {!readOnly && (
-                <div className="protocol-checklist__actions">
-                  <Button disabled={busy} onClick={() => void handleSave()}>
-                    Save plot
-                  </Button>
-                  {current.plotId && (
-                    <Button
-                      kind="danger--tertiary"
-                      disabled={busy}
-                      onClick={() => void handleDelete()}
-                    >
-                      Delete plot
-                    </Button>
-                  )}
-                </div>
-              )}
-            </>
+            </fieldset>
           )}
-        </div>
-      </div>
+
+          {(get('treeIndicator') === 'Y' || get('cwdTransectIndicator') === 'Y') && (
+            <p className="rip-form__hint">* Decimal place means measured</p>
+          )}
+        </>
+      )}
     </div>
   );
 };

@@ -10,5 +10,6 @@ public record BioStratumRow(
     String strataTypeCode,
     String summaryDate,
     String plotCount,
-    String size
+    String size,
+    String revisionCount
 ) {}

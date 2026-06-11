@@ -1,4 +1,5 @@
 import type {
+  BecRow,
   CodeOption,
   MasterListYear,
   OrgUnit,
@@ -55,12 +56,62 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
+  getStrataTypes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/strata-types',
+    });
+  }
+
+  /** BEC catalogue search for the FREP211 BEC picker (all criteria optional). */
+  searchBec(criteria: Partial<Record<string, string>>): CancelablePromise<BecRow[]> {
+    return this.doRequest<BecRow[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/bec-search',
+      query: criteria,
+    });
+  }
+
   /** FREP checklist answer options (Yes/No/etc.) for indicator dropdowns. */
   getChecklistAnswers(exclude?: string): CancelablePromise<CodeOption[]> {
     return this.doRequest<CodeOption[]>(this.config, {
       method: 'GET',
       url: '/v1/configuration/checklist-answers',
       query: exclude ? { exclude } : undefined,
+    });
+  }
+
+  /** Tree-species options for the FREP212 Stand / CWD "Spp." dropdowns. */
+  getSpecies(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/species',
+    });
+  }
+
+  /** Wildlife-tree decay-class options for the FREP212 Stand "WT Class" dropdown. */
+  getWildlifeTreeDecay(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/wildlife-tree-decay',
+    });
+  }
+
+  /** CWD decay-class options for the FREP212 Coarse Woody Debris "Decay Class" dropdown. */
+  getCwdDecay(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/cwd-decay',
+    });
+  }
+
+  /** Evaluator options (the checklist's team) for the FREP212 "Evaluated By" dropdown. */
+  getEvaluators(checklistId: string, protocol = 'SLB'): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/evaluators',
+      query: { checklistId, protocol },
     });
   }
 }

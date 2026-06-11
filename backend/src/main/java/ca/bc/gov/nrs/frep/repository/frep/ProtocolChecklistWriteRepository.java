@@ -8,32 +8,12 @@ import ca.bc.gov.nrs.frep.dto.frep.BioStratum;
 import ca.bc.gov.nrs.frep.dto.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.dto.frep.BioWindthrowTreatment;
 import ca.bc.gov.nrs.frep.dto.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.dto.frep.RipContinuousIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipNoAnswerRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOpenSpecImpactRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOtherIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipOtherSpecImpactRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipPointIndRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipQuestionRow;
-import ca.bc.gov.nrs.frep.dto.frep.RipStreamEdgeRow;
 import ca.bc.gov.nrs.frep.dto.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.dto.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.dto.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.dto.frep.EvaluatorRow;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFieldData;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianNotes;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianFinalComments;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianOtherIndicators;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianQuestions;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianSpecificImpacts;
-import ca.bc.gov.nrs.frep.dto.frep.RiparianStreamOpening;
-import ca.bc.gov.nrs.frep.dto.frep.WaterAssessment;
-import ca.bc.gov.nrs.frep.dto.frep.WaterRange;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleArea;
-import ca.bc.gov.nrs.frep.dto.frep.WaterSampleSite;
-import ca.bc.gov.nrs.frep.dto.frep.WtrAccessRoadRow;
-import ca.bc.gov.nrs.frep.dto.frep.WtrAssessmentRow;
-import ca.bc.gov.nrs.frep.dto.frep.WtrDisturbanceRow;
+import ca.bc.gov.nrs.frep.dto.frep.StratumComputed;
 import java.sql.Array;
 import java.sql.Struct;
 import java.sql.Types;
@@ -42,6 +22,7 @@ import java.util.List;
 import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
@@ -208,8 +189,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   private static final String STRATUM_LIST_SELECT =
       "SELECT stratum_id, stratum_number, biodiversity_strata_type_code, "
           + "TO_CHAR(stratum_summary_date,'YYYY-MM-DD') AS summary_date, stratum_plot_count, "
-          + "stratum_size FROM the.biodiversity_stratum WHERE biodiversity_checklist_id = ? "
-          + "ORDER BY stratum_number";
+          + "stratum_size, revision_count FROM the.biodiversity_stratum "
+          + "WHERE biodiversity_checklist_id = ? ORDER BY stratum_number";
 
   // All editable + round-tripped scalar columns (UPDATE rewrites every column, so read them all).
   private static final String STRATUM_SELECT =
@@ -232,9 +213,17 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           + "seral, windthrow_distribution_code, other_windthrow_treatment, calc_constrained_total, "
           + "revision_count FROM the.biodiversity_stratum WHERE stratum_id = ?";
 
+  // Mirrors FREP_211_BIOSTRATUM.get: left-join the full windthrow-code catalogue
+  // so EVERY code is returned (check_ind 'Y' when a row exists for this stratum,
+  // else 'N'). SAVE_STRATUM loops the array bounds, so it must never be empty.
   private static final String WINDTHROW_SELECT =
-      "SELECT windthrow_treatment_id, windthrow_treatment_code, check_ind "
-          + "FROM the.windthrow_treatment WHERE stratum_id = ? ORDER BY windthrow_treatment_code";
+      "SELECT wt.windthrow_treatment_id, wtc.windthrow_treatment_code, "
+          + "DECODE(wt.windthrow_treatment_code, NULL, 'N', 'Y') AS check_ind "
+          + "FROM the.windthrow_treatment_code wtc "
+          + "LEFT JOIN the.windthrow_treatment wt "
+          + "  ON wtc.windthrow_treatment_code = wt.windthrow_treatment_code "
+          + " AND wt.stratum_id = ? "
+          + "ORDER BY wtc.windthrow_treatment_code";
 
   public List<BioStratumRow> listBioStrata(String checklistId) {
     return jdbcTemplate.query(
@@ -245,7 +234,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
             rs.getString("biodiversity_strata_type_code"),
             rs.getString("summary_date"),
             rs.getString("stratum_plot_count"),
-            rs.getString("stratum_size")),
+            rs.getString("stratum_size"),
+            rs.getString("revision_count")),
         checklistId
     );
   }
@@ -328,21 +318,6 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     }, stratumId);
   }
 
-  /** Generate the next stratum number for a new stratum (FREP_211_BIOSTRATUM.ADD_NEW). */
-  public String nextStratumNumber() {
-    return executeCall(
-        callSql(BIO_STRATUM_PACKAGE, "ADD_NEW", 2),
-        cs -> {
-          cs.registerOutParameter(1, Types.VARCHAR);
-          cs.registerOutParameter(2, Types.VARCHAR);
-        },
-        cs -> {
-          throwIfError(BIO_STRATUM_PACKAGE, "ADD_NEW", cs.getString(2));
-          return cs.getString(1);
-        }
-    );
-  }
-
   /** Per-stratum upsert via FREP_211_BIOSTRATUM.SAVE_STRATUM (63 params incl. windthrow VARRAY). */
   public BioStratum saveBioStratum(BioStratum s, String userId) {
     return executeCall(
@@ -420,10 +395,22 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     );
   }
 
+  private static final String WINDTHROW_CODE_SELECT =
+      "SELECT windthrow_treatment_code FROM the.windthrow_treatment_code "
+          + "ORDER BY windthrow_treatment_code";
+
   private Array buildWindthrowArray(java.sql.CallableStatement cs, BioStratum s) throws java.sql.SQLException {
     OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
     List<BioWindthrowTreatment> treatments =
         s.windthrowTreatments() == null ? List.of() : s.windthrowTreatments();
+    // SAVE_STRATUM loops FIRST..LAST over this VARRAY; an empty array makes those
+    // bounds NULL and raises ORA-06502. The legacy always sends the full code list,
+    // so if we somehow received none, fall back to all-codes-unchecked (a no-op save).
+    if (treatments.isEmpty()) {
+      treatments = jdbcTemplate.queryForList(WINDTHROW_CODE_SELECT, String.class).stream()
+          .map(code -> new BioWindthrowTreatment(null, code, "N"))
+          .toList();
+    }
     List<Object> structs = new ArrayList<>(treatments.size());
     for (BioWindthrowTreatment t : treatments) {
       structs.add(connection.createStruct(WINDTHROW_OBJECT_TYPE, new Object[] {
@@ -445,6 +432,59 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     );
   }
 
+  // Plots completed = count of plots in the stratum (FREP_211_BIOSTRATUM.get lines 456-460).
+  private static final String PLOTS_COMPLETED_SELECT =
+      "SELECT COUNT(*) FROM the.biodiversity_plot WHERE stratum_id = ?";
+
+  // NAR (Net Area Reforested) = nar_area of the stratum's selected site, keyed off the
+  // resource value (FREP_211_BIOSTRATUM.get lines 438-443).
+  private static final String NAR_SELECT =
+      "SELECT fss.nar_area FROM the.frep_selected_site fss, the.frep_resource_value frv "
+          + "WHERE frv.frep_resource_value_id = ? "
+          + "AND fss.frep_selected_site_id = frv.frep_selected_site_id";
+
+  /**
+   * Read-only computed values for the FREP211 Stratum Summary: NAR (Net Area Reforested) and
+   * plots-completed. These are the two values the legacy {@code FREP_211_BIOSTRATUM.get} proc
+   * derives (NAR out-param 78, plots-completed out-param 26); we run the proc's own two queries
+   * directly rather than invoke the full 82-param proc — that proc also does tombstone /
+   * evaluator-lead / status {@code SELECT ... INTO}s that raise {@code NO_DATA_FOUND} and sink the
+   * whole call when the navigation context isn't perfectly reconstructed. Returns blanks (never
+   * throws) when the stratum or its resource value can't be resolved.
+   */
+  public StratumComputed getStratumComputed(String stratumId) {
+    String checklistId;
+    try {
+      checklistId = jdbcTemplate.queryForObject(
+          "SELECT biodiversity_checklist_id FROM the.biodiversity_stratum WHERE stratum_id = ?",
+          String.class, stratumId);
+    } catch (EmptyResultDataAccessException ex) {
+      return new StratumComputed(null, null);
+    }
+    Long plots = jdbcTemplate.queryForObject(PLOTS_COMPLETED_SELECT, Long.class, stratumId);
+    return new StratumComputed(narForChecklist(checklistId), plots == null ? "0" : String.valueOf(plots));
+  }
+
+  /**
+   * Computed values for a not-yet-saved stratum (the "Add stratum" form). NAR is site-level, so it
+   * resolves from the checklist's resource value just like a saved stratum; plots-completed is 0
+   * because the new stratum has no plots yet. Mirrors the legacy "Add New" flow, which calls the get
+   * proc keyed on the resource value (NAR shown) with no stratum (COUNT(*) = 0).
+   */
+  public StratumComputed getNewStratumComputed(String checklistId) {
+    return new StratumComputed(narForChecklist(checklistId), "0");
+  }
+
+  // NAR (Net Area Reforested) for a checklist's selected site — identical for every stratum.
+  private String narForChecklist(String checklistId) {
+    String resourceValueId = resolveResourceValueId(checklistId, "SLB");
+    if (StringUtils.isBlank(resourceValueId)) {
+      return null;
+    }
+    List<String> narRows = jdbcTemplate.query(NAR_SELECT, (rs, n) -> rs.getString(1), resourceValueId);
+    return narRows.isEmpty() ? null : narRows.get(0);
+  }
+
   // --- Biodiversity Plots (FREP screen 212) ---
 
   private static final String BIO_PLOT_PACKAGE = "FREP_212_BIOPLOT";
@@ -454,8 +494,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   private static final String CWD_OBJECT_TYPE = "THE.FREP_CWD_TABLE_OBJECT";
 
   private static final String PLOT_LIST_SELECT =
-      "SELECT biodiversity_plot_id, plot_number, assessor_name FROM the.biodiversity_plot "
-          + "WHERE stratum_id = ? ORDER BY biodiversity_plot_id";
+      "SELECT biodiversity_plot_id, plot_number, assessor_name, revision_count "
+          + "FROM the.biodiversity_plot WHERE stratum_id = ? ORDER BY biodiversity_plot_id";
 
   private static final String PLOT_SELECT =
       "SELECT stratum_id, plot_number, assessor_name, utm_signal, utm_zone, utm_easting, "
@@ -494,7 +534,8 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
         (rs, rowNum) -> new BioPlotRow(
             rs.getString("biodiversity_plot_id"),
             rs.getString("plot_number"),
-            rs.getString("assessor_name")),
+            rs.getString("assessor_name"),
+            rs.getString("revision_count")),
         stratumId
     );
   }
@@ -653,476 +694,6 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
           cs.registerOutParameter(3, Types.VARCHAR);
         },
         cs -> cs.getString(3)
-    );
-  }
-
-  // --- Riparian stream opening (FREP screen 230) ---
-
-  private static final String RIP_STREAM_PACKAGE = "FREP_230_STRM_OPEN";
-  private static final String STRM_EDGE_VARRAY_TYPE = "THE.FREP_STRM_EDGE_MEASMNT_VARRAY";
-  private static final String STRM_EDGE_OBJECT_TYPE = "THE.FREP_STRM_EDGE_MEASMNT_OBJECT";
-
-  // Column names taken from FREP_RIPARIAN_CHECKLIST entity package (param names differ from columns).
-  private static final String RIP_STREAM_SELECT =
-      "SELECT sample_number, range_use_plan, pasture_id, stream_name, stream_location_ind, "
-          + "pln_riparian_strm_rma_cls_code, act_riparian_strm_rma_cls_code, channel_width, "
-          + "channel_gradient_pct, channel_depth, reach_location_to, reach_location_from, "
-          + "reach_location_ups_ds_ind, reach_location_from_desc, utm_signal, utm_at_reference, "
-          + "utm_zone, utm_easting, utm_northing, riparian_chan_morphology_code, "
-          + "rttn_rma_doms_on_plans_pct, rttn_rma_doms_on_plans_ind, rttn_rma_doms_in_field_pct, "
-          + "rttn_rma_undrstry_on_plans_pct, rttn_rma_undrstry_on_plans_ind, "
-          + "rttn_rma_undrstry_in_field_pct, rttn_rrz_doms_on_plans_pct, rttn_rrz_doms_on_plans_ind, "
-          + "rttn_rrz_doms_in_field_pct, rttn_rrz_doms_in_field, rttn_rrz_undrstry_on_plans_pct, "
-          + "rttn_rrz_undrstry_on_plans_ind, rttn_rrz_undrstry_in_field_pct, "
-          + "rttn_rrz_undrstry_in_field, rttn_rmz_doms_on_plans_pct, rttn_rmz_doms_on_plans_ind, "
-          + "rttn_rmz_doms_in_field_pct, rttn_rmz_undrstry_on_plans_pct, "
-          + "rttn_rmz_undrstry_on_plans_ind, rttn_rmz_undrstry_in_field_pct, pln_riparian_str_na_ind, "
-          + "invasive_plant_answer_code, invasive_plant_comment, revision_count "
-          + "FROM the.riparian_checklist WHERE riparian_checklist_id = ?";
-
-  private static final String RIP_STREAM_EDGE_SELECT =
-      "SELECT rip_stream_edge_measure_type, stream_edge_measurement, revision_count "
-          + "FROM the.rip_stream_edge_measure_xref WHERE riparian_checklist_id = ? "
-          + "ORDER BY rip_stream_edge_measure_type";
-
-  public RiparianStreamOpening getRipStreamOpening(String checklistId) {
-    List<RipStreamEdgeRow> edges = jdbcTemplate.query(
-        RIP_STREAM_EDGE_SELECT,
-        (rs, rowNum) -> new RipStreamEdgeRow(
-            rs.getString("rip_stream_edge_measure_type"),
-            rs.getString("stream_edge_measurement"),
-            null,
-            rs.getString("revision_count")),
-        checklistId
-    );
-    return jdbcTemplate.query(RIP_STREAM_SELECT, rs -> {
-      if (!rs.next()) {
-        return null;
-      }
-      return new RiparianStreamOpening(
-          checklistId,
-          rs.getString("sample_number"),
-          rs.getString("range_use_plan"),
-          rs.getString("pasture_id"),
-          rs.getString("stream_name"),
-          rs.getString("stream_location_ind"),
-          rs.getString("pln_riparian_strm_rma_cls_code"),
-          rs.getString("act_riparian_strm_rma_cls_code"),
-          rs.getString("channel_width"),
-          rs.getString("channel_gradient_pct"),
-          rs.getString("channel_depth"),
-          rs.getString("reach_location_to"),
-          rs.getString("reach_location_from"),
-          rs.getString("reach_location_ups_ds_ind"),
-          rs.getString("reach_location_from_desc"),
-          rs.getString("utm_signal"),
-          rs.getString("utm_at_reference"),
-          rs.getString("utm_zone"),
-          rs.getString("utm_easting"),
-          rs.getString("utm_northing"),
-          rs.getString("riparian_chan_morphology_code"),
-          rs.getString("rttn_rma_doms_on_plans_pct"),
-          rs.getString("rttn_rma_doms_on_plans_ind"),
-          rs.getString("rttn_rma_doms_in_field_pct"),
-          rs.getString("rttn_rma_undrstry_on_plans_pct"),
-          rs.getString("rttn_rma_undrstry_on_plans_ind"),
-          rs.getString("rttn_rma_undrstry_in_field_pct"),
-          rs.getString("rttn_rrz_doms_on_plans_pct"),
-          rs.getString("rttn_rrz_doms_on_plans_ind"),
-          rs.getString("rttn_rrz_doms_in_field_pct"),
-          rs.getString("rttn_rrz_doms_in_field"),
-          rs.getString("rttn_rrz_undrstry_on_plans_pct"),
-          rs.getString("rttn_rrz_undrstry_on_plans_ind"),
-          rs.getString("rttn_rrz_undrstry_in_field_pct"),
-          rs.getString("rttn_rrz_undrstry_in_field"),
-          rs.getString("rttn_rmz_doms_on_plans_pct"),
-          rs.getString("rttn_rmz_doms_on_plans_ind"),
-          rs.getString("rttn_rmz_doms_in_field_pct"),
-          rs.getString("rttn_rmz_undrstry_on_plans_pct"),
-          rs.getString("rttn_rmz_undrstry_on_plans_ind"),
-          rs.getString("rttn_rmz_undrstry_in_field_pct"),
-          rs.getString("pln_riparian_str_na_ind"),
-          rs.getString("invasive_plant_answer_code"),
-          rs.getString("invasive_plant_comment"),
-          rs.getString("revision_count"),
-          edges
-      );
-    }, checklistId);
-  }
-
-  /** Save the stream opening via FREP_230_STRM_OPEN.SAVE (48 params; stream-edge VARRAY at 9). */
-  public RiparianStreamOpening saveRipStreamOpening(RiparianStreamOpening o, String userId) {
-    return executeCall(
-        callSql(RIP_STREAM_PACKAGE, "SAVE", 48),
-        cs -> {
-          setInOutString(cs, 1, o.checklistId());
-          cs.setString(2, o.sampleNumber());
-          cs.setString(3, o.rangeUsePlan());
-          cs.setString(4, o.pastureId());
-          cs.setString(5, o.streamName());
-          cs.setString(6, o.streamLocationInd());
-          cs.setString(7, o.plnRiparianStrmRmaCls());
-          cs.setString(8, o.actRiparianStrmRmaCls());
-          cs.setObject(9, buildStructArray(cs, STRM_EDGE_VARRAY_TYPE, STRM_EDGE_OBJECT_TYPE,
-              o.streamEdge(), row -> new Object[] {
-                  o.checklistId(), row.measureType(), blankToNull(row.measurement()), null,
-                  blankToNull(row.revisionCount()), null, userId
-              }));
-          cs.registerOutParameter(9, Types.ARRAY, STRM_EDGE_VARRAY_TYPE);
-          cs.setString(10, o.channelWidth());
-          cs.setString(11, o.channelGradientPct());
-          cs.setString(12, o.channelDepth());
-          cs.setString(13, o.reachLocationTo());
-          cs.setString(14, o.reachLocationFrom());
-          cs.setString(15, o.reachLocationUpsDsInd());
-          cs.setString(16, o.reachLocationFromDesc());
-          cs.setString(17, o.utmSignal());
-          cs.setString(18, o.utmAtReference());
-          cs.setString(19, o.utmZone());
-          cs.setString(20, o.utmEasting());
-          cs.setString(21, o.utmNorthing());
-          cs.setString(22, o.riparianChanMorphology());
-          cs.setString(23, o.rttnRmaDomsOnPlans());
-          cs.setString(24, o.rttnRmaDomsOnPlansInd());
-          cs.setString(25, o.rttnRmaDomsInField());
-          cs.setString(26, o.rttnRmaUndrstryOnPlans());
-          cs.setString(27, o.rttnRmaUndrstryOnPlnI());
-          cs.setString(28, o.rttnRmaUndrstryInField());
-          cs.setString(29, o.rttnRrzDomsOnPlans());
-          cs.setString(30, o.rttnRrzDomsOnPlansInd());
-          cs.setString(31, o.rttnRrzDomsInFieldPct());
-          cs.setString(32, o.rttnRrzDomsInField());
-          cs.setString(33, o.rttnRrzUndrstryOnPlans());
-          cs.setString(34, o.rttnRrzUndrstryOnPlnI());
-          cs.setString(35, o.rttnRrzUndrstryFldPct());
-          cs.setString(36, o.rttnRrzUndrstryInField());
-          cs.setString(37, o.rttnRmzDomsOnPlans());
-          cs.setString(38, o.rttnRmzDomsOnPlansInd());
-          cs.setString(39, o.rttnRmzDomsInField());
-          cs.setString(40, o.rttnRmzUndrstryOnPlans());
-          cs.setString(41, o.rttnRmzUndrstryOnPlnI());
-          cs.setString(42, o.rttnRmzUndrstryInField());
-          cs.setString(43, o.plnRiparianStrNaInd());
-          cs.setString(44, o.invasivePlantIndicator());
-          cs.setString(45, o.invasivePlantComment());
-          setInOutString(cs, 46, o.revisionCount());
-          cs.setString(47, userId);
-          cs.registerOutParameter(48, Types.VARCHAR);
-        },
-        cs -> {
-          throwIfError(RIP_STREAM_PACKAGE, "SAVE", cs.getString(48));
-          return o.withIdentity(cs.getString(1), cs.getString(46));
-        }
-    );
-  }
-
-  // --- Riparian final comments (FREP screen 235) ---
-
-  private static final String RIP_FINAL_CMTS_PACKAGE = "FREP_235_FINAL_CMTS";
-
-  private static final String RIP_FINAL_CMTS_SELECT =
-      "SELECT conclusion_comment, specific_impact_comment, assessment_problems_comment, "
-          + "map_legibility_comment, leave_strip_assessment_comment, checklist_recomm_comment, "
-          + "revision_count FROM the.riparian_checklist WHERE riparian_checklist_id = ?";
-
-  public RiparianFinalComments getRipFinalComments(String checklistId) {
-    return jdbcTemplate.query(RIP_FINAL_CMTS_SELECT, rs -> {
-      if (!rs.next()) {
-        return null;
-      }
-      return new RiparianFinalComments(
-          checklistId,
-          rs.getString("conclusion_comment"),
-          rs.getString("specific_impact_comment"),
-          rs.getString("assessment_problems_comment"),
-          rs.getString("map_legibility_comment"),
-          rs.getString("leave_strip_assessment_comment"),
-          rs.getString("checklist_recomm_comment"),
-          rs.getString("revision_count")
-      );
-    }, checklistId);
-  }
-
-  public RiparianFinalComments saveRipFinalComments(RiparianFinalComments o, String userId) {
-    return executeCall(
-        callSql(RIP_FINAL_CMTS_PACKAGE, "save", 10),
-        cs -> {
-          setInOutString(cs, 1, o.checklistId());
-          cs.setString(2, o.conclusionComment());
-          cs.setString(3, o.specificImpactComment());
-          cs.setString(4, o.assessmentProblemsComment());
-          cs.setString(5, o.mapLegibilityComment());
-          cs.setString(6, o.leaveStripAssessmentComment());
-          cs.setString(7, o.checklistRecommComment());
-          setInOutString(cs, 8, o.revisionCount());
-          cs.setString(9, userId);
-          cs.registerOutParameter(10, Types.VARCHAR);
-        },
-        cs -> {
-          throwIfError(RIP_FINAL_CMTS_PACKAGE, "save", cs.getString(10));
-          return o.withIdentity(cs.getString(1), cs.getString(8));
-        }
-    );
-  }
-
-  // --- Riparian indicator/question/impact grids (FREP screens 231-234) ---
-  //
-  // Reads use a direct SELECT of the xref tables (authoritative columns; display-only labels that
-  // the legacy GET derives from type-table joins — question_no, transect_no, threshold, question
-  // text, descriptions — are left null and reconciled by the SAVE procs by type/id). Saves use the
-  // exact .pks SAVE signatures with the VARRAY element order from the .tps object types.
-
-  private static final String RIP_FIELD_PACKAGE = "FREP_231_FIELD_DATA";
-  private static final String RIP_OTHER_PACKAGE = "FREP_232_OTHER_INDS";
-  private static final String RIP_QUESTIONS_PACKAGE = "FREP_233_QUESTIONS";
-  private static final String RIP_IMPACTS_PACKAGE = "FREP_234_SPECIFIC_IMPACTS";
-
-  private static final String POINT_IND_VARRAY = "THE.FREP_POINT_INDICATOR_VARRAY";
-  private static final String POINT_IND_OBJECT = "THE.FREP_POINT_INDICATOR_OBJECT";
-  private static final String CONTINUOUS_IND_VARRAY = "THE.FREP_CONTINUOUS_IND_VARRAY";
-  private static final String CONTINUOUS_IND_OBJECT = "THE.FREP_CONTINUOUS_IND_OBJECT";
-  private static final String OTHER_IND_VARRAY = "THE.FREP_OTHER_INDICATOR_VARRAY";
-  private static final String OTHER_IND_OBJECT = "THE.FREP_OTHER_INDICATOR_OBJECT";
-  private static final String QUESTIONS_VARRAY = "THE.FREP_QUESTIONS_VARRAY";
-  private static final String QUESTIONS_OBJECT = "THE.FREP_QUESTIONS_OBJECT";
-  private static final String NO_ANSWERS_VARRAY = "THE.FREP_NO_ANSWERS_VARRAY";
-  private static final String NO_ANSWERS_OBJECT = "THE.FREP_NO_ANSWERS_OBJECT";
-  private static final String OPEN_SPEC_VARRAY = "THE.FREP_OPEN_SPEC_IMPACT_VARRAY";
-  private static final String OPEN_SPEC_OBJECT = "THE.FREP_OPEN_SPEC_IMPACT_OBJECT";
-  private static final String OTHER_SPEC_VARRAY = "THE.FREP_OTHER_SPEC_IMPACT_VARRAY";
-  private static final String OTHER_SPEC_OBJECT = "THE.FREP_OTHER_SPEC_IMPACT_OBJECT";
-
-  // 231 Field data
-  public RiparianFieldData getRipFieldData(String checklistId) {
-    List<RipPointIndRow> points = jdbcTemplate.query(
-        "SELECT riparian_point_indicator_id, riparian_point_ind_type, measure_1, measure_2, "
-            + "measure_3, measure_4, measure_5, measure_6, mean, revision_count "
-            + "FROM the.riparian_point_indicator WHERE riparian_checklist_id = ? "
-            + "ORDER BY riparian_point_ind_type",
-        (rs, n) -> new RipPointIndRow(
-            rs.getString("riparian_point_indicator_id"), null,
-            rs.getString("riparian_point_ind_type"), null,
-            rs.getString("measure_1"), rs.getString("measure_2"), rs.getString("measure_3"),
-            rs.getString("measure_4"), rs.getString("measure_5"), rs.getString("measure_6"),
-            null, rs.getString("mean"), rs.getString("revision_count")),
-        checklistId);
-    List<RipContinuousIndRow> continuous = jdbcTemplate.query(
-        "SELECT riparian_continuous_ind_id, riparian_continuous_ind_type, total, comments, "
-            + "revision_count FROM the.riparian_continuous_ind WHERE riparian_checklist_id = ? "
-            + "ORDER BY riparian_continuous_ind_type",
-        (rs, n) -> new RipContinuousIndRow(
-            rs.getString("riparian_continuous_ind_id"), null,
-            rs.getString("riparian_continuous_ind_type"), null,
-            rs.getString("total"), rs.getString("comments"), null, rs.getString("revision_count")),
-        checklistId);
-    return jdbcTemplate.query(
-        "SELECT field_data_stream_reach_dry FROM the.riparian_checklist WHERE riparian_checklist_id = ?",
-        rs -> {
-          if (!rs.next()) {
-            return null;
-          }
-          return new RiparianFieldData(
-              checklistId, rs.getString("field_data_stream_reach_dry"), points, continuous);
-        }, checklistId);
-  }
-
-  public RiparianFieldData saveRipFieldData(RiparianFieldData o, String userId) {
-    return executeCall(
-        callSql(RIP_FIELD_PACKAGE, "SAVE", 6),
-        cs -> {
-          cs.setString(1, o.checklistId());
-          cs.setString(2, o.fieldDataStreamReachDry());
-          // measure_1..6, mean, ids and revision_count are NUMBER attrs — blank "" raises ORA-17059,
-          // so empty values must be sent as null.
-          cs.setObject(3, buildStructArray(cs, POINT_IND_VARRAY, POINT_IND_OBJECT, o.points(),
-              r -> new Object[] {
-                  blankToNull(r.pointIndicatorId()), r.questionNo(), r.pointIndType(), r.transectNo(),
-                  blankToNull(r.measure1()), blankToNull(r.measure2()), blankToNull(r.measure3()),
-                  blankToNull(r.measure4()), blankToNull(r.measure5()), blankToNull(r.measure6()),
-                  r.threshold(), blankToNull(r.mean()), blankToNull(r.revisionCount())
-              }));
-          cs.registerOutParameter(3, Types.ARRAY, POINT_IND_VARRAY);
-          cs.setObject(4, buildStructArray(cs, CONTINUOUS_IND_VARRAY, CONTINUOUS_IND_OBJECT,
-              o.continuous(), r -> new Object[] {
-                  blankToNull(r.continuousIndId()), r.questionNo(), r.continuousIndType(), r.question(),
-                  blankToNull(r.total()), r.comments(), r.threshold(), blankToNull(r.revisionCount())
-              }));
-          cs.registerOutParameter(4, Types.ARRAY, CONTINUOUS_IND_VARRAY);
-          cs.setString(5, userId);
-          setInOutString(cs, 6, null);
-        },
-        cs -> {
-          throwIfError(RIP_FIELD_PACKAGE, "SAVE", cs.getString(6));
-          return getRipFieldData(o.checklistId());
-        }
-    );
-  }
-
-  // 232 Other indicators
-  public RiparianOtherIndicators getRipOtherIndicators(String checklistId) {
-    List<RipOtherIndRow> indicators = jdbcTemplate.query(
-        "SELECT riparian_other_indicator_id, riparian_other_ind_type_id, riparian_other_answer_ind, "
-            + "revision_count FROM the.riparian_other_indicator WHERE riparian_checklist_id = ? "
-            + "ORDER BY riparian_other_ind_type_id",
-        (rs, n) -> new RipOtherIndRow(
-            rs.getString("riparian_other_ind_type_id"), null, null, null,
-            rs.getString("riparian_other_indicator_id"), rs.getString("riparian_other_answer_ind"),
-            rs.getString("revision_count"), null, null),
-        checklistId);
-    return new RiparianOtherIndicators(checklistId, indicators);
-  }
-
-  public RiparianOtherIndicators saveRipOtherIndicators(RiparianOtherIndicators o, String userId) {
-    return executeCall(
-        callSql(RIP_OTHER_PACKAGE, "save", 4),
-        cs -> {
-          cs.setString(1, o.checklistId());
-          cs.setObject(2, buildStructArray(cs, OTHER_IND_VARRAY, OTHER_IND_OBJECT, o.indicators(),
-              r -> new Object[] {
-                  r.otherIndTypeId(), r.quesSectCode(), r.headerQuestionInd(), r.question(),
-                  blankToNull(r.otherIndicatorId()), r.otherAnswerInd(),
-                  blankToNull(r.revisionCount()), null, userId
-              }));
-          cs.setString(3, userId);
-          setInOutString(cs, 4, null);
-        },
-        cs -> {
-          throwIfError(RIP_OTHER_PACKAGE, "save", cs.getString(4));
-          return getRipOtherIndicators(o.checklistId());
-        }
-    );
-  }
-
-  // 233 Questions + no-answers
-  public RiparianQuestions getRipQuestions(String checklistId) {
-    List<RipQuestionRow> questions = jdbcTemplate.query(
-        "SELECT riparian_checklist_question_id, frep_checklist_answer_code, revision_count "
-            + "FROM the.riparian_checklist_answer WHERE riparian_checklist_id = ? "
-            + "ORDER BY riparian_checklist_question_id",
-        (rs, n) -> new RipQuestionRow(
-            checklistId, rs.getString("riparian_checklist_question_id"), null, null, null, null,
-            null, null, null, null, rs.getString("frep_checklist_answer_code"),
-            rs.getString("revision_count"), null, null),
-        checklistId);
-    List<RipNoAnswerRow> noAnswers = jdbcTemplate.query(
-        "SELECT riparian_answer_impact_id, riparian_checklist_question_id, "
-            + "riparian_answer_impact_type, answer_ind, revision_count "
-            + "FROM the.riparian_answer_impact WHERE riparian_checklist_id = ? "
-            + "ORDER BY riparian_answer_impact_id",
-        (rs, n) -> new RipNoAnswerRow(
-            rs.getString("riparian_answer_impact_id"), checklistId,
-            rs.getString("riparian_checklist_question_id"), null,
-            rs.getString("riparian_answer_impact_type"), null, null, rs.getString("answer_ind"),
-            rs.getString("revision_count"), null, null),
-        checklistId);
-    return new RiparianQuestions(checklistId, questions, noAnswers);
-  }
-
-  public RiparianQuestions saveRipQuestions(RiparianQuestions o, String userId) {
-    String checklistId = o.checklistId();
-    executeCall(
-        callSql(RIP_QUESTIONS_PACKAGE, "save_responses", 4),
-        cs -> {
-          cs.setString(1, checklistId);
-          cs.setObject(2, buildStructArray(cs, QUESTIONS_VARRAY, QUESTIONS_OBJECT, o.questions(),
-              q -> new Object[] {
-                  checklistId, blankToNull(q.checklistQuestionId()), q.questionNo(), q.question(),
-                  q.chanMorphologyCode(), q.applicableInd(), q.morphologyDesc(), q.questionType(),
-                  q.questionDesc(), q.subQuestion(), q.answerCode(), blankToNull(q.revisionCount()),
-                  null, userId
-              }));
-          cs.setString(3, userId);
-          setInOutString(cs, 4, null);
-        },
-        cs -> {
-          throwIfError(RIP_QUESTIONS_PACKAGE, "save_responses", cs.getString(4));
-          return null;
-        }
-    );
-    // save_no_answers loops FOR i IN array.FIRST..array.LAST; an empty VARRAY gives NULL bounds,
-    // which raises ORA-06502. Only call it when there are cause rows to persist.
-    if (o.noAnswers() != null && !o.noAnswers().isEmpty()) {
-      executeCall(
-          callSql(RIP_QUESTIONS_PACKAGE, "save_no_answers", 4),
-          cs -> {
-            cs.setString(1, checklistId);
-            cs.setObject(2, buildStructArray(cs, NO_ANSWERS_VARRAY, NO_ANSWERS_OBJECT, o.noAnswers(),
-                r -> new Object[] {
-                    blankToNull(r.answerImpactId()), checklistId,
-                    blankToNull(r.checklistQuestionId()), r.questionNo(), r.answerImpactType(),
-                    r.answerImpactDesc(), blankToNull(r.sortOrder()), r.answerInd(),
-                    blankToNull(r.revisionCount()), null, userId
-                }));
-            cs.registerOutParameter(2, Types.ARRAY, NO_ANSWERS_VARRAY);
-            cs.setString(3, userId);
-            setInOutString(cs, 4, null);
-          },
-          cs -> {
-            throwIfError(RIP_QUESTIONS_PACKAGE, "save_no_answers", cs.getString(4));
-            return null;
-          }
-      );
-    }
-    return getRipQuestions(checklistId);
-  }
-
-  // 234 Specific impacts
-  public RiparianSpecificImpacts getRipSpecificImpacts(String checklistId) {
-    List<RipOpenSpecImpactRow> openImpacts = jdbcTemplate.query(
-        "SELECT opening_specific_impact_id, opening_specific_impact_type, spec_impact_ind, "
-            + "revision_count FROM the.opening_specific_impact WHERE riparian_checklist_id = ? "
-            + "ORDER BY opening_specific_impact_id",
-        (rs, n) -> new RipOpenSpecImpactRow(
-            rs.getString("opening_specific_impact_id"), rs.getString("opening_specific_impact_type"),
-            rs.getString("spec_impact_ind"), rs.getString("revision_count")),
-        checklistId);
-    List<RipOtherSpecImpactRow> otherImpacts = jdbcTemplate.query(
-        "SELECT other_opening_spec_impact_id, description, spec_impact_ind, revision_count "
-            + "FROM the.other_opening_spec_impact WHERE riparian_checklist_id = ? "
-            + "ORDER BY other_opening_spec_impact_id",
-        (rs, n) -> new RipOtherSpecImpactRow(
-            rs.getString("other_opening_spec_impact_id"), rs.getString("description"),
-            rs.getString("spec_impact_ind"), rs.getString("revision_count")),
-        checklistId);
-    return new RiparianSpecificImpacts(checklistId, openImpacts, otherImpacts);
-  }
-
-  public RiparianSpecificImpacts saveRipSpecificImpacts(RiparianSpecificImpacts o, String userId) {
-    // FREP_234.SAVE loops both arrays with FOR i IN array.FIRST..LAST; an empty VARRAY gives NULL
-    // bounds (ORA-06502). "Other impacts" is commonly empty, so substitute a single all-null
-    // sentinel row — the proc's loop treats a null id / null indicator as a no-op.
-    List<RipOpenSpecImpactRow> openImpacts =
-        (o.openImpacts() == null || o.openImpacts().isEmpty())
-            ? List.of(new RipOpenSpecImpactRow(null, null, null, null))
-            : o.openImpacts();
-    List<RipOtherSpecImpactRow> otherImpacts =
-        (o.otherImpacts() == null || o.otherImpacts().isEmpty())
-            ? List.of(new RipOtherSpecImpactRow(null, null, null, null))
-            : o.otherImpacts();
-    return executeCall(
-        callSql(RIP_IMPACTS_PACKAGE, "SAVE", 5),
-        cs -> {
-          setInOutString(cs, 1, o.checklistId());
-          setInOutString(cs, 2, userId);
-          cs.registerOutParameter(3, Types.VARCHAR);
-          cs.setObject(4, buildStructArray(cs, OPEN_SPEC_VARRAY, OPEN_SPEC_OBJECT, openImpacts,
-              r -> new Object[] {
-                  blankToNull(r.openingSpecificImpactId()),
-                  blankToNull(r.openingSpecificImpactType()), r.specImpactInd(),
-                  blankToNull(r.revisionCount())
-              }));
-          cs.registerOutParameter(4, Types.ARRAY, OPEN_SPEC_VARRAY);
-          cs.setObject(5, buildStructArray(cs, OTHER_SPEC_VARRAY, OTHER_SPEC_OBJECT, otherImpacts,
-              r -> new Object[] {
-                  blankToNull(r.otherRiparianSpecImpactId()), r.description(), r.specImpactInd(),
-                  blankToNull(r.revisionCount())
-              }));
-          cs.registerOutParameter(5, Types.ARRAY, OTHER_SPEC_VARRAY);
-        },
-        cs -> {
-          throwIfError(RIP_IMPACTS_PACKAGE, "SAVE", cs.getString(3));
-          return getRipSpecificImpacts(o.checklistId());
-        }
     );
   }
 
@@ -1394,17 +965,60 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   /**
-   * Upload a new attachment via {@code SAVE} (10 params; id IN OUT @1 null for new, checklist @2,
-   * type @3, file_name @4, description @5, mime_type_code @6, mime_type IN OUT @7, BLOB @8, userid
-   * @9, error @10).
+   * Upload a new attachment. The legacy flow is two steps, because {@code SAVE} only <em>updates</em>
+   * an existing row (it never inserts): first {@code GET_BLOB_FOR_UPDATE} with a null id <em>inserts</em>
+   * the metadata row + an EMPTY_BLOB content row and returns the new id (committing), then {@code SAVE}
+   * updates that row's file_name/description and writes the BLOB content.
    */
   public void saveAttachment(
       String checklistId, String resourceType, String fileName, String description, String mimeType,
       byte[] bytes, String userId) {
+    String attachmentId = createAttachmentRecord(checklistId, resourceType, fileName, description,
+        mimeType, userId);
+    writeAttachmentContent(attachmentId, checklistId, resourceType, fileName, description, mimeType,
+        bytes, userId);
+  }
+
+  /**
+   * Insert the attachment metadata + empty content row via {@code GET_BLOB_FOR_UPDATE} (10 params,
+   * all IN OUT; id @1 null = new). Returns the newly generated attachment id.
+   */
+  private String createAttachmentRecord(
+      String checklistId, String resourceType, String fileName, String description, String mimeType,
+      String userId) {
+    return executeCall(
+        callSql(ATTACH_PKG, "GET_BLOB_FOR_UPDATE", 10),
+        cs -> {
+          setInOutString(cs, 1, null); // null id => INSERT a new record
+          setInOutString(cs, 2, checklistId);
+          setInOutString(cs, 3, resourceType);
+          setInOutString(cs, 4, fileName);
+          setInOutString(cs, 5, nullIfBlank(description));
+          setInOutString(cs, 6, mimeTypeCode(fileName));
+          setInOutString(cs, 7, mimeType);
+          cs.setNull(8, Types.BLOB);
+          cs.registerOutParameter(8, Types.BLOB);
+          setInOutString(cs, 9, userId);
+          cs.registerOutParameter(10, Types.VARCHAR);
+        },
+        cs -> {
+          throwIfError(ATTACH_PKG, "GET_BLOB_FOR_UPDATE", cs.getString(10));
+          return cs.getString(1); // new attachment id
+        });
+  }
+
+  /**
+   * Write the file bytes + metadata onto an existing attachment via {@code SAVE} (10 params; id @1,
+   * checklist @2, type @3, file_name @4, description @5, mime_type_code @6, mime_type IN OUT @7,
+   * BLOB @8, userid @9, error @10).
+   */
+  private void writeAttachmentContent(
+      String attachmentId, String checklistId, String resourceType, String fileName,
+      String description, String mimeType, byte[] bytes, String userId) {
     executeCall(
         callSql(ATTACH_PKG, "SAVE", 10),
         cs -> {
-          setInOutString(cs, 1, null);
+          setInOutString(cs, 1, attachmentId);
           setInOutString(cs, 2, checklistId);
           setInOutString(cs, 3, resourceType);
           cs.setString(4, fileName);
@@ -1450,284 +1064,6 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
     }
     String ext = fileName.substring(dot + 1).toUpperCase();
     return ext.length() > 20 ? ext.substring(0, 20) : ext;
-  }
-
-  // --- Water (FREP screens 250-253) ---
-  //
-  // Reads use the struct-based GET procs (the OBJECT/VARRAY attribute order is the authoritative
-  // .tps order). Saves marshal the full OBJECT back (round-tripping every attribute) plus the child
-  // VARRAYs. The save procs carry revision_count inside the OBJECT and raise on a stale revision;
-  // that surfaces as a DataAccessException (refined to a 409 in dev).
-
-  private static final String WTR_CHECKLIST_GET = "FREP_250_WATER_CHKLST_GET";
-  private static final String WTR_CHECKLIST_SAVE = "FREP_250_WATER_CHKLST_SAVE";
-  private static final String WTR_SAMPLE_SITE_GET = "FREP_251_SAMPLE_SITE_GET";
-  private static final String WTR_SAMPLE_SITE_SAVE = "FREP_251_SAMPLE_SITE_SAVE";
-  private static final String WTR_ASSESSMENT_GET = "FREP_252_ASSESSMENT_GET";
-  private static final String WTR_ASSESSMENT_PKG = "FREP_WATER_ASSESSMENT";
-  private static final String WTR_RANGE_GET = "FREP_253_RANGE_GET";
-  private static final String WTR_RANGE_PKG = "FREP_WATER_RANGE";
-
-  private static final String WTR_CHECKLIST_TYPE = "THE.FREP_WTR_CHKLST_OBJECT";
-  private static final String WTR_SAMPLE_SITE_TYPE = "THE.FREP_WTR_SAMPLE_SITE_OBJECT";
-  private static final String WTR_DISTURBANCE_VARRAY = "THE.FREP_WTR_DISTURBANCE_VARRAY";
-  private static final String WTR_DISTURBANCE_OBJECT = "THE.FREP_WTR_DISTURBANCE_OBJECT";
-  private static final String WTR_ACCESS_ROAD_VARRAY = "THE.FREP_WTR_ACCESS_ROAD_VARRAY";
-  private static final String WTR_ACCESS_ROAD_OBJECT = "THE.FREP_WTR_ACCESS_ROAD_OBJECT";
-  private static final String WTR_ASSESSMENT_VARRAY = "THE.FREP_WTR_ASSESSMENT_VW_VARRAY";
-  private static final String WTR_ASSESSMENT_OBJECT = "THE.FREP_WTR_ASSESSMENT_VW_OBJECT";
-
-  // 250 Sample area (water checklist OBJECT + disturbance/access-road child VARRAYs)
-  public WaterSampleArea getWaterSampleArea(String checklistId) {
-    return executeCall(
-        "{call " + WTR_CHECKLIST_GET + "(?,?,?)}",
-        cs -> {
-          cs.setObject(1, newStruct(cs, WTR_CHECKLIST_TYPE, 39, 0, checklistId));
-          cs.registerOutParameter(1, Types.STRUCT, WTR_CHECKLIST_TYPE);
-          cs.registerOutParameter(2, Types.ARRAY, WTR_DISTURBANCE_VARRAY);
-          cs.registerOutParameter(3, Types.ARRAY, WTR_ACCESS_ROAD_VARRAY);
-        },
-        cs -> {
-          Struct s = (Struct) cs.getObject(1);
-          if (s == null) {
-            return null;
-          }
-          Object[] a = s.getAttributes();
-          List<WtrDisturbanceRow> dist = readStructList(cs.getArray(2), attrs -> new WtrDisturbanceRow(
-              attrString(attrs, 0), attrString(attrs, 1), attrString(attrs, 2), attrString(attrs, 3),
-              attrString(attrs, 4), attrString(attrs, 5), attrString(attrs, 6), attrString(attrs, 7)));
-          List<WtrAccessRoadRow> roads = readStructList(cs.getArray(3), attrs -> new WtrAccessRoadRow(
-              attrString(attrs, 0), attrString(attrs, 1), attrString(attrs, 2), attrString(attrs, 3),
-              attrString(attrs, 4), attrString(attrs, 5), attrString(attrs, 6), attrString(attrs, 7),
-              attrString(attrs, 8), attrString(attrs, 9)));
-          return new WaterSampleArea(
-              attrString(a, 0), attrString(a, 1), attrString(a, 2), attrString(a, 3),
-              attrString(a, 4), attrString(a, 5), attrString(a, 6), attrString(a, 7),
-              attrString(a, 8), attrString(a, 9), attrString(a, 10), attrString(a, 11),
-              attrString(a, 12), attrString(a, 13), attrString(a, 14), attrString(a, 15),
-              attrString(a, 16), attrString(a, 17), attrString(a, 18), attrString(a, 19),
-              attrString(a, 20), attrString(a, 21), attrString(a, 22), attrString(a, 23),
-              attrString(a, 24), attrString(a, 25), attrString(a, 26), attrString(a, 27),
-              attrString(a, 28), attrString(a, 29), attrString(a, 30), attrString(a, 31),
-              attrString(a, 32), attrString(a, 33), attrString(a, 34), attrString(a, 35),
-              attrString(a, 36), attrString(a, 37), dist, roads);
-        }
-    );
-  }
-
-  public WaterSampleArea saveWaterSampleArea(WaterSampleArea o, String userId) {
-    return executeCall(
-        "{call " + WTR_CHECKLIST_SAVE + "(?,?,?)}",
-        cs -> {
-          cs.setObject(1, buildWaterChecklistStruct(cs, o, userId));
-          cs.registerOutParameter(1, Types.STRUCT, WTR_CHECKLIST_TYPE);
-          cs.setObject(2, buildStructArray(cs, WTR_ACCESS_ROAD_VARRAY, WTR_ACCESS_ROAD_OBJECT,
-              o.accessRoads(), r -> new Object[] {
-                  blankToNull(r.accessRoadId()), o.waterChecklistId(), r.accessRoadType(),
-                  r.accessRoadDesc(), r.accessRoadStatusCode(),
-                  blankToNull(r.approximateRoadLength()), blankToNull(r.approximateRoadAge()),
-                  blankToNull(r.revisionCount()), r.entryUserid(), userId
-              }));
-          cs.registerOutParameter(2, Types.ARRAY, WTR_ACCESS_ROAD_VARRAY);
-          cs.setObject(3, buildStructArray(cs, WTR_DISTURBANCE_VARRAY, WTR_DISTURBANCE_OBJECT,
-              o.disturbances(), r -> new Object[] {
-                  blankToNull(r.disturbanceId()), o.waterChecklistId(), r.disturbanceCode(),
-                  r.disturbanceAgeCode(), blankToNull(r.disturbanceNumber()),
-                  blankToNull(r.revisionCount()), r.entryUserid(), userId
-              }));
-          cs.registerOutParameter(3, Types.ARRAY, WTR_DISTURBANCE_VARRAY);
-        },
-        cs -> {
-          Struct s = (Struct) cs.getObject(1);
-          String revision = s == null ? o.revisionCount() : attrString(s.getAttributes(), 35);
-          return o.withIdentity(o.waterChecklistId(), revision);
-        }
-    );
-  }
-
-  private Struct buildWaterChecklistStruct(java.sql.CallableStatement cs, WaterSampleArea o, String userId)
-      throws java.sql.SQLException {
-    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    Object[] a = new Object[38];
-    a[0] = o.waterChecklistId();
-    a[1] = o.frepResourceValueId();
-    a[2] = o.statusCode();
-    a[3] = o.siteAccessCode();
-    a[4] = o.mainAccessRoadNumber();
-    a[5] = o.mainWatershedDescription();
-    a[6] = o.drinkingWaterAnswerCode();
-    a[7] = o.waterIntakeComment();
-    a[8] = o.intakeToCutblockDistance();
-    a[9] = o.waterIntakeConnectivityCode();
-    a[10] = o.intakeToCutblockComment();
-    a[11] = o.specResourceAnswerCode();
-    a[12] = o.specialResourceValueComment();
-    a[13] = o.reportedDisturbanceInd();
-    a[14] = o.fertilizerUseOnRoadInd();
-    a[15] = o.fertilizerUseWithinBlckInd();
-    a[16] = o.sensitiveSoilAnswerCode();
-    a[17] = o.herbicideUseOnRoadInd();
-    a[18] = o.herbicideUseWithinBlockInd();
-    a[19] = o.pesticideUseOnRoadInd();
-    a[20] = o.pesticideUseWithinBlockInd();
-    a[21] = o.streamCrossingsInd();
-    a[22] = o.roadsParallelToStreamInd();
-    a[23] = o.unstableSlopesInd();
-    a[24] = o.sensitiveSoilsInd();
-    a[25] = o.adjacentHarvestingInd();
-    a[26] = o.livestockConcernsInd();
-    a[27] = o.otherActivityInd();
-    a[28] = o.otherActivityDescription();
-    a[29] = o.noteDescription();
-    a[30] = o.blockAccessTime();
-    a[31] = o.hoursOnBlock();
-    a[32] = o.peopleOnBlock();
-    a[33] = o.invasivePlantAnswerCode();
-    a[34] = o.invasivePlantComment();
-    a[35] = o.revisionCount();
-    a[36] = o.entryUserid();
-    a[37] = userId;
-    return connection.createStruct(WTR_CHECKLIST_TYPE, a);
-  }
-
-  // 251 Sample site (single OBJECT)
-  public WaterSampleSite getWaterSampleSite(String checklistId) {
-    return executeCall(
-        "{call " + WTR_SAMPLE_SITE_GET + "(?)}",
-        cs -> {
-          cs.setObject(1, newStruct(cs, WTR_SAMPLE_SITE_TYPE, 28, 1, checklistId));
-          cs.registerOutParameter(1, Types.STRUCT, WTR_SAMPLE_SITE_TYPE);
-        },
-        cs -> {
-          Struct s = (Struct) cs.getObject(1);
-          if (s == null) {
-            return null;
-          }
-          Object[] a = s.getAttributes();
-          return new WaterSampleSite(
-              attrString(a, 0), attrString(a, 1), attrString(a, 2), attrString(a, 3),
-              attrString(a, 4), attrString(a, 5), attrString(a, 6), attrString(a, 7),
-              attrString(a, 8), attrString(a, 9), attrString(a, 10), attrString(a, 11),
-              attrString(a, 12), attrString(a, 13), attrString(a, 14), attrString(a, 15),
-              attrString(a, 16), attrString(a, 17), attrString(a, 18), attrString(a, 19),
-              attrString(a, 20), attrString(a, 21), attrString(a, 22), attrString(a, 23),
-              attrString(a, 24), attrString(a, 25), attrString(a, 26), attrString(a, 27));
-        }
-    );
-  }
-
-  public WaterSampleSite saveWaterSampleSite(WaterSampleSite o, String userId) {
-    return executeCall(
-        "{call " + WTR_SAMPLE_SITE_SAVE + "(?)}",
-        cs -> {
-          cs.setObject(1, buildSampleSiteStruct(cs, o, userId));
-          cs.registerOutParameter(1, Types.STRUCT, WTR_SAMPLE_SITE_TYPE);
-        },
-        cs -> {
-          Struct s = (Struct) cs.getObject(1);
-          if (s == null) {
-            return o;
-          }
-          Object[] a = s.getAttributes();
-          return o.withIdentity(attrString(a, 0), attrString(a, 25));
-        }
-    );
-  }
-
-  private Struct buildSampleSiteStruct(java.sql.CallableStatement cs, WaterSampleSite o, String userId)
-      throws java.sql.SQLException {
-    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    Object[] a = new Object[] {
-        o.waterSampleSiteId(), o.waterChecklistId(), o.statusCode(), o.waterSiteType(),
-        o.waterStreamWidthCode(), o.evaluatorNameId(), o.domesticIntakeInd(), o.sampleSiteNumber(),
-        o.utmSignal(), o.utmZone(), o.utmEasting(), o.utmNorthing(), o.roadTypeCode(),
-        o.roadUseCode(), o.roadReference(), o.watershedReference(), o.communityWatershedInd(),
-        o.rangeImpactEvaluationInd(), o.waterCompromisedInd(), o.otherObservedConditionInd(),
-        o.otherObservedConditionDesc(), o.otherSolutionInd(), o.otherSolutionDescription(),
-        o.assessmentComment(), o.rangeComment(), o.revisionCount(), o.entryUserid(), userId
-    };
-    return connection.createStruct(WTR_SAMPLE_SITE_TYPE, a);
-  }
-
-  // 252 Assessment (condition + solution VARRAYs)
-  public WaterAssessment getWaterAssessment(String sampleSiteId) {
-    return executeCall(
-        "{call " + WTR_ASSESSMENT_GET + "(?,?,?)}",
-        cs -> {
-          cs.setString(1, sampleSiteId);
-          cs.registerOutParameter(2, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-          cs.registerOutParameter(3, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-        },
-        cs -> new WaterAssessment(sampleSiteId,
-            readStructList(cs.getArray(2), this::assessmentRow),
-            readStructList(cs.getArray(3), this::assessmentRow))
-    );
-  }
-
-  public WaterAssessment saveWaterAssessment(WaterAssessment o, String userId) {
-    return executeCall(
-        callSql(WTR_ASSESSMENT_PKG, "save", 3),
-        cs -> {
-          cs.setString(1, o.waterSampleSiteId());
-          cs.setObject(2, buildAssessmentArray(cs, o.conditions(), o.waterSampleSiteId(), userId));
-          cs.registerOutParameter(2, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-          cs.setObject(3, buildAssessmentArray(cs, o.solutions(), o.waterSampleSiteId(), userId));
-          cs.registerOutParameter(3, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-        },
-        cs -> getWaterAssessment(o.waterSampleSiteId())
-    );
-  }
-
-  // 253 Range (single VARRAY)
-  public WaterRange getWaterRange(String sampleSiteId) {
-    return executeCall(
-        "{call " + WTR_RANGE_GET + "(?,?)}",
-        cs -> {
-          cs.setString(1, sampleSiteId);
-          cs.registerOutParameter(2, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-        },
-        cs -> new WaterRange(sampleSiteId, readStructList(cs.getArray(2), this::assessmentRow))
-    );
-  }
-
-  public WaterRange saveWaterRange(WaterRange o, String userId) {
-    return executeCall(
-        callSql(WTR_RANGE_PKG, "save", 2),
-        cs -> {
-          cs.setString(1, o.waterSampleSiteId());
-          cs.setObject(2, buildAssessmentArray(cs, o.ranges(), o.waterSampleSiteId(), userId));
-          cs.registerOutParameter(2, Types.ARRAY, WTR_ASSESSMENT_VARRAY);
-        },
-        cs -> getWaterRange(o.waterSampleSiteId())
-    );
-  }
-
-  private WtrAssessmentRow assessmentRow(Object[] attrs) {
-    return new WtrAssessmentRow(
-        attrString(attrs, 0), attrString(attrs, 1), attrString(attrs, 2), attrString(attrs, 3),
-        attrString(attrs, 4), attrString(attrs, 5), attrString(attrs, 6), attrString(attrs, 7),
-        attrString(attrs, 8), attrString(attrs, 9));
-  }
-
-  private Array buildAssessmentArray(
-      java.sql.CallableStatement cs, List<WtrAssessmentRow> rows, String sampleSiteId, String userId)
-      throws java.sql.SQLException {
-    return buildStructArray(cs, WTR_ASSESSMENT_VARRAY, WTR_ASSESSMENT_OBJECT, rows,
-        r -> new Object[] {
-            sampleSiteId, r.activityGrpCode(), r.activityGrpDesc(),
-            blankToNull(r.activityGrpCount()), r.assessmentType(), r.assessmentDesc(),
-            r.assessmentInd(), blankToNull(r.revisionCount()), r.entryUserid(), userId
-        });
-  }
-
-  /** Build an input OBJECT with a single id attribute set (the GET procs key off it). */
-  private static Struct newStruct(
-      java.sql.CallableStatement cs, String type, int size, int idIndex, String idValue)
-      throws java.sql.SQLException {
-    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    Object[] attrs = new Object[size];
-    attrs[idIndex] = idValue;
-    return connection.createStruct(type, attrs);
   }
 
   /** Null for a blank string, so empty values are not passed to NUMBER struct attrs (ORA-17059). */

@@ -25,3 +25,15 @@ export type CodeOption = {
   code: string;
   description: string;
 };
+
+/** One BEC catalogue row returned by the FREP211 BEC search. */
+export type BecRow = {
+  bgcZoneCode?: string;
+  bgcSubzoneCode?: string;
+  bgcVariant?: string;
+  bgcPhase?: string;
+  becSiteSeriesCd?: string;
+  siteSeriesPhaseCd?: string;
+  seral?: string;
+  description?: string;
+};

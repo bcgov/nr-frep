@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.repository.frep;
 
+import ca.bc.gov.nrs.frep.dto.frep.BecRow;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.util.LinkedHashMap;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Repository;
 public class CodeListRepository extends AbstractFrepRepository {
 
   static final String PACKAGE_NAME = "FREP_CODE_LISTS";
+  private static final String BGC_SEARCH_PACKAGE = "FREP_52_BGC_SEARCH";
 
   public CodeListRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -99,6 +101,79 @@ public class CodeListRepository extends AbstractFrepRepository {
   }
 
   /**
+   * Biodiversity stratum-type codes for the FREP211 "Stratum type" dropdown.
+   *
+   * <p>Legacy procedure {@code get_stratum_type_code} returns {@code code} =
+   * {@code biodiversity_strata_type_code} and {@code description} =
+   * {@code code || ' - ' || description}, from table {@code biodiversity_strata_type_code}.
+   */
+  public List<Map<String, Object>> getStratumTypeCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_stratum_type_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Tree-species codes for the FREP212 plot Stand / CWD "Spp." dropdowns.
+   *
+   * <p>Legacy procedure {@code get_frep_species_code} returns {@code code} =
+   * {@code frep_tree_species_code} and {@code description}, from table
+   * {@code frep_tree_species_code}.
+   */
+  public List<Map<String, Object>> getFrepSpeciesCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_frep_species_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Wildlife-tree decay-class codes for the FREP212 Stand table "WT Class" dropdown.
+   *
+   * <p>Legacy procedure {@code get_wildlife_tree_decay_code} returns {@code code} =
+   * {@code wildlife_tree_decay_class_code} and {@code description}.
+   */
+  public List<Map<String, Object>> getWildlifeTreeDecayCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_wildlife_tree_decay_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * CWD decay-class codes for the FREP212 Coarse Woody Debris "Decay Class" dropdown.
+   *
+   * <p>Legacy procedure {@code get_cwd_decay_class_code} returns {@code code} =
+   * {@code cwd_decay_class_code} and {@code description}.
+   */
+  public List<Map<String, Object>> getCwdDecayClassCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_cwd_decay_class_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Evaluator user-ids for the FREP212 "Evaluated By" dropdown — the checklist's saved team
+   * members for the given protocol.
+   *
+   * <p>Legacy procedure {@code get_evaluator_code(p_checklist_id, p_resource_type_code, cursor)}
+   * returns {@code code} = {@code evaluator_userid} and {@code description} = the userid with the
+   * {@code IDIR\} prefix stripped, from {@code <protocol>_evaluator_name}.
+   */
+  public List<Map<String, Object>> getEvaluatorCode(String checklistId, String resourceType) {
+    String call = "{call " + PACKAGE_NAME + ".get_evaluator_code(?,?,?)}";
+    return executeCall(call,
+        cs -> {
+          cs.setString(1, checklistId);
+          cs.setString(2, resourceType);
+          registerOutCursor(cs, 3);
+        },
+        cs -> readCursor(cs, 3, CodeListRepository::rowToMap));
+  }
+
+  /**
    * FREP checklist answer codes (Yes/No/etc.) for indicator dropdowns such as the
    * FREP230 invasive-plant answer.
    *
@@ -120,6 +195,47 @@ public class CodeListRepository extends AbstractFrepRepository {
           registerOutCursor(cs, 2);
         },
         cs -> readCursor(cs, 2, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * BEC catalogue search for the FREP211 BEC picker via {@code FREP_52_BGC_SEARCH.mainline}
+   * ({@code p_action='GET'}). 10 params: action + the 7 BEC criteria + error_message are all IN OUT
+   * VARCHAR (the proc uppercases / strips LIKE predicates on the criteria in place); the result set
+   * is the OUT ref cursor at param 10. Each criterion is optional (blank → matches everything).
+   * Mirrors legacy {@code Sil52BgcSearchBeanJDBCAdaptor}.
+   */
+  public List<BecRow> searchBec(String zone, String subzone, String variant, String phase,
+      String siteSeries, String siteSeriesPhase, String seral) {
+    String call = "{call " + BGC_SEARCH_PACKAGE + ".mainline(?,?,?,?,?,?,?,?,?,?)}";
+    return executeCall(call,
+        cs -> {
+          setInOutString(cs, 1, "GET");
+          setInOutString(cs, 2, zone);
+          setInOutString(cs, 3, subzone);
+          setInOutString(cs, 4, variant);
+          setInOutString(cs, 5, phase);
+          setInOutString(cs, 6, siteSeries);
+          setInOutString(cs, 7, siteSeriesPhase);
+          setInOutString(cs, 8, seral);
+          setInOutString(cs, 9, null);
+          registerOutCursor(cs, 10);
+        },
+        cs -> {
+          throwIfError(BGC_SEARCH_PACKAGE, "mainline", cs.getString(9));
+          return readCursor(cs, 10, CodeListRepository::becRow);
+        });
+  }
+
+  private static BecRow becRow(ResultSet rs) throws java.sql.SQLException {
+    return new BecRow(
+        rs.getString("BGC_ZONE_CODE"),
+        rs.getString("BGC_SUBZONE_CODE"),
+        rs.getString("BGC_VARIANT"),
+        rs.getString("BGC_PHASE"),
+        rs.getString("BEC_SITE_SERIES_CD"),
+        rs.getString("BEC_SITE_SERIES_PHASE_CD"),
+        rs.getString("BEC_SERAL"),
+        rs.getString("SITE_SERIES_DESC"));
   }
 
   private static Map<String, Object> rowToMap(ResultSet rs) throws java.sql.SQLException {

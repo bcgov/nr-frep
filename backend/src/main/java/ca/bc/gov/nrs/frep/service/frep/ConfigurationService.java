@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.dto.frep.BecRow;
 import ca.bc.gov.nrs.frep.dto.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
 import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
@@ -74,6 +75,53 @@ public class ConfigurationService {
         .map(ConfigurationService::toCodeOption)
         .filter(o -> o.code() != null)
         .toList();
+  }
+
+  /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
+  public List<CodeOptionResponse> getStrataTypes() {
+    return codeListRepository.getStratumTypeCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Tree-species options for the FREP212 Stand / CWD "Spp." dropdowns. */
+  public List<CodeOptionResponse> getSpeciesCodes() {
+    return codeListRepository.getFrepSpeciesCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Wildlife-tree decay-class options for the FREP212 Stand "WT Class" dropdown. */
+  public List<CodeOptionResponse> getWildlifeTreeDecayCodes() {
+    return codeListRepository.getWildlifeTreeDecayCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** CWD decay-class options for the FREP212 Coarse Woody Debris "Decay Class" dropdown. */
+  public List<CodeOptionResponse> getCwdDecayCodes() {
+    return codeListRepository.getCwdDecayClassCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Evaluator options (the checklist's saved team) for the FREP212 "Evaluated By" dropdown. */
+  public List<CodeOptionResponse> getEvaluators(String checklistId, String resourceType) {
+    return codeListRepository.getEvaluatorCode(checklistId, resourceType).stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** BEC catalogue search for the FREP211 BEC picker (all criteria optional). */
+  public List<BecRow> searchBec(String zone, String subzone, String variant, String phase,
+      String siteSeries, String siteSeriesPhase, String seral) {
+    return codeListRepository.searchBec(
+        zone, subzone, variant, phase, siteSeries, siteSeriesPhase, seral);
   }
 
   /**

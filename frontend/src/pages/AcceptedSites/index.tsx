@@ -108,7 +108,8 @@ const AcceptedSitesPage: FC = () => {
         if (cancelled) return;
         setMasterListYears(years);
         setOrgUnits(units);
-        setProtocols(fetchedProtocols);
+        // Riparian (RIP) and Water (WTR) are out of scope — keep them out of the protocol filter.
+        setProtocols(fetchedProtocols.filter((p) => p.code !== 'RIP' && p.code !== 'WTR'));
 
         const defaultYear = years.find((year) => year.current) ?? years[0];
         if (defaultYear) setEffectiveYear(defaultYear.effectiveYear);

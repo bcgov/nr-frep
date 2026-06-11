@@ -1,6 +1,6 @@
-import { Download, TrashCan } from '@carbon/icons-react';
-import { Button, FileUploaderButton, SkeletonText, TextInput } from '@carbon/react';
-import { useCallback, useEffect, useState, type FC } from 'react';
+import { Download, TrashCan, Upload } from '@carbon/icons-react';
+import { Button, SkeletonText, TextInput } from '@carbon/react';
+import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
 import type { AttachmentRow } from '@/types/protocolChecklist';
 
@@ -37,8 +37,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   const { display } = useNotification();
   const [rows, setRows] = useState<AttachmentRow[]>([]);
   const [description, setDescription] = useState('');
+  const [descInvalid, setDescInvalid] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -71,12 +74,18 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   }, [protocol, checklistId, reportError]);
 
   const handleUpload = async (file: File) => {
+    // Legacy FREP303 requires a description before an attachment can be saved — surface it as
+    // inline field validation rather than blocking the Browse button.
+    if (!description.trim()) {
+      setDescInvalid(true);
+      return;
+    }
     setBusy(true);
     try {
       const data = await toBase64(file);
       const updated = await API.protocolChecklist.uploadAttachment(protocol, checklistId, {
         fileName: file.name,
-        description,
+        description: description.trim(),
         contentType: file.type,
         data,
       });
@@ -140,7 +149,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
 
   return (
     <div className="rip-form">
-      {rows.length > 0 ? (
+      {rows.length > 0 && (
         <table className="rip-field-grid">
           <thead>
             <tr>
@@ -170,11 +179,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                   />
                   {canManage && (
                     <Button
-                      kind="danger--tertiary"
+                      kind="danger--ghost"
                       size="sm"
                       hasIconOnly
                       renderIcon={TrashCan}
-                      iconDescription="Remove attachment"
+                      iconDescription="Delete"
                       disabled={busy}
                       onClick={() => void handleDelete(row)}
                     />
@@ -184,30 +193,64 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             ))}
           </tbody>
         </table>
-      ) : (
-        <p>No attachments.</p>
       )}
 
       {canManage && (
-        <div className="rip-form__add-evaluator">
-          <TextInput
-            id="attach-description"
-            labelText="Description (optional)"
-            value={description}
-            disabled={busy}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <FileUploaderButton
-            labelText="Add attachment"
-            buttonKind="tertiary"
-            disableLabelChanges
-            disabled={busy}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              const file = e.target.files?.[0];
-              if (file) void handleUpload(file);
-              e.target.value = '';
-            }}
-          />
+        <div className="attach-card">
+          <div className="attach-card__header">Upload file</div>
+          <div className="attach-card__body">
+            <TextInput
+              id="attach-description"
+              className="attach-card__desc"
+              labelText="Description"
+              required
+              invalid={descInvalid}
+              invalidText="The description field must be entered."
+              value={description}
+              disabled={busy}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (e.target.value.trim()) setDescInvalid(false);
+              }}
+            />
+            <div
+              className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!busy) setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file && !busy) void handleUpload(file);
+              }}
+            >
+              <span className="attach-drop__icon">
+                <Upload size={24} />
+              </span>
+              <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
+              <Button
+                kind="primary"
+                size="lg"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse files
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

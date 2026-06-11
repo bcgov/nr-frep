@@ -40,10 +40,6 @@ import LandingPage from '@/pages/Landing';
 import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
 import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
-import WaterAssessmentEditPage from '@/pages/ProtocolChecklist/WaterAssessmentEdit';
-import WaterRangeEditPage from '@/pages/ProtocolChecklist/WaterRangeEdit';
-import WaterSampleAreaEditPage from '@/pages/ProtocolChecklist/WaterSampleAreaEdit';
-import WaterSampleSiteEditPage from '@/pages/ProtocolChecklist/WaterSampleSiteEdit';
 import RandomListPage from '@/pages/RandomList';
 import ReportsPage from '@/pages/Reports';
 import RoleErrorPage from '@/pages/RoleError';
@@ -153,54 +149,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: false,
-  },
-  {
-    path: '/protocol-checklists/water/:id/sample-area',
-    id: 'Water Sample Area Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <WaterSampleAreaEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/water/:id/sample-site',
-    id: 'Water Sample Site Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <WaterSampleSiteEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/water/:id/assessment',
-    id: 'Water Assessment Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <WaterAssessmentEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
-  },
-  {
-    path: '/protocol-checklists/water/:id/range',
-    id: 'Water Range Edit',
-    icon: Tree,
-    element: (
-      <Layout>
-        <WaterRangeEditPage />
-      </Layout>
-    ),
-    isSideMenu: false,
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
   },
   {
     path: '/chr/checklists/:id',

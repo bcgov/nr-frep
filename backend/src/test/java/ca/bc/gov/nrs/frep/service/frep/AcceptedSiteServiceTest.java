@@ -88,6 +88,40 @@ class AcceptedSiteServiceTest {
   }
 
   @Test
+  void findAcceptedSitesExcludesRiparianAndWaterWhenNoProtocolFilter() {
+    when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
+        new AcceptedSiteRow(
+            "1001", "Biodiversity", "", "ACC", "RDY",
+            "A1", "987001", "L1", "CP-1", "CB-1", "2024-06-15"
+        ),
+        new AcceptedSiteRow(
+            "1002", "Riparian", "", "ACC", "RDY",
+            "A2", "987002", "L2", "CP-2", "CB-2", "2024-06-15"
+        ),
+        new AcceptedSiteRow(
+            "1003", "Water", "", "ACC", "RDY",
+            "A3", "987003", "L3", "CP-3", "CB-3", "2024-06-15"
+        )
+    ));
+    Map<String, Object> slb = new LinkedHashMap<>();
+    slb.put("CODE", "SLB");
+    slb.put("DESCRIPTION", "Biodiversity");
+    Map<String, Object> rip = new LinkedHashMap<>();
+    rip.put("CODE", "RIP");
+    rip.put("DESCRIPTION", "Riparian");
+    Map<String, Object> wtr = new LinkedHashMap<>();
+    wtr.put("CODE", "WTR");
+    wtr.put("DESCRIPTION", "Water");
+    when(codeListRepository.getResourceValue()).thenReturn(List.of(slb, rip, wtr));
+
+    var sites = service.findAcceptedSites("2024", "56", null);
+
+    // Only Biodiversity remains — Riparian + Water are out of scope.
+    assertEquals(1, sites.size());
+    assertEquals("SLB", sites.get(0).protocolCode());
+  }
+
+  @Test
   void findAcceptedSitesMergesCulturalHeritage() {
     when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
         new AcceptedSiteRow(

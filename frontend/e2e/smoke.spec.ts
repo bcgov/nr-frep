@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test('root responds with 200', async ({ page }) => {
   const response = await page.goto('/');

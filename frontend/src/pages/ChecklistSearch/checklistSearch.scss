@@ -29,7 +29,8 @@
   gap: 0.5rem;
 }
 
-// Client # field with its lookup button aligned to the input's baseline.
+// Client name field (single grid column) with its lookup/clear buttons aligned to the input's
+// baseline.
 .checklist-search__client {
   display: flex;
   align-items: end;
@@ -37,5 +38,16 @@
 
   .cds--text-input-wrapper {
     flex: 1 1 auto;
+  }
+
+  // The read-only input renders with a transparent background by default; force the filled grey
+  // field background so it matches the other (editable) filters like Opening ID.
+  .cds--text-input {
+    background-color: var(--#{vars.$bcgov-prefix}-field);
+  }
+
+  .checklist-search__client-buttons {
+    display: flex;
+    gap: 0.25rem;
   }
 }

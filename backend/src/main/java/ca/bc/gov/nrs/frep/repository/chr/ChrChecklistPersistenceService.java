@@ -147,6 +147,71 @@ public class ChrChecklistPersistenceService {
   }
 
   public void saveChecklist(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    applyOpeningFields(chrChecklist, resource);
+
+    FrepChecklistStatusCode status = entityManager.find(
+        FrepChecklistStatusCode.class,
+        resource.getStatus()
+    );
+    chrChecklist.setFrepChecklistStatusCode(status);
+
+    applyBlockSummaryFields(chrChecklist, resource);
+    stampChecklistUpdate(chrChecklist, userId);
+
+    saveContacts(chrChecklist, resource, userId);
+    saveFeatures(chrChecklist, resource, userId);
+    savePictures(chrChecklist, resource, userId);
+
+    entityManager.flush();
+    resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
+  }
+
+  /**
+   * Per-section saves (Opening info, Block summary, Contacts, Features, Attachments) — each loads
+   * the checklist row, applies only its own section, stamps the parent (bumping the shared
+   * {@code revision_count} optimistic-lock token), flushes, and echoes the new revision count.
+   * Unlike {@link #saveChecklist} these never touch the other sections, so e.g. saving Opening info
+   * does not re-sync photos to object storage. They mirror the Biodiversity per-section save model.
+   */
+  public void saveOpeningSection(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+    chrChecklist.setDeviceCheckoutGuid(null);
+    applyOpeningFields(chrChecklist, resource);
+    finishSectionSave(chrChecklist, resource, userId);
+  }
+
+  public void saveBlockSummarySection(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+    chrChecklist.setDeviceCheckoutGuid(null);
+    applyBlockSummaryFields(chrChecklist, resource);
+    finishSectionSave(chrChecklist, resource, userId);
+  }
+
+  public void saveContactsSection(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+    chrChecklist.setDeviceCheckoutGuid(null);
+    saveContacts(chrChecklist, resource, userId);
+    finishSectionSave(chrChecklist, resource, userId);
+  }
+
+  public void saveFeaturesSection(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+    chrChecklist.setDeviceCheckoutGuid(null);
+    saveFeatures(chrChecklist, resource, userId);
+    finishSectionSave(chrChecklist, resource, userId);
+  }
+
+  public void savePicturesSection(CheckList resource, String userId) {
+    ChrChecklist chrChecklist = loadChecklistForSave(resource);
+    chrChecklist.setDeviceCheckoutGuid(null);
+    savePictures(chrChecklist, resource, userId);
+    finishSectionSave(chrChecklist, resource, userId);
+  }
+
+  private ChrChecklist loadChecklistForSave(CheckList resource) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, Long.parseLong(resource.getChecklistID()));
     if (chrChecklist == null) {
       throw new ChrRestException(
@@ -154,8 +219,21 @@ public class ChrChecklistPersistenceService {
           "Checklist " + resource.getChecklistID() + " was not found."
       );
     }
+    return chrChecklist;
+  }
 
-    chrChecklist.setDeviceCheckoutGuid(null);
+  private void finishSectionSave(ChrChecklist chrChecklist, CheckList resource, String userId) {
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+    resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
+  }
+
+  private void stampChecklistUpdate(ChrChecklist chrChecklist, String userId) {
+    chrChecklist.setUpdateUserid(userId);
+    chrChecklist.setUpdateTimestamp(new Date());
+  }
+
+  private void applyOpeningFields(ChrChecklist chrChecklist, CheckList resource) {
     try {
       chrChecklist.setEvaluationDate(ChrDateUtils.getDate(resource.getEvaluationDate()));
     } catch (Exception ex) {
@@ -166,15 +244,10 @@ public class ChrChecklistPersistenceService {
     }
     chrChecklist.setFirstNationsPlacename(resource.getFirstNationName());
     chrChecklist.setLocationDescription(resource.getGeneralLocation());
-
     updateTargetedStatus(chrChecklist, resource.getTargeted());
+  }
 
-    FrepChecklistStatusCode status = entityManager.find(
-        FrepChecklistStatusCode.class,
-        resource.getStatus()
-    );
-    chrChecklist.setFrepChecklistStatusCode(status);
-
+  private void applyBlockSummaryFields(ChrChecklist chrChecklist, CheckList resource) {
     chrChecklist.setLimitingOperatnlFactorsInd(
         ChrStringUtils.booleanToIndictor(resource.getQ8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock()));
     chrChecklist.setLimitingOperatnlFactorsDesc(resource.getQ8Comments());
@@ -201,15 +274,6 @@ public class ChrChecklistPersistenceService {
     }
     chrChecklist.setEvaluationRatingRationale(resource.getRatingRationale());
     chrChecklist.setBlockComments(resource.getCommentaires());
-    chrChecklist.setUpdateUserid(userId);
-    chrChecklist.setUpdateTimestamp(new Date());
-
-    saveContacts(chrChecklist, resource, userId);
-    saveFeatures(chrChecklist, resource, userId);
-    savePictures(chrChecklist, resource, userId);
-
-    entityManager.flush();
-    resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
   }
 
   public String getDeviceCheckoutGuid(Long checklistId) {

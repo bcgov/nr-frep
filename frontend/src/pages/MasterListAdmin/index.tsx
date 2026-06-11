@@ -194,30 +194,46 @@ const MasterListAdminPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Select
-          id="master-list-admin-year"
-          labelText="Master list year"
-          value={effectiveYear}
-          onChange={(e) => setEffectiveYear(e.target.value)}
-          disabled={loading || years.length === 0}
-        >
-          {years.map((year) => (
-            <SelectItem key={year.effectiveYear} value={year.effectiveYear} text={year.label} />
-          ))}
-        </Select>
-      </Column>
+        <Tile className="master-list-admin__panel">
+          <h2>Eligibility criteria</h2>
+          <div className="master-list-admin__year">
+            <div className="master-list-admin__year-select">
+              <Select
+                id="master-list-admin-year"
+                labelText="Master list year"
+                value={effectiveYear}
+                onChange={(e) => setEffectiveYear(e.target.value)}
+                disabled={loading || years.length === 0}
+              >
+                {years.map((year) => (
+                  <SelectItem
+                    key={year.effectiveYear}
+                    value={year.effectiveYear}
+                    text={year.label}
+                  />
+                ))}
+              </Select>
+            </div>
+            {!loading && criteria && (
+              <div className="master-list-admin__generated">
+                <span className="master-list-admin__label">Generated</span>
+                {criteria.generated ? (
+                  <Tag type="green" size="sm">
+                    Yes
+                  </Tag>
+                ) : (
+                  <Tag type="gray" size="sm">
+                    Not yet
+                  </Tag>
+                )}
+              </div>
+            )}
+          </div>
 
-      {loading && (
-        <Column sm={4} md={8} lg={16}>
-          <SkeletonText paragraph lineCount={6} />
-        </Column>
-      )}
+          {loading && <SkeletonText paragraph lineCount={6} />}
 
-      {!loading && criteria && (
-        <>
-          <Column sm={4} md={8} lg={10}>
-            <Tile className="master-list-admin__panel">
-              <h2>Eligibility criteria</h2>
+          {!loading && criteria && (
+            <>
               <div className="master-list-admin__form">
                 <TextInput
                   id="mla-min-date"
@@ -289,35 +305,13 @@ const MasterListAdminPage: FC = () => {
                   </Button>
                 )}
               </div>
-            </Tile>
-          </Column>
+            </>
+          )}
+        </Tile>
+      </Column>
 
-          <Column sm={4} md={8} lg={6}>
-            <Tile className="master-list-admin__panel">
-              <h2>Status</h2>
-              <p>
-                <span className="master-list-admin__label">Year</span>
-                <span>{criteria.effectiveYear}</span>
-              </p>
-              <p>
-                <span className="master-list-admin__label">Generated</span>
-                {criteria.generated ? (
-                  <Tag type="green" size="sm">
-                    Yes
-                  </Tag>
-                ) : (
-                  <Tag type="gray" size="sm">
-                    Not yet
-                  </Tag>
-                )}
-              </p>
-              <p>
-                <span className="master-list-admin__label">Comments</span>
-                <span>{criteria.generationComments || '—'}</span>
-              </p>
-            </Tile>
-          </Column>
-
+      {!loading && criteria && (
+        <>
           <Column sm={4} md={8} lg={16}>
             {criteria.generationStats.length === 0 ? (
               <p>No generation stats yet — generate the list to see per-district counts.</p>

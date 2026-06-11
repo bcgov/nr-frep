@@ -103,6 +103,66 @@ public class ChrChecklistService {
   }
 
   @Transactional
+  public CheckList saveOpeningSection(CheckList checklist) {
+    return saveSection(checklist, persistenceService::saveOpeningSection, null);
+  }
+
+  @Transactional
+  public CheckList saveBlockSummarySection(CheckList checklist) {
+    return saveSection(checklist, persistenceService::saveBlockSummarySection, null);
+  }
+
+  @Transactional
+  public CheckList saveContactsSection(CheckList checklist) {
+    return saveSection(checklist, persistenceService::saveContactsSection, null);
+  }
+
+  @Transactional
+  public CheckList saveFeaturesSection(CheckList checklist) {
+    return saveSection(checklist, persistenceService::saveFeaturesSection, this::validateFeatures);
+  }
+
+  @Transactional
+  public CheckList savePicturesSection(CheckList checklist) {
+    return saveSection(checklist, persistenceService::savePicturesSection, this::validatePictures);
+  }
+
+  /**
+   * Shared gate for per-section saves: authorize, require an id, confirm the checklist is ACT,
+   * run the optimistic-lock check, run any section-specific validation, persist just that section,
+   * and return the freshly re-read checklist (new revision count + any server-assigned ids). Only
+   * the relevant section is validated, so e.g. saving Opening info is not blocked by a photo that
+   * is missing its description.
+   */
+  private CheckList saveSection(
+      CheckList checklist,
+      java.util.function.BiConsumer<CheckList, String> persist,
+      java.util.function.Consumer<CheckList> validate
+  ) {
+    assertCanWriteChecklist();
+    if (!ChrStringUtils.hasAValue(checklist.getChecklistID())) {
+      throw new ChrRestException(
+          ChrConstants.RestExceptionTypes.UNEXPECTED,
+          "checkListId is missing in JSON body and is required to perform save"
+      );
+    }
+    if (validate != null) {
+      validate.accept(checklist);
+    }
+    long checklistId = Long.parseLong(checklist.getChecklistID());
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new ChrRestException(
+          ChrConstants.RestExceptionTypes.UNEXPECTED,
+          ChrConstants.RestMessages.ERROR_CHANGE_STATUS
+      );
+    }
+    assertRevisionCount(checklist, checklistId);
+    persist.accept(checklist, loggedUserHelper.getLoggedUserId());
+    return getChecklist(checklistId);
+  }
+
+  @Transactional
   public CheckList submitChecklist(long checklistId, CheckList checklist) {
     assertCanWriteChecklist();
     if (checklist != null && !Long.toString(checklistId).equals(checklist.getChecklistID())) {
@@ -220,6 +280,11 @@ public class ChrChecklistService {
   }
 
   private void validateSaveRequest(CheckList checklist) {
+    validateFeatures(checklist);
+    validatePictures(checklist);
+  }
+
+  private void validateFeatures(CheckList checklist) {
     if (checklist.getFeatures() != null) {
       for (Feature feature : checklist.getFeatures()) {
         if (feature.getOtherPlannedManagementStrategy() == null) {
@@ -245,6 +310,9 @@ public class ChrChecklistService {
         }
       }
     }
+  }
+
+  private void validatePictures(CheckList checklist) {
     if (checklist.getPictures() != null) {
       for (Picture picture : checklist.getPictures()) {
         if (!ChrStringUtils.hasAValue(picture.getDescription())) {

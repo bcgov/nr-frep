@@ -1,6 +1,8 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -11,6 +13,7 @@ import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.SearchRepository;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -19,6 +22,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class SearchServiceTest {
@@ -107,5 +113,32 @@ class SearchServiceTest {
     assertEquals("tolko", criteria.clientName());
     assertEquals("John", criteria.legalFirstName());
     assertEquals("Q", criteria.legalMiddleName());
+  }
+
+  @Test
+  void searchClientsTranslatesVarrayOverflowToBadRequest() {
+    // Legacy proc raises ORA-20103 (varray index out of bounds) when > 500 rows match.
+    SQLException oraError = new SQLException(
+        "ORA-20103: frep.web.usr.database.record.varray.index.out.of.bounds:500", "72000", 20103);
+    when(searchRepository.searchClients(any()))
+        .thenThrow(new DataAccessResourceFailureException("call failed", oraError));
+
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.searchClients(null, null, "a", null, null));
+
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    assertTrue(ex.getReason() != null && ex.getReason().contains("narrow"));
+  }
+
+  @Test
+  void searchClientsRethrowsOtherDataAccessErrors() {
+    DataAccessResourceFailureException other = new DataAccessResourceFailureException(
+        "connection closed", new SQLException("ORA-12345: something else", "72000", 12345));
+    when(searchRepository.searchClients(any())).thenThrow(other);
+
+    DataAccessResourceFailureException thrown = assertThrows(
+        DataAccessResourceFailureException.class,
+        () -> service.searchClients(null, null, "a", null, null));
+    assertSame(other, thrown);
   }
 }

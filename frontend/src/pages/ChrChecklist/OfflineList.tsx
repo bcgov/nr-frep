@@ -1,14 +1,37 @@
-import { Button, Column, Grid, Tag, Tile } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  Button,
+  Column,
+  DataTable,
+  Grid,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tag,
+} from '@carbon/react';
+import { useEffect, useMemo, useState, type FC } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 
 import type { OfflineChecklist } from '@/services/offline/chrDb';
 
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 
+// All offline records come from the CHR store (chrOfflineRepo / the "frep-chr" IndexedDB).
+const PROTOCOL_LABEL = 'Cultural Heritage';
+
+const TABLE_HEADERS = [
+  { key: 'checklist', header: 'Checklist' },
+  { key: 'protocol', header: 'Protocol' },
+  { key: 'openingId', header: 'Opening ID' },
+  { key: 'status', header: 'Status' },
+  { key: 'actions', header: '' },
+] as const;
+
 /** Lists CHR checklists currently stored offline in this browser, with quick links to open them. */
 const ChrOfflineListPage: FC = () => {
-  const navigate = useNavigate();
   const [records, setRecords] = useState<OfflineChecklist[]>([]);
 
   useEffect(() => {
@@ -21,6 +44,19 @@ const ChrOfflineListPage: FC = () => {
     };
   }, []);
 
+  const rows = useMemo(
+    () =>
+      records.map((record) => ({
+        id: record.checklistId,
+        checklist: `Checklist ${record.checklistId}`,
+        protocol: PROTOCOL_LABEL,
+        openingId: record.checkList.openingID || '—',
+        status: record.dirty ? 'Unsynced changes' : 'Synced',
+        dirty: record.dirty,
+      })),
+    [records],
+  );
+
   const remove = async (id: string) => {
     await chrOfflineRepo.remove(id);
     setRecords((prev) => prev.filter((r) => r.checklistId !== id));
@@ -29,37 +65,78 @@ const ChrOfflineListPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Offline CHR checklists</h1>
+        <h1>Offline checklists</h1>
         <p>Checklists saved on this device for offline editing.</p>
       </Column>
       <Column sm={4} md={8} lg={16}>
-        {records.length === 0 && <p>No checklists are stored offline.</p>}
-        {records.map((record) => (
-          <Tile key={record.checklistId} className="chr-checklist__row">
-            <strong>Checklist {record.checklistId}</strong>{' '}
-            {record.dirty ? (
-              <Tag type="magenta" size="sm">
-                Unsynced changes
-              </Tag>
-            ) : (
-              <Tag type="green" size="sm">
-                Synced
-              </Tag>
+        {rows.length === 0 ? (
+          <p>No checklists are stored offline.</p>
+        ) : (
+          <DataTable
+            rows={rows}
+            headers={[...TABLE_HEADERS]}
+            data-testid="offline-checklists-table"
+          >
+            {({ rows: dataRows, headers, getTableProps, getHeaderProps, getRowProps }) => (
+              <TableContainer>
+                <Table {...getTableProps()}>
+                  <TableHead>
+                    <TableRow>
+                      {headers.map((header) => (
+                        <TableHeader {...getHeaderProps({ header })} key={header.key}>
+                          {header.header}
+                        </TableHeader>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {dataRows.map((row) => {
+                      const meta = rows.find((item) => item.id === row.id);
+                      return (
+                        <TableRow {...getRowProps({ row })} key={row.id}>
+                          {row.cells.map((cell) => {
+                            if (cell.info.header === 'checklist') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <RouterLink to={`/chr/checklists/${row.id}`}>
+                                    {cell.value}
+                                  </RouterLink>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'status') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <Tag type={meta?.dirty ? 'magenta' : 'green'} size="sm">
+                                    {cell.value}
+                                  </Tag>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'actions') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  <Button
+                                    size="sm"
+                                    kind="danger--tertiary"
+                                    onClick={() => void remove(row.id)}
+                                  >
+                                    Remove from device
+                                  </Button>
+                                </TableCell>
+                              );
+                            }
+                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
+                          })}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
-            <div className="chr-checklist__actions">
-              <Button size="sm" onClick={() => navigate(`/chr/checklists/${record.checklistId}`)}>
-                Open
-              </Button>
-              <Button
-                size="sm"
-                kind="danger--tertiary"
-                onClick={() => void remove(record.checklistId)}
-              >
-                Remove from device
-              </Button>
-            </div>
-          </Tile>
-        ))}
+          </DataTable>
+        )}
       </Column>
     </Grid>
   );

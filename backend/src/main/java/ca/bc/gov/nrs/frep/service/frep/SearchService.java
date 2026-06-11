@@ -7,11 +7,15 @@ import ca.bc.gov.nrs.frep.repository.frep.ChecklistSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.frep.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.frep.SearchRepository;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * FREP400 checklist search and FREP410 client search backed by the legacy Oracle
@@ -44,22 +48,26 @@ public class SearchService {
       String evaluationDateFrom,
       String evaluationDateTo
   ) {
-    return searchRepository.searchChecklists(new ChecklistSearchCriteria(
-        trimToNull(effectiveYear),
-        trimToNull(orgUnit),
-        normalizeProtocolType(protocolType).orElse(null),
-        trimToNull(licenceId),
-        trimToNull(cuttingPermitId),
-        trimToNull(cutBlockId),
-        trimToNull(openingId),
-        trimToNull(clientNumber),
-        trimToNull(checklistStatusCode),
-        trimToNull(checklistId),
-        trimToNull(evaluationDateFrom),
-        trimToNull(evaluationDateTo)
-    )).stream()
-        .map(SearchService::toChecklistSearchResult)
-        .toList();
+    try {
+      return searchRepository.searchChecklists(new ChecklistSearchCriteria(
+          trimToNull(effectiveYear),
+          trimToNull(orgUnit),
+          normalizeProtocolType(protocolType).orElse(null),
+          trimToNull(licenceId),
+          trimToNull(cuttingPermitId),
+          trimToNull(cutBlockId),
+          trimToNull(openingId),
+          trimToNull(clientNumber),
+          trimToNull(checklistStatusCode),
+          trimToNull(checklistId),
+          trimToNull(evaluationDateFrom),
+          trimToNull(evaluationDateTo)
+      )).stream()
+          .map(SearchService::toChecklistSearchResult)
+          .toList();
+    } catch (DataAccessException ex) {
+      throw translateTooManyResults(ex);
+    }
   }
 
   /**
@@ -73,15 +81,39 @@ public class SearchService {
       String legalFirstName,
       String legalMiddleName
   ) {
-    return searchRepository.searchClients(new ClientSearchCriteria(
-        trimToNull(clientNumber),
-        trimToNull(clientAcronym),
-        trimToNull(clientName),
-        trimToNull(legalFirstName),
-        trimToNull(legalMiddleName)
-    )).stream()
-        .map(SearchService::toClientSearchResult)
-        .toList();
+    try {
+      return searchRepository.searchClients(new ClientSearchCriteria(
+          trimToNull(clientNumber),
+          trimToNull(clientAcronym),
+          trimToNull(clientName),
+          trimToNull(legalFirstName),
+          trimToNull(legalMiddleName)
+      )).stream()
+          .map(SearchService::toClientSearchResult)
+          .toList();
+    } catch (DataAccessException ex) {
+      throw translateTooManyResults(ex);
+    }
+  }
+
+  /**
+   * The legacy search procs BULK COLLECT into a VARRAY(500); more than 500 matches overflows and is
+   * re-raised as ORA-20103 ({@code ...record.varray.index.out.of.bounds:500}). Surface that as a
+   * 400 telling the user to narrow their search, rather than a generic 500. Any other data-access
+   * failure is rethrown unchanged.
+   */
+  private static RuntimeException translateTooManyResults(DataAccessException ex) {
+    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+      boolean tooMany = (cause instanceof SQLException sqlEx && sqlEx.getErrorCode() == 20103)
+          || (cause.getMessage() != null
+              && cause.getMessage().contains("varray.index.out.of.bounds"));
+      if (tooMany) {
+        return new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Your search matched more than 500 records. Please narrow your search criteria.");
+      }
+    }
+    return ex;
   }
 
   static ChecklistSearchResult toChecklistSearchResult(ChecklistSearchRow row) {

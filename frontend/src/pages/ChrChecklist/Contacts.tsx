@@ -1,5 +1,5 @@
 import { Add, TrashCan } from '@carbon/icons-react';
-import { Button, Column, Grid, Tile } from '@carbon/react';
+import { Button } from '@carbon/react';
 
 import { CodeSelect, IndicatorCheckbox, TextField } from '@/pages/ChrChecklist/fields';
 
@@ -12,8 +12,10 @@ import { CONTACT_ROLE_CODES } from '@/pages/ChrChecklist/codeLists';
 const Contacts: FC<{
   contacts: Contact[];
   onChange: (contacts: Contact[]) => void;
+  onSave: () => Promise<boolean>;
   readOnly: boolean;
-}> = ({ contacts, onChange, readOnly }) => {
+  busy: boolean;
+}> = ({ contacts, onChange, onSave, readOnly, busy }) => {
   const patchAt = (index: number, patch: Partial<Contact>) => {
     onChange(contacts.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
@@ -21,83 +23,89 @@ const Contacts: FC<{
   const add = () => onChange([...contacts, { contactedInd: 'false', attendingOnSiteInd: 'false' }]);
 
   return (
-    <Grid fullWidth className="chr-checklist__section">
-      <Column sm={4} md={8} lg={16}>
-        {contacts.length === 0 && <p>No contacts recorded.</p>}
-        {contacts.map((contact, index) => (
-          <Tile key={contact.id ?? `contact-${index}`} className="chr-checklist__row">
-            <div className="chr-checklist__form">
-              <TextField
-                id={`contact-first-${index}`}
-                labelText="First name"
-                value={contact.firstName}
-                disabled={readOnly}
-                onChange={(v) => patchAt(index, { firstName: v })}
-              />
-              <TextField
-                id={`contact-last-${index}`}
-                labelText="Last name"
-                value={contact.lastName}
-                disabled={readOnly}
-                onChange={(v) => patchAt(index, { lastName: v })}
-              />
-              <CodeSelect
-                id={`contact-role-${index}`}
-                labelText="Role"
-                value={contact.roleCode}
-                options={CONTACT_ROLE_CODES}
-                disabled={readOnly}
-                onChange={(v) => patchAt(index, { roleCode: v })}
-              />
-              <TextField
-                id={`contact-org-${index}`}
-                labelText="Organization"
-                value={contact.organization}
-                disabled={readOnly}
-                onChange={(v) => patchAt(index, { organization: v })}
-              />
-              <TextField
-                id={`contact-date-${index}`}
-                labelText="Contacted date"
-                placeholder="YYYY-MM-DD"
-                value={contact.contactedDate}
-                disabled={readOnly}
-                onChange={(v) => patchAt(index, { contactedDate: v })}
-              />
-              <IndicatorCheckbox
-                id={`contact-contacted-${index}`}
-                labelText="Contacted"
-                value={contact.contactedInd}
-                disabled={readOnly}
-                onToggle={(v) => patchAt(index, { contactedInd: v })}
-              />
-              <IndicatorCheckbox
-                id={`contact-attending-${index}`}
-                labelText="Attending on site"
-                value={contact.attendingOnSiteInd}
-                disabled={readOnly}
-                onToggle={(v) => patchAt(index, { attendingOnSiteInd: v })}
-              />
-            </div>
-            {!readOnly && (
-              <Button
-                kind="danger--tertiary"
-                size="sm"
-                renderIcon={TrashCan}
-                onClick={() => removeAt(index)}
-              >
-                Remove contact
-              </Button>
-            )}
-          </Tile>
-        ))}
-        {!readOnly && (
-          <Button kind="tertiary" renderIcon={Add} onClick={add}>
-            Add contact
+    <div className="rip-form">
+      {!readOnly && (
+        <div className="protocol-checklist__section-actions">
+          <Button size="lg" disabled={busy} onClick={() => void onSave()}>
+            Save
           </Button>
-        )}
-      </Column>
-    </Grid>
+        </div>
+      )}
+      {contacts.length === 0 && <p>No contacts recorded.</p>}
+      {contacts.map((contact, index) => (
+        <fieldset key={contact.id ?? `contact-${index}`} className="rip-form__group">
+          <legend>Contact {index + 1}</legend>
+          <div className="rip-form__grid">
+            <TextField
+              id={`contact-first-${index}`}
+              labelText="First name"
+              value={contact.firstName}
+              disabled={readOnly}
+              onChange={(v) => patchAt(index, { firstName: v })}
+            />
+            <TextField
+              id={`contact-last-${index}`}
+              labelText="Last name"
+              value={contact.lastName}
+              disabled={readOnly}
+              onChange={(v) => patchAt(index, { lastName: v })}
+            />
+            <CodeSelect
+              id={`contact-role-${index}`}
+              labelText="Role"
+              value={contact.roleCode}
+              options={CONTACT_ROLE_CODES}
+              disabled={readOnly}
+              onChange={(v) => patchAt(index, { roleCode: v })}
+            />
+            <TextField
+              id={`contact-org-${index}`}
+              labelText="Organization"
+              value={contact.organization}
+              disabled={readOnly}
+              onChange={(v) => patchAt(index, { organization: v })}
+            />
+            <TextField
+              id={`contact-date-${index}`}
+              labelText="Contacted date"
+              placeholder="YYYY-MM-DD"
+              value={contact.contactedDate}
+              disabled={readOnly}
+              onChange={(v) => patchAt(index, { contactedDate: v })}
+            />
+            <IndicatorCheckbox
+              id={`contact-contacted-${index}`}
+              labelText="Contacted"
+              value={contact.contactedInd}
+              disabled={readOnly}
+              onToggle={(v) => patchAt(index, { contactedInd: v })}
+            />
+            <IndicatorCheckbox
+              id={`contact-attending-${index}`}
+              labelText="Attending on site"
+              value={contact.attendingOnSiteInd}
+              disabled={readOnly}
+              onToggle={(v) => patchAt(index, { attendingOnSiteInd: v })}
+            />
+          </div>
+          {!readOnly && (
+            <Button
+              kind="danger--ghost"
+              size="sm"
+              renderIcon={TrashCan}
+              onClick={() => removeAt(index)}
+            >
+              Remove contact
+            </Button>
+          )}
+        </fieldset>
+      ))}
+      {!readOnly && (
+        <Button kind="tertiary" size="lg" renderIcon={Add} onClick={add}>
+          Add contact
+        </Button>
+      )}
+    </div>
   );
 };
 

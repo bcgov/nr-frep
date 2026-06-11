@@ -33,6 +33,46 @@ public class ChrChecklistController {
     return ResponseEntity.ok(chrChecklistService.saveChecklist(checklist));
   }
 
+  @PostMapping("/checklists/{id}/opening")
+  public ResponseEntity<CheckList> saveOpening(
+      @PathVariable long id,
+      @RequestBody CheckList checklist
+  ) {
+    return ResponseEntity.ok(chrChecklistService.saveOpeningSection(checklist));
+  }
+
+  @PostMapping("/checklists/{id}/block-summary")
+  public ResponseEntity<CheckList> saveBlockSummary(
+      @PathVariable long id,
+      @RequestBody CheckList checklist
+  ) {
+    return ResponseEntity.ok(chrChecklistService.saveBlockSummarySection(checklist));
+  }
+
+  @PostMapping("/checklists/{id}/contacts")
+  public ResponseEntity<CheckList> saveContacts(
+      @PathVariable long id,
+      @RequestBody CheckList checklist
+  ) {
+    return ResponseEntity.ok(chrChecklistService.saveContactsSection(checklist));
+  }
+
+  @PostMapping("/checklists/{id}/features")
+  public ResponseEntity<CheckList> saveFeatures(
+      @PathVariable long id,
+      @RequestBody CheckList checklist
+  ) {
+    return ResponseEntity.ok(chrChecklistService.saveFeaturesSection(checklist));
+  }
+
+  @PostMapping("/checklists/{id}/photos")
+  public ResponseEntity<CheckList> savePhotos(
+      @PathVariable long id,
+      @RequestBody CheckList checklist
+  ) {
+    return ResponseEntity.ok(chrChecklistService.savePicturesSection(checklist));
+  }
+
   @PostMapping("/checklists/{id}/submit")
   public ResponseEntity<?> submitChecklist(
       @PathVariable long id,

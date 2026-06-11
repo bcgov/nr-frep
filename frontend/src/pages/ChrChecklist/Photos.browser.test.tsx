@@ -8,7 +8,9 @@ describe('Photos display', () => {
     render(
       <Photos
         readOnly={false}
+        busy={false}
         onChange={vi.fn()}
+        onSave={vi.fn()}
         pictures={[{ id: '7', code: 'QUJD', mimeTypeCode: 'image/jpg', description: 'site' }]}
       />,
     );
@@ -20,7 +22,9 @@ describe('Photos display', () => {
     render(
       <Photos
         readOnly={false}
+        busy={false}
         onChange={vi.fn()}
+        onSave={vi.fn()}
         pictures={[{ id: '8', code: 'data:image/png;base64,XYZ', description: 'cam' }]}
       />,
     );

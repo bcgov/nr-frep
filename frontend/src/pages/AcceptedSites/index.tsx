@@ -34,12 +34,11 @@ const ALL_PROTOCOLS_VALUE = '';
 // Maps a resource-value type code to its checklist route. Codes match the legacy app
 // (`Constants.java`: SLB = biodiversity, RIP = riparian, WTR = water, CHR handled separately).
 // BIO/WAT aliases kept as a safety net for any friendly-code source.
-const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
+// Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
+// (RIP) and Water (WTR) are out of scope and have no pages, so their rows are not linked.
+const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
   SLB: 'biodiversity',
-  RIP: 'riparian',
-  WTR: 'water',
   BIO: 'biodiversity',
-  WAT: 'water',
 };
 
 const TABLE_HEADERS = [

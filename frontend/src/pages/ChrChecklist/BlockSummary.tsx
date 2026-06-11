@@ -1,118 +1,239 @@
-import { Column, Grid, Tag, Tile } from '@carbon/react';
+import { Edit } from '@carbon/icons-react';
+import { Button, Tag } from '@carbon/react';
+import { useState, type FC } from 'react';
 
 import { CodeSelect, IndicatorCheckbox, TextAreaField } from '@/pages/ChrChecklist/fields';
 
 import type { CheckList } from '@/types/chrChecklist';
-import type { FC } from 'react';
 
 import { RATING_CODES, calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 
-/** Section — block summary: Q8/Q9/Q10, block rating + rationale, computed MRVA, comments. */
+const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
+  <div className="protocol-checklist__field">
+    <span className="protocol-checklist__label">{label}</span>
+    <span className="protocol-checklist__value">{value || '—'}</span>
+  </div>
+);
+
+const yesNo = (v?: string) => (v === 'true' ? 'Yes' : 'No');
+
+const ratingLabel = (code?: string) => RATING_CODES.find((r) => r.code === code)?.label ?? code;
+
+type Draft = Pick<
+  CheckList,
+  | 'q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock'
+  | 'q8Comments'
+  | 'q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues'
+  | 'q9Comments'
+  | 'q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock'
+  | 'q10Comments'
+  | 'rating'
+  | 'ratingRationale'
+  | 'commentaires'
+>;
+
+/**
+ * Section — block summary: Q8/Q9/Q10, block rating + rationale, computed MRVA, comments.
+ * Read-only by default with an Edit / Save / Cancel toggle, mirroring the Biodiversity Opening tab.
+ * Save persists the whole CHR checklist via `onSave`.
+ */
 const BlockSummary: FC<{
   value: CheckList;
-  onPatch: (patch: Partial<CheckList>) => void;
+  onSave: (patch: Partial<CheckList>) => Promise<boolean>;
   readOnly: boolean;
-}> = ({ value, onPatch, readOnly }) => {
+  busy: boolean;
+}> = ({ value, onSave, readOnly, busy }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Draft>({});
   const mrva = calculateMrvaRatingCode(value.rating, value.features);
+
+  const beginEdit = () => {
+    setDraft({
+      q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock:
+        value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
+      q8Comments: value.q8Comments,
+      q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues:
+        value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
+      q9Comments: value.q9Comments,
+      q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock:
+        value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
+      q10Comments: value.q10Comments,
+      rating: value.rating,
+      ratingRationale: value.ratingRationale,
+      commentaires: value.commentaires,
+    });
+    setEditing(true);
+  };
+  const save = async () => {
+    if (await onSave(draft)) setEditing(false);
+  };
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+
+  const mrvaCell = (
+    <div className="protocol-checklist__field">
+      <span className="protocol-checklist__label">MRVA rating (computed)</span>
+      <span className="protocol-checklist__value">
+        <Tag type="blue" size="sm">
+          {mrva || '—'}
+        </Tag>
+      </span>
+    </div>
+  );
+
   return (
-    <Grid fullWidth className="chr-checklist__section">
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h3>Block summary</h3>
-          <div className="chr-checklist__form">
-            <IndicatorCheckbox
-              id="chr-q8"
-              labelText="Q8 — Were there operational factors that limited CHR management options on this block?"
-              value={value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock}
-              disabled={readOnly}
-              onToggle={(v) =>
-                onPatch({
-                  q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock: v,
-                })
-              }
-            />
+    <div className="rip-form">
+      <div className="protocol-checklist__section-actions">
+        {!editing && !readOnly && (
+          <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
+            <span className="protocol-checklist__edit-label">
+              <Edit /> Edit
+            </span>
+          </Button>
+        )}
+        {editing && (
+          <>
+            <Button kind="ghost" size="lg" disabled={busy} onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button size="lg" disabled={busy} onClick={() => void save()}>
+              Save
+            </Button>
+          </>
+        )}
+      </div>
+
+      {editing ? (
+        <>
+          <fieldset className="rip-form__group">
+            <legend>Operational review</legend>
+            <div className="rip-form__grid">
+              <IndicatorCheckbox
+                id="chr-q8"
+                labelText="Q8 — Operational factors limited CHR management options on this block?"
+                value={
+                  draft.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock
+                }
+                onToggle={(v) =>
+                  set({
+                    q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock: v,
+                  })
+                }
+              />
+              <IndicatorCheckbox
+                id="chr-q9"
+                labelText="Q9 — Management strategies/practices used were particularly effective?"
+                value={
+                  draft.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues
+                }
+                onToggle={(v) =>
+                  set({
+                    q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues:
+                      v,
+                  })
+                }
+              />
+              <IndicatorCheckbox
+                id="chr-q10"
+                labelText="Q10 — Strategies/practices could have reduced impacts on CHR values?"
+                value={
+                  draft.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock
+                }
+                onToggle={(v) =>
+                  set({
+                    q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock:
+                      v,
+                  })
+                }
+              />
+            </div>
             <TextAreaField
               id="chr-q8-comments"
               labelText="Q8 comments"
-              value={value.q8Comments}
-              disabled={readOnly}
-              onChange={(v) => onPatch({ q8Comments: v })}
-            />
-            <IndicatorCheckbox
-              id="chr-q9"
-              labelText="Q9 — Were management strategies/practices used on this block particularly effective?"
-              value={
-                value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues
-              }
-              disabled={readOnly}
-              onToggle={(v) =>
-                onPatch({
-                  q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues:
-                    v,
-                })
-              }
+              value={draft.q8Comments}
+              onChange={(v) => set({ q8Comments: v })}
             />
             <TextAreaField
               id="chr-q9-comments"
               labelText="Q9 comments"
-              value={value.q9Comments}
-              disabled={readOnly}
-              onChange={(v) => onPatch({ q9Comments: v })}
-            />
-            <IndicatorCheckbox
-              id="chr-q10"
-              labelText="Q10 — Were there strategies/practices that could have reduced impacts on CHR values on this block?"
-              value={
-                value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock
-              }
-              disabled={readOnly}
-              onToggle={(v) =>
-                onPatch({
-                  q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock:
-                    v,
-                })
-              }
+              value={draft.q9Comments}
+              onChange={(v) => set({ q9Comments: v })}
             />
             <TextAreaField
               id="chr-q10-comments"
               labelText="Q10 comments"
-              value={value.q10Comments}
-              disabled={readOnly}
-              onChange={(v) => onPatch({ q10Comments: v })}
+              value={draft.q10Comments}
+              onChange={(v) => set({ q10Comments: v })}
             />
-            <CodeSelect
-              id="chr-block-rating"
-              labelText="Block rating"
-              value={value.rating}
-              options={RATING_CODES}
-              includeBlank
-              disabled={readOnly}
-              onChange={(v) => onPatch({ rating: v })}
-            />
+          </fieldset>
+
+          <fieldset className="rip-form__group">
+            <legend>Block rating</legend>
+            <div className="rip-form__grid">
+              <CodeSelect
+                id="chr-block-rating"
+                labelText="Block rating"
+                value={draft.rating}
+                options={RATING_CODES}
+                includeBlank
+                onChange={(v) => set({ rating: v })}
+              />
+              {mrvaCell}
+            </div>
             <TextAreaField
               id="chr-rating-rationale"
               labelText="Rating rationale"
-              value={value.ratingRationale}
-              disabled={readOnly}
-              onChange={(v) => onPatch({ ratingRationale: v })}
+              value={draft.ratingRationale}
+              onChange={(v) => set({ ratingRationale: v })}
             />
-            <p className="chr-checklist__ro-field">
-              <span className="chr-checklist__ro-label">MRVA rating (computed)</span>
-              <Tag type="blue" size="sm">
-                {mrva || '—'}
-              </Tag>
-            </p>
             <TextAreaField
               id="chr-block-comments"
               labelText="Additional comments"
-              value={value.commentaires}
-              disabled={readOnly}
-              onChange={(v) => onPatch({ commentaires: v })}
+              value={draft.commentaires}
+              onChange={(v) => set({ commentaires: v })}
             />
-          </div>
-        </Tile>
-      </Column>
-    </Grid>
+          </fieldset>
+        </>
+      ) : (
+        <>
+          <fieldset className="rip-form__group">
+            <legend>Operational review</legend>
+            <div className="rip-form__grid">
+              <RoField
+                label="Q8 — Operational factors limited CHR management options?"
+                value={yesNo(
+                  value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
+                )}
+              />
+              <RoField
+                label="Q9 — Practices used were particularly effective?"
+                value={yesNo(
+                  value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
+                )}
+              />
+              <RoField
+                label="Q10 — Practices could have reduced impacts?"
+                value={yesNo(
+                  value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
+                )}
+              />
+            </div>
+            <RoField label="Q8 comments" value={value.q8Comments} />
+            <RoField label="Q9 comments" value={value.q9Comments} />
+            <RoField label="Q10 comments" value={value.q10Comments} />
+          </fieldset>
+
+          <fieldset className="rip-form__group">
+            <legend>Block rating</legend>
+            <div className="rip-form__grid">
+              <RoField label="Block rating" value={ratingLabel(value.rating)} />
+              {mrvaCell}
+            </div>
+            <RoField label="Rating rationale" value={value.ratingRationale} />
+            <RoField label="Additional comments" value={value.commentaires} />
+          </fieldset>
+        </>
+      )}
+    </div>
   );
 };
 

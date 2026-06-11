@@ -19,6 +19,7 @@ import type { ClientSearchQuery, ClientSearchResult } from '@/types/search';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 import './clientSearchModal.scss';
 
@@ -35,8 +36,8 @@ const TABLE_HEADERS = [
 type ClientSearchModalProps = {
   open: boolean;
   onClose: () => void;
-  /** Invoked with the selected client number; the modal closes after selection. */
-  onSelect: (clientNumber: string) => void;
+  /** Invoked with the selected client number + name; the modal closes after selection. */
+  onSelect: (clientNumber: string, clientName: string) => void;
 };
 
 /**
@@ -61,11 +62,10 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
         const data = await API.search.searchClients(query);
         setResults(data);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
         display({
           kind: 'error',
           title: "We couldn't run the client search",
-          subtitle: message,
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
         setHasError(true);
@@ -96,6 +96,16 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
     [results],
   );
 
+  // At least one criterion is required: the legacy proc caps results at 500 rows and errors on a
+  // broad/empty search, so don't allow searching with no filters.
+  const hasCriteria = [
+    filters.clientAcronym,
+    filters.clientNumber,
+    filters.clientName,
+    filters.legalFirstName,
+    filters.legalMiddleName,
+  ].some((value) => value?.trim());
+
   return (
     <Modal
       open={open}
@@ -107,7 +117,7 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
     >
       <p className="client-search-modal__hint">
         Find a Forest Client by acronym, client number, or name (substring, case-insensitive), then
-        select a row to use its client number.
+        select a row to use its client number. Enter at least one search field.
       </p>
 
       <div className="client-search-modal__filters">
@@ -145,14 +155,17 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
           onChange={(e) => setFilters({ ...filters, legalMiddleName: e.target.value || undefined })}
         />
         <div className="client-search-modal__actions">
-          <Button onClick={() => void runSearch(filters)} disabled={loading}>
+          <Button onClick={() => void runSearch(filters)} disabled={loading || !hasCriteria}>
             Search
           </Button>
           <Button
             kind="ghost"
+            disabled={loading}
             onClick={() => {
               setFilters({});
-              void runSearch({});
+              setResults([]);
+              setHasError(false);
+              setHasSearched(false);
             }}
           >
             Clear
@@ -210,7 +223,13 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
                             const clientNumberCell = row.cells.find(
                               (c) => c.info.header === 'clientNumber',
                             );
-                            onSelect(String(clientNumberCell?.value ?? ''));
+                            const clientNameCell = row.cells.find(
+                              (c) => c.info.header === 'clientName',
+                            );
+                            onSelect(
+                              String(clientNumberCell?.value ?? ''),
+                              String(clientNameCell?.value ?? ''),
+                            );
                             onClose();
                           }}
                         >

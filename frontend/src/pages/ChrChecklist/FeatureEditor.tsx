@@ -182,7 +182,7 @@ const FeatureEditor: FC<{
       <TabPanels>
         {/* Description */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             <TextField
               id="feat-label"
               labelText="Feature label"
@@ -217,7 +217,7 @@ const FeatureEditor: FC<{
               onChange={(v) => onPatch({ compositeFeature: v })}
             />
             {siblingLabels.length > 0 && (
-              <fieldset className="chr-checklist__fieldset">
+              <fieldset className="rip-form__group">
                 <legend>Associated features</legend>
                 {siblingLabels.map((label) => (
                   <Checkbox
@@ -267,7 +267,7 @@ const FeatureEditor: FC<{
               disabled={readOnly}
               onChange={(v) => onPatch({ areaofFeature: v })}
             />
-            <fieldset className="chr-checklist__fieldset">
+            <fieldset className="rip-form__group">
               <legend>Type of feature(s)</legend>
               {FEATURE_TYPES.map((t) => chk(t.field, t.label))}
               {chk('ofCMTs', 'CMTs')}
@@ -300,7 +300,7 @@ const FeatureEditor: FC<{
 
         {/* Location */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk('inharvestedarea', 'In harvested area')}
             {chk('adjacenttoblock', 'Adjacent to block')}
             {chk('adjacenttowater', 'Adjacent to water')}
@@ -327,7 +327,7 @@ const FeatureEditor: FC<{
 
         {/* Age */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk('pre1846', 'Pre-1846')}
             {chk('post1846', 'Post-1846')}
             {chk('ageUnknown', 'Age unknown')}
@@ -337,7 +337,7 @@ const FeatureEditor: FC<{
 
         {/* Planning */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk('managementStrategyFN', 'FN management recommendations provided')}
             {chk('managementStrategySP', 'Site plan strategies noted')}
             {chk('sitePermitIssued', 'AIA / site-alteration permit issued')}
@@ -369,7 +369,7 @@ const FeatureEditor: FC<{
               ))}
             </tbody>
           </table>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             <TextField
               id="feat-buffer-fn"
               labelText="Buffer length — FN (m)"
@@ -444,7 +444,7 @@ const FeatureEditor: FC<{
 
         {/* Effectiveness */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk('forCompositeFeaturesInd', 'Same strategy for all features (composite)')}
             {chk('unabletoLocate', 'Unable to locate feature')}
             {chk('noManagement', 'No management applied')}
@@ -519,12 +519,12 @@ const FeatureEditor: FC<{
 
         {/* Damage */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk(
               'q1Isthereevidenceofdamagetothesiteorfeature',
               'Q1 — Evidence of damage to the site/feature',
             )}
-            <fieldset className="chr-checklist__fieldset">
+            <fieldset className="rip-form__group">
               <legend>Q2 — Most likely cause of damage</legend>
               {DAMAGE_AGENTS.map((d) => chk(d.field, d.label))}
               {chk('otherQ2Wheredamagehasoccurredwhatisthemostlikelycause', 'Other')}
@@ -565,7 +565,7 @@ const FeatureEditor: FC<{
 
         {/* Windthrow */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk('windthrowManagement', 'Windthrow management applicable')}
             {chk('windthrow', 'Area windfirm')}
             <TextField
@@ -575,7 +575,7 @@ const FeatureEditor: FC<{
               disabled={readOnly}
               onChange={(v) => onPatch({ estwindthrow: v })}
             />
-            <fieldset className="chr-checklist__fieldset">
+            <fieldset className="rip-form__group">
               <legend>Windthrow treatment</legend>
               {WINDTHROW_TECHNIQUES.map((w) => chk(w.field, w.label))}
               {chk('otherTechnique', 'Other technique')}
@@ -587,7 +587,7 @@ const FeatureEditor: FC<{
                 onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
               />
             </fieldset>
-            <fieldset className="chr-checklist__fieldset">
+            <fieldset className="rip-form__group">
               <legend>Trail features</legend>
               {chk('trailfeatures', 'Trail features applicable')}
               {chk('canthetrailstillbelocated', 'Trail still locatable')}
@@ -606,7 +606,7 @@ const FeatureEditor: FC<{
 
         {/* Summary */}
         <TabPanel>
-          <div className="chr-checklist__form">
+          <div className="rip-form__grid">
             {chk(
               'q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature',
               'Q4 — Operational factors limited CHR management options?',

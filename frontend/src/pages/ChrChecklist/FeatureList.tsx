@@ -10,8 +10,10 @@ import type { Feature } from '@/types/chrChecklist';
 const FeatureList: FC<{
   features: Feature[];
   onChange: (features: Feature[]) => void;
+  onSave: () => Promise<boolean>;
   readOnly: boolean;
-}> = ({ features, onChange, readOnly }) => {
+  busy: boolean;
+}> = ({ features, onChange, onSave, readOnly, busy }) => {
   const [selected, setSelected] = useState(0);
 
   const nextLabel = (): string => {
@@ -71,6 +73,15 @@ const FeatureList: FC<{
 
   return (
     <Grid fullWidth className="chr-checklist__section">
+      {!readOnly && (
+        <Column sm={4} md={8} lg={16}>
+          <div className="protocol-checklist__section-actions">
+            <Button size="lg" disabled={busy} onClick={() => void onSave()}>
+              Save
+            </Button>
+          </div>
+        </Column>
+      )}
       <Column sm={4} md={2} lg={4}>
         <div className="chr-checklist__feature-list">
           {features.length === 0 && <p>No features yet.</p>}
@@ -86,7 +97,7 @@ const FeatureList: FC<{
             </Button>
           ))}
           {!readOnly && (
-            <Button kind="tertiary" size="sm" renderIcon={Add} onClick={add}>
+            <Button kind="tertiary" size="lg" renderIcon={Add} onClick={add}>
               Add feature
             </Button>
           )}
@@ -97,7 +108,7 @@ const FeatureList: FC<{
           <Tile className="chr-checklist__feature-editor">
             {!readOnly && (
               <Button
-                kind="danger--tertiary"
+                kind="danger--ghost"
                 size="sm"
                 renderIcon={TrashCan}
                 className="chr-checklist__feature-delete"

@@ -1,4 +1,4 @@
-import { Search as SearchIcon } from '@carbon/icons-react';
+import { Close, Search as SearchIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -27,6 +27,7 @@ import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 import { runTodoFeature } from '@/utils/featureTodo';
 
 import './checklistSearch.scss';
@@ -52,14 +53,11 @@ const STATUS_OPTIONS = [
   { value: 'SUB', label: 'Submitted' },
 ];
 
-// Codes match the legacy app (`Constants.java`: SLB = biodiversity, RIP = riparian,
-// WTR = water; CHR handled separately). BIO/WAT aliases kept as a safety net.
-const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | 'riparian' | 'water' | undefined> = {
+// Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
+// (RIP) and Water (WTR) are out of scope and have no pages, so their rows are not linked.
+const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
   SLB: 'biodiversity',
-  RIP: 'riparian',
-  WTR: 'water',
   BIO: 'biodiversity',
-  WAT: 'water',
 };
 
 const ChecklistSearchPage: FC = () => {
@@ -75,6 +73,10 @@ const ChecklistSearchPage: FC = () => {
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [clientLookupOpen, setClientLookupOpen] = useState(false);
+  // The checklist search filters by client NUMBER (legacy frep_checklist_search.search), but we
+  // display the client NAME selected from the lookup — mirroring the legacy FREP400 screen where
+  // "Client Name" is a read-only display populated by the FREP410 client picker.
+  const [clientName, setClientName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -132,11 +134,10 @@ const ChecklistSearchPage: FC = () => {
       const data = await API.search.searchChecklists(filters);
       setResults(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
       display({
         kind: 'error',
         title: "We couldn't run the search",
-        subtitle: message,
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
       setHasError(true);
@@ -181,7 +182,7 @@ const ChecklistSearchPage: FC = () => {
         <div className="checklist-search__filters">
           <Select
             id="checklist-search-year"
-            labelText="Year"
+            labelText="Master list year"
             value={filters.effectiveYear ?? ''}
             onChange={(e) => updateFilter('effectiveYear', e.target.value || undefined)}
             disabled={configLoading}
@@ -230,66 +231,45 @@ const ChecklistSearchPage: FC = () => {
             ))}
           </Select>
           <TextInput
-            id="checklist-search-licence"
-            labelText="Licence"
-            value={filters.licenceId ?? ''}
-            onChange={(e) => updateFilter('licenceId', e.target.value || undefined)}
-          />
-          <TextInput
-            id="checklist-search-cp"
-            labelText="Cutting permit"
-            value={filters.cuttingPermitId ?? ''}
-            onChange={(e) => updateFilter('cuttingPermitId', e.target.value || undefined)}
-          />
-          <TextInput
-            id="checklist-search-block"
-            labelText="Cut block"
-            value={filters.cutBlockId ?? ''}
-            onChange={(e) => updateFilter('cutBlockId', e.target.value || undefined)}
-          />
-          <TextInput
             id="checklist-search-opening"
-            labelText="Opening"
+            labelText="Opening ID"
             value={filters.openingId ?? ''}
             onChange={(e) => updateFilter('openingId', e.target.value || undefined)}
           />
           <div className="checklist-search__client">
             <TextInput
               id="checklist-search-client"
-              labelText="Client #"
-              value={filters.clientNumber ?? ''}
-              onChange={(e) => updateFilter('clientNumber', e.target.value || undefined)}
+              labelText="Client name"
+              placeholder="Use the lookup to select a client"
+              readOnly
+              value={clientName}
             />
-            <Button
-              hasIconOnly
-              kind="tertiary"
-              size="md"
-              renderIcon={SearchIcon}
-              iconDescription="Look up client"
-              tooltipPosition="top"
-              onClick={() => setClientLookupOpen(true)}
-            />
+            <div className="checklist-search__client-buttons">
+              <Button
+                hasIconOnly
+                kind="tertiary"
+                size="md"
+                renderIcon={SearchIcon}
+                iconDescription="Look up client"
+                tooltipPosition="top"
+                onClick={() => setClientLookupOpen(true)}
+              />
+              {filters.clientNumber && (
+                <Button
+                  hasIconOnly
+                  kind="ghost"
+                  size="md"
+                  renderIcon={Close}
+                  iconDescription="Clear client"
+                  tooltipPosition="top"
+                  onClick={() => {
+                    setClientName('');
+                    updateFilter('clientNumber', undefined);
+                  }}
+                />
+              )}
+            </div>
           </div>
-          <TextInput
-            id="checklist-search-checklist-id"
-            labelText="Checklist ID"
-            value={filters.checklistId ?? ''}
-            onChange={(e) => updateFilter('checklistId', e.target.value || undefined)}
-          />
-          <TextInput
-            id="checklist-search-eval-from"
-            labelText="Eval. date from"
-            placeholder="YYYY-MM-DD"
-            value={filters.evaluationDateFrom ?? ''}
-            onChange={(e) => updateFilter('evaluationDateFrom', e.target.value || undefined)}
-          />
-          <TextInput
-            id="checklist-search-eval-to"
-            labelText="Eval. date to"
-            placeholder="YYYY-MM-DD"
-            value={filters.evaluationDateTo ?? ''}
-            onChange={(e) => updateFilter('evaluationDateTo', e.target.value || undefined)}
-          />
           <div className="checklist-search__actions">
             <Button onClick={() => void runSearch()} disabled={loading}>
               Search
@@ -298,6 +278,7 @@ const ChecklistSearchPage: FC = () => {
               kind="ghost"
               onClick={() => {
                 setFilters({});
+                setClientName('');
                 void runSearch();
               }}
             >
@@ -391,7 +372,10 @@ const ChecklistSearchPage: FC = () => {
       <ClientSearchModal
         open={clientLookupOpen}
         onClose={() => setClientLookupOpen(false)}
-        onSelect={(clientNumber) => updateFilter('clientNumber', clientNumber || undefined)}
+        onSelect={(clientNumber, selectedClientName) => {
+          updateFilter('clientNumber', clientNumber || undefined);
+          setClientName(selectedClientName);
+        }}
       />
     </Grid>
   );

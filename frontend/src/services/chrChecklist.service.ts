@@ -30,6 +30,41 @@ export class ChrChecklistService extends HttpClient {
     });
   }
 
+  /**
+   * Per-section saves (mirroring the Biodiversity per-tab save). Each posts the full checklist but
+   * the backend persists only that section, so e.g. saving Opening info does not re-sync photos.
+   * The response is the freshly re-read checklist (new revision count + any server-assigned ids).
+   */
+  private saveSection(section: string, checklistId: string, checkList: CheckList) {
+    return this.doRequest<CheckList>(this.config, {
+      method: 'POST',
+      url: '/v1/chr/checklists/{checklistId}/{section}',
+      path: { checklistId, section },
+      body: checkList,
+      mediaType: 'application/json',
+    });
+  }
+
+  saveOpening(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
+    return this.saveSection('opening', checklistId, checkList);
+  }
+
+  saveBlockSummary(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
+    return this.saveSection('block-summary', checklistId, checkList);
+  }
+
+  saveContacts(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
+    return this.saveSection('contacts', checklistId, checkList);
+  }
+
+  saveFeatures(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
+    return this.saveSection('features', checklistId, checkList);
+  }
+
+  savePhotos(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
+    return this.saveSection('photos', checklistId, checkList);
+  }
+
   /** Submit for review. On validation failure the API responds 400 with a ValidationError[] body. */
   submit(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
     return this.doRequest<CheckList>(this.config, {

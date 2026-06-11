@@ -11,11 +11,22 @@ const assertNoGlobalError = async (page: Page) => {
 };
 
 test.describe('page coverage', () => {
-  test('dashboard renders accepted sites table', async ({ page }) => {
+  test('dashboard renders the landing menu', async ({ page }) => {
     await gotoProtected(page, '/dashboard');
     await expect(page.getByTestId('side-nav-link-Dashboard')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Accepted Sites' })).toBeVisible();
-    await expect(page.getByTestId('accepted-sites-table')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'FREP Dashboard', level: 1 })).toBeVisible();
+    await assertNoGlobalError(page);
+  });
+
+  test('accepted sites page renders', async ({ page }) => {
+    await gotoProtected(page, '/accepted-sites');
+    await expect(page.getByRole('heading', { name: 'Accepted Sites', level: 1 })).toBeVisible();
+    // The list loaded without erroring: either the results table (data) or the empty state is
+    // shown. The table renders via Carbon's headless DataTable, which doesn't forward data-testid
+    // to the DOM, so match it by role.
+    await expect(
+      page.getByRole('table').or(page.getByTestId('accepted-sites-empty')),
+    ).toBeVisible();
     await assertNoGlobalError(page);
   });
 

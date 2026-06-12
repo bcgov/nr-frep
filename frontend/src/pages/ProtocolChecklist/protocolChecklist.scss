@@ -19,6 +19,11 @@
   gap: 0.5rem;
 }
 
+.protocol-checklist__errors-intro {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
 // Per-tab edit button, right-aligned above the section fields.
 .protocol-checklist__section-actions {
   display: flex;
@@ -296,6 +301,57 @@
   gap: 1rem;
   margin-top: 1rem;
   flex-wrap: wrap;
+}
+
+// Inline FAM evaluator (FREP-editor) search — filter row + hint.
+.evaluator-search {
+  margin-top: 1rem;
+
+  &__hint {
+    margin: 0 0 1rem;
+  }
+
+  &__filters {
+    display: flex;
+    align-items: end;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+
+    .cds--text-input-wrapper {
+      flex: 1 1 12rem;
+    }
+  }
+
+  // Two mutually-exclusive add buttons (lead / member) per result row.
+  &__row-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  // Shown in place of the add buttons for users already on the team.
+  &__added {
+    color: var(--#{vars.$bcgov-prefix}-text-secondary);
+    font-style: italic;
+  }
+}
+
+// Selected evaluators (team lead + members) shown at the bottom of the Evaluation team section.
+.rip-form__selected-evaluators {
+  margin-top: 1.5rem;
+}
+
+.rip-form__evaluator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.rip-form__evaluator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 // Riparian field-data grids (FREP231) — point + continuous indicator tables.

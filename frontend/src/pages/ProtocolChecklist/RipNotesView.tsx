@@ -78,6 +78,24 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
     }
   };
 
+  // Re-fetch immediately before editing so we hold the current optimistic-lock token. The Opening,
+  // Administration and Notes tabs all persist to biodiversity_checklist and share its
+  // revision_count, so a sibling-tab save can otherwise leave this view's token stale and
+  // FREP_CHECKLIST_NOTES.SAVE rejects it with "record.modified2". A silent refresh (no skeleton)
+  // avoids a flicker.
+  const beginEdit = async () => {
+    setBusy(true);
+    try {
+      const fresh = await API.protocolChecklist.getNotes(protocol, checklistId);
+      setData(fresh);
+      setEditing(true);
+    } catch (err) {
+      reportError("We couldn't load the notes", err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const cancel = () => {
     loadData();
     setEditing(false);
@@ -94,7 +112,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
     <div className="rip-form">
       <div className="protocol-checklist__section-actions">
         {!editing && showEditControls && (
-          <Button kind="tertiary" size="lg" onClick={() => setEditing(true)}>
+          <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
             <span className="protocol-checklist__edit-label">
               <Edit /> Edit
             </span>

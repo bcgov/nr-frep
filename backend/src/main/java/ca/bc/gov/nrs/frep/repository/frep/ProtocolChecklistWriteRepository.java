@@ -15,6 +15,9 @@ import ca.bc.gov.nrs.frep.dto.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.dto.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.dto.frep.StratumComputed;
 import java.sql.Array;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Struct;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -92,7 +95,7 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    * out-parameter ordering. Returns null when the checklist does not exist.
    */
   public BiodiversityOpening getBiodiversityOpening(String checklistId) {
-    return jdbcTemplate.query(
+    BiodiversityOpening opening = jdbcTemplate.query(
         BIO_OPENING_SELECT,
         rs -> {
           if (!rs.next()) {
@@ -112,11 +115,43 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
               rs.getString("invasive_plant_comment"),
               rs.getString("frep_site_evaluation_code"),
               rs.getString("evaluator_opinion_comment"),
-              rs.getString("revision_count")
+              rs.getString("revision_count"),
+              null, null, null
           );
         },
         checklistId
     );
+    if (opening == null) {
+      return null;
+    }
+    return fillOpeningResultsRefs(opening);
+  }
+
+  /**
+   * Populates the read-only RESULTS reference fields (gross / net area, harvest-complete date) that
+   * the legacy {@code FREP_210_BIO_OPENING.GET} derives from {@code frep_selected_site} (joined via
+   * {@code frep_resource_value}). They are display-only — never persisted by the SAVE proc — so a
+   * direct SELECT keeps them current without round-tripping. Leaves them null if the site row or its
+   * resource-value link is missing.
+   */
+  private BiodiversityOpening fillOpeningResultsRefs(BiodiversityOpening opening) {
+    String resourceValueId = opening.resourceValueId();
+    if (resourceValueId == null || resourceValueId.isBlank()) {
+      return opening;
+    }
+    List<BiodiversityOpening> refs = jdbcTemplate.query(
+        "SELECT fss.opening_gross_area, fss.nar_area,"
+            + " TO_CHAR(fss.disturbance_end_date, 'YYYY-MM-DD') AS harvest_date"
+            + " FROM the.frep_selected_site fss"
+            + " JOIN the.frep_resource_value frv"
+            + " ON frv.frep_selected_site_id = fss.frep_selected_site_id"
+            + " WHERE frv.frep_resource_value_id = ?",
+        (rs, n) -> opening.withResultsRefs(
+            rs.getString("opening_gross_area"),
+            rs.getString("nar_area"),
+            rs.getString("harvest_date")),
+        resourceValueId);
+    return refs.isEmpty() ? opening : refs.get(0);
   }
 
   /**
@@ -723,6 +758,25 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
   }
 
   /**
+   * Cost-resource scalars read directly from {@code biodiversity_checklist}, bypassing the drifted
+   * {@code FREP_CHECKLIST_COST_RESOURCES.GET} out-params (@25-@28, @33). {@code revisionCountAccess}
+   * is the table's {@code revision_count} — the optimistic-lock token the SAVE proc rewrites.
+   */
+  private record BiodiversityAdminScalars(String siteAccessCode, String blockAccessTime,
+      String hoursOnBlock, String peopleOnBlock, String revisionCountAccess) {
+  }
+
+  private BiodiversityAdminScalars readBiodiversityAdminScalars(String checklistId) {
+    List<BiodiversityAdminScalars> rows = jdbcTemplate.query(
+        "SELECT frep_site_access_code, block_access_time, hours_on_block, people_on_block,"
+            + " revision_count FROM the.biodiversity_checklist WHERE biodiversity_checklist_id = ?",
+        (rs, n) -> new BiodiversityAdminScalars(
+            rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)),
+        checklistId);
+    return rows.isEmpty() ? null : rows.get(0);
+  }
+
+  /**
    * Read the Administration (cost/resource) data via {@code FREP_CHECKLIST_COST_RESOURCES.GET} (35
    * params per the legacy FrepCostResourceDataManager: tombstone 1-16, selectedSiteId @17,
    * resourceValueId IN @18, type @19, status @20, checklistId IN @21, ... siteAccessCode @25,
@@ -731,6 +785,15 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
    */
   public AdministrationData getAdministration(String checklistId, String resourceType) {
     String resourceValueId = resolveResourceValueId(checklistId, resourceType);
+    // The deployed FREP_CHECKLIST_COST_RESOURCES.GET out-param layout has drifted from the legacy
+    // source for the cost-resource scalars (the same GET-proc drift proven for FREP210/211): the
+    // tombstone, status, team-lead and team-member-cursor params still line up, but @25-@28 (site
+    // access / block-access time / hours / people on block) read blank even when the row holds
+    // values, and SAVE persists fine. Read those four scalars plus the biodiversity_checklist
+    // revision token straight from the table so the screen shows what SAVE actually wrote and the
+    // save round-trips the true optimistic-lock token.
+    BiodiversityAdminScalars direct =
+        "SLB".equals(resourceType) ? readBiodiversityAdminScalars(checklistId) : null;
     return executeCall(
         callSql(COST_RESOURCE_PKG, "GET", 35),
         cs -> {
@@ -748,10 +811,17 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
         },
         cs -> {
           throwIfError(COST_RESOURCE_PKG, "GET", cs.getString(34));
+          // The cost-resource team-member cursor only returns EVALUATOR_USERID,
+          // EVALUATOR_TEAM_LEAD_IND and REVISION_COUNT (FREP_RESOURCE_VALUE_ID and
+          // EVALUATOR_DESCRIPTION are absent for this proc). Read each column only if present,
+          // mirroring the legacy FrepCostResourceDataManager.populateFrepTeamMemeberBean, so an
+          // absent column doesn't blow up with ORA-17006.
           List<EvaluatorRow> team = readCursor(cs, 35, rs -> new EvaluatorRow(
-              rs.getString("EVALUATOR_USERID"), rs.getString("FREP_RESOURCE_VALUE_ID"),
-              rs.getString("EVALUATOR_TEAM_LEAD_IND"), rs.getString("EVALUATOR_DESCRIPTION"),
-              rs.getString("REVISION_COUNT")));
+              getStringIfPresent(rs, "EVALUATOR_USERID"),
+              getStringIfPresent(rs, "FREP_RESOURCE_VALUE_ID"),
+              getStringIfPresent(rs, "EVALUATOR_TEAM_LEAD_IND"),
+              getStringIfPresent(rs, "EVALUATOR_DESCRIPTION"),
+              getStringIfPresent(rs, "REVISION_COUNT")));
           return new AdministrationData(
               checklistId,
               cs.getString(17),
@@ -759,14 +829,15 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
               cs.getString(19),
               cs.getString(20),
               cs.getString(11),
-              cs.getString(25),
-              cs.getString(26),
-              cs.getString(27),
-              cs.getString(28),
+              direct != null ? direct.siteAccessCode() : cs.getString(25),
+              direct != null ? direct.blockAccessTime() : cs.getString(26),
+              direct != null ? direct.hoursOnBlock() : cs.getString(27),
+              direct != null ? direct.peopleOnBlock() : cs.getString(28),
               cs.getString(29),
               cs.getString(30),
+              cs.getString(31),
               cs.getString(32),
-              cs.getString(33),
+              direct != null ? direct.revisionCountAccess() : cs.getString(33),
               team);
         });
   }
@@ -805,6 +876,21 @@ public class ProtocolChecklistWriteRepository extends AbstractFrepRepository {
 
   private static String nullIfBlank(String value) {
     return (value == null || value.isBlank()) ? null : value;
+  }
+
+  /**
+   * Returns the column's value, or {@code null} when the column is absent from the result set —
+   * mirrors the legacy {@code FrepCostResourceDataManager} which guards each read with a
+   * column-name presence check (some cursors omit columns the bean can carry).
+   */
+  private static String getStringIfPresent(ResultSet rs, String column) throws SQLException {
+    ResultSetMetaData metaData = rs.getMetaData();
+    for (int i = 1; i <= metaData.getColumnCount(); i++) {
+      if (metaData.getColumnName(i).equalsIgnoreCase(column)) {
+        return rs.getString(column);
+      }
+    }
+    return null;
   }
 
   /** Add (or re-flag) an evaluator on the team via {@code save_team_member} (6 params). */

@@ -12,7 +12,7 @@ vi.mock('@/services/APIs', () => ({
       getBiodiversityOpening: vi.fn(),
       saveBiodiversityOpening: vi.fn(),
     },
-    configuration: { getChecklistAnswers: vi.fn() },
+    configuration: { getChecklistAnswers: vi.fn(), getSiteEvaluationCodes: vi.fn() },
   },
 }));
 
@@ -26,6 +26,7 @@ const api = API.protocolChecklist as unknown as {
 };
 const config = API.configuration as unknown as {
   getChecklistAnswers: ReturnType<typeof vi.fn>;
+  getSiteEvaluationCodes: ReturnType<typeof vi.fn>;
 };
 
 describe('BioOpeningView', () => {
@@ -42,6 +43,10 @@ describe('BioOpeningView', () => {
       { code: 'Y', description: 'Yes' },
       { code: 'N', description: 'No' },
     ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([
+      { code: 'E', description: 'Exceeds' },
+      { code: 'M', description: 'Meets' },
+    ]);
 
     render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
 
@@ -52,9 +57,29 @@ describe('BioOpeningView', () => {
     expect(api.saveBiodiversityOpening.mock.calls[0][0]).toBe('9001');
   });
 
+  it('blocks the save when Location description is blank', async () => {
+    api.getBiodiversityOpening.mockResolvedValue({
+      checklistId: '9001',
+      locationDescription: '',
+      revisionCount: '3',
+    });
+    api.saveBiodiversityOpening.mockResolvedValue({ checklistId: '9001', revisionCount: '4' });
+    config.getChecklistAnswers.mockResolvedValue([]);
+    config.getSiteEvaluationCodes.mockResolvedValue([]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBiodiversityOpening).not.toHaveBeenCalled();
+    expect(screen.getByText('Location description is required.')).toBeTruthy();
+  });
+
   it('hides the Edit control for a submitted checklist', async () => {
     api.getBiodiversityOpening.mockResolvedValue({ checklistId: '9001', revisionCount: '5' });
     config.getChecklistAnswers.mockResolvedValue([]);
+    config.getSiteEvaluationCodes.mockResolvedValue([]);
 
     render(<BioOpeningView checklistId="9001" canEdit submitted />);
 

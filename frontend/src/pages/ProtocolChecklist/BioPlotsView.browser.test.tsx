@@ -64,6 +64,10 @@ describe('BioPlotsView', () => {
     render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    // No UTM signal for this plot (so UTM coords aren't required); both bearing legs are required.
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'No UTM signal available' }));
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
 
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
@@ -71,6 +75,70 @@ describe('BioPlotsView', () => {
     // On save success the form closes and we return to the table.
     expect(await screen.findByRole('button', { name: 'Add plot' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+
+  it('blocks the save until both bearing legs are entered', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+    api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '1' });
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'No UTM signal available' }));
+    // No bearing legs entered → save is blocked and the fields show inline errors.
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    expect(api.saveBioPlot).not.toHaveBeenCalled();
+    expect(screen.getByText('Bearing 1st leg is required.')).toBeTruthy();
+    expect(screen.getByText('2nd leg is required.')).toBeTruthy();
+
+    // Fill both legs → save proceeds.
+    await userEvent.type(screen.getByLabelText('Bearing 1st leg (required)'), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires valid UTM coordinates when "No UTM signal available" is unchecked', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+    api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '1' });
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    // Signal available by default → Zone/Easting/Northing are required. Fill bearing legs so only
+    // UTM blocks the save.
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveBioPlot).not.toHaveBeenCalled();
+    expect(screen.getByText('Easting is required.')).toBeTruthy();
+    expect(screen.getByText('Northing is required.')).toBeTruthy();
+
+    // Too-short easting → length error (the input is also capped at 6 chars by maxLength).
+    await userEvent.type(screen.getByLabelText('Easting (required)'), '123');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveBioPlot).not.toHaveBeenCalled();
+    expect(screen.getByText('Easting must be exactly 6 digits.')).toBeTruthy();
+  });
+
+  it('shows an inline error when "Trees exist" is checked but the stand table is empty', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+    api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '1' });
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
+
+    // Trees exist but no stand rows → save blocked with an inline stand-table error.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveBioPlot).not.toHaveBeenCalled();
+    expect(screen.getByText('Stand table required')).toBeTruthy();
   });
 
   it('shows the plots table and deletes a row', async () => {

@@ -1,6 +1,8 @@
 import type {
   BecRow,
   CodeOption,
+  EvaluatorSearchParams,
+  EvaluatorSearchResult,
   MasterListYear,
   OrgUnit,
   Protocol,
@@ -56,6 +58,14 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /** Site-evaluation (rating) options for the FREP210 Opening "Rating" dropdown. */
+  getSiteEvaluationCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/site-evaluation-codes',
+    });
+  }
+
   /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
   getStrataTypes(): CancelablePromise<CodeOption[]> {
     return this.doRequest<CodeOption[]>(this.config, {
@@ -106,12 +116,39 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /** Site-access options for the FREP301 Administration "Access type" dropdown. */
+  getSiteAccessCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/site-access-codes',
+    });
+  }
+
   /** Evaluator options (the checklist's team) for the FREP212 "Evaluated By" dropdown. */
   getEvaluators(checklistId: string, protocol = 'SLB'): CancelablePromise<CodeOption[]> {
     return this.doRequest<CodeOption[]>(this.config, {
       method: 'GET',
       url: '/v1/configuration/evaluators',
       query: { checklistId, protocol },
+    });
+  }
+
+  /**
+   * Searches IDIR users holding the FREP editor role (via FAM) for the Administration "Add
+   * evaluator" modal — optional userId/first/last filters, paginated (FAM caps size at 100). Not
+   * district-scoped (FAM has no district dimension); empty when the FAM lookup isn't configured.
+   */
+  searchEvaluators(params: EvaluatorSearchParams): CancelablePromise<EvaluatorSearchResult> {
+    return this.doRequest<EvaluatorSearchResult>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/evaluator-search',
+      query: {
+        userId: params.userId,
+        firstName: params.firstName,
+        lastName: params.lastName,
+        page: params.page,
+        size: params.size,
+      },
     });
   }
 }

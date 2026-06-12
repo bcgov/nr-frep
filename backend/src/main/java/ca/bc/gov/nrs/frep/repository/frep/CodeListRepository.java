@@ -101,6 +101,34 @@ public class CodeListRepository extends AbstractFrepRepository {
   }
 
   /**
+   * Site-access codes for the FREP301 Administration "Access type" dropdown.
+   *
+   * <p>Legacy procedure {@code get_site_access_code} returns {@code code} =
+   * {@code frep_site_access_code} and {@code description}, from table
+   * {@code frep_site_access_code}.
+   */
+  public List<Map<String, Object>> getSiteAccessCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_site_access_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
+   * Site-evaluation (rating) codes for the FREP210 Opening "Rating" dropdown.
+   *
+   * <p>Legacy procedure {@code get_evaluation_code} returns {@code code} =
+   * {@code frep_site_evaluation_code} and {@code description}, from table
+   * {@code frep_site_evaluation_code}, ordered E/W/M/P/U (rating 1-5).
+   */
+  public List<Map<String, Object>> getEvaluationCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_evaluation_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepository::rowToMap));
+  }
+
+  /**
    * Biodiversity stratum-type codes for the FREP211 "Stratum type" dropdown.
    *
    * <p>Legacy procedure {@code get_stratum_type_code} returns {@code code} =

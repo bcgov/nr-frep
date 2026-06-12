@@ -25,9 +25,13 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
   const [data, setData] = useState<BiodiversityOpening | null>(null);
   const [answers, setAnswers] = useState<CodeOption[]>([]);
+  const [ratings, setRatings] = useState<CodeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Set once the user tries to save with a blank Location description, so the required-field error
+  // only shows after a save attempt (not the moment they enter edit mode).
+  const [attemptedSave, setAttemptedSave] = useState(false);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -67,6 +71,12 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       .getChecklistAnswers('NA')
       .then((c) => !signal.cancelled && setAnswers(c))
       .catch(() => undefined);
+    // Evaluator-opinion "Rating" is a coded dropdown (frep_site_evaluation_code), not free text —
+    // matching the legacy FREP210 ratingDropDown.
+    API.configuration
+      .getSiteEvaluationCodes()
+      .then((c) => !signal.cancelled && setRatings(c))
+      .catch(() => undefined);
     return () => {
       signal.cancelled = true;
     };
@@ -79,11 +89,25 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const handleSave = async () => {
     if (!data) return;
+    // Location description is the one mandatory Opening field (legacy submit check
+    // frep.submit.biodiversity.opening checks COUNT(location_description)). Block the save up front so
+    // it never has to surface as a submit-time validation error.
+    if (get('locationDescription').trim() === '') {
+      setAttemptedSave(true);
+      display({
+        kind: 'error',
+        title: 'Location description is required',
+        subtitle: 'Enter a Location description before saving the Opening.',
+        timeout: 6000,
+      });
+      return;
+    }
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveBiodiversityOpening(checklistId, data);
       setData(saved);
       setEditing(false);
+      setAttemptedSave(false);
       display({ kind: 'success', title: 'Opening saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -101,6 +125,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       const fresh = await API.protocolChecklist.getBiodiversityOpening(checklistId);
       setData(fresh);
+      setAttemptedSave(false);
       setEditing(true);
     } catch (err) {
       reportError("We couldn't load the opening", err);
@@ -111,6 +136,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const cancel = () => {
     loadData();
+    setAttemptedSave(false);
     setEditing(false);
   };
 
@@ -143,23 +169,29 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       cell(label, get(key))
     );
 
-  const textarea = (key: keyof BiodiversityOpening, label: string): ReactNode =>
+  const textarea = (key: keyof BiodiversityOpening, label: string, required = false): ReactNode =>
     editing ? (
       <TextArea
         key={key}
         id={`bio-${key}`}
-        labelText={label}
+        labelText={required ? `${label} (required)` : label}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
+        invalid={required && attemptedSave && get(key).trim() === ''}
+        invalidText={`${label} is required.`}
       />
     ) : (
       cell(label, get(key), true)
     );
 
-  const optionText = (code: string): string =>
-    answers.find((o) => o.code === code)?.description ?? code;
+  const optionText = (code: string, options: CodeOption[]): string =>
+    options.find((o) => o.code === code)?.description ?? code;
 
-  const select = (key: keyof BiodiversityOpening, label: string): ReactNode =>
+  const select = (
+    key: keyof BiodiversityOpening,
+    label: string,
+    options: CodeOption[] = answers,
+  ): ReactNode =>
     editing ? (
       <Select
         key={key}
@@ -169,12 +201,12 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         onChange={(e) => set(key, e.target.value)}
       >
         <SelectItem value="" text="—" />
-        {answers.map((o) => (
+        {options.map((o) => (
           <SelectItem key={o.code} value={o.code} text={o.description} />
         ))}
       </Select>
     ) : (
-      cell(label, optionText(get(key)))
+      cell(label, optionText(get(key), options))
     );
 
   if (loading) {
@@ -211,9 +243,13 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       <fieldset className="rip-form__group">
         <legend>Opening identification</legend>
         <div className="rip-form__grid">
+          {/* Read-only RESULTS reference fields (from frep_selected_site) — never editable. */}
+          {cell('Harvest complete date', get('harvestDate'))}
+          {cell('Net area to be reforested (ha)', get('netArea'))}
+          {cell('Gross area (ha)', get('grossArea'))}
           {text('frepWtpOverride', 'FREP gross area override (ha)')}
         </div>
-        {textarea('locationDescription', 'Location description')}
+        {textarea('locationDescription', 'Location description', true)}
       </fieldset>
 
       <fieldset className="rip-form__group">
@@ -227,7 +263,11 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       <fieldset className="rip-form__group">
         <legend>Evaluator opinion</legend>
         <div className="rip-form__grid">
-          {text('frepSiteEvaluationCode', 'Rating (stand-level biodiversity maintained)')}
+          {select(
+            'frepSiteEvaluationCode',
+            'Rating (stand-level biodiversity maintained)',
+            ratings,
+          )}
         </div>
         {textarea('evaluatorOpinionComment', 'Rationale')}
       </fieldset>

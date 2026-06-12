@@ -12,6 +12,7 @@ import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
 import java.util.List;
 
 import ca.bc.gov.nrs.frep.service.frep.ConfigurationService;
+import ca.bc.gov.nrs.frep.service.frep.FamUserDirectoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,12 +27,15 @@ class ConfigurationControllerTest {
   @Mock
   private ConfigurationService configurationService;
 
+  @Mock
+  private FamUserDirectoryService famUserDirectoryService;
+
   private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders
-        .standaloneSetup(new ConfigurationController(configurationService))
+        .standaloneSetup(new ConfigurationController(configurationService, famUserDirectoryService))
         .build();
   }
 

@@ -77,6 +77,22 @@ public class ConfigurationService {
         .toList();
   }
 
+  /** Site-access options for the FREP301 Administration "Access type" dropdown. */
+  public List<CodeOptionResponse> getSiteAccessCodes() {
+    return codeListRepository.getSiteAccessCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Site-evaluation (rating) options for the FREP210 Opening "Rating" dropdown. */
+  public List<CodeOptionResponse> getSiteEvaluationCodes() {
+    return codeListRepository.getEvaluationCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
   /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
   public List<CodeOptionResponse> getStrataTypes() {
     return codeListRepository.getStratumTypeCode().stream()

@@ -4,7 +4,6 @@ import ca.bc.gov.nrs.frep.dto.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.dto.frep.EvaluatorSearchResponse;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -12,22 +11,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Searches IDIR users who hold the FREP editor role via the FAM external user-search API
@@ -61,19 +56,29 @@ public class FamUserDirectoryService {
 
   private final String baseUrl;
   private final String evaluatorRole;
-  private final RestTemplate restTemplate;
+  private final RestClient restClient;
 
   public FamUserDirectoryService(
       @Value("${ca.bc.gov.nrs.identity-lookup.base-url:}") String baseUrl,
       @Value("${ca.bc.gov.nrs.identity-lookup.evaluator-role:FREP_EDITOR}") String evaluatorRole,
       @Value("${ca.bc.gov.nrs.identity-lookup.connect-timeout:15s}") Duration connectTimeout,
       @Value("${ca.bc.gov.nrs.identity-lookup.read-timeout:30s}") Duration readTimeout) {
+    this.baseUrl = baseUrl == null ? "" : baseUrl.trim();
+    this.evaluatorRole = evaluatorRole;
+
     SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
     factory.setConnectTimeout((int) connectTimeout.toMillis());
     factory.setReadTimeout((int) readTimeout.toMillis());
-    this.baseUrl = baseUrl == null ? "" : baseUrl.trim();
-    this.evaluatorRole = evaluatorRole;
-    this.restTemplate = new RestTemplate(factory);
+
+    // RestClient with a fixed base URL (mirrors nr-fspts' UserDirectoryService). The host/path are
+    // pinned at construction from trusted config; the user-supplied filters only ever flow into
+    // queryParam() on the framework's UriBuilder below, so they can't redirect the request (avoids
+    // the SSRF that a hand-built URI passed to exchange() trips).
+    this.restClient = RestClient.builder()
+        .baseUrl(this.baseUrl)
+        .requestFactory(factory)
+        .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+        .build();
   }
 
   /**
@@ -91,33 +96,30 @@ public class FamUserDirectoryService {
       return new EvaluatorSearchResponse(List.of(), 0, reqPage, reqSize);
     }
     try {
-      UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(baseUrl)
-          .path(USERS_PATH)
-          .queryParam("role", evaluatorRole)
-          .queryParam("idpType", "IDIR")
-          .queryParam("page", reqPage)
-          .queryParam("size", reqSize);
-      if (StringUtils.hasText(userId)) {
-        builder.queryParam("idpUsername", userId.trim());
-      }
-      if (StringUtils.hasText(firstName)) {
-        builder.queryParam("firstName", firstName.trim());
-      }
-      if (StringUtils.hasText(lastName)) {
-        builder.queryParam("lastName", lastName.trim());
-      }
-      // encode() handles spaces/special chars in the name filters; pass a URI so RestTemplate
-      // doesn't re-encode it.
-      URI uri = builder.encode().build().toUri();
+      // The base URL is fixed on restClient; the user-supplied filters go only into queryParam on
+      // the framework's UriBuilder (which encodes them), so they can't alter the host/path.
+      FamUserSearchResponse body = restClient.get()
+          .uri(uriBuilder -> {
+            uriBuilder.path(USERS_PATH)
+                .queryParam("role", evaluatorRole)
+                .queryParam("idpType", "IDIR")
+                .queryParam("page", reqPage)
+                .queryParam("size", reqSize);
+            if (StringUtils.hasText(userId)) {
+              uriBuilder.queryParam("idpUsername", userId.trim());
+            }
+            if (StringUtils.hasText(firstName)) {
+              uriBuilder.queryParam("firstName", firstName.trim());
+            }
+            if (StringUtils.hasText(lastName)) {
+              uriBuilder.queryParam("lastName", lastName.trim());
+            }
+            return uriBuilder.build();
+          })
+          .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
+          .retrieve()
+          .body(FamUserSearchResponse.class);
 
-      HttpHeaders headers = new HttpHeaders();
-      headers.setBearerAuth(extractBearerToken());
-      headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-
-      ResponseEntity<FamUserSearchResponse> response = restTemplate.exchange(
-          uri, HttpMethod.GET, new HttpEntity<>(headers), FamUserSearchResponse.class);
-
-      FamUserSearchResponse body = response.getBody();
       if (body == null) {
         return new EvaluatorSearchResponse(List.of(), 0, reqPage, reqSize);
       }

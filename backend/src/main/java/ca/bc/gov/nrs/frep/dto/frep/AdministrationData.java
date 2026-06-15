@@ -25,6 +25,7 @@ public record AdministrationData(
     String peopleOnBlock,
     String additionalComments,
     String teamLeadNameId,
+    String teamLeadRevisionCount,
     String revisionCount,
     String revisionCountAccess,
     List<EvaluatorRow> teamMembers

@@ -105,7 +105,8 @@ class ProtocolChecklistWriteRepositoryTest {
     when(cs.getString(14)).thenReturn("6"); // revision incremented
 
     BiodiversityOpening in = new BiodiversityOpening(
-        "1001", "500", "ACT", "N", "loc", "Y", "N", "Y", "innov", "N", "inv", "W", "opinion", "5");
+        "1001", "500", "ACT", "N", "loc", "Y", "N", "Y", "innov", "N", "inv", "W", "opinion", "5",
+        null, null, null);
 
     BiodiversityOpening out = repository.saveBiodiversityOpening(in, "idir");
 

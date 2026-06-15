@@ -24,6 +24,7 @@ import BioStratumView from './BioStratumView';
 import RipAdministrationView from './RipAdministrationView';
 import RipAttachmentsView from './RipAttachmentsView';
 import RipNotesView from './RipNotesView';
+import { formatSubmitValidation } from './submitValidation';
 
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
@@ -71,6 +72,9 @@ const ProtocolChecklistPage: FC = () => {
   const [busy, setBusy] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  // Carbon keeps every TabPanel mounted, so sibling tabs (e.g. Plots) hold data loaded once on
+  // mount. Track the active tab so a view can refetch when it becomes visible.
+  const [tabIndex, setTabIndex] = useState(0);
 
   const protocolType: ProtocolType | null = isProtocolType(type) ? type : null;
   const backendCode = protocolType ? PROTOCOL_TYPE_TO_BACKEND[protocolType] : null;
@@ -281,23 +285,32 @@ const ProtocolChecklistPage: FC = () => {
 
           {validationErrors.length > 0 && (
             <Column sm={4} md={8} lg={16}>
+              <p className="protocol-checklist__errors-intro">
+                This checklist isn&apos;t ready to submit. Fix the following, then submit again:
+              </p>
               <div className="protocol-checklist__errors">
-                {validationErrors.map((message) => (
-                  <InlineNotification
-                    key={message}
-                    kind="error"
-                    title="Validation"
-                    subtitle={message}
-                    hideCloseButton
-                    lowContrast
-                  />
-                ))}
+                {validationErrors.map((code) => {
+                  const { title, detail } = formatSubmitValidation(code);
+                  return (
+                    <InlineNotification
+                      key={code}
+                      kind="error"
+                      title={title}
+                      subtitle={detail}
+                      hideCloseButton
+                      lowContrast
+                    />
+                  );
+                })}
               </div>
             </Column>
           )}
 
           <Column sm={4} md={8} lg={16}>
-            <Tabs>
+            <Tabs
+              selectedIndex={tabIndex}
+              onChange={({ selectedIndex }) => setTabIndex(selectedIndex)}
+            >
               <TabList aria-label="Checklist sections" contained>
                 {checklist.sections.map((section) => (
                   <Tab key={section.id}>{section.title}</Tab>
@@ -305,7 +318,7 @@ const ProtocolChecklistPage: FC = () => {
               </TabList>
               <TabPanels>
                 {/* All Biodiversity sections edit inline (their own Edit/Save). */}
-                {checklist.sections.map((section) => (
+                {checklist.sections.map((section, i) => (
                   <TabPanel key={section.id}>
                     {section.id === 'administration' ? (
                       <RipAdministrationView
@@ -333,7 +346,12 @@ const ProtocolChecklistPage: FC = () => {
                     ) : section.id === 'stratum' ? (
                       <BioStratumView checklistId={id} canEdit={canEdit} submitted={submitted} />
                     ) : section.id === 'plots' ? (
-                      <BioPlotsView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      <BioPlotsView
+                        checklistId={id}
+                        canEdit={canEdit}
+                        submitted={submitted}
+                        active={i === tabIndex}
+                      />
                     ) : null}
                   </TabPanel>
                 ))}

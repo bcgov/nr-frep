@@ -45,6 +45,11 @@ export type BiodiversityOpening = {
   frepSiteEvaluationCode?: string;
   evaluatorOpinionComment?: string;
   revisionCount?: string;
+  // Read-only RESULTS reference fields (legacy FREP210 derives these from frep_selected_site); never
+  // editable, not persisted on save.
+  grossArea?: string;
+  netArea?: string;
+  harvestDate?: string;
 };
 
 /** A windthrow treatment on a stratum (mirrors FREP_WINDTHROW_TREAT_OBJECT). */
@@ -254,6 +259,7 @@ export type AdministrationData = {
   peopleOnBlock?: string;
   additionalComments?: string;
   teamLeadNameId?: string;
+  teamLeadRevisionCount?: string;
   revisionCount?: string;
   revisionCountAccess?: string;
   teamMembers?: EvaluatorRow[];

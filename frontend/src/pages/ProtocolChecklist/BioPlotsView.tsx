@@ -41,6 +41,8 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
+  active?: boolean;
 };
 
 // Sub-table columns. `kind` picks the cell control: index = read-only row number,
@@ -80,7 +82,7 @@ const UTM_ZONE_OPTIONS: CodeOption[] = ['7', '8', '9', '10', '11'].map((z) => ({
 const TABLE_MAX = 100;
 const TABLE_WARN = 50;
 
-const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
   const { display } = useNotification();
   const [strata, setStrata] = useState<BioStratumRow[]>([]);
   const [stratumId, setStratumId] = useState('');
@@ -88,6 +90,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [current, setCurrent] = useState<BioPlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Set once a save is attempted on an invalid plot, so required-field highlights only appear after
+  // the user tries to save (not the moment the form opens). Reset whenever a fresh plot form opens.
+  const [attemptedSave, setAttemptedSave] = useState(false);
 
   // Reference data for the coded dropdowns. `evaluators` is null until loaded so we can show the
   // "no evaluator yet" notice only after the lookup resolves.
@@ -132,6 +137,29 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     // (and cancel) the load before it settles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checklistId]);
+
+  // Carbon keeps the Stratum tab mounted alongside this one, so a stratum added there won't appear
+  // in our once-loaded list. Refetch the strata whenever this tab becomes active so newly-added
+  // strata show up without a full page reload. (Refetches only the lightweight list; keeps the
+  // current selection and any open plot.)
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    API.protocolChecklist
+      .listBioStrata(checklistId)
+      .then((list) => {
+        if (cancelled) return;
+        setStrata(list);
+        setStratumId((prev) => prev || list[0]?.stratumId || '');
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) reportError("We couldn't load the strata", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, checklistId]);
 
   // Reference data (coded dropdowns + the checklist's evaluator list).
   useEffect(() => {
@@ -210,6 +238,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const select = async (plotId: string) => {
     setBusy(true);
     try {
+      setAttemptedSave(false);
       setCurrent(await API.protocolChecklist.getBioPlot(plotId));
     } catch (err) {
       reportError('Could not load the plot', err);
@@ -218,7 +247,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     }
   };
 
-  const addPlot = () =>
+  const addPlot = () => {
+    setAttemptedSave(false);
     setCurrent({
       stratumId,
       treeIndicator: 'N',
@@ -226,15 +256,45 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       standTable: [],
       cwdTable: [],
     });
+  };
 
-  // Easting/Northing digit checks mirror the legacy onblur validation.
-  const validate = (): string[] => {
-    const errs: string[] = [];
-    if (!noUtmSignal && get('utmEasting') && !/^\d{6}$/.test(get('utmEasting'))) {
-      errs.push('Easting must be 6 digits.');
+  // Per-field validation message ('' = valid). Single source of truth shared by validate() (which
+  // blocks the save) and the inline field controls, so the toast and the field highlights stay in
+  // sync. UTM zone/easting/northing are required + length-checked only when a signal is available
+  // ("No UTM signal available" unchecked); when checked, those fields are disabled and exempt.
+  const plotFieldError = (key: string): string => {
+    const value = get(key).trim();
+    switch (key) {
+      case 'utmZone':
+        return noUtmSignal || value !== '' ? '' : 'Zone is required.';
+      case 'utmEasting':
+        if (noUtmSignal) return '';
+        if (value === '') return 'Easting is required.';
+        return /^\d{6}$/.test(value) ? '' : 'Easting must be exactly 6 digits.';
+      case 'utmNorthing':
+        if (noUtmSignal) return '';
+        if (value === '') return 'Northing is required.';
+        return /^\d{7}$/.test(value) ? '' : 'Northing must be exactly 7 digits.';
+      case 'firstLegTransect':
+        return value === '' ? 'Bearing 1st leg is required.' : '';
+      case 'secondLegTransect':
+        return value === '' ? '2nd leg is required.' : '';
+      default:
+        return '';
     }
-    if (!noUtmSignal && get('utmNorthing') && !/^\d{7}$/.test(get('utmNorthing'))) {
-      errs.push('Northing must be 7 digits.');
+  };
+
+  const validate = (): string[] => {
+    // Bearing legs are always required; UTM is required only when a signal is available (legacy
+    // submit checks frep.submit.biodiversity.plot.nobearingleg / .utmrequired). Enforce here so they
+    // can't reach submit.
+    const errs = ['utmZone', 'utmEasting', 'utmNorthing', 'firstLegTransect', 'secondLegTransect']
+      .map(plotFieldError)
+      .filter((e) => e !== '');
+    // When "Trees exist" is checked, the stand table must have at least one row (legacy submit check
+    // frep.submit.biodiversity.plot.notrees) — otherwise the indicator and the table disagree.
+    if (get('treeIndicator') === 'Y' && (current?.standTable?.length ?? 0) === 0) {
+      errs.push('"Trees exist" is checked — add at least one stand-table row, or uncheck it.');
     }
     return errs;
   };
@@ -243,6 +303,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     if (!current) return;
     const errs = validate();
     if (errs.length > 0) {
+      setAttemptedSave(true);
       reportError('Please fix the following', new Error(errs.join(' ')));
       return;
     }
@@ -360,34 +421,43 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     label: string,
     maxLength?: number,
     disabled = false,
-  ): ReactNode =>
-    readOnly ? (
+    required = false,
+  ): ReactNode => {
+    const error = plotFieldError(key);
+    return readOnly ? (
       roField(label, get(key))
     ) : (
       <TextInput
         id={`plot-${key}`}
-        labelText={label}
+        labelText={required ? `${label} (required)` : label}
         value={get(key)}
         maxLength={maxLength}
         disabled={disabled}
         onChange={(e) => set(key, e.target.value)}
+        invalid={attemptedSave && error !== ''}
+        invalidText={error}
       />
     );
+  };
 
   const selectField = (
     key: string,
     label: string,
     options: CodeOption[],
     disabled = false,
-  ): ReactNode =>
-    readOnly ? (
+    required = false,
+  ): ReactNode => {
+    const error = plotFieldError(key);
+    return readOnly ? (
       roField(label, options.find((o) => o.code === get(key))?.description ?? get(key))
     ) : (
       <Select
         id={`plot-${key}`}
-        labelText={label}
+        labelText={required ? `${label} (required)` : label}
         value={get(key)}
         disabled={disabled}
+        invalid={attemptedSave && error !== ''}
+        invalidText={error}
         onChange={(e) => set(key, e.target.value)}
       >
         <SelectItem value="" text="—" />
@@ -396,6 +466,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         ))}
       </Select>
     );
+  };
 
   const checkField = (key: string, label: string): ReactNode =>
     readOnly ? (
@@ -659,9 +730,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
             <div className="rip-form__grid">
               {textField('plotNumber', 'Plot #', 3)}
               {selectField('assessorName', 'Evaluated by', evaluators ?? [])}
-              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal)}
-              {textField('utmEasting', 'Easting', 6, noUtmSignal)}
-              {textField('utmNorthing', 'Northing', 7, noUtmSignal)}
+              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
+              {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
+              {textField('utmNorthing', 'Northing', 7, noUtmSignal, !noUtmSignal)}
             </div>
           </fieldset>
 
@@ -678,8 +749,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
               {checkField('cwdTransectIndicator', 'CWD in transect')}
             </div>
             <div className="rip-form__grid">
-              {textField('firstLegTransect', 'Bearing 1st leg', 3)}
-              {textField('secondLegTransect', '2nd leg', 3)}
+              {textField('firstLegTransect', 'Bearing 1st leg', 3, false, true)}
+              {textField('secondLegTransect', '2nd leg', 3, false, true)}
             </div>
             <div className="rip-form__grid">{textField('plotComment', 'Comments')}</div>
           </fieldset>
@@ -688,6 +759,15 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           {get('treeIndicator') === 'Y' && (
             <fieldset className="rip-form__group">
               <legend>Stand table (trees)</legend>
+              {attemptedSave && (current.standTable ?? []).length === 0 && (
+                <InlineNotification
+                  kind="error"
+                  title="Stand table required"
+                  subtitle='"Trees exist" is checked — add at least one stand-table row, or uncheck it.'
+                  hideCloseButton
+                  lowContrast
+                />
+              )}
               {childGrid(
                 'Stand',
                 STAND_COLS,

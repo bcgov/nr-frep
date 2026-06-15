@@ -36,20 +36,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class OracleJpaConfiguration {
 
   @Bean
-  static BeanPostProcessor oracleJdbcUrlLogger() {
-    return new BeanPostProcessor() {
-      @Override
-      public Object postProcessAfterInitialization(Object bean, String beanName)
-          throws BeansException {
-        if ("dataSource".equals(beanName) && bean instanceof HikariDataSource hikari) {
-          log.info("Oracle JDBC URL: {}", hikari.getJdbcUrl());
-        }
-        return bean;
-      }
-    };
-  }
-
-  @Bean
   public InitializingBean warmOraclePool(DataSource dataSource) {
     return () -> {
       try (var ignored = dataSource.getConnection()) {

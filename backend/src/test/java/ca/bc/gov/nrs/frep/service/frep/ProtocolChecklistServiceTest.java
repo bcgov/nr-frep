@@ -214,7 +214,8 @@ class ProtocolChecklistServiceTest {
     when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     BiodiversityOpening opening = new BiodiversityOpening(
-        "9001", "500", "ACT", "N", "loc", "N", "N", "N", null, "N", null, "W", "ok", "3");
+        "9001", "500", "ACT", "N", "loc", "N", "N", "N", null, "N", null, "W", "ok", "3",
+        null, null, null);
     when(writeRepository.saveBiodiversityOpening(opening, "u")).thenReturn(opening);
 
     BiodiversityOpening saved = service.saveBiodiversityOpening("9001", opening);

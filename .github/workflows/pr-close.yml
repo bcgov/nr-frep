@@ -20,6 +20,10 @@ jobs:
     secrets:
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
+      # Without this the helper falls back to its built-in default
+      # (https://api.silver.devops.gov.bc.ca:6443), printing/targeting the wrong
+      # cluster. Every other workflow sources the server from vars.oc_server.
+      oc_server: ${{ vars.oc_server }}
     with:
       cleanup: label
       packages: backend frontend

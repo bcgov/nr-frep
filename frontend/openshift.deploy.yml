@@ -18,7 +18,7 @@ parameters:
   # SLOT decouples the public-facing Route hostname from the OpenShift object
   # names so per-PR previews can share a fixed pool of Cognito callback URIs.
   # AWS Cognito user pool app clients don't accept wildcards in CallbackURLs;
-  # we pre-register 50 URIs (nr-frep-0…nr-frep-49.apps.silver.devops.gov.bc.ca)
+  # we pre-register 50 URIs (nr-frep-0…nr-frep-49.apps.gold.devops.gov.bc.ca)
   # and bucket PRs into them via PR % 50.
   # pr-open.yml computes SLOT = PR % 50; merge.yml passes SLOT = ZONE = test/prod.
   - name: SLOT
@@ -32,7 +32,7 @@ parameters:
     value: ghcr.io/bcgov/nr-frep/frontend
   - name: DOMAIN
     description: Cluster apps domain (do not include leading dot)
-    value: apps.silver.devops.gov.bc.ca
+    value: apps.gold.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   # Runtime VITE_* config (rendered into /srv/config.js by the entrypoint).

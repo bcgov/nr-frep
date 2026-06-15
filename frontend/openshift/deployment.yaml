@@ -30,7 +30,7 @@ spec:
       # rejected because the SCC's MustRunAs strategy limits it to the
       # namespace range.
       #
-      # seccompProfile is also intentionally omitted: BC Gov Silver
+      # seccompProfile is also intentionally omitted: BC Gov Gold
       # translates the field into a deprecated alpha annotation that
       # restricted-v2 forbids. The SCC enforces runtime/default at the SCC
       # level regardless, so we don't lose protection by leaving it out.
@@ -173,7 +173,7 @@ spec:
     insecureEdgeTerminationPolicy: Redirect
 ---
 # NetworkPolicy: allow ingress from the OpenShift router into the frontend pods.
-# BC Gov silver namespaces have default-deny ingress; without this the router
+# BC Gov gold namespaces have default-deny ingress; without this the router
 # returns 503 even though the Route is Admitted and the Service has endpoints.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

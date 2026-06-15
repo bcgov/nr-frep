@@ -34,7 +34,7 @@ spec:
       # Pod-level security defaults. fsGroup and seccompProfile are
       # intentionally omitted: OpenShift's restricted-v2 SCC enforces a
       # MustRunAs fsGroup from the namespace's allocated GID range (setting
-      # one ourselves is rejected), and Silver translates seccompProfile
+      # one ourselves is rejected), and Gold translates seccompProfile
       # into a deprecated alpha annotation that the SCC forbids. The SCC
       # still injects fsGroup and enforces runtime/default seccomp at the
       # SCC layer — we just can't declare them in the pod spec.
@@ -275,7 +275,7 @@ stringData:
 # NetworkPolicy: allow ingress into backend from
 #   1) frontend pods (so Caddy's `reverse_proxy /api*` can reach :8080)
 #   2) cluster monitoring (so Prometheus can scrape /actuator/prometheus)
-# Without this, silver's default-deny ingress drops Caddy's outbound to
+# Without this, gold's default-deny ingress drops Caddy's outbound to
 # frep-backend:8080 and the user sees 502 Bad Gateway on /api/* calls.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

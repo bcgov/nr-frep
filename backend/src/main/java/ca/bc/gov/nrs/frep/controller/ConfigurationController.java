@@ -79,6 +79,18 @@ public class ConfigurationController {
     return ResponseEntity.ok(configurationService.getStrataTypes());
   }
 
+  /** Resource-value status options for the biodiversity data-extract report filter. */
+  @GetMapping("/resource-value-status-codes")
+  public ResponseEntity<List<CodeOptionResponse>> getResourceValueStatusCodes() {
+    return ResponseEntity.ok(configurationService.getResourceValueStatusCodes());
+  }
+
+  /** Checklist-status options for the CHR data-extract report filter (FREPRPT022). */
+  @GetMapping("/checklist-status-codes")
+  public ResponseEntity<List<CodeOptionResponse>> getChecklistStatusCodes() {
+    return ResponseEntity.ok(configurationService.getChecklistStatusCodes());
+  }
+
   @GetMapping("/bec-search")
   public ResponseEntity<List<BecRow>> searchBec(
       @RequestParam(name = "zone", required = false) String zone,

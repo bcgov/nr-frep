@@ -1,132 +1,140 @@
-export type FrepReportDefinition = {
+import type { ReportFormat } from '@/services/reports';
+
+/**
+ * Generatable-report registry — the front-end mirror of the backend
+ * `ReportDefinition` enum, modelled on the nr-fspts `reportDefinitions.ts`. Each
+ * entry drives a {@link ReportConfigForm} (which inputs to show) and POSTs to
+ * `/api/v1/reports/{id}`.
+ *
+ * <p>To add a report: register it in the backend `ReportDefinition` + drop its
+ * JRXML, then add an entry to {@link GENERATABLE_REPORTS} whose {@code id} matches
+ * the backend route token.</p>
+ */
+export type ReportFieldKey =
+  | 'dateRange'
+  | 'orgUnit'
+  | 'masterListYear'
+  | 'resourceValueStatus'
+  | 'checklistStatus'
+  | 'clientNumber'
+  | 'licence'
+  | 'openingId';
+
+export interface GeneratableReport {
+  /** Route token — must match the backend `ReportDefinition` id. */
   id: string;
   title: string;
-  category: string;
-  description: string;
-  adminOnly?: boolean;
-};
+  summary: string;
+  availableFormats: ReportFormat[];
+  /** Which inputs the form shows; 'required' enforces a value before generating. */
+  fields: Partial<Record<ReportFieldKey, boolean | 'optional' | 'required'>>;
+  /** Optional grid layout: each inner array is one row of field keys. */
+  layout?: ReportFieldKey[][];
+}
 
-/** Legacy Jasper catalog (FREPRPT on JCRS). Read-only placeholder until Phase 4 migration. */
-export const FREP_REPORT_DEFINITIONS: FrepReportDefinition[] = [
+// Reports → Biodiversity → Data Extract (legacy JCRS FREPRPT001-005). All CSV extracts sharing the
+// same filters: org unit (required), master-list year (required), resource-value status (required),
+// opening id (optional). Ids match the backend ReportDefinition route tokens.
+const BIODIVERSITY_EXTRACT_FIELDS: GeneratableReport['fields'] = {
+  orgUnit: 'required',
+  masterListYear: 'required',
+  resourceValueStatus: 'required',
+  openingId: 'optional',
+};
+const BIODIVERSITY_EXTRACT_LAYOUT: ReportFieldKey[][] = [
+  ['orgUnit', 'masterListYear', 'resourceValueStatus', 'openingId'],
+];
+
+export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
-    id: 'FREPRPT001',
-    title: 'Biodiversity extract',
-    category: 'Biodiversity',
-    description: 'Opening-level biodiversity checklist extract.',
+    id: 'biodiversity-extract-block',
+    title: 'Biodiversity — Block Table extract',
+    summary: 'Opening/block-level biodiversity checklist data (FREPRPT001).',
+    availableFormats: ['csv'],
+    fields: BIODIVERSITY_EXTRACT_FIELDS,
+    layout: BIODIVERSITY_EXTRACT_LAYOUT,
   },
   {
-    id: 'FREPRPT002',
-    title: 'Biodiversity extract',
-    category: 'Biodiversity',
-    description: 'District biodiversity summary extract.',
+    id: 'biodiversity-extract-stratum',
+    title: 'Biodiversity — Stratum Table extract',
+    summary: 'Stratum-summary biodiversity data (FREPRPT002).',
+    availableFormats: ['csv'],
+    fields: BIODIVERSITY_EXTRACT_FIELDS,
+    layout: BIODIVERSITY_EXTRACT_LAYOUT,
   },
   {
-    id: 'FREPRPT003',
-    title: 'Biodiversity extract',
-    category: 'Biodiversity',
-    description: 'Provincial biodiversity listing.',
+    id: 'biodiversity-extract-plot',
+    title: 'Biodiversity — Plot Table extract',
+    summary: 'Plot-level biodiversity data (FREPRPT003).',
+    availableFormats: ['csv'],
+    fields: BIODIVERSITY_EXTRACT_FIELDS,
+    layout: BIODIVERSITY_EXTRACT_LAYOUT,
   },
   {
-    id: 'FREPRPT004',
-    title: 'Biodiversity extract',
-    category: 'Biodiversity',
-    description: 'Biodiversity targeted-site extract.',
+    id: 'biodiversity-extract-stand',
+    title: 'Biodiversity — Stand Table extract',
+    summary: 'Stand-table (tree) biodiversity data (FREPRPT004).',
+    availableFormats: ['csv'],
+    fields: BIODIVERSITY_EXTRACT_FIELDS,
+    layout: BIODIVERSITY_EXTRACT_LAYOUT,
   },
   {
-    id: 'FREPRPT005',
-    title: 'Biodiversity extract',
-    category: 'Biodiversity',
-    description: 'Biodiversity results export.',
+    id: 'biodiversity-extract-cwd',
+    title: 'Biodiversity — Coarse Woody Debris extract',
+    summary: 'CWD-table biodiversity data (FREPRPT005).',
+    availableFormats: ['csv'],
+    fields: BIODIVERSITY_EXTRACT_FIELDS,
+    layout: BIODIVERSITY_EXTRACT_LAYOUT,
   },
+  // Reports → Checklist Completion Status (legacy JCRS FREPRPT012). Jasper PDF rolled up by
+  // region / org unit; the date range supplies the proc's start/end year, plus optional
+  // licence + client number. No org-unit filter — the proc aggregates all regions itself.
   {
-    id: 'FREPRPT006',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian stream opening extract.',
+    id: 'checklist-completion-status',
+    title: 'Checklist Completion Status',
+    summary:
+      'Resource-value checklist completion statistics by region and district, for a year range '
+      + '(FREPRPT012). Counts in parentheses are unsubmitted checklists.',
+    availableFormats: ['pdf'],
+    fields: {
+      dateRange: 'optional',
+      licence: 'optional',
+      clientNumber: 'optional',
+    },
+    layout: [['dateRange'], ['licence', 'clientNumber']],
   },
+  // Reports → Checklist Rejection Reason (legacy JCRS FREPRPT018). Jasper PDF: accepted/rejected
+  // checklist counts by region / district with a per-district rejection-reason breakdown. Filtered
+  // by org unit + year range (the date range supplies the proc's start/end year).
   {
-    id: 'FREPRPT007',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian district summary.',
+    id: 'checklist-rejection-reason',
+    title: 'Checklist Rejection Reason',
+    summary:
+      'Accepted vs. rejected checklist counts by region and district, with the rejection reasons '
+      + 'per district, for an org unit and year range (FREPRPT018).',
+    availableFormats: ['pdf'],
+    fields: {
+      orgUnit: 'optional',
+      dateRange: 'optional',
+    },
+    layout: [['orgUnit'], ['dateRange']],
   },
+  // Reports → Cultural Heritage → Data Extract (legacy JCRS FREPRPT022). CSV data extract (97 flat
+  // columns) filtered by org unit, master-list year, checklist status and resource value. Admin-only
+  // in legacy — access gating is deferred (see plan), so this is visible to all report users for now.
   {
-    id: 'FREPRPT009',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian checklist listing.',
-  },
-  {
-    id: 'FREPRPT010',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian results export.',
-  },
-  {
-    id: 'FREPRPT011',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian targeted-site extract.',
-  },
-  {
-    id: 'FREPRPT012',
-    title: 'Checklist statistics',
-    category: 'Statistics',
-    description: 'Provincial checklist statistics summary.',
-  },
-  {
-    id: 'FREPRPT013',
-    title: 'Water quality extract',
-    category: 'Water quality',
-    description: 'Water quality sample-area extract.',
-  },
-  {
-    id: 'FREPRPT015',
-    title: 'Water quality extract',
-    category: 'Water quality',
-    description: 'Water quality district summary.',
-  },
-  {
-    id: 'FREPRPT016',
-    title: 'Water quality extract',
-    category: 'Water quality',
-    description: 'Water quality results export.',
-  },
-  {
-    id: 'FREPRPT017',
-    title: 'Water quality extract',
-    category: 'Water quality',
-    description: 'Water quality targeted-site extract.',
-  },
-  {
-    id: 'FREPRPT018',
-    title: 'Rejection reasons',
-    category: 'Statistics',
-    description: 'Checklist rejection reason summary.',
-  },
-  {
-    id: 'FREPRPT019',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian provincial listing.',
-  },
-  {
-    id: 'FREPRPT020',
-    title: 'Riparian extract',
-    category: 'Riparian',
-    description: 'Riparian opening detail export.',
-  },
-  {
-    id: 'FREPRPT021',
-    title: 'Water quality extract',
-    category: 'Water quality',
-    description: 'Water quality provincial listing.',
-  },
-  {
-    id: 'FREPRPT022',
-    title: 'CHR data extract',
-    category: 'Culture Heritage',
-    description: 'Culture Heritage administrative data extract.',
-    adminOnly: true,
+    id: 'chr-data-extract',
+    title: 'Cultural Heritage — Data Extract',
+    summary:
+      'Cultural Heritage Resource checklist, site and feature detail (FREPRPT022). Filtered by '
+      + 'org unit, master-list year, checklist status and resource value.',
+    availableFormats: ['csv'],
+    fields: {
+      orgUnit: 'required',
+      masterListYear: 'required',
+      checklistStatus: 'optional',
+      resourceValueStatus: 'optional',
+    },
+    layout: [['orgUnit', 'masterListYear', 'checklistStatus', 'resourceValueStatus']],
   },
 ];

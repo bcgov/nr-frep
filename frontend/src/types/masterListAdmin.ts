@@ -12,7 +12,8 @@ export type MasterListAdmin = {
   maxHarvestCompleteDate: string;
   minOpeningGrossAreaHa: number | null;
   maxSitesPerDistrict: number | null;
-  resourceEvaluatedInd: string;
+  /** Legacy resource_evaluation_ind lock flag: '' = no list, 'N' = generated, 'Y' = evaluations under way. */
+  resourceEvaluationInd: string;
   generationComments: string;
   generated: boolean;
   generationStats: MasterListGenerationStat[];
@@ -24,6 +25,5 @@ export type GenerateMasterListRequest = {
   maxHarvestCompleteDate?: string;
   minOpeningGrossAreaHa?: number | null;
   maxSitesPerDistrict?: number | null;
-  resourceEvaluatedInd?: string;
   comments?: string;
 };

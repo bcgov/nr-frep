@@ -1,111 +1,98 @@
-import {
-  Column,
-  DataTable,
-  Grid,
-  InlineNotification,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Tag,
-} from '@carbon/react';
-import { useMemo, type FC } from 'react';
+import { Accordion, AccordionItem, Column, Grid, InlineNotification } from '@carbon/react';
+import { useEffect, useState, type FC } from 'react';
 
-import TableHeaderBar from '@/components/core/TableHeaderBar';
+import ReportConfigForm from './ReportConfigForm';
+import { GENERATABLE_REPORTS } from './reportDefinitions';
 
-import { FREP_REPORT_DEFINITIONS } from './reportDefinitions';
+import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
 
-import { useAuthorization } from '@/hooks/useAuthorization';
+import { useNotification } from '@/context/notification/useNotification';
+import API from '@/services/APIs';
 
 import './reports.scss';
 
-const TABLE_HEADERS = [
-  { key: 'id', header: 'Report ID' },
-  { key: 'title', header: 'Report' },
-  { key: 'category', header: 'Category' },
-  { key: 'description', header: 'Description' },
-  { key: 'access', header: 'Access' },
-] as const;
-
 const ReportsPage: FC = () => {
-  const { isSysAdmin } = useAuthorization();
+  const { display } = useNotification();
 
-  const visibleReports = useMemo(
-    () => FREP_REPORT_DEFINITIONS.filter((report) => !report.adminOnly || isSysAdmin),
-    [isSysAdmin],
-  );
+  // Reference data shared by every report form (loaded once, only when needed).
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
+  const [resourceValueStatuses, setResourceValueStatuses] = useState<CodeOption[]>([]);
+  const [checklistStatuses, setChecklistStatuses] = useState<CodeOption[]>([]);
 
-  const tableRows = useMemo(
-    () =>
-      visibleReports.map((report) => ({
-        id: report.id,
-        title: report.title,
-        category: report.category,
-        description: report.description,
-        access: report.adminOnly ? 'Admin only' : 'All roles',
-      })),
-    [visibleReports],
-  );
+  useEffect(() => {
+    // Skip the lookups entirely while there are no generatable reports.
+    if (GENERATABLE_REPORTS.length === 0) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      API.configuration.getOrgUnits(),
+      API.configuration.getMasterListYears(),
+      API.configuration.getResourceValueStatusCodes(),
+      API.configuration.getChecklistStatusCodes(),
+    ])
+      .then(([orgs, years, statuses, checklistStatusCodes]) => {
+        if (cancelled) return;
+        setOrgUnits(orgs);
+        setMasterListYears(years);
+        setResourceValueStatuses(statuses);
+        setChecklistStatuses(checklistStatusCodes);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          display({
+            kind: 'warning',
+            title: 'Report filters unavailable',
+            subtitle:
+              "We couldn't load the report filter options. Try again, or pick values manually.",
+            timeout: 8000,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [display]);
 
   return (
     <Grid fullWidth className="default-grid reports-grid">
       <Column sm={4} md={8} lg={16}>
         <h1 className="reports__title">Reports</h1>
-        <p className="reports__subtitle">
-          Catalog of legacy FREP Jasper reports. Generation is not yet available in this application
-          — browse the list below.
-        </p>
+        <p className="reports__subtitle">Generate FREP reports below.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <InlineNotification
-          kind="info"
-          title="Read-only catalog"
-          subtitle="Report download and parameter forms will be added in a later phase. Legacy Jasper reports remain on JCRS until then."
-          hideCloseButton
-          lowContrast
-        />
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <DataTable rows={tableRows} headers={[...TABLE_HEADERS]}>
-          {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-            <TableContainer>
-              <TableHeaderBar title="Reports catalog" />
-              <Table {...getTableProps()} aria-label="FREP reports catalog">
-                <TableHead>
-                  <TableRow>
-                    {headers.map((header) => (
-                      <TableHeader {...getHeaderProps({ header })} key={header.key}>
-                        {header.header}
-                      </TableHeader>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow {...getRowProps({ row })} key={row.id}>
-                      {row.cells.map((cell) => (
-                        <TableCell key={cell.id}>
-                          {cell.info.header === 'access' ? (
-                            <Tag type={cell.value === 'Admin only' ? 'purple' : 'blue'} size="sm">
-                              {cell.value}
-                            </Tag>
-                          ) : (
-                            cell.value
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </DataTable>
+        {GENERATABLE_REPORTS.length === 0 ? (
+          <InlineNotification
+            kind="info"
+            title="No reports available to generate yet"
+            subtitle="The generation pipeline is wired and ready; FREP report templates will be added here as they're ported from the legacy catalog."
+            hideCloseButton
+            lowContrast
+          />
+        ) : (
+          <Accordion>
+            {GENERATABLE_REPORTS.map((report) => (
+              <AccordionItem key={report.id} title={report.title}>
+                <p className="reports__accordion-summary">{report.summary}</p>
+                <ReportConfigForm
+                  definition={report}
+                  orgUnits={orgUnits}
+                  masterListYears={masterListYears}
+                  resourceValueStatuses={resourceValueStatuses}
+                  checklistStatuses={checklistStatuses}
+                  loading={loading}
+                />
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
       </Column>
     </Grid>
   );

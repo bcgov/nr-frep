@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 6.1.1.final using JasperReports Library version 6.1.1  -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="FREPRPT018_Checklist_Rejection_Reason" pageWidth="612" pageHeight="792" whenNoDataType="AllSectionsNoDetail" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="ee544001-59d4-49ef-9a4f-30dd176ff1d7">
+  <!-- Ported from legacy JCRS FREPRPT018. Flattened to remove the JasperServer header
+       subreports / repo: logo / SUBREPORT_EXT (matching the nr-fspts pattern). The detail
+       subreport is essential (it runs its own per-org-unit proc), so it is retained but
+       resolved as a pre-compiled JasperReport passed in via REJECTION_SUBREPORT — see
+       ReportParameterProvider#paramsChecklistRejection. p_user_id is supplied by the provider;
+       REPORT_CONNECTION is set by JasperFillManager and reused by the subreport. -->
+  <parameter name="p_user_id" class="java.lang.String" isForPrompting="false"/>
+  <parameter name="p_org_unit_code" class="java.lang.String"/>
+  <parameter name="p_start_year" class="java.lang.String"/>
+  <parameter name="p_end_year" class="java.lang.String"/>
+  <parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+  <parameter name="REJECTION_SUBREPORT" class="net.sf.jasperreports.engine.JasperReport" isForPrompting="false"/>
+  <queryString language="plsql"><![CDATA[{call freprpt_chklst_rej_reason(
+$P{ORACLE_REF_CURSOR}
+,$P{p_org_unit_code}
+,$P{p_start_year}
+,$P{p_end_year}
+,$P{p_user_id}
+)}]]></queryString>
+  <field name="DB_NAME" class="java.lang.String"/>
+  <field name="USER_ID" class="java.lang.String"/>
+  <field name="PARAM_ORG" class="java.lang.String"/>
+  <field name="PARAM_ORG_DESC" class="java.lang.String"/>
+  <field name="REGION" class="java.lang.String"/>
+  <field name="ORG_UNIT_NAME" class="java.lang.String"/>
+  <field name="ORG_UNIT_CODE" class="java.lang.String"/>
+  <field name="COUNT_FSS_ID" class="java.math.BigDecimal"/>
+  <field name="ACC_COUNT" class="java.math.BigDecimal"/>
+  <field name="REJ_COUNT" class="java.math.BigDecimal"/>
+  <field name="TAR_COUNT" class="java.math.BigDecimal"/>
+  <field name="ALL_COUNT" class="java.math.BigDecimal"/>
+  <sortField name="REGION"/>
+  <sortField name="ORG_UNIT_NAME"/>
+  <variable name="PageNumber" class="java.lang.Integer" resetType="None">
+    <variableExpression><![CDATA[$V{PAGE_NUMBER}]]></variableExpression>
+  </variable>
+  <group name="REGION">
+    <groupExpression><![CDATA[$F{REGION}]]></groupExpression>
+    <groupHeader>
+      <band height="49">
+        <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+          <reportElement mode="Opaque" x="0" y="0" width="570" height="16" backcolor="#E0E0E0" uuid="adddb5f8-c81e-4aba-98bb-e843bafe9115">
+            <property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+          </reportElement>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{REGION}]]></textFieldExpression>
+        </textField>
+        <staticText>
+          <reportElement x="0" y="16" width="150" height="33" uuid="77a6ecb7-7ad6-4aa2-81a2-94492c75c47d">
+            <property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+          </reportElement>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement verticalAlignment="Bottom">
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <text><![CDATA[District]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="150" y="16" width="65" height="33" uuid="b6c4b85b-d58f-4bda-bab6-e564570be73c"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement verticalAlignment="Bottom">
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <text><![CDATA[# of Sites on Random List]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="215" y="16" width="50" height="33" uuid="a2717710-3113-4d6e-85b7-fc0de0a8f4a5"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement verticalAlignment="Bottom">
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Accepted]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="265" y="16" width="50" height="33" uuid="e4ed93a7-5484-47b0-8e08-efaf72133094"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement verticalAlignment="Bottom">
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Rejected]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="315" y="16" width="255" height="33" uuid="e4ed93a7-5484-47b0-8e08-efaf72133094"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement verticalAlignment="Bottom">
+            <font fontName="Arial" size="9" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Rejection Reason]]></text>
+        </staticText>
+      </band>
+    </groupHeader>
+    <groupFooter>
+      <band height="5"/>
+    </groupFooter>
+  </group>
+  <group name="ORG_UNIT_NAME">
+    <groupExpression><![CDATA[$F{ORG_UNIT_NAME}]]></groupExpression>
+    <groupHeader>
+      <band height="22">
+        <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+          <reportElement stretchType="RelativeToTallestObject" x="0" y="0" width="150" height="22" uuid="dd26a4d6-762f-4fd2-8e3a-1a12482c0344"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{ORG_UNIT_NAME}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement stretchType="RelativeToTallestObject" x="150" y="0" width="65" height="22" uuid="706c2a38-c1e8-4a62-bd49-993a6f1b0b7e"/>
+          <box padding="2" leftPadding="5">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{COUNT_FSS_ID}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement stretchType="RelativeToTallestObject" x="215" y="0" width="50" height="22" uuid="77f198dc-55a9-4b25-820a-5aced782c1d7"/>
+          <box padding="2" leftPadding="5">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{ACC_COUNT}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement stretchType="RelativeToTallestObject" x="265" y="0" width="50" height="22" uuid="03cf1ee1-fda3-4805-be18-0423a99cb221"/>
+          <box padding="2" leftPadding="5">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{REJ_COUNT}]]></textFieldExpression>
+        </textField>
+        <elementGroup>
+          <frame>
+            <reportElement stretchType="RelativeToTallestObject" x="315" y="0" width="255" height="22" uuid="c95bebe0-c3cc-408f-938b-1ba2c6428455"/>
+            <box>
+              <pen lineWidth="0.25"/>
+              <topPen lineWidth="0.25"/>
+              <leftPen lineWidth="0.25"/>
+              <bottomPen lineWidth="0.25"/>
+              <rightPen lineWidth="0.25"/>
+            </box>
+          </frame>
+          <subreport>
+            <reportElement mode="Transparent" x="315" y="0" width="255" height="22" uuid="f4986ac8-a91c-443a-b1f3-30e001a29545"/>
+            <subreportParameter name="p_org_unit_code">
+              <subreportParameterExpression><![CDATA[$F{ORG_UNIT_CODE}]]></subreportParameterExpression>
+            </subreportParameter>
+            <subreportParameter name="p_start_year">
+              <subreportParameterExpression><![CDATA[$P{p_start_year}]]></subreportParameterExpression>
+            </subreportParameter>
+            <subreportParameter name="p_end_year">
+              <subreportParameterExpression><![CDATA[$P{p_end_year}]]></subreportParameterExpression>
+            </subreportParameter>
+            <subreportParameter name="p_user_id">
+              <subreportParameterExpression><![CDATA[$P{p_user_id}]]></subreportParameterExpression>
+            </subreportParameter>
+            <subreportParameter name="ORACLE_REF_CURSOR">
+              <subreportParameterExpression><![CDATA[$P{ORACLE_REF_CURSOR}]]></subreportParameterExpression>
+            </subreportParameter>
+            <connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+            <subreportExpression><![CDATA[$P{REJECTION_SUBREPORT}]]></subreportExpression>
+          </subreport>
+        </elementGroup>
+      </band>
+    </groupHeader>
+  </group>
+  <background>
+    <band splitType="Stretch"/>
+  </background>
+  <pageHeader>
+    <band height="100" splitType="Stretch">
+      <!-- Title (was the FREPRPT_HEADER subreport + p_report_name field). -->
+      <staticText>
+        <reportElement x="0" y="0" width="400" height="14" uuid="54177e35-5024-453f-aa64-d407a6aa4d72"/>
+        <textElement>
+          <font fontName="Arial" size="12" isBold="true"/>
+        </textElement>
+        <text><![CDATA[FREP Jasper Reports]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="0" y="24" width="572" height="20" uuid="35cb6706-32d6-4e6a-b26b-b9f11f4dddca"/>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="12" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Checklist Rejection Reason]]></text>
+      </staticText>
+      <!-- Run metadata (right column), preserved from the legacy header. -->
+      <staticText>
+        <reportElement x="405" y="0" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c8401001"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Page:]]></text>
+      </staticText>
+      <textField>
+        <reportElement x="476" y="0" width="80" height="11" uuid="7da22937-1a13-46e5-9634-8d2d945a76fc"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{PageNumber} + " of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="405" y="11" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c8401002"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Date Printed:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" pattern="yyyy-MM-dd" isBlankWhenNull="true">
+        <reportElement x="476" y="11" width="94" height="11" uuid="d5d40342-1023-464a-ba09-b4bdfd4bbda6"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[new java.util.Date()]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="405" y="22" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c8401003"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[User Id:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="476" y="22" width="94" height="11" uuid="369018ac-9718-4ad4-87e3-24d3ddb9ab0f"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{p_user_id}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="405" y="33" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c8401004"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Database:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="476" y="33" width="94" height="11" uuid="bf179c2d-c526-4fec-b0b6-d3d9a717717d"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{DB_NAME}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="405" y="44" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c8401005"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Report Id:]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="476" y="44" width="94" height="11" uuid="2c406dcc-7b82-4cd7-9137-482fc6c57b78"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <text><![CDATA[FREPRPT018]]></text>
+      </staticText>
+      <line>
+        <reportElement x="0" y="66" width="570" height="1" uuid="ca4769f1-f5d8-4a85-b446-f5c536063001"/>
+      </line>
+      <!-- Parameter echo (was the FREPRPT018_Report_Header subreport). Org unit comes from the
+           main proc's own result fields; the years come straight from the input params. -->
+      <staticText>
+        <reportElement x="0" y="71" width="60" height="11" uuid="ae832a25-df40-451c-9f14-82050a001001"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Org Unit:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="60" y="71" width="400" height="11" uuid="ae832a25-df40-451c-9f14-82050a001002"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$F{PARAM_ORG_DESC}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="0" y="83" width="60" height="11" uuid="ae832a25-df40-451c-9f14-82050a001003"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Year From:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="60" y="83" width="80" height="11" uuid="ae832a25-df40-451c-9f14-82050a001004"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$P{p_start_year}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="150" y="83" width="60" height="11" uuid="ae832a25-df40-451c-9f14-82050a001005"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Year To:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="210" y="83" width="80" height="11" uuid="ae832a25-df40-451c-9f14-82050a001006"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$P{p_end_year}]]></textFieldExpression>
+      </textField>
+      <line>
+        <reportElement x="0" y="98" width="570" height="1" uuid="ca4769f1-f5d8-4a85-b446-f5c536063002"/>
+      </line>
+    </band>
+  </pageHeader>
+</jasperReport>

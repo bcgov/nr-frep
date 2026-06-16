@@ -27,8 +27,8 @@ import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
-import { runTodoFeature } from '@/utils/featureTodo';
 
 import './checklistSearch.scss';
 
@@ -144,6 +144,20 @@ const ChecklistSearchPage: FC = () => {
       setResults([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const { blob, filename } = await requestChecklistSearchCsv(filters);
+      triggerBrowserDownload(blob, filename);
+    } catch (err) {
+      display({
+        kind: 'error',
+        title: "We couldn't export the search results",
+        subtitle: apiErrorMessage(err),
+        timeout: 9000,
+      });
     }
   };
 
@@ -314,15 +328,10 @@ const ChecklistSearchPage: FC = () => {
                     <Button
                       kind="tertiary"
                       size="md"
-                      onClick={() =>
-                        void runTodoFeature(
-                          () => API.search.exportChecklists(filters),
-                          display,
-                          'Export to Excel',
-                        )
-                      }
+                      onClick={() => void exportCsv()}
+                      disabled={loading || results.length === 0}
                     >
-                      Export to Excel
+                      Export to CSV
                     </Button>
                   }
                 />

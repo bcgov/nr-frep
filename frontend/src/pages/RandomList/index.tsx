@@ -27,6 +27,7 @@ import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
 import { runTodoFeature } from '@/utils/featureTodo';
 
 import './randomList.scss';
@@ -159,6 +160,21 @@ const RandomListPage: FC = () => {
     void loadRandomList();
   }, [loadRandomList]);
 
+  const exportCsv = useCallback(async () => {
+    if (!effectiveYear) return;
+    try {
+      const { blob, filename } = await requestRandomListCsv(effectiveYear, orgUnit || undefined);
+      triggerBrowserDownload(blob, filename);
+    } catch (err) {
+      display({
+        kind: 'error',
+        title: "We couldn't export the random list",
+        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        timeout: 9000,
+      });
+    }
+  }, [display, effectiveYear, orgUnit]);
+
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 
   // Reset to the first page whenever a new result set loads.
@@ -255,20 +271,10 @@ const RandomListPage: FC = () => {
                     <Button
                       kind="tertiary"
                       size="md"
-                      onClick={() =>
-                        void runTodoFeature(
-                          () =>
-                            API.randomList.exportRandomList({
-                              effectiveYear,
-                              orgUnit: orgUnit || undefined,
-                            }),
-                          display,
-                          'Export to Excel',
-                        )
-                      }
+                      onClick={() => void exportCsv()}
                       disabled={loading || configLoading || !effectiveYear}
                     >
-                      Export to Excel
+                      Export to CSV
                     </Button>
                   }
                 />

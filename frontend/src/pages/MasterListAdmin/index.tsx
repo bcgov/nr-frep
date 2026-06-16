@@ -36,9 +36,15 @@ const emptyForm = (effectiveYear: string): GenerateMasterListRequest => ({
   maxHarvestCompleteDate: '',
   minOpeningGrossAreaHa: 5,
   maxSitesPerDistrict: 12,
-  resourceEvaluatedInd: 'BIO,RIP,WAT,CHR',
   comments: '',
 });
+
+/** Legacy FREP700 lock state from resource_evaluation_ind: '' none, 'N' generated, 'Y' locked. */
+const evalStateTag = (ind: string): { type: 'gray' | 'teal' | 'red'; label: string } => {
+  if (ind === 'Y') return { type: 'red', label: 'Evaluations under way (locked)' };
+  if (ind === 'N') return { type: 'teal', label: 'Generated' };
+  return { type: 'gray', label: 'No list yet' };
+};
 
 const MasterListAdminPage: FC = () => {
   const { display } = useNotification();
@@ -99,7 +105,6 @@ const MasterListAdminPage: FC = () => {
           maxHarvestCompleteDate: data.maxHarvestCompleteDate,
           minOpeningGrossAreaHa: data.minOpeningGrossAreaHa,
           maxSitesPerDistrict: data.maxSitesPerDistrict,
-          resourceEvaluatedInd: data.resourceEvaluatedInd,
           comments: data.generationComments,
         });
       })
@@ -183,6 +188,13 @@ const MasterListAdminPage: FC = () => {
     );
   };
 
+  // Legacy FREP700 button-gating (Frep700ButtonManager), keyed on resource_evaluation_ind:
+  //  Generate enabled only when no list ('');  Delete locked once evaluations exist ('Y');
+  //  Save comments only meaningful once a list exists.
+  const evalInd = criteria?.resourceEvaluationInd ?? '';
+  const hasList = evalInd !== '';
+  const locked = evalInd === 'Y';
+
   return (
     <Grid fullWidth className="default-grid master-list-admin-grid">
       <Column sm={4} md={8} lg={16}>
@@ -216,16 +228,10 @@ const MasterListAdminPage: FC = () => {
             </div>
             {!loading && criteria && (
               <div className="master-list-admin__generated">
-                <span className="master-list-admin__label">Generated</span>
-                {criteria.generated ? (
-                  <Tag type="green" size="sm">
-                    Yes
-                  </Tag>
-                ) : (
-                  <Tag type="gray" size="sm">
-                    Not yet
-                  </Tag>
-                )}
+                <span className="master-list-admin__label">Status</span>
+                <Tag type={evalStateTag(evalInd).type} size="sm">
+                  {evalStateTag(evalInd).label}
+                </Tag>
               </div>
             )}
           </div>
@@ -273,13 +279,6 @@ const MasterListAdminPage: FC = () => {
                   }
                   step={1}
                 />
-                <TextInput
-                  id="mla-protocols"
-                  labelText="Protocols evaluated"
-                  helperText="Comma-separated, e.g. BIO,RIP,WAT,CHR"
-                  value={form.resourceEvaluatedInd ?? ''}
-                  onChange={(e) => setForm({ ...form, resourceEvaluatedInd: e.target.value })}
-                />
                 <TextArea
                   id="mla-comments"
                   labelText="Generation comments"
@@ -288,19 +287,30 @@ const MasterListAdminPage: FC = () => {
                   onChange={(e) => setForm({ ...form, comments: e.target.value })}
                 />
               </div>
+              {locked && (
+                <p className="master-list-admin__lock-note">
+                  Resource evaluations are under way for this year — the list is locked, so it
+                  can&apos;t be (re-)generated or deleted. Use per-district Regenerate where
+                  allowed.
+                </p>
+              )}
               <div className="master-list-admin__actions">
-                <Button onClick={() => void handleGenerate()} disabled={generating}>
-                  {criteria.generated ? 'Re-generate master list' : 'Generate master list'}
+                <Button onClick={() => void handleGenerate()} disabled={generating || hasList}>
+                  Generate master list
                 </Button>
                 <Button
                   kind="tertiary"
                   onClick={() => void handleSaveComments()}
-                  disabled={generating}
+                  disabled={generating || !hasList}
                 >
                   Save comments
                 </Button>
-                {criteria.generated && (
-                  <Button kind="danger--tertiary" onClick={handleDelete} disabled={generating}>
+                {hasList && (
+                  <Button
+                    kind="danger--tertiary"
+                    onClick={handleDelete}
+                    disabled={generating || locked}
+                  >
                     Delete list
                   </Button>
                 )}

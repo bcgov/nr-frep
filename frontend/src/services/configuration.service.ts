@@ -74,6 +74,22 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /** Resource-value status options for the biodiversity data-extract report filter. */
+  getResourceValueStatusCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/resource-value-status-codes',
+    });
+  }
+
+  /** Checklist-status options for the CHR data-extract report filter (FREPRPT022). */
+  getChecklistStatusCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/checklist-status-codes',
+    });
+  }
+
   /** BEC catalogue search for the FREP211 BEC picker (all criteria optional). */
   searchBec(criteria: Partial<Record<string, string>>): CancelablePromise<BecRow[]> {
     return this.doRequest<BecRow[]>(this.config, {

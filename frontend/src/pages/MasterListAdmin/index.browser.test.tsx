@@ -34,7 +34,7 @@ const criteria = (generated: boolean) => ({
   maxHarvestCompleteDate: '2024-03-31',
   minOpeningGrossAreaHa: 5,
   maxSitesPerDistrict: 12,
-  resourceEvaluatedInd: 'BIO,RIP,WAT,CHR',
+  resourceEvaluationInd: 'N',
   generationComments: 'note',
   generated,
   generationStats: generated
@@ -79,5 +79,38 @@ describe('MasterListAdminPage actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Save comments' }));
 
     expect(api.saveComments).toHaveBeenCalledWith('2024', 'note');
+  });
+
+  it('locks generate and delete once evaluations are under way (ind = Y)', async () => {
+    config.getMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    api.getMasterList.mockResolvedValue({ ...criteria(true), resourceEvaluationInd: 'Y' });
+
+    render(<MasterListAdminPage />);
+
+    // Carbon's danger--tertiary button injects a visually-hidden "danger" span, so the Delete
+    // button's accessible name is "dangerDelete list" — match it with a regex.
+    expect(await screen.findByRole('button', { name: 'Generate master list' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByRole('button', { name: /Delete list/ })).toHaveProperty('disabled', true);
+  });
+
+  it('with no list (ind = empty), only generate is enabled', async () => {
+    config.getMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    api.getMasterList.mockResolvedValue({ ...criteria(false), resourceEvaluationInd: '' });
+
+    render(<MasterListAdminPage />);
+
+    expect(await screen.findByRole('button', { name: 'Generate master list' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(screen.getByRole('button', { name: 'Save comments' })).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('button', { name: 'Delete list' })).toBeNull();
   });
 });

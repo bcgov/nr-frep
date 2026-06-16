@@ -60,11 +60,6 @@ class SearchControllerTest {
         .andExpect(jsonPath("$[0].clientLocnName").value("Head Office"));
   }
 
-  @Test
-  void exportChecklistsIsNotYetImplemented() throws Exception {
-    mockMvc.perform(get("/api/v1/search/checklists/export"))
-        .andExpect(status().isNotImplemented())
-        .andExpect(jsonPath("$.status").value("NOT_IMPLEMENTED"))
-        .andExpect(jsonPath("$.feature").value("export-checklists"));
-  }
+  // CSV export lives on ReportController now (GET /api/v1/reports/checklist-search/csv);
+  // see ReportControllerTest.
 }

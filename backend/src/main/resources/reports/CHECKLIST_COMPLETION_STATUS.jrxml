@@ -1,0 +1,1607 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 6.1.1.final using JasperReports Library version 6.1.1  -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="FREPRPT012_Resource_Value_Checklist_Completion_Statistics" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="752" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="dac0ecf1-37bb-4748-94bb-03beca34b876">
+  <!-- Ported from legacy JCRS FREPRPT012. Flattened to a single self-contained template
+       (no JasperServer subreports / repo: logo / SUBREPORT_EXT) to match the nr-fspts pattern.
+       p_user_id is supplied by ReportParameterProvider; the proc fills ORACLE_REF_CURSOR. -->
+  <parameter name="p_user_id" class="java.lang.String" isForPrompting="false"/>
+  <parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+  <parameter name="p_start_year" class="java.lang.String"/>
+  <parameter name="p_end_year" class="java.lang.String"/>
+  <parameter name="p_licence" class="java.lang.String"/>
+  <parameter name="p_client_number" class="java.lang.String"/>
+  <queryString language="plsql"><![CDATA[{call freprpt_resval_chklst_comp(
+$P{ORACLE_REF_CURSOR}
+,$P{p_start_year}
+,$P{p_end_year}
+,$P{p_licence}
+,$P{p_client_number}
+,$P{p_user_id}
+)}]]></queryString>
+  <field name="DB_NAME" class="java.lang.String"/>
+  <field name="USER_ID" class="java.lang.String"/>
+  <field name="ROLLUP_REGION_CODE" class="java.lang.String"/>
+  <field name="ROLLUP_REGION_NAME" class="java.lang.String"/>
+  <field name="ORG_UNIT_CODE" class="java.lang.String"/>
+  <field name="ORG_UNIT_NAME" class="java.lang.String"/>
+  <field name="PARAM_LICENCE" class="java.lang.String"/>
+  <field name="PARAM_CLIENT_NAME_DESC" class="java.lang.String"/>
+  <field name="TOTALS" class="java.math.BigDecimal"/>
+  <field name="BIODIVERSITY" class="java.math.BigDecimal"/>
+  <field name="CULT_HERITAGE" class="java.math.BigDecimal"/>
+  <field name="FISH_RIP" class="java.math.BigDecimal"/>
+  <field name="FORAGE_ASSOC_PLANT_COMM" class="java.math.BigDecimal"/>
+  <field name="RECREATION" class="java.math.BigDecimal"/>
+  <field name="RES_FEATURES" class="java.math.BigDecimal"/>
+  <field name="SOILS" class="java.math.BigDecimal"/>
+  <field name="TIMBER" class="java.math.BigDecimal"/>
+  <field name="VISUAL_QUALITY" class="java.math.BigDecimal"/>
+  <field name="WATER" class="java.math.BigDecimal"/>
+  <field name="WILDLIFE" class="java.math.BigDecimal"/>
+  <field name="TOTALS_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="BIODIVERSITY_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="CULT_HERITAGE_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="FISH_RIP_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="FORAGE_ASSOC_PLANT_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="RECREATION_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="RES_FEATURES_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="SOILS_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="TIMBER_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="VISUAL_QUALITY_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="WATER_NOT_SUB" class="java.math.BigDecimal"/>
+  <field name="WILDLIFE_NOT_SUB" class="java.math.BigDecimal"/>
+  <sortField name="ROLLUP_REGION_NAME"/>
+  <sortField name="ORG_UNIT_CODE"/>
+  <variable name="PageNumber" class="java.lang.Integer" resetType="None">
+    <variableExpression><![CDATA[$V{PAGE_NUMBER}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_TOTALS" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{TOTALS}]]></variableExpression>
+  </variable>
+  <variable name="region_total_TOTALS" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{TOTALS}]]></variableExpression>
+  </variable>
+  <variable name="region_total_BIODIVERSITY" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{BIODIVERSITY}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_BIODIVERSITY" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{BIODIVERSITY}]]></variableExpression>
+  </variable>
+  <variable name="region_total_CULT_HERITAGE" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{CULT_HERITAGE}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_CULT_HERITAGE" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{CULT_HERITAGE}]]></variableExpression>
+  </variable>
+  <variable name="region_total_FISH_RIP" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{FISH_RIP}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_FISH_RIP" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{FISH_RIP}]]></variableExpression>
+  </variable>
+  <variable name="region_total_FORAGE_ASSOC_PLANT_COMM" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{FORAGE_ASSOC_PLANT_COMM}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_FORAGE_ASSOC_PLANT_COMM" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{FORAGE_ASSOC_PLANT_COMM}]]></variableExpression>
+  </variable>
+  <variable name="region_total_RECREATION" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{RECREATION}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_RECREATION" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{RECREATION}]]></variableExpression>
+  </variable>
+  <variable name="region_total_RES_FEATURES" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{RES_FEATURES}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_RES_FEATURES" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{RES_FEATURES}]]></variableExpression>
+  </variable>
+  <variable name="region_total_SOILS" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{SOILS}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_SOILS" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{SOILS}]]></variableExpression>
+  </variable>
+  <variable name="region_total_TIMBER" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{TIMBER}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_TIMBER" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{TIMBER}]]></variableExpression>
+  </variable>
+  <variable name="region_total_VISUAL_QUALITY" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{VISUAL_QUALITY}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_VISUAL_QUALITY" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{VISUAL_QUALITY}]]></variableExpression>
+  </variable>
+  <variable name="region_total_WATER" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{WATER}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_WATER" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{WATER}]]></variableExpression>
+  </variable>
+  <variable name="region_total_WILDLIFE" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{WILDLIFE}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_WILDLIFE" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{WILDLIFE}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_TOTALS_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{TOTALS_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_TOTALS_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{TOTALS_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_BIODIVERSITY_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{BIODIVERSITY_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_BIODIVERSITY_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{BIODIVERSITY_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_CULT_HERITAGE_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{CULT_HERITAGE_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_CULT_HERITAGE_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{CULT_HERITAGE_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_FISH_RIP_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{FISH_RIP_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_FISH_RIP_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{FISH_RIP_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_FORAGE_ASSOC_PLANT_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{FORAGE_ASSOC_PLANT_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_FORAGE_ASSOC_PLANT_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{FORAGE_ASSOC_PLANT_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_RECREATION_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{RECREATION_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_RECREATION_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{RECREATION_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_RES_FEATURES_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{RES_FEATURES_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_RES_FEATURES_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{RES_FEATURES_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_SOILS_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{SOILS_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_SOILS_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{SOILS_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_TIMBER_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{TIMBER_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_TIMBER_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{TIMBER_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_VISUAL_QUALITY_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{VISUAL_QUALITY_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_VISUAL_QUALITY_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{VISUAL_QUALITY_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_WATER_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{WATER_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_WATER_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{WATER_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="region_total_WILDLIFE_NOT_SUB" class="java.math.BigDecimal" resetType="Group" resetGroup="ROLLUP_REGION_NAME" calculation="Sum">
+    <variableExpression><![CDATA[$F{WILDLIFE_NOT_SUB}]]></variableExpression>
+  </variable>
+  <variable name="prov_total_WILDLIFE_NOT_SUB" class="java.math.BigDecimal" calculation="Sum">
+    <variableExpression><![CDATA[$F{WILDLIFE_NOT_SUB}]]></variableExpression>
+  </variable>
+  <group name="ROLLUP_REGION_NAME">
+    <groupExpression><![CDATA[$F{ROLLUP_REGION_NAME}]]></groupExpression>
+    <groupHeader>
+      <band height="60">
+        <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+          <reportElement positionType="Float" mode="Opaque" x="0" y="0" width="750" height="16" backcolor="#E0E0E0" uuid="98b5588b-d3b7-4976-bf52-14de013a4039"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement>
+            <font fontName="Arial" size="10" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{ROLLUP_REGION_NAME}]]></textFieldExpression>
+        </textField>
+        <rectangle>
+          <reportElement x="20" y="16" width="190" height="44" uuid="20933ce5-485d-43bf-8013-fe599a9b0c21"/>
+          <graphicElement>
+            <pen lineWidth="0.25"/>
+          </graphicElement>
+        </rectangle>
+        <staticText>
+          <reportElement x="210" y="16" width="50" height="44" uuid="8c71945c-84c2-456c-a4db-619337331af5"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Biodiversity]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="260" y="16" width="40" height="44" uuid="d5743d0f-433b-4001-a40f-b339ad161832"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Cultural Heritage]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="300" y="16" width="40" height="44" uuid="7b85d0e1-ed87-4fd9-b906-f8c9447f6c2d"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Fish / Riparian]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="340" y="16" width="60" height="44" uuid="52c1518c-4657-4767-9de1-416c99a47020"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Forage and
+Associated
+Plant
+Communities]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="400" y="16" width="50" height="44" uuid="4e73b413-9a18-4551-af89-a7d41235c90e"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Recreation]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="450" y="16" width="50" height="44" uuid="1593128a-24e5-4de8-ac31-63f3a76865f5"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Resource Features]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="500" y="16" width="40" height="44" uuid="d30a58d7-5bcd-4d87-852a-09675b72a3af"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Soils]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="540" y="16" width="40" height="44" uuid="cb103e45-296c-4d91-8ce6-68737f187737"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Timber]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="580" y="16" width="40" height="44" uuid="b0c58279-dfba-423b-b411-e32f4d838afe"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Visual Quality]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="620" y="16" width="40" height="44" uuid="6b18c56b-4402-4c3b-8269-edae16e11a81"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Water]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="660" y="16" width="40" height="44" uuid="2f73151e-d04d-4767-bbe1-63d2216fd7a5"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[Wildlife]]></text>
+        </staticText>
+        <staticText>
+          <reportElement x="700" y="16" width="50" height="44" uuid="0c7846e9-81e0-47da-908e-d92f27b61e75"/>
+          <box bottomPadding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center" verticalAlignment="Bottom">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <text><![CDATA[TOTALS]]></text>
+        </staticText>
+      </band>
+    </groupHeader>
+    <groupFooter>
+      <band height="22">
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="210" y="0" width="25" height="11" uuid="82e55ad4-369d-4ad1-850c-036d9a94bacb"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_BIODIVERSITY}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="235" y="0" width="25" height="11" uuid="c4344478-a0b5-40a4-9f59-6a31ffabdcad"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_BIODIVERSITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="260" y="0" width="20" height="11" uuid="96315d06-4b3d-4c29-81e5-6b5eb67232d6"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_CULT_HERITAGE}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="280" y="0" width="20" height="11" uuid="2002f51f-9f70-409c-af3b-756a2d870265"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_CULT_HERITAGE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="300" y="0" width="20" height="11" uuid="33396d47-4adc-4565-946b-bae2caeffc11"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_FISH_RIP}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="320" y="0" width="20" height="11" uuid="8d3b8aed-141c-4ca9-bf8a-316f8a3cc2bb"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_FISH_RIP_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="340" y="0" width="30" height="11" uuid="d925b0fb-5a0d-49ab-9564-c4d78449410b"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_FORAGE_ASSOC_PLANT_COMM}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="370" y="0" width="30" height="11" uuid="d2e016d1-2e42-46d8-842e-8e6a6b54e505"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_FORAGE_ASSOC_PLANT_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="400" y="0" width="25" height="11" uuid="299c3fe3-0904-428c-ae51-b60c36945630"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_RECREATION}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="425" y="0" width="25" height="11" uuid="1b9cc364-367f-4f36-8af2-da6a33ef47af"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_RECREATION_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="450" y="0" width="25" height="11" uuid="a14376cc-f530-454d-9f8d-002a506230a5"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_RES_FEATURES}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="475" y="0" width="25" height="11" uuid="0165b064-2bb2-4f79-97aa-8098d86ab8c0"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_RES_FEATURES_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="500" y="0" width="20" height="11" uuid="3e3f2dc4-bf4c-421c-a041-4af73fa4b62b"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_SOILS}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="520" y="0" width="20" height="11" uuid="5907072b-e5f6-43cb-9279-110e89099e78"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_SOILS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="540" y="0" width="20" height="11" uuid="2c727321-d583-4c55-9111-73648556430c"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_TIMBER}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="560" y="0" width="20" height="11" uuid="e09dc069-2534-42bc-9f76-04864f2d27a5"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_TIMBER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="580" y="0" width="20" height="11" uuid="0f7bf401-e9bf-47fc-b6e3-706184ee4775"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_VISUAL_QUALITY}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="600" y="0" width="20" height="11" uuid="e8ce360b-96d6-4bcf-a66b-0c355e7337b2"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_VISUAL_QUALITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="620" y="0" width="20" height="11" uuid="b1af02ae-b868-466e-bfe6-d2c46cbefad7"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_WATER}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="640" y="0" width="20" height="11" uuid="88f56a0b-b7bf-44de-8e56-24bddd3ac252"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_WATER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="660" y="0" width="20" height="11" uuid="3fbf488b-4ae8-401d-b5ef-d385d5ef3f03"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_WILDLIFE}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="680" y="0" width="20" height="11" uuid="80fc5959-93fd-4c18-8ae9-89688bc7a684"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_WILDLIFE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="700" y="0" width="25" height="11" uuid="07bb5b61-6685-4d17-a8b1-f5272f6b1a67"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.25"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.0"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$V{region_total_TOTALS}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="725" y="0" width="25" height="11" uuid="c8849419-e9f7-4a92-a770-87015635c795"/>
+          <box padding="2">
+            <pen lineWidth="0.25"/>
+            <topPen lineWidth="0.25"/>
+            <leftPen lineWidth="0.0"/>
+            <bottomPen lineWidth="0.25"/>
+            <rightPen lineWidth="0.25"/>
+          </box>
+          <textElement textAlignment="Center">
+            <font fontName="Arial" size="8" isBold="true"/>
+          </textElement>
+          <textFieldExpression><![CDATA["(" + $V{region_total_TOTALS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+        </textField>
+      </band>
+    </groupFooter>
+  </group>
+  <background>
+    <band splitType="Stretch"/>
+  </background>
+  <pageHeader>
+    <band height="113" splitType="Stretch">
+      <!-- Report title (was the FREPRPT_HEADER_landscape subreport + p_report_name field). -->
+      <staticText>
+        <reportElement x="0" y="0" width="752" height="16" uuid="c79a182a-610a-4c3e-9c4d-066bda60d490"/>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="12" isBold="true"/>
+        </textElement>
+        <text><![CDATA[FREP Jasper Reports]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="165" y="24" width="422" height="20" uuid="35cb6706-32d6-4e6a-b26b-b9f11f4dddca"/>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="12" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Resource Value Checklist Completion Statistics]]></text>
+      </staticText>
+      <!-- Parameter echo (was the FREPRPT012_Report_Header subreport). Years come from the
+           input params; licence + client name come straight off the main proc's result set. -->
+      <staticText>
+        <reportElement x="0" y="66" width="71" height="11" uuid="b1000000-0000-0000-0000-000000000001"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Year From:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="71" y="66" width="80" height="11" uuid="b1000000-0000-0000-0000-000000000002"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$P{p_start_year}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="160" y="66" width="71" height="11" uuid="b1000000-0000-0000-0000-000000000003"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Year To:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="231" y="66" width="80" height="11" uuid="b1000000-0000-0000-0000-000000000004"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$P{p_end_year}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="0" y="77" width="71" height="11" uuid="b1000000-0000-0000-0000-000000000005"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Licence:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="71" y="77" width="240" height="11" uuid="b1000000-0000-0000-0000-000000000006"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$F{PARAM_LICENCE}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="0" y="88" width="71" height="11" uuid="b1000000-0000-0000-0000-000000000007"/>
+        <textElement><font fontName="Arial" size="8" isBold="true"/></textElement>
+        <text><![CDATA[Client:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="71" y="88" width="500" height="11" uuid="b1000000-0000-0000-0000-000000000008"/>
+        <textElement><font fontName="Arial" size="8"/></textElement>
+        <textFieldExpression><![CDATA[$F{PARAM_CLIENT_NAME_DESC}]]></textFieldExpression>
+      </textField>
+      <!-- Run metadata (right column), preserved from the legacy header. -->
+      <textField>
+        <reportElement x="587" y="0" width="80" height="11" uuid="7da22937-1a13-46e5-9634-8d2d945a76fc"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Page:"]]></textFieldExpression>
+      </textField>
+      <textField evaluationTime="Auto">
+        <reportElement x="658" y="0" width="40" height="11" uuid="d1f8f628-2285-42c2-98aa-2b9fb136db4b"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{PageNumber} + " of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="587" y="11" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c91840401"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Date Printed:]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="587" y="22" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c91840402"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[User Id:]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="587" y="33" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c91840403"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Database:]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="587" y="44" width="71" height="11" uuid="524f87c4-bb25-4fc5-b636-444c91840404"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Report Id:]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" pattern="yyyy-MM-dd" isBlankWhenNull="true">
+        <reportElement x="658" y="11" width="94" height="11" uuid="d5d40342-1023-464a-ba09-b4bdfd4bbda6"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[new java.util.Date()]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="658" y="22" width="94" height="11" uuid="369018ac-9718-4ad4-87e3-24d3ddb9ab0f"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{p_user_id}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="658" y="33" width="94" height="11" uuid="bf179c2d-c526-4fec-b0b6-d3d9a717717d"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{DB_NAME}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="658" y="44" width="94" height="11" uuid="2c406dcc-7b82-4cd7-9137-482fc6c57b78"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <text><![CDATA[FREPRPT012]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="600" y="99" width="163" height="11" uuid="22716e9e-a030-4303-8ec1-925494f03d1f"/>
+        <textElement>
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <text><![CDATA[() indicates unsubmitted checklists]]></text>
+      </staticText>
+      <line>
+        <reportElement x="0" y="97" width="752" height="1" uuid="4c845767-6578-4a0c-b591-77bff29f2fe2"/>
+      </line>
+      <line>
+        <reportElement x="0" y="64" width="752" height="1" uuid="2ff661cf-4f13-4419-abab-e025a3987fd9"/>
+      </line>
+    </band>
+  </pageHeader>
+  <detail>
+    <band height="15">
+      <property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+      <textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+        <reportElement positionType="Float" x="20" y="0" width="190" height="15" uuid="c8c2434e-9860-4b9f-a896-9fbe4e24c313">
+          <property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+        </reportElement>
+        <box padding="2" leftPadding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement>
+          <font fontName="Arial" size="9"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{ORG_UNIT_NAME}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" mode="Transparent" x="210" y="0" width="25" height="15" uuid="60aca685-42a8-42fb-9f44-748679d14fc0"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+          <paragraph lineSpacing="Single"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{BIODIVERSITY}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="235" y="0" width="25" height="15" uuid="fdc4d25d-797c-4941-b650-90f3f96614fd"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{BIODIVERSITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="260" y="0" width="20" height="15" uuid="9502c676-ac0d-4cdf-93ba-11ae1a7606fb"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{CULT_HERITAGE}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="280" y="0" width="20" height="15" uuid="3b75ed73-e6ec-4246-a342-70887635252f"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{CULT_HERITAGE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="300" y="0" width="20" height="15" uuid="fa1abf62-ede7-448a-949c-bd6193ef6e15"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{FISH_RIP}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="320" y="0" width="20" height="15" uuid="242fad18-2578-49ea-a81d-7657ae93f712"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{FISH_RIP_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="340" y="0" width="30" height="15" uuid="6db18d17-2936-4ade-95d8-df5acc454bdc"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{FORAGE_ASSOC_PLANT_COMM}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="370" y="0" width="30" height="15" uuid="8a312a98-b4bf-4336-8049-dd11cb18e148"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{FORAGE_ASSOC_PLANT_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="400" y="0" width="25" height="15" uuid="48d4d1ff-7c7b-4b99-8665-890bfb5a2a65"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{RECREATION}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="425" y="0" width="25" height="15" uuid="a64fdea0-1bd4-4646-846a-8cfecc593064"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{RECREATION_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="450" y="0" width="25" height="15" uuid="f41046d4-dc72-421e-b59a-66ec9fdcfca6"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{RES_FEATURES}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="475" y="0" width="25" height="15" uuid="073a94c5-ffb6-4947-8d47-2db2406ba636"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{RES_FEATURES_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="500" y="0" width="20" height="15" uuid="15ed6a7b-4e50-43d3-aede-c1d97322d435"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{SOILS}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="520" y="0" width="20" height="15" uuid="8e44251e-2145-4635-af17-257c28006f35"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{SOILS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="540" y="0" width="20" height="15" uuid="2a84410c-33ea-458d-aaf7-59a9122996cd"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{TIMBER}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="560" y="0" width="20" height="15" uuid="ceefe6d2-df96-479f-949e-dc674e31157f"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{TIMBER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="580" y="0" width="20" height="15" uuid="2c5da5f9-4f4a-4a78-b2f4-6136161b593a"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{VISUAL_QUALITY}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="600" y="0" width="20" height="15" uuid="4ebbcedc-4530-4405-a4b1-0a36aef4613a"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{VISUAL_QUALITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="620" y="0" width="20" height="15" uuid="6c876172-0df2-4d66-abde-c30e3822d760"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{WATER}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="640" y="0" width="20" height="15" uuid="8080bb8a-3d42-44af-ac39-ba2299816995"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{WATER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="660" y="0" width="20" height="15" uuid="fb7f36d1-4e51-4bad-b18d-bff930336bfc"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{WILDLIFE}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="680" y="0" width="20" height="15" uuid="b46ae11f-dd1c-4334-b9b1-166ba1b284db"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{WILDLIFE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="700" y="0" width="25" height="15" uuid="16700bcf-d0ac-43d9-8bac-26499acefa51"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{TOTALS}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement positionType="Float" stretchType="RelativeToBandHeight" x="725" y="0" width="25" height="15" uuid="1959cf01-d12a-4e39-a58f-25d2422a671e"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $F{TOTALS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+    </band>
+  </detail>
+  <summary>
+    <band height="36" splitType="Stretch">
+      <staticText>
+        <reportElement x="0" y="20" width="752" height="16" uuid="120fffba-3f17-4943-ac23-880479c926ee"/>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <text><![CDATA[End of Report]]></text>
+      </staticText>
+      <staticText>
+        <reportElement mode="Opaque" x="0" y="0" width="210" height="16" backcolor="#E0E0E0" uuid="f51dba0d-2cfd-4127-8e63-d59fe55525ef"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement>
+          <font fontName="Arial" size="10" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Province]]></text>
+      </staticText>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="210" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="aba5f9b4-e34d-4ecc-8b1a-c7a60a9fc0ef"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_BIODIVERSITY}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="235" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="8f6ce500-72bf-47ee-a1b8-3bc244785365"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_BIODIVERSITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="260" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="7deadb72-2928-43e0-afb0-0f5bb72b1af8"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_CULT_HERITAGE}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="280" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="28d6513d-4825-41a2-9d9a-63ad1bf838ff"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_CULT_HERITAGE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="300" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="d00738f6-9c5c-4a8e-bbc0-972f33fa6ef3"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_FISH_RIP}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="320" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="0f77dfa3-f1f7-409e-ae60-1512cfe10ee8"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_FISH_RIP_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="340" y="0" width="30" height="16" backcolor="#E0E0E0" uuid="fd4d14d5-b2bc-49bd-bb8d-403a5a827645"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_FORAGE_ASSOC_PLANT_COMM}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="370" y="0" width="30" height="16" backcolor="#E0E0E0" uuid="ac92b97a-5ff6-4768-b6a6-212522af6d9c"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_FORAGE_ASSOC_PLANT_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="400" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="8d998343-3100-4ac4-bd6f-4724c351c1fa"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_RECREATION}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="425" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="6e74d442-1a5e-4127-a68c-cc000298fab3"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_RECREATION_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="450" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="58b0695a-9515-4773-a300-bcdac7ad1b96"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_RES_FEATURES}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="475" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="6ff8a25e-a939-4a5c-8531-a14c1db858d1"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_RES_FEATURES_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="500" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="c5784751-f639-42d7-95b2-b53620b09496"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_SOILS}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="520" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="2766e232-ffd4-4df7-8ff2-ba2a2a389167"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_SOILS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="540" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="e176557a-280d-4d1d-bd05-be9c3b242b48"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_TIMBER}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="560" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="fe367449-46b0-49f0-8913-288cd318e560"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_TIMBER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="580" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="a4d757d1-6c39-4151-b3fe-0ba413a7e58f"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_VISUAL_QUALITY}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="600" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="6781e4c9-e620-4605-ba3a-f3454fe46be7"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_VISUAL_QUALITY_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="620" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="f281139f-f550-4d6d-8363-6daa8093466f"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_WATER}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="640" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="cc44bd01-a5e4-4131-835f-e5feef6ead91"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_WATER_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="660" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="f7ba4f4e-4a99-4bfe-a8e1-40287b98be1c"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_WILDLIFE}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="680" y="0" width="20" height="16" backcolor="#E0E0E0" uuid="b9fa4ffa-930a-480a-a0e1-1d5319e606d1"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_WILDLIFE_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="700" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="d3ad22a5-6606-4e5a-a79b-7a8977385b29"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.25"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.0"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{prov_total_TOTALS}]]></textFieldExpression>
+      </textField>
+      <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+        <reportElement mode="Opaque" x="725" y="0" width="25" height="16" backcolor="#E0E0E0" uuid="f3cc2bef-38e7-44ec-a767-23df58829b37"/>
+        <box padding="2">
+          <pen lineWidth="0.25"/>
+          <topPen lineWidth="0.25"/>
+          <leftPen lineWidth="0.0"/>
+          <bottomPen lineWidth="0.25"/>
+          <rightPen lineWidth="0.25"/>
+        </box>
+        <textElement textAlignment="Center">
+          <font fontName="Arial" size="8" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["(" + $V{prov_total_TOTALS_NOT_SUB}.toString() + ")"]]></textFieldExpression>
+      </textField>
+    </band>
+  </summary>
+</jasperReport>

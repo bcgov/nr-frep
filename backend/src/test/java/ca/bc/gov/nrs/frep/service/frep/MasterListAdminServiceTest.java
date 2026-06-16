@@ -79,14 +79,14 @@ class MasterListAdminServiceTest {
     ));
 
     var response = service.generateMasterList(new GenerateMasterListRequest(
-        "2025", "2024-04-01", "2025-03-31", 5.0, 12, null, "Run generation"
+        "2025", "2024-04-01", "2025-03-31", 5.0, 12, "Run generation"
     ));
 
     verify(masterListRepository).generate(
         eq("2025"),
         eq("2025-03-31"),
         eq("2024-04-01"),
-        eq("5.0"),
+        eq("5"),
         eq("12"),
         eq("Run generation"),
         eq("IDIR\\ADMIN")
@@ -95,10 +95,24 @@ class MasterListAdminServiceTest {
   }
 
   @Test
+  void generatePassesGrossAreaAsPlainNumberNotDoubleToString() {
+    // Guards ORA-01722: whole numbers must lose the ".0" (5.0 -> "5"); fractions keep it (2.5 -> "2.5").
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ADMIN");
+    when(masterListRepository.getCriteria("2025")).thenReturn(new MasterListCriteriaData(
+        "2025-03-31", "2024-04-01", 2.5, 12, "", "N", List.of()));
+
+    service.generateMasterList(new GenerateMasterListRequest(
+        "2025", "2024-04-01", "2025-03-31", 2.5, 12, "c"));
+
+    verify(masterListRepository).generate(
+        eq("2025"), eq("2025-03-31"), eq("2024-04-01"), eq("2.5"), eq("12"), eq("c"), eq("IDIR\\ADMIN"));
+  }
+
+  @Test
   void generateRequiresYear() {
     assertThrows(IllegalArgumentException.class,
         () -> service.generateMasterList(
-            new GenerateMasterListRequest("", null, null, null, null, null, null)));
+            new GenerateMasterListRequest("", null, null, null, null, null)));
   }
 
   @Test

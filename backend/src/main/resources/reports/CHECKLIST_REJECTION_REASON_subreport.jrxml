@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 6.1.1.final using JasperReports Library version 5.0.4  -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="FREPRPT018_Checklist_Rejection_Reason_subreport" pageWidth="275" pageHeight="752" whenNoDataType="AllSectionsNoDetail" columnWidth="275" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0" uuid="83dfd4cb-8e09-4f47-a660-464f11343c7c">
+  <property name="ireport.zoom" value="2.0"/>
+  <property name="ireport.x" value="0"/>
+  <property name="ireport.y" value="0"/>
+  <parameter name="p_org_unit_code" class="java.lang.String"/>
+  <parameter name="p_start_year" class="java.lang.String"/>
+  <parameter name="p_end_year" class="java.lang.String"/>
+  <parameter name="p_user_id" class="java.lang.String"/>
+  <parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+  <queryString language="plsql"><![CDATA[{call freprpt_chklst_rej_reas(
+$P{ORACLE_REF_CURSOR}
+,$P{p_org_unit_code}
+,$P{p_start_year}
+,$P{p_end_year}
+,$P{p_user_id}
+)}]]></queryString>
+  <field name="REASON_CODE" class="java.lang.String"/>
+  <field name="COUNT_FSS_ID_SUB" class="java.math.BigDecimal"/>
+  <field name="DESCRIPTION" class="java.lang.String"/>
+  <field name="REJECTION_REASON" class="java.lang.String"/>
+  <field name="FREP_RESOURCE_VALUE_TYPE_CODE" class="java.lang.String"/>
+  <field name="FREP_RESOURCE_VALUE_ID" class="java.math.BigDecimal"/>
+  <field name="TRICK" class="java.lang.String"/>
+  <sortField name="TRICK"/>
+  <group name="TRICK">
+    <groupExpression><![CDATA[$F{TRICK}]]></groupExpression>
+    <groupHeader>
+      <band height="13">
+        <printWhenExpression><![CDATA[!$F{DESCRIPTION}.isEmpty()]]></printWhenExpression>
+        <textField isStretchWithOverflow="true" pattern="#,##0" isBlankWhenNull="true">
+          <reportElement x="0" y="2" width="40" height="11" uuid="bac8f765-1efc-4ed8-bf0e-124c19adc74a"/>
+          <textElement textAlignment="Right">
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{COUNT_FSS_ID_SUB}]]></textFieldExpression>
+        </textField>
+        <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+          <reportElement x="50" y="2" width="186" height="11" uuid="a3b22083-c83f-4223-98e8-c73d624a7f17"/>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <textFieldExpression><![CDATA[$F{DESCRIPTION}]]></textFieldExpression>
+        </textField>
+        <staticText>
+          <reportElement x="40" y="2" width="10" height="11" uuid="7649a2bb-e4dd-45e3-b6c7-223ccd7a6e49"/>
+          <textElement>
+            <font fontName="Arial" size="8"/>
+          </textElement>
+          <text><![CDATA[ - ]]></text>
+        </staticText>
+      </band>
+    </groupHeader>
+  </group>
+  <background>
+    <band splitType="Stretch"/>
+  </background>
+  <detail>
+    <band height="11" splitType="Stretch">
+      <printWhenExpression><![CDATA[$F{DESCRIPTION}.equalsIgnoreCase( "Other" )]]></printWhenExpression>
+      <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+        <reportElement x="60" y="0" width="210" height="11" uuid="05837292-e2a8-49e1-9592-eaa0073485ba"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{REJECTION_REASON}]]></textFieldExpression>
+      </textField>
+      <staticText>
+        <reportElement x="50" y="0" width="10" height="11" uuid="675b3c6d-0ba8-4b60-be1f-39a6a89fd9f0"/>
+        <textElement>
+          <font fontName="Arial" size="8"/>
+        </textElement>
+        <text><![CDATA[ - ]]></text>
+      </staticText>
+    </band>
+  </detail>
+</jasperReport>

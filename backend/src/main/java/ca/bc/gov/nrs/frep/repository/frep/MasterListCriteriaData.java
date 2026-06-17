@@ -11,6 +11,8 @@ public record MasterListCriteriaData(
     Double minOpeningGrossAreaHa,
     Integer maxSitesPerDistrict,
     String generationComments,
-    String resourceEvaluatedInd,
+    /** Legacy {@code resource_evaluation_ind}: {@code ""} = no list, {@code "N"} = generated (no
+     *  evaluations yet), {@code "Y"} = evaluations under way (list effectively locked). */
+    String resourceEvaluationInd,
     List<MasterListGenerationRow> generationStats
 ) {}

@@ -10,7 +10,6 @@ package ca.bc.gov.nrs.frep.dto.frep;
  * @param maxHarvestCompleteDate optional override of the end of the harvest window
  * @param minOpeningGrossAreaHa  minimum block size to consider
  * @param maxSitesPerDistrict    cap on sites generated per district
- * @param resourceEvaluatedInd   protocol scope, e.g. {@code "BIO,RIP,WAT,CHR"}
  * @param comments               admin's notes for this run
  */
 public record GenerateMasterListRequest(
@@ -19,6 +18,5 @@ public record GenerateMasterListRequest(
     String maxHarvestCompleteDate,
     Double minOpeningGrossAreaHa,
     Integer maxSitesPerDistrict,
-    String resourceEvaluatedInd,
     String comments
 ) {}

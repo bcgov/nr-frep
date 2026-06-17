@@ -7,6 +7,7 @@ import ca.bc.gov.nrs.frep.repository.frep.MasterListCriteriaData;
 import ca.bc.gov.nrs.frep.repository.frep.MasterListGenerationRow;
 import ca.bc.gov.nrs.frep.repository.frep.MasterListRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import java.math.BigDecimal;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
@@ -98,7 +99,7 @@ public class MasterListAdminService {
         data.maxHarvestCompleteDate(),
         data.minOpeningGrossAreaHa(),
         data.maxSitesPerDistrict(),
-        data.resourceEvaluatedInd(),
+        data.resourceEvaluationInd(),
         data.generationComments(),
         isGenerated(stats),
         stats
@@ -138,8 +139,16 @@ public class MasterListAdminService {
     return value == null ? "" : value.trim();
   }
 
+  /**
+   * Formats the gross-area number for the proc's {@code TO_NUMBER(p_min_opening_gross_area)}.
+   * Uses a plain decimal with no trailing {@code .0} / scientific notation — {@code Double.toString(5.0)}
+   * yields {@code "5.0"}, which regresses from the legacy value {@code "5"} and trips {@code ORA-01722}
+   * on {@code TO_NUMBER}. {@code 5.0 -> "5"}, {@code 2.5 -> "2.5"}.
+   */
   private static String formatDecimal(Double value, String defaultValue) {
-    return value == null ? defaultValue : Double.toString(value);
+    return value == null
+        ? defaultValue
+        : BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
   }
 
   private static String formatInteger(Integer value, String defaultValue) {

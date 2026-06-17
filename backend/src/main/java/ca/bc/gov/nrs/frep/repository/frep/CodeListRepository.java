@@ -143,6 +143,41 @@ public class CodeListRepository extends AbstractFrepRepository {
   }
 
   /**
+   * Resource-value status codes for the biodiversity data-extract report filter
+   * ({@code p_resource_val}). Direct SELECT (no proc), mirroring the legacy JCRS input control:
+   * {@code frep_resource_value_stat_code} + {@code description}, excluding {@code REJ}.
+   */
+  public List<Map<String, Object>> getResourceValueStatusCode() {
+    return jdbcTemplate.query(
+        "SELECT frep_resource_value_stat_code AS code, description "
+            + "FROM the.frep_resource_value_stat_code "
+            + "WHERE frep_resource_value_stat_code <> 'REJ' ORDER BY description",
+        (rs, n) -> {
+          Map<String, Object> row = new LinkedHashMap<>(2);
+          row.put("code", rs.getString("code"));
+          row.put("description", rs.getString("description"));
+          return row;
+        });
+  }
+
+  /**
+   * Checklist-status options for the CHR data-extract report filter (legacy FREPRPT022
+   * {@code p_checklist_status_code} input control). Returns {@code code} =
+   * {@code frep_checklist_status_code} + {@code description}.
+   */
+  public List<Map<String, Object>> getChecklistStatusCode() {
+    return jdbcTemplate.query(
+        "SELECT frep_checklist_status_code AS code, description "
+            + "FROM the.frep_checklist_status_code ORDER BY description",
+        (rs, n) -> {
+          Map<String, Object> row = new LinkedHashMap<>(2);
+          row.put("code", rs.getString("code"));
+          row.put("description", rs.getString("description"));
+          return row;
+        });
+  }
+
+  /**
    * Tree-species codes for the FREP212 plot Stand / CWD "Spp." dropdowns.
    *
    * <p>Legacy procedure {@code get_frep_species_code} returns {@code code} =

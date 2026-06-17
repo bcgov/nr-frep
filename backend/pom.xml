@@ -88,6 +88,38 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!--
+      JasperReports core — powers ReportService (compile JRXML on first request,
+      fill against the Oracle datasource, export PDF/CSV). Pinned to 6.21.5 to
+      match nr-fspts / nr-rept so report templates port between the apps. JR 6.x
+      bundles the Eclipse JDT expression compiler + PDF exporter in the core jar,
+      so no jasperreports-jdt / jasperreports-pdf sub-artifacts are needed.
+    -->
+    <!-- Apache Commons CSV — CSVReportService writes the biodiversity data-extract
+         CSVs directly from the proc cursor (no Jasper). Version matches nr-fspts. -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>1.11.0</version>
+    </dependency>
+    <dependency>
+      <groupId>net.sf.jasperreports</groupId>
+      <artifactId>jasperreports</artifactId>
+      <version>6.21.5</version>
+      <exclusions>
+        <!--
+          Jasper drags in jackson-dataformat-xml (for its XML data adapters,
+          which we don't use — we compile JRXML and fill against JDBC). On the
+          classpath it makes Spring auto-register the XML message converter, which
+          flips REST content negotiation to XML and breaks the JSON controllers.
+          Exclude it so responses stay JSON-only.
+        -->
+        <exclusion>
+          <groupId>com.fasterxml.jackson.dataformat</groupId>
+          <artifactId>jackson-dataformat-xml</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jpa</artifactId>

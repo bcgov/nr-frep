@@ -101,6 +101,22 @@ public class ConfigurationService {
         .toList();
   }
 
+  /** Resource-value status options for the biodiversity data-extract report filter. */
+  public List<CodeOptionResponse> getResourceValueStatusCodes() {
+    return codeListRepository.getResourceValueStatusCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Checklist-status options for the CHR data-extract report filter (FREPRPT022). */
+  public List<CodeOptionResponse> getChecklistStatusCodes() {
+    return codeListRepository.getChecklistStatusCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
   /** Tree-species options for the FREP212 Stand / CWD "Spp." dropdowns. */
   public List<CodeOptionResponse> getSpeciesCodes() {
     return codeListRepository.getFrepSpeciesCode().stream()

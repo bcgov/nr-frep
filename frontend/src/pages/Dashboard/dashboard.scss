@@ -28,6 +28,8 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: 12rem;
+  // Cap the width so a lone tile (e.g. the offline-only dashboard) doesn't stretch full-width.
+  max-width: 24rem;
 }
 
 .dashboard__tile-icon {

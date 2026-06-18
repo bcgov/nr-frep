@@ -25,6 +25,7 @@ import type {
   BioStratumRow,
 } from '@/types/protocolChecklist';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 
@@ -84,6 +85,7 @@ const TABLE_WARN = 50;
 
 const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
   const { display } = useNotification();
+  const confirm = useConfirm();
   const [strata, setStrata] = useState<BioStratumRow[]>([]);
   const [stratumId, setStratumId] = useState('');
   const [rows, setRows] = useState<BioPlotRow[]>([]);
@@ -328,6 +330,13 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
   const deleteRow = async (row: BioPlotRow) => {
     if (!row.plotId) return;
+    if (
+      !(await confirm({
+        title: 'Delete plot?',
+        message: `Delete plot ${row.plotNumber || row.plotId}? This can't be undone.`,
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await API.protocolChecklist.deleteBioPlot(row.plotId, row.revisionCount ?? '');

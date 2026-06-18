@@ -17,6 +17,7 @@ import { Link as RouterLink } from 'react-router-dom';
 
 import type { OfflineChecklist } from '@/services/offline/chrDb';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 
 // All offline records come from the CHR store (chrOfflineRepo / the "frep-chr" IndexedDB).
@@ -32,6 +33,7 @@ const TABLE_HEADERS = [
 
 /** Lists CHR checklists currently stored offline in this browser, with quick links to open them. */
 const ChrOfflineListPage: FC = () => {
+  const confirm = useConfirm();
   const [records, setRecords] = useState<OfflineChecklist[]>([]);
 
   useEffect(() => {
@@ -58,6 +60,15 @@ const ChrOfflineListPage: FC = () => {
   );
 
   const remove = async (id: string) => {
+    if (
+      !(await confirm({
+        title: 'Remove from device?',
+        message:
+          'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        confirmButtonText: 'Remove',
+      }))
+    )
+      return;
     await chrOfflineRepo.remove(id);
     setRecords((prev) => prev.filter((r) => r.checklistId !== id));
   };

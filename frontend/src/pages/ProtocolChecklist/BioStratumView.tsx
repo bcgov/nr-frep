@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 
@@ -351,6 +352,7 @@ const isNumInRange = (s: string, min: number, max: number): boolean => {
 
 const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
   const [computed, setComputed] = useState<StratumComputed | null>(null);
@@ -690,6 +692,13 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const deleteRow = async (row: BioStratumRow) => {
     if (!row.stratumId) return;
+    if (
+      !(await confirm({
+        title: 'Delete stratum?',
+        message: `Delete stratum ${row.stratumNumber || row.stratumId}? This can't be undone.`,
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');

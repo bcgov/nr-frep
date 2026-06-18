@@ -29,7 +29,21 @@ export const TextField: FC<{
   disabled?: boolean;
   placeholder?: string;
   helperText?: string;
-}> = ({ id, labelText, value, onChange, disabled, placeholder, helperText }) => (
+  invalid?: boolean;
+  invalidText?: string;
+  maxLength?: number;
+}> = ({
+  id,
+  labelText,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  helperText,
+  invalid,
+  invalidText,
+  maxLength,
+}) => (
   <TextInput
     id={id}
     labelText={labelText}
@@ -37,6 +51,9 @@ export const TextField: FC<{
     disabled={disabled}
     placeholder={placeholder}
     helperText={helperText}
+    invalid={invalid}
+    invalidText={invalidText}
+    maxLength={maxLength}
     onChange={(e) => onChange(e.target.value)}
   />
 );

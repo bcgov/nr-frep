@@ -16,8 +16,28 @@ const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
 );
 
 const yesNo = (v?: string) => (v === 'true' ? 'Yes' : 'No');
+const isYes = (v?: string) => v === 'true';
 
 const ratingLabel = (code?: string) => RATING_CODES.find((r) => r.code === code)?.label ?? code;
+
+// Verbatim question text from the legacy CHR Block Summary (frep-frontend BlockSummary.vue).
+const Q8_LABEL =
+  'Were there operational factors that limited CHR management options on this block?';
+const Q9_LABEL =
+  'Were there management strategies and/or practices used on this block that were particularly effective?';
+const Q10_LABEL =
+  'Are there management strategies and/or practices that could have been used to reduce the impact on this CHR values on this block?';
+const RATING_QUESTION =
+  'To what extent did practices on this block maintain CHR values given the recommendations and opportunities that were available?';
+
+/** Friendly labels for the computed MRVA rating code (legacy mrvaRatingDesc). */
+const MRVA_LABELS: Record<string, string> = {
+  NUL: 'NUL',
+  HIGH: 'High',
+  MEDIUM: 'Medium',
+  LOW: 'Low',
+  VERYLOW: 'Very Low',
+};
 
 type Draft = Pick<
   CheckList,
@@ -29,7 +49,6 @@ type Draft = Pick<
   | 'q10Comments'
   | 'rating'
   | 'ratingRationale'
-  | 'commentaires'
 >;
 
 /**
@@ -60,7 +79,6 @@ const BlockSummary: FC<{
       q10Comments: value.q10Comments,
       rating: value.rating,
       ratingRationale: value.ratingRationale,
-      commentaires: value.commentaires,
     });
     setEditing(true);
   };
@@ -74,9 +92,46 @@ const BlockSummary: FC<{
       <span className="protocol-checklist__label">MRVA rating (computed)</span>
       <span className="protocol-checklist__value">
         <Tag type="blue" size="sm">
-          {mrva || '—'}
+          {mrva ? (MRVA_LABELS[mrva] ?? mrva) : '—'}
         </Tag>
       </span>
+      <details className="chr-mrva-help">
+        <summary>How is the MRVA rating determined?</summary>
+        <p>
+          The Most Restrictive Value Assessment is derived from the block rating (and the
+          per-feature ratings). NA = not applicable.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Block rating</th>
+              <th>MRVA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Don&apos;t know</td>
+              <td>NUL</td>
+            </tr>
+            <tr>
+              <td>Poorly / Very Poorly</td>
+              <td>High</td>
+            </tr>
+            <tr>
+              <td>Moderately</td>
+              <td>Medium if any feature is Poorly/Very Poorly, otherwise Low</td>
+            </tr>
+            <tr>
+              <td>Well</td>
+              <td>Low if any feature is Poorly/Very Poorly, otherwise Very Low</td>
+            </tr>
+            <tr>
+              <td>Very Well</td>
+              <td>Very Low</td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
     </div>
   );
 
@@ -106,10 +161,12 @@ const BlockSummary: FC<{
         <>
           <fieldset className="rip-form__group">
             <legend>Operational review</legend>
-            <div className="rip-form__grid">
+            {/* Each question sits beside its description; the description appears only when the
+                question is Yes (legacy parity), otherwise a spacer keeps the 2-column rhythm. */}
+            <div className="chr-block-qa">
               <IndicatorCheckbox
                 id="chr-q8"
-                labelText="Q8 — Operational factors limited CHR management options on this block?"
+                labelText={Q8_LABEL}
                 value={
                   draft.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock
                 }
@@ -119,9 +176,22 @@ const BlockSummary: FC<{
                   })
                 }
               />
+              {isYes(
+                draft.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
+              ) ? (
+                <TextAreaField
+                  id="chr-q8-comments"
+                  labelText="Q8 description"
+                  value={draft.q8Comments}
+                  onChange={(v) => set({ q8Comments: v })}
+                />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
+
               <IndicatorCheckbox
                 id="chr-q9"
-                labelText="Q9 — Management strategies/practices used were particularly effective?"
+                labelText={Q9_LABEL}
                 value={
                   draft.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues
                 }
@@ -132,9 +202,22 @@ const BlockSummary: FC<{
                   })
                 }
               />
+              {isYes(
+                draft.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
+              ) ? (
+                <TextAreaField
+                  id="chr-q9-comments"
+                  labelText="Q9 description"
+                  value={draft.q9Comments}
+                  onChange={(v) => set({ q9Comments: v })}
+                />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
+
               <IndicatorCheckbox
                 id="chr-q10"
-                labelText="Q10 — Strategies/practices could have reduced impacts on CHR values?"
+                labelText={Q10_LABEL}
                 value={
                   draft.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock
                 }
@@ -145,33 +228,28 @@ const BlockSummary: FC<{
                   })
                 }
               />
+              {isYes(
+                draft.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
+              ) ? (
+                <TextAreaField
+                  id="chr-q10-comments"
+                  labelText="Q10 description"
+                  value={draft.q10Comments}
+                  onChange={(v) => set({ q10Comments: v })}
+                />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
             </div>
-            <TextAreaField
-              id="chr-q8-comments"
-              labelText="Q8 comments"
-              value={draft.q8Comments}
-              onChange={(v) => set({ q8Comments: v })}
-            />
-            <TextAreaField
-              id="chr-q9-comments"
-              labelText="Q9 comments"
-              value={draft.q9Comments}
-              onChange={(v) => set({ q9Comments: v })}
-            />
-            <TextAreaField
-              id="chr-q10-comments"
-              labelText="Q10 comments"
-              value={draft.q10Comments}
-              onChange={(v) => set({ q10Comments: v })}
-            />
           </fieldset>
 
           <fieldset className="rip-form__group">
             <legend>Block rating</legend>
+            <p className="rip-form__question">{RATING_QUESTION}</p>
             <div className="rip-form__grid">
               <CodeSelect
                 id="chr-block-rating"
-                labelText="Block rating"
+                labelText="Rating"
                 value={draft.rating}
                 options={RATING_CODES}
                 includeBlank
@@ -185,51 +263,65 @@ const BlockSummary: FC<{
               value={draft.ratingRationale}
               onChange={(v) => set({ ratingRationale: v })}
             />
-            <TextAreaField
-              id="chr-block-comments"
-              labelText="Additional comments"
-              value={draft.commentaires}
-              onChange={(v) => set({ commentaires: v })}
-            />
           </fieldset>
         </>
       ) : (
         <>
           <fieldset className="rip-form__group">
             <legend>Operational review</legend>
-            <div className="rip-form__grid">
+            <div className="chr-block-qa">
               <RoField
-                label="Q8 — Operational factors limited CHR management options?"
+                label={Q8_LABEL}
                 value={yesNo(
                   value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
                 )}
               />
+              {isYes(
+                value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
+              ) ? (
+                <RoField label="Q8 description" value={value.q8Comments} />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
+
               <RoField
-                label="Q9 — Practices used were particularly effective?"
+                label={Q9_LABEL}
                 value={yesNo(
                   value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
                 )}
               />
+              {isYes(
+                value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
+              ) ? (
+                <RoField label="Q9 description" value={value.q9Comments} />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
+
               <RoField
-                label="Q10 — Practices could have reduced impacts?"
+                label={Q10_LABEL}
                 value={yesNo(
                   value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
                 )}
               />
+              {isYes(
+                value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
+              ) ? (
+                <RoField label="Q10 description" value={value.q10Comments} />
+              ) : (
+                <div className="chr-block-qa__spacer" aria-hidden="true" />
+              )}
             </div>
-            <RoField label="Q8 comments" value={value.q8Comments} />
-            <RoField label="Q9 comments" value={value.q9Comments} />
-            <RoField label="Q10 comments" value={value.q10Comments} />
           </fieldset>
 
           <fieldset className="rip-form__group">
             <legend>Block rating</legend>
+            <p className="rip-form__question">{RATING_QUESTION}</p>
             <div className="rip-form__grid">
-              <RoField label="Block rating" value={ratingLabel(value.rating)} />
+              <RoField label="Rating" value={ratingLabel(value.rating)} />
               {mrvaCell}
             </div>
             <RoField label="Rating rationale" value={value.ratingRationale} />
-            <RoField label="Additional comments" value={value.commentaires} />
           </fieldset>
         </>
       )}

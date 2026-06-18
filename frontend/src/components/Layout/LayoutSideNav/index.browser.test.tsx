@@ -10,7 +10,12 @@ vi.mock('@/context/layout/useLayout', () => ({
   useLayout: () => ({ isSideNavExpanded: true, closeSideNav: () => {} }),
 }));
 
+vi.mock('@/context/auth/useAuth', () => ({
+  useAuth: () => ({ user: { roles: ['admin'] }, isLoggedIn: true }),
+}));
+
 vi.mock('@/routes/routePaths', () => ({
+  getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/chr/offline' }],
   getMenuEntries: () => [
     {
       id: 'Dashboard',

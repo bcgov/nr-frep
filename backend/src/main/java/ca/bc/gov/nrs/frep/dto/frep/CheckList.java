@@ -17,7 +17,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 		"evaluationDate", "assessedBy", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
 		"LandscapeUnit", "FirstNation", "openingID", "licensee", "cp", "block", "Proponent",
 		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "yearofHarvest", "firstNationsName",
-		"generallocation", "targeted", "Contact1Name", "Contact1Date", "Contact1Contacted", "Contact2Name",
+		"generalLocation", "targeted", "Contact1Name", "Contact1Date", "Contact1Contacted", "Contact2Name",
 		"Contact2Date", "Contact2Contacted", "Contact3Name", "Contact3Date", "Contact3Contacted",
 		"FeatureID1Description", "FeatureID1Source", "FeatureID2Description", "FeatureID2Source", "FeatureID2Comments",
 		"FeatureID3Description", "FeatureID3Source", "FeatureID4Description", "FeatureID4Source", "FeatureID4Comments",
@@ -92,7 +92,7 @@ public class CheckList {
 	private String yearOfHarvest;
 	@JsonProperty("firstNationsName")
 	private String firstNationName;
-	@JsonProperty("generallocation")
+	@JsonProperty("generalLocation")
 	private String generalLocation;
 	@JsonProperty("targeted")
 	private String targeted;
@@ -440,12 +440,12 @@ public class CheckList {
 		this.firstNationName = firstNationName;
 	}
 
-	@JsonProperty("generallocation")
+	@JsonProperty("generalLocation")
 	public String getGeneralLocation() {
 		return generalLocation;
 	}
 
-	@JsonProperty("generallocation")
+	@JsonProperty("generalLocation")
 	public void setGeneralLocation(String generalLocation) {
 		this.generalLocation = generalLocation;
 	}

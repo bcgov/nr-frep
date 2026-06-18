@@ -2,16 +2,24 @@ import { SideNav, SideNavItems, SideNavLink, SideNavMenu, SideNavMenuItem } from
 import { type FC } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { getMenuEntries, getOfflineMenuEntries, type MenuItem } from '@/routes/routePaths';
+
 import { useAuth } from '@/context/auth/useAuth';
 import { useLayout } from '@/context/layout/useLayout';
-import { getMenuEntries, type MenuItem } from '@/routes/routePaths';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 import './index.scss';
 
 export const LayoutSideNav: FC = () => {
   const { isSideNavExpanded, closeSideNav } = useLayout();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isLoggedIn } = useAuth();
+  const online = useOnlineStatus();
+
+  // Offline (or logged out): the server-backed screens can't load, so the side nav shows only the
+  // offline-capable routes.
+  const menuEntries =
+    online && isLoggedIn ? getMenuEntries(user?.roles || []) : getOfflineMenuEntries();
 
   const renderIcon = (route: MenuItem) => {
     const Icon = route.icon;
@@ -74,7 +82,7 @@ export const LayoutSideNav: FC = () => {
       className={`side-nav-drawer${isSideNavExpanded ? ' side-nav-drawer--open' : ''}`}
     >
       <SideNavItems>
-        {getMenuEntries(user?.roles || []).map((route) =>
+        {menuEntries.map((route) =>
           route.children ? renderMenuItem(route) : renderMenuLink(route),
         )}
       </SideNavItems>

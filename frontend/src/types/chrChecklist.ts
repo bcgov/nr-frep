@@ -72,9 +72,9 @@ export type Feature = {
   permit?: string;
   sitePermitIssued?: Indicator;
 
-  // Feature type checkboxes
-  culturalTraildesignated?: Indicator;
-  culturalTrailundesignated?: Indicator;
+  // Feature type checkboxes (keys match the backend Feature DTO @JsonProperty names)
+  culturaltraildesignated?: Indicator;
+  culturaltrailundesignated?: Indicator;
   burialSite?: Indicator;
   nest?: Indicator;
   ceremonialSite?: Indicator;
@@ -82,7 +82,7 @@ export type Feature = {
   caveorotherKarst?: Indicator;
   den?: Indicator;
   traditionalUseSite?: Indicator;
-  cedarBarkStripArea?: Indicator;
+  cedarBarkStriparea?: Indicator;
   rockOutcrop?: Indicator;
   spiritualSite?: Indicator;
   ofCMTs?: Indicator;
@@ -92,7 +92,7 @@ export type Feature = {
   culturalDepression?: Indicator;
   lithics?: Indicator;
   other?: Indicator;
-  otherDescription?: string;
+  otherdescription?: string;
 
   // Location
   inharvestedarea?: Indicator;

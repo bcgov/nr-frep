@@ -7,4 +7,9 @@
     line-height: var(--cds-body-long-01-line-height, 1.42857);
     letter-spacing: var(--cds-body-long-01-letter-spacing, 0.16px);
   }
+
+  &__actions {
+    display: flex;
+    gap: 1rem;
+  }
 }

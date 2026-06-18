@@ -80,6 +80,15 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
+    // OAuth redirect target (redirectSignIn). Amplify completes the code exchange on load; once
+    // auth has hydrated we bounce to home (Landing if still unauthenticated, Dashboard if logged
+    // in via the protected set).
+    path: '/auth/callback',
+    id: 'Auth callback',
+    element: <Navigate to="/" replace />,
+    isSideMenu: false,
+  },
+  {
     path: '*',
     id: 'Not Found',
     element: <NotFoundPage />,
@@ -92,6 +101,13 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
     id: 'RedirectWhileLoggedIn',
+    element: <Navigate to="/dashboard" replace />,
+    isSideMenu: false,
+  },
+  {
+    // OAuth redirect target (redirectSignIn) — once logged in, bounce off the callback URL to home.
+    path: '/auth/callback',
+    id: 'Auth callback',
     element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
   },
@@ -239,6 +255,45 @@ export const getMenuEntries = (roles: string[]): MenuItem[] => {
 
 /** Returns the public (unauthenticated) route array. */
 export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
+
+/**
+ * Offline route set — served to unauthenticated users while the device is offline. The landing
+ * page becomes the FREP Dashboard (which shows only the Offline Checklist option when logged out),
+ * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
+ * These carry no role restriction, so they render as-is (Layout-wrapped).
+ */
+const OFFLINE_PATHS = new Set(['/chr/offline', '/chr/checklists/:id']);
+export const getOfflineRoutes = (): RouteDescription[] => [
+  {
+    path: '/',
+    id: 'Landing',
+    element: <LandingPage />,
+    isSideMenu: false,
+  },
+  {
+    path: '/dashboard',
+    id: 'FREP Dashboard',
+    element: (
+      <Layout>
+        <DashboardPage />
+      </Layout>
+    ),
+    isSideMenu: false,
+  },
+  ...PROTECTED_ROUTES.filter((route) => OFFLINE_PATHS.has(route.path)),
+  {
+    path: '*',
+    id: 'OfflineRedirect',
+    element: <Navigate to="/" replace />,
+    isSideMenu: false,
+  },
+];
+
+/** Sidebar entries shown while offline / logged out — only the offline-capable routes. */
+export const getOfflineMenuEntries = (): MenuItem[] =>
+  PROTECTED_ROUTES.filter((route) => route.isSideMenu && OFFLINE_PATHS.has(route.path)).map(
+    ({ id, path, icon }) => ({ id, path, icon }),
+  );
 
 /**
  * Returns the route set for an authenticated user who has no recognized FREP

@@ -51,7 +51,9 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
@@ -112,7 +114,6 @@ public class ChrChecklistPersistenceService {
         FrepChecklistStatusCode.class,
         ChrConstants.FrepChecklistStatusCode.RDO
     );
-    chrChecklist.setAssessedBy(userId);
     chrChecklist.setFrepChecklistStatusCode(status);
     chrChecklist.setDeviceCheckoutGuid(UuidUtils.asBytes(UUID.randomUUID()));
     chrChecklist.setUpdateUserid(userId);
@@ -180,6 +181,13 @@ public class ChrChecklistPersistenceService {
     ChrChecklist chrChecklist = loadChecklistForSave(resource);
     chrChecklist.setDeviceCheckoutGuid(null);
     applyOpeningFields(chrChecklist, resource);
+    // "Assessed by" defaults to whoever first saves the opening info, and is otherwise left
+    // untouched — except it can be reassigned to the saving user via the "Assign it to me" action
+    // (the payload sends the current user's id). It is never set to anyone but the saving user.
+    if (!ChrStringUtils.hasAValue(chrChecklist.getAssessedBy())
+        || userId.equals(resource.getAssessedBy())) {
+      chrChecklist.setAssessedBy(userId);
+    }
     finishSectionSave(chrChecklist, resource, userId);
   }
 
@@ -202,6 +210,11 @@ public class ChrChecklistPersistenceService {
     chrChecklist.setDeviceCheckoutGuid(null);
     saveFeatures(chrChecklist, resource, userId);
     finishSectionSave(chrChecklist, resource, userId);
+    // The feature writes rewrote child xrefs by delete-then-reinsert and the new rows carry only
+    // their embedded ids (the code associations the mapper reads are insertable=false). Drop the
+    // persistence context so the response re-read (getChecklist) reloads the whole graph fresh from
+    // the now-flushed database state, with every code association populated.
+    entityManager.clear();
   }
 
   public void savePicturesSection(CheckList resource, String userId) {
@@ -312,26 +325,32 @@ public class ChrChecklistPersistenceService {
       return;
     }
 
+    // Participant ids still present in the payload (newly-added contacts have no id yet).
+    Set<Long> retainedParticipantIds = new HashSet<>();
+    for (Contact contact : resource.getContacts()) {
+      if (ChrStringUtils.hasAValue(contact.getId())) {
+        retainedParticipantIds.add(Long.parseLong(contact.getId()));
+      }
+    }
+
+    // Remove participations (and their participant) no longer in the payload. The checklist's
+    // chrChecklistParticipations is an EAGER inverse Set, so we must also drop the deleted element
+    // from it — otherwise the managed checklist still references a removed row at flush time and
+    // Hibernate raises a TransientObjectException. Flush the deletes before re-persisting, matching
+    // saveFeatures.
     List<ChrChecklistParticipation> existing = entityManager.createQuery(
             "SELECT p FROM ChrChecklistParticipation p WHERE p.id.chrChecklistId = :cid",
             ChrChecklistParticipation.class)
         .setParameter("cid", chrChecklist.getChrChecklistId())
         .getResultList();
-
     for (ChrChecklistParticipation participation : existing) {
-      boolean exists = false;
-      for (Contact contact : resource.getContacts()) {
-        if (participation.getChrChecklistParticipant().getChrChecklistParticipantId()
-            .equals(Long.parseLong(contact.getId()))) {
-          exists = true;
-          break;
-        }
-      }
-      if (!exists) {
+      if (!retainedParticipantIds.contains(participation.getId().getChrChecklistParticipantId())) {
+        chrChecklist.getChrChecklistParticipations().remove(participation);
         entityManager.remove(participation);
         entityManager.remove(participation.getChrChecklistParticipant());
       }
     }
+    entityManager.flush();
 
     for (Contact contact : resource.getContacts()) {
       ChrChecklistParticipant participant;
@@ -360,11 +379,15 @@ public class ChrChecklistPersistenceService {
           ChrChecklistParticipation.class,
           participationId
       );
-      if (participation == null) {
+      boolean newParticipation = participation == null;
+      if (newParticipation) {
         participation = new ChrChecklistParticipation();
         participation.setId(participationId);
         participation.setEntryTimestamp(new Date());
         participation.setEntryUserid(userId);
+        // CHR_CHECKLIST_PARTICIPANT_ID is read-only (derived from the embedded id); set the
+        // association so the same-session re-read (CheckListMapper) can resolve the participant.
+        participation.setChrChecklistParticipant(participant);
       }
       participation.setUpdateTimestamp(new Date());
       participation.setUpdateUserid(userId);
@@ -381,6 +404,9 @@ public class ChrChecklistPersistenceService {
       }
       participation.setAttendingOnSiteInd(ChrStringUtils.booleanToIndictor(contact.getAttendingOnSiteInd()));
       entityManager.persist(participation);
+      if (newParticipation) {
+        chrChecklist.getChrChecklistParticipations().add(participation);
+      }
     }
   }
 
@@ -389,12 +415,16 @@ public class ChrChecklistPersistenceService {
       resource.setPictures(new ArrayList<>());
     }
 
-    for (Object attachmentObj : chrChecklist.getChrChecklistAttachments()) {
+    // Remove attachments no longer in the payload. Iterate a copy and also drop the row from the
+    // checklist's eager chrChecklistAttachments set, otherwise the managed checklist still
+    // references the removed row at flush time and Hibernate raises a TransientObjectException.
+    for (Object attachmentObj : new ArrayList<>(chrChecklist.getChrChecklistAttachments())) {
       ChrChecklistAttachment attachment = (ChrChecklistAttachment) attachmentObj;
       boolean exists = resource.getPictures().stream()
           .anyMatch(p -> ChrStringUtils.hasAValue(p.getId())
               && Long.parseLong(p.getId()) == attachment.getChrchecklistAttachmentId());
       if (!exists) {
+        chrChecklist.getChrChecklistAttachments().remove(attachment);
         entityManager.remove(attachment);
       }
     }
@@ -402,7 +432,8 @@ public class ChrChecklistPersistenceService {
     List<PhotoUpload> uploads = new ArrayList<>();
     for (Picture picture : resource.getPictures()) {
       ChrChecklistAttachment attachment;
-      if (ChrStringUtils.hasAValue(picture.getId())) {
+      boolean newAttachment = !ChrStringUtils.hasAValue(picture.getId());
+      if (!newAttachment) {
         attachment = entityManager.find(ChrChecklistAttachment.class, Long.parseLong(picture.getId()));
       } else {
         attachment = new ChrChecklistAttachment();
@@ -425,6 +456,9 @@ public class ChrChecklistPersistenceService {
       attachment.setUpdateTimestamp(new Date());
       attachment.setUpdateUserid(userId);
       entityManager.persist(attachment);
+      if (newAttachment) {
+        chrChecklist.getChrChecklistAttachments().add(attachment);
+      }
       picture.setId(attachment.getChrchecklistAttachmentId().toString());
 
       if (ChrStringUtils.hasAValue(picture.getCode())) {
@@ -452,7 +486,9 @@ public class ChrChecklistPersistenceService {
     }
     long checklistId = chrChecklist.getChrChecklistId();
 
-    // Remove features no longer present in the payload.
+    // Remove features no longer present in the payload. Also drop them from the checklist's eager
+    // chrFeatureIdentities set so the same-session re-read (CheckListMapper) doesn't show a removed
+    // (or, for new rows below, a missing) feature.
     List<ChrFeatureIdentity> existingIdentities = entityManager.createQuery(
             "SELECT fi FROM ChrFeatureIdentity fi WHERE fi.chrChecklist.chrChecklistId = :cid",
             ChrFeatureIdentity.class)
@@ -463,7 +499,8 @@ public class ChrChecklistPersistenceService {
           .anyMatch(f -> ChrStringUtils.hasAValue(f.getId())
               && identity.getChrFeatureId().equals(Long.parseLong(f.getId())));
       if (!stillPresent) {
-        entityManager.remove(identity);
+        chrChecklist.getChrFeatureIdentities().remove(identity);
+        deleteFeature(identity);
       }
     }
     entityManager.flush();
@@ -471,7 +508,8 @@ public class ChrChecklistPersistenceService {
     // Pass 1: identity, info source, detail, and all per-feature cross-reference collections.
     for (Feature feature : resource.getFeatures()) {
       ChrFeatureIdentity identity;
-      if (ChrStringUtils.hasAValue(feature.getId())) {
+      boolean newIdentity = !ChrStringUtils.hasAValue(feature.getId());
+      if (!newIdentity) {
         identity = entityManager.find(ChrFeatureIdentity.class, Long.parseLong(feature.getId()));
         identity.setUpdateTimestamp(new Date());
         identity.setUpdateUserid(userId);
@@ -497,11 +535,17 @@ public class ChrChecklistPersistenceService {
         }
       }
       entityManager.persist(identity);
+      if (newIdentity) {
+        chrChecklist.getChrFeatureIdentities().add(identity);
+      }
       feature.setId(identity.getChrFeatureId().toString());
       long featureId = identity.getChrFeatureId();
 
+      // Detach the eager-loaded child collections before the delete-then-reinsert rewrites below.
+      clearIdentityChildren(identity);
       saveFeatureInfoSource(feature, featureId, userId);
       ChrFeatureDetail detail = saveFeatureDetail(feature, identity, userId);
+      clearDetailChildren(detail);
       saveFeatureTypeXrefs(feature, detail, featureId, userId);
       saveFeatureLocationDetails(feature, detail, featureId, userId);
       saveFeatureAgeXrefs(feature, featureId, userId);
@@ -879,6 +923,75 @@ public class ChrChecklistPersistenceService {
     stampEntry(used::setEntryTimestamp, used::setEntryUserid, userId);
     stampUpdate(used::setUpdateTimestamp, used::setUpdateUserid, userId);
     return used;
+  }
+
+  /**
+   * Drop the eager-loaded child collections of a feature's identity/detail from the in-memory
+   * graph. The per-feature save below rewrites every child collection via delete-then-reinsert;
+   * those deletes ({@link #removeXrefsByFeatureId}/{@link #removeStrategies}) flush while the parent
+   * (loaded eagerly with the checklist) still references the rows being deleted, which trips
+   * Hibernate's flush-time integrity check. Clearing has no DML effect — the join columns are
+   * insertable=false/updatable=false with no cascade — it only removes the stale references. The
+   * graph is reloaded fresh from the database after the writes (the persistence context is cleared
+   * in {@code saveFeaturesSection}).
+   */
+  @SuppressWarnings("unchecked")
+  private void clearIdentityChildren(ChrFeatureIdentity identity) {
+    identity.getChrFeatureInfoSourceXrefs().clear();
+    identity.getChrAssociatedFeatureXrefsForFromChrFeatureId().clear();
+    identity.getChrAssociatedFeatureXrefsForToChrFeatureId().clear();
+  }
+
+  @SuppressWarnings("unchecked")
+  private void clearDetailChildren(ChrFeatureDetail detail) {
+    detail.getChrFeatureTypeXrefs().clear();
+    detail.getChrFeatureLocationDetails().clear();
+    detail.getChrFeatureAgeXrefs().clear();
+    detail.getChrFeatWindthrTreatXrefs().clear();
+    detail.getChrFeatureDamageAgentXrefs().clear();
+    detail.getChrMgmtStrategyUseds().clear();
+    detail.getChrMgmtStrategyPlanneds().clear();
+  }
+
+  /**
+   * Fully delete a feature that is no longer in the payload: its child cross-references first (the
+   * detail's collections have no cascade, so they must be removed explicitly to satisfy the FKs),
+   * then the identity — whose {@code chrFeatureDetail} cascade removes the detail row. The eager
+   * child collections are cleared first so the deletes below don't flush while the still-loaded
+   * identity/detail reference the rows being removed.
+   */
+  private void deleteFeature(ChrFeatureIdentity identity) {
+    long featureId = identity.getChrFeatureId();
+    clearIdentityChildren(identity);
+    ChrFeatureDetail detail = identity.getChrFeatureDetail();
+    if (detail != null) {
+      clearDetailChildren(detail);
+    }
+    removeXrefsByFeatureId("ChrFeatureInfoSourceXref", featureId);
+    removeXrefsByFeatureId("ChrFeatureTypeXref", featureId);
+    removeXrefsByFeatureId("ChrFeatureLocationDetail", featureId);
+    removeXrefsByFeatureId("ChrFeatureAgeXref", featureId);
+    removeXrefsByFeatureId("ChrFeatureDamageAgentXref", featureId);
+    removeXrefsByFeatureId("ChrFeatWindthrTreatXref", featureId);
+    removeStrategies("ChrMgmtStrategyPlanned", featureId);
+    removeStrategies("ChrMgmtStrategyUsed", featureId);
+    removeAssociatedFeatures(featureId);
+    entityManager.remove(identity);
+    entityManager.flush();
+  }
+
+  /** Removes associated-feature links pointing to or from a feature (both directions) and flushes. */
+  private void removeAssociatedFeatures(long featureId) {
+    List<ChrAssociatedFeatureXref> rows = entityManager.createQuery(
+            "SELECT a FROM ChrAssociatedFeatureXref a "
+                + "WHERE a.id.fromChrFeatureId = :fid OR a.id.toChrFeatureId = :fid",
+            ChrAssociatedFeatureXref.class)
+        .setParameter("fid", featureId)
+        .getResultList();
+    for (ChrAssociatedFeatureXref row : rows) {
+      entityManager.remove(row);
+    }
+    entityManager.flush();
   }
 
   /** Removes all composite-id xrefs for a feature (keyed by {@code id.chrFeatureId}) and flushes. */

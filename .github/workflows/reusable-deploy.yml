@@ -58,6 +58,18 @@ on:
       keystore_secret:
         description: Oracle keystore passphrase
         required: true
+      object_storage_host:
+        description: CHR object storage host
+        required: true
+      object_storage_bucket:
+        description: CHR object storage bucket
+        required: true
+      object_storage_access_key:
+        description: CHR object storage access key
+        required: true
+      object_storage_secret_key:
+        description: CHR object storage secret key
+        required: true
 
     outputs:
       triggered:
@@ -89,6 +101,10 @@ jobs:
     env:
       DATABASE_PASSWORD: ${{ secrets.database_password }}
       KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
+      OBJECT_STORAGE_HOST: ${{ secrets.object_storage_host }}
+      OBJECT_STORAGE_BUCKET: ${{ secrets.object_storage_bucket }}
+      OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.object_storage_access_key }}
+      OBJECT_STORAGE_SECRET_KEY: ${{ secrets.object_storage_secret_key }}
     steps:
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
@@ -117,6 +133,10 @@ jobs:
             -p DATABASE_USER="${{ secrets.database_user }}"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
+            -p OBJECT_STORAGE_HOST="$OBJECT_STORAGE_HOST"
+            -p OBJECT_STORAGE_BUCKET="$OBJECT_STORAGE_BUCKET"
+            -p OBJECT_STORAGE_ACCESS_KEY="$OBJECT_STORAGE_ACCESS_KEY"
+            -p OBJECT_STORAGE_SECRET_KEY="$OBJECT_STORAGE_SECRET_KEY"
           triggers: ${{ inputs.triggers }}
 
   frontend:

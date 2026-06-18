@@ -104,8 +104,8 @@ persistence adapted from legacy `RestDataManager` plus JDBC tombstone calls:
 | POST | `/api/v1/chr/checklists/{id}/unsubmit` | `FREP_TOMBSTONE.UNSUBMIT` |
 | POST | `/api/v1/chr/attachments` | S3 photo upload |
 
-CHR object storage is configured via `frep.chr.object-storage.*` (`CHR_OBJECT_STORAGE_HOST`,
-`CHR_OBJECT_STORAGE_BUCKET`, `CHR_OBJECT_STORAGE_ACCESS_KEY`, `CHR_OBJECT_STORAGE_SECRET_KEY`).
+CHR object storage is configured via `frep.chr.object-storage.*` (`OBJECT_STORAGE_HOST`,
+`OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`).
 
 | Variable | Description |
 |---|---|

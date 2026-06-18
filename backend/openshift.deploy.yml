@@ -64,6 +64,14 @@ parameters:
     required: true
   - name: KEYSTORE_SECRET
     required: true
+  - name: OBJECT_STORAGE_HOST
+    required: true
+  - name: OBJECT_STORAGE_BUCKET
+    required: true
+  - name: OBJECT_STORAGE_ACCESS_KEY
+    required: true
+  - name: OBJECT_STORAGE_SECRET_KEY
+    required: true
 
 objects:
   # ── Deployment ────────────────────────────────────────────
@@ -181,6 +189,26 @@ objects:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: KEYSTORE_SECRET
+                - name: OBJECT_STORAGE_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: OBJECT_STORAGE_HOST
+                - name: OBJECT_STORAGE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: OBJECT_STORAGE_BUCKET
+                - name: OBJECT_STORAGE_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: OBJECT_STORAGE_ACCESS_KEY
+                - name: OBJECT_STORAGE_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: OBJECT_STORAGE_SECRET_KEY
               resources:
                 requests:
                   cpu: ${MIN_CPU}
@@ -311,6 +339,10 @@ objects:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       KEYSTORE_SECRET: ${KEYSTORE_SECRET}
+      OBJECT_STORAGE_HOST: ${OBJECT_STORAGE_HOST}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY}
 
   # ── NetworkPolicy: ingress from same-zone frontend + cluster monitoring ──
   - apiVersion: networking.k8s.io/v1

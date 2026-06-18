@@ -3,14 +3,23 @@ import { SideNavLink } from '@carbon/react';
 import { type FC } from 'react';
 
 import AvatarImage from '@/components/Layout/AvatarImage';
+
 import { useAuth } from '@/context/auth/useAuth';
 import { useTheme } from '@/context/theme/useTheme';
 
 import './index.scss';
 
+/** Friendly label for the user's identity provider (falls back to IDIR). */
+const PROVIDER_LABELS: Record<string, string> = {
+  IDIR: 'IDIR',
+  BCEIDBUSINESS: 'Business BCeID',
+};
+
 const HeaderPanelProfile: FC = () => {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
+
+  const providerLabel = PROVIDER_LABELS[user?.idpProvider ?? ''] ?? 'IDIR';
 
   return (
     <div className="my-profile-container">
@@ -20,7 +29,7 @@ const HeaderPanelProfile: FC = () => {
         </div>
         <div className="user-data">
           <p className="user-name">{`${user?.firstName} ${user?.lastName}`}</p>
-          <p>{`IDIR: ${user?.userName ?? ''}`}</p>
+          <p>{`${providerLabel}: ${user?.userName ?? ''}`}</p>
           <p>{`Email: ${user?.email}`}</p>
         </div>
       </div>

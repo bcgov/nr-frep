@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HeaderPanelProfile from './index';
 
@@ -14,13 +14,14 @@ vi.mock('@/components/Layout/AvatarImage', () => ({
 
 const mockToggleTheme = vi.fn();
 const mockLogout = vi.fn();
-const mockUser = {
+const idirUser = {
   firstName: 'Jane',
   lastName: 'Doe',
   idpProvider: 'IDIR',
   userName: 'jdoe',
   email: 'jane@example.com',
 };
+let mockUser: typeof idirUser = idirUser;
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: () => ({ logout: mockLogout, user: mockUser }),
@@ -36,13 +37,23 @@ const renderWithProviders = async () => {
 };
 
 describe('HeaderPanelProfile', () => {
+  beforeEach(() => {
+    mockUser = idirUser;
+  });
+
   it('renders user info and avatar', async () => {
     await renderWithProviders();
     expect(screen.getByText('Jane Doe')).toBeInTheDocument();
-    // Component renders `IDIR: <userName>` (see HeaderPanelProfile/index.tsx).
+    // Component renders `<providerLabel>: <userName>` (see HeaderPanelProfile/index.tsx).
     expect(screen.getByText('IDIR: jdoe')).toBeInTheDocument();
     expect(screen.getByText('Email: jane@example.com')).toBeInTheDocument();
     expect(screen.getByTestId('avatar-image')).toHaveTextContent('Jane Doe-large');
+  });
+
+  it('labels a BCeID Business user as "Business BCeID"', async () => {
+    mockUser = { ...idirUser, idpProvider: 'BCEIDBUSINESS', userName: 'jdoe-bceid' };
+    await renderWithProviders();
+    expect(screen.getByText('Business BCeID: jdoe-bceid')).toBeInTheDocument();
   });
 
   it('calls toggleTheme when Change theme is clicked', async () => {

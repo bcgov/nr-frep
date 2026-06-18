@@ -191,6 +191,11 @@ const WINDTHROW_TECHNIQUES: Array<{ label: string; field: string }> = [
   { label: 'Topping', field: 'windthrowTechniqueTopping' },
 ];
 
+// Monotonic key generator for the id-less, editable "other strategy" rows. A stable React key
+// (never reused, never the array index) keeps row inputs from remounting/losing focus on edit.
+let otherStrategyKeySeq = 0;
+const nextOtherStrategyKey = () => `other-strat-${(otherStrategyKeySeq += 1)}`;
+
 const FeatureEditor: FC<{
   feature: Feature;
   onPatch: PatchFn;
@@ -234,21 +239,30 @@ const FeatureEditor: FC<{
   const recommendationsEnabled = showFN || showSP || on('sitePermitIssued');
 
   const strategies = feature.otherPlannedManagementStrategy ?? [];
+  // Stable React keys for the id-less strategy rows, kept positionally in sync with the list.
+  // (FeatureEditor remounts per feature, so this initializes per feature.)
+  const [strategyKeys, setStrategyKeys] = useState<string[]>(() =>
+    strategies.map(() => nextOtherStrategyKey()),
+  );
   const patchStrategy = (index: number, patch: Partial<OtherPlannedManagementStrategy>) =>
     onPatch({
       otherPlannedManagementStrategy: strategies.map((s, i) =>
         i === index ? { ...s, ...patch } : s,
       ),
     });
-  const addStrategy = () =>
+  const addStrategy = () => {
+    setStrategyKeys((keys) => [...keys, nextOtherStrategyKey()]);
     onPatch({
       otherPlannedManagementStrategy: [
         ...strategies,
         { otherStrategy: '', fnInd: 'false', aiaInd: 'false', spInd: 'false' },
       ],
     });
-  const removeStrategy = (index: number) =>
+  };
+  const removeStrategy = (index: number) => {
+    setStrategyKeys((keys) => keys.filter((_, i) => i !== index));
     onPatch({ otherPlannedManagementStrategy: strategies.filter((_, i) => i !== index) });
+  };
 
   // Buffer-length / reserve-type sub-field for one of the FN/AIA/SP columns — shown only when the
   // column is visible and the matching strategy row is checked.
@@ -258,7 +272,7 @@ const FeatureEditor: FC<{
     label: string,
     kind: 'buffer' | 'reserve',
   ) => {
-    const columnVisible = variant === 'fn' ? showFN : variant === 'sp' ? showSP : true;
+    const columnVisible = { fn: showFN, aia: true, sp: showSP }[variant];
     if (!columnVisible || !on(def.when)) return null;
     return kind === 'buffer' ? (
       <TextField
@@ -559,7 +573,7 @@ const FeatureEditor: FC<{
                   </TableHead>
                   <TableBody>
                     {strategies.map((s, i) => (
-                      <TableRow key={`other-strat-${i}`}>
+                      <TableRow key={strategyKeys[i]}>
                         <TableCell>
                           <TextField
                             id={`other-strat-${i}`}

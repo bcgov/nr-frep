@@ -44,7 +44,7 @@ vi.mock('@/context/notification/useNotification', () => ({
 }));
 
 vi.mock('@/context/auth/useAuth', () => ({
-  useAuth: () => ({ user: { providerUsername: 'IDIR\\TESTER' } }),
+  useAuth: () => ({ user: { providerUsername: String.raw`IDIR\TESTER` } }),
 }));
 
 const api = API.chrChecklist as unknown as {

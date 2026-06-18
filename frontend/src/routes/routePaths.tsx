@@ -80,6 +80,15 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
+    // OAuth redirect target (redirectSignIn). Amplify completes the code exchange on load; once
+    // auth has hydrated we bounce to home (Landing if still unauthenticated, Dashboard if logged
+    // in via the protected set).
+    path: '/auth/callback',
+    id: 'Auth callback',
+    element: <Navigate to="/" replace />,
+    isSideMenu: false,
+  },
+  {
     path: '*',
     id: 'Not Found',
     element: <NotFoundPage />,
@@ -92,6 +101,13 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
     id: 'RedirectWhileLoggedIn',
+    element: <Navigate to="/dashboard" replace />,
+    isSideMenu: false,
+  },
+  {
+    // OAuth redirect target (redirectSignIn) — once logged in, bounce off the callback URL to home.
+    path: '/auth/callback',
+    id: 'Auth callback',
     element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
   },

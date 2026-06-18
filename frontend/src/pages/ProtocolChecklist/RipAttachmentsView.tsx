@@ -105,17 +105,17 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
           );
           if (!content.data) return null;
           const mime = content.mimeType || r.mimeTypeCode || 'image/jpeg';
-          return [
-            r.checklistAttachmentId as string,
-            `data:${mime};base64,${content.data}`,
-          ] as const;
+          return [r.checklistAttachmentId as string, `data:${mime};base64,${content.data}`] as [
+            string,
+            string,
+          ];
         } catch {
           return null;
         }
       }),
     ).then((entries) => {
       if (cancelled) return;
-      const loaded = entries.filter((e): e is readonly [string, string] => e !== null);
+      const loaded = entries.filter((e): e is [string, string] => e !== null);
       if (loaded.length > 0) setThumbs((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
     });
     return () => {

@@ -83,6 +83,11 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
   const cognitoGroups = extractGroups(decodedIdToken);
   const privileges = parsePrivileges(cognitoGroups);
   const derivedRoles = Object.keys(privileges) as ROLE_TYPE[];
+  // The backend (JwtPrincipalUtil) stores userids with the legacy WebADE source-directory prefix,
+  // normalizing FAM's "BCEIDBUSINESS" to "BCEID". Mirror that here so providerUsername matches the
+  // backend-stored userid (e.g. the assessedBy "Assign it to me" comparison). idpProvider keeps the
+  // accurate FAM provider name for display.
+  const userIdPrefix = idpProvider === 'BCEIDBUSINESS' ? 'BCEID' : idpProvider;
   return {
     userName,
     displayName,
@@ -92,7 +97,7 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
     roles: derivedRoles,
     firstName: sanitizedFirstName,
     lastName,
-    providerUsername: `${idpProvider}\\${userName}`,
+    providerUsername: `${userIdPrefix}\\${userName}`,
   };
 };
 

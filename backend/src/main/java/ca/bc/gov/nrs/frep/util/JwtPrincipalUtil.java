@@ -52,20 +52,25 @@ public class JwtPrincipalUtil {
   /**
    * Retrieves the provider value from the JWT claims. The provider is identified by the key
    * "custom:idp_name" within the claims. If the provider's name starts with "ca.bc.gov.flnr.fam.",
-   * it is replaced with "BCSC". Otherwise, the provider's name is returned in uppercase. If the
-   * provider is not specified, an empty string is returned.
+   * it is replaced with "BCSC". The FAM provider name "BCEIDBUSINESS" is normalized to "BCEID" so
+   * the userid prefix matches the legacy WebADE source-directory token ("BCEID\\username") that the
+   * legacy FREP schema (audit columns, evaluator/search display stripping) was built around.
+   * Otherwise, the provider's name is returned in uppercase. If the provider is not specified, an
+   * empty string is returned.
    *
    * @param claims The map containing the JWT claims.
-   * @return The provider's name in uppercase or "BCSC" if it starts with "ca.bc.gov.flnr.fam.", or
-   *     an empty string if the provider is not specified.
+   * @return The provider's name in uppercase ("BCEIDBUSINESS" normalized to "BCEID"), or "BCSC" if
+   *     it starts with "ca.bc.gov.flnr.fam.", or an empty string if the provider is not specified.
    */
   private static String getProviderValue(Map<String, Object> claims) {
     String provider = getClaimValue(claims, "custom:idp_name");
 
     if (StringUtils.isNotBlank(provider)) {
-      return provider.startsWith("ca.bc.gov.flnr.fam.")
-          ? "BCSC"
-          : provider.toUpperCase(Locale.ROOT);
+      if (provider.startsWith("ca.bc.gov.flnr.fam.")) {
+        return "BCSC";
+      }
+      String upperProvider = provider.toUpperCase(Locale.ROOT);
+      return "BCEIDBUSINESS".equals(upperProvider) ? "BCEID" : upperProvider;
     }
     return StringUtils.EMPTY;
   }

@@ -24,7 +24,7 @@ const amplifyconfig = {
       loginWith: {
         oauth: {
           domain: cognitoDomain,
-          scopes: ['openid', 'profile'],
+          scopes: ['openid', 'profile', 'email'],
           redirectSignIn: [`${redirectUri}/auth/callback`],
           redirectSignOut: [redirectSignOut],
           responseType: verificationMethod,

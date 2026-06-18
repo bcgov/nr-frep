@@ -57,16 +57,29 @@ const LandingPage: FC = () => {
 
             <div className="buttons-container single-row">
               {online ? (
-                <Button
-                  type="button"
-                  onClick={() => login('idir')}
-                  renderIcon={Login}
-                  size="md"
-                  data-testid="landing-button__idir"
-                  className="login-btn"
-                >
-                  Log in with IDIR
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    onClick={() => login('idir')}
+                    renderIcon={Login}
+                    size="md"
+                    data-testid="landing-button__idir"
+                    className="login-btn"
+                  >
+                    Log in with IDIR
+                  </Button>
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    onClick={() => login('bceid')}
+                    renderIcon={Login}
+                    size="md"
+                    data-testid="landing-button__bceid"
+                    className="login-btn"
+                  >
+                    Log in with Business BCeID
+                  </Button>
+                </>
               ) : (
                 // Offline: IDIR login can't run, so enter the offline FREP Dashboard.
                 <Button

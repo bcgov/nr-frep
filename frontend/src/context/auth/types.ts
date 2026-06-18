@@ -15,7 +15,7 @@ type RoleValue = string[] | null;
 
 export type USER_PRIVILEGE_TYPE = Partial<Record<ROLE_TYPE, RoleValue>>;
 
-export const validIdpProviders = ['IDIR'] as const;
+export const validIdpProviders = ['IDIR', 'BCEIDBUSINESS'] as const;
 
 export type IdpProviderType = (typeof validIdpProviders)[number];
 

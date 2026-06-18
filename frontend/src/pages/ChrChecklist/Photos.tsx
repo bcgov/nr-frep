@@ -1,10 +1,21 @@
-import { TrashCan, Upload } from '@carbon/icons-react';
-import { Button } from '@carbon/react';
+import { Download, TrashCan, Upload } from '@carbon/icons-react';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@carbon/react';
 import { useRef, useState, type FC } from 'react';
 
+import ImagePreviewModal from '@/components/core/ImagePreviewModal';
 import { TextField } from '@/pages/ChrChecklist/fields';
 
 import type { Picture } from '@/types/chrChecklist';
+
+import { useConfirm } from '@/context/confirm/useConfirm';
 
 /**
  * Build a displayable image src from a picture's `code`. Newly-added photos already carry a
@@ -23,73 +34,230 @@ const photoSrc = (picture: Picture): string | undefined => {
   return `data:${mime};base64,${code}`;
 };
 
+// Client-side downscale/re-encode bounds, mirroring the legacy CHR upload: cap the full image at
+// 800×1200 and re-encode to JPEG so full-resolution photos don't bloat the payload and storage.
+const MAX_WIDTH = 800;
+const MAX_HEIGHT = 1200;
+const JPEG_QUALITY = 0.7;
+
+const readDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+
+const loadImage = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Image decode failed'));
+    img.src = src;
+  });
+
 /**
- * Section — attachments: capture photos via the Biodiversity drag-and-drop upload card, store
- * base64, edit description/date, remove. Existing photos keep their thumbnails below the card.
+ * Resize (never upscale) an image file to fit within {@link MAX_WIDTH}×{@link MAX_HEIGHT} and
+ * re-encode it as JPEG. Non-image files, or anything we can't decode, are returned as-is. Returns
+ * the picture fields (code is a data URL; the data: prefix is stripped at save time).
+ */
+const processFile = async (
+  file: File,
+): Promise<{ code: string; mimeTypeCode: string; fileName: string }> => {
+  const original = await readDataUrl(file);
+  if (!file.type.startsWith('image/')) {
+    return { code: original, mimeTypeCode: file.type, fileName: file.name };
+  }
+  try {
+    const img = await loadImage(original);
+    const scale = Math.min(1, MAX_WIDTH / img.width, MAX_HEIGHT / img.height);
+    const width = Math.max(1, Math.round(img.width * scale));
+    const height = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { code: original, mimeTypeCode: file.type, fileName: file.name };
+    ctx.drawImage(img, 0, 0, width, height);
+    const code = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    return { code, mimeTypeCode: 'image/jpeg', fileName: `${baseName}.jpg` };
+  } catch {
+    return { code: original, mimeTypeCode: file.type, fileName: file.name };
+  }
+};
+
+/**
+ * Attachments tab — mirrors the Biodiversity checklist Attachments tab: a table of existing photos
+ * with download / delete, plus an upload card where the description/date are entered before
+ * browsing. Each upload and delete persists immediately (no tab-level Save button); `onSave` posts
+ * the full picture list and pulls back the server's truth (new row ids, etc.).
  */
 const Photos: FC<{
   pictures: Picture[];
-  onChange: (pictures: Picture[]) => void;
-  onSave: () => Promise<boolean>;
+  onSave: (pictures: Picture[]) => Promise<boolean>;
   readOnly: boolean;
   busy: boolean;
-}> = ({ pictures, onChange, onSave, readOnly, busy }) => {
+}> = ({ pictures, onSave, readOnly, busy }) => {
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState('');
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
 
-  const patchAt = (index: number, patch: Partial<Picture>) =>
-    onChange(pictures.map((p, i) => (i === index ? { ...p, ...patch } : p)));
-  const removeAt = (index: number) => onChange(pictures.filter((_, i) => i !== index));
+  // Compress/resize each selected file, append them all with the entered description/date, and
+  // persist in a single save. Clear the upload fields once the save succeeds.
+  const addFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const additions: Picture[] = await Promise.all(
+      files.map(async (file) => ({
+        ...(await processFile(file)), // code (data URL; prefix stripped at save), mimeTypeCode, fileName
+        description: description.trim(),
+        date: date.trim(),
+      })),
+    );
+    if (await onSave([...pictures, ...additions])) {
+      setDescription('');
+      setDate('');
+    }
+  };
 
-  const addFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      onChange([
-        ...pictures,
-        {
-          code: reader.result as string, // data URL; prefix stripped at save time
-          mimeTypeCode: file.type,
-          fileName: file.name,
-          description: '',
-          date: '',
-        },
-      ]);
-    };
-    reader.readAsDataURL(file);
+  const removeAt = async (index: number) => {
+    if (
+      !(await confirm({
+        title: 'Delete photo?',
+        message: "Delete this photo? This can't be undone.",
+      }))
+    )
+      return;
+    await onSave(pictures.filter((_, i) => i !== index));
+  };
+
+  const download = (picture: Picture) => {
+    const src = photoSrc(picture);
+    if (!src) return;
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = picture.fileName || `photo-${picture.id ?? ''}`;
+    link.click();
   };
 
   return (
     <div className="rip-form">
-      {!readOnly && (
-        <div className="protocol-checklist__section-actions">
-          <Button size="lg" disabled={busy} onClick={() => void onSave()}>
-            Save
-          </Button>
-        </div>
+      {pictures.length > 0 && (
+        <Table size="sm" className="bio-strata__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Photo</TableHeader>
+              <TableHeader>Description</TableHeader>
+              <TableHeader>Date</TableHeader>
+              <TableHeader>Actions</TableHeader>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {pictures.map((picture, index) => {
+              const src = photoSrc(picture);
+              return (
+                <TableRow key={picture.id ?? `photo-${index}`}>
+                  <TableCell>
+                    {src ? (
+                      <button
+                        type="button"
+                        className="image-thumb-button"
+                        onClick={() =>
+                          setPreview({
+                            src,
+                            alt: picture.description || picture.fileName || `Photo ${index + 1}`,
+                          })
+                        }
+                      >
+                        <img
+                          className="chr-checklist__thumb image-thumb--clickable"
+                          src={src}
+                          alt={picture.description || picture.fileName || `Photo ${index + 1}`}
+                        />
+                      </button>
+                    ) : (
+                      <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
+                        {picture.fileName || 'Saved photo'}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>{picture.description || '—'}</TableCell>
+                  <TableCell>{picture.date || '—'}</TableCell>
+                  <TableCell>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      hasIconOnly
+                      renderIcon={Download}
+                      iconDescription="Download"
+                      disabled={busy}
+                      onClick={() => download(picture)}
+                    />
+                    {!readOnly && (
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        hasIconOnly
+                        renderIcon={TrashCan}
+                        iconDescription="Delete"
+                        disabled={busy}
+                        onClick={() => void removeAt(index)}
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
+
       {!readOnly && (
         <div className="attach-card">
           <div className="attach-card__header">Upload file</div>
           <div className="attach-card__body">
+            <TextField
+              id="photo-description"
+              labelText="Description"
+              value={description}
+              disabled={busy}
+              onChange={setDescription}
+            />
+            <TextField
+              id="photo-date"
+              labelText="Date"
+              placeholder="YYYY-MM-DD"
+              value={date}
+              disabled={busy}
+              onChange={setDate}
+            />
             <div
               className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
               onDragOver={(e) => {
                 e.preventDefault();
-                setDragOver(true);
+                if (!busy) setDragOver(true);
               }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                const file = e.dataTransfer.files?.[0];
-                if (file) addFile(file);
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length > 0 && !busy) void addFiles(files);
               }}
             >
               <span className="attach-drop__icon">
                 <Upload size={24} />
               </span>
               <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
-              <Button kind="primary" size="lg" onClick={() => fileInputRef.current?.click()}>
+              <Button
+                kind="primary"
+                size="lg"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
                 Browse files
               </Button>
               <input
@@ -97,10 +265,11 @@ const Photos: FC<{
                 type="file"
                 accept="image/*"
                 capture="environment"
+                multiple
                 hidden
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) addFile(file);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) void addFiles(files);
                   e.target.value = '';
                 }}
               />
@@ -109,55 +278,14 @@ const Photos: FC<{
         </div>
       )}
 
-      {pictures.length === 0 && <p>No photos attached.</p>}
-      {pictures.map((picture, index) => {
-        const src = photoSrc(picture);
-        return (
-          <fieldset key={picture.id ?? `photo-${index}`} className="rip-form__group">
-            <legend>Photo {index + 1}</legend>
-            <div className="chr-checklist__photo">
-              {src ? (
-                <img
-                  className="chr-checklist__thumb"
-                  src={src}
-                  alt={picture.description || picture.fileName || `Photo ${index + 1}`}
-                />
-              ) : (
-                <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
-                  {picture.fileName || 'Saved photo'}
-                </span>
-              )}
-              <div className="rip-form__grid">
-                <TextField
-                  id={`photo-desc-${index}`}
-                  labelText="Description"
-                  value={picture.description}
-                  disabled={readOnly}
-                  onChange={(v) => patchAt(index, { description: v })}
-                />
-                <TextField
-                  id={`photo-date-${index}`}
-                  labelText="Date"
-                  placeholder="YYYY-MM-DD"
-                  value={picture.date}
-                  disabled={readOnly}
-                  onChange={(v) => patchAt(index, { date: v })}
-                />
-              </div>
-            </div>
-            {!readOnly && (
-              <Button
-                kind="danger--ghost"
-                size="sm"
-                renderIcon={TrashCan}
-                onClick={() => removeAt(index)}
-              >
-                Remove photo
-              </Button>
-            )}
-          </fieldset>
-        );
-      })}
+      {preview && (
+        <ImagePreviewModal
+          open
+          src={preview.src}
+          alt={preview.alt}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 };

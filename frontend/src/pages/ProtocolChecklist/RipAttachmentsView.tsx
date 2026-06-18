@@ -2,8 +2,11 @@ import { Download, TrashCan, Upload } from '@carbon/icons-react';
 import { Button, SkeletonText, TextInput } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
+import ImagePreviewModal from '@/components/core/ImagePreviewModal';
+
 import type { AttachmentRow } from '@/types/protocolChecklist';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 
@@ -20,6 +23,13 @@ type Props = {
   submitted: boolean;
 };
 
+// True when an attachment is an image we can preview as a thumbnail.
+function isImage(row: AttachmentRow): boolean {
+  const mime = (row.mimeTypeCode || '').toLowerCase();
+  if (mime.includes('image')) return true;
+  return /\.(jpe?g|png|gif|bmp|tiff?|webp)$/.test((row.fileName || '').toLowerCase());
+}
+
 // Read a File as base64 (without the data: prefix).
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -35,7 +45,11 @@ function toBase64(file: File): Promise<string> {
 
 const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<AttachmentRow[]>([]);
+  // attachmentId -> data-URL thumbnail, fetched lazily for image attachments.
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [description, setDescription] = useState('');
   const [descInvalid, setDescInvalid] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,6 +86,42 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       cancelled = true;
     };
   }, [protocol, checklistId, reportError]);
+
+  // Lazily fetch thumbnails for image attachments (the list endpoint returns metadata only).
+  // Failures are silent — a missing thumbnail simply falls back to the placeholder.
+  useEffect(() => {
+    let cancelled = false;
+    const pending = rows.filter(
+      (r) => r.checklistAttachmentId && isImage(r) && !thumbs[r.checklistAttachmentId],
+    );
+    if (pending.length === 0) return;
+    void Promise.all(
+      pending.map(async (r) => {
+        try {
+          const content = await API.protocolChecklist.getAttachmentContent(
+            protocol,
+            checklistId,
+            r.checklistAttachmentId as string,
+          );
+          if (!content.data) return null;
+          const mime = content.mimeType || r.mimeTypeCode || 'image/jpeg';
+          return [
+            r.checklistAttachmentId as string,
+            `data:${mime};base64,${content.data}`,
+          ] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const loaded = entries.filter((e): e is readonly [string, string] => e !== null);
+      if (loaded.length > 0) setThumbs((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rows, thumbs, protocol, checklistId]);
 
   const handleUpload = async (file: File) => {
     // Legacy FREP303 requires a description before an attachment can be saved — surface it as
@@ -125,6 +175,13 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
 
   const handleDelete = async (row: AttachmentRow) => {
     if (!row.checklistAttachmentId) return;
+    if (
+      !(await confirm({
+        title: 'Delete attachment?',
+        message: `Delete ${row.fileName || 'this attachment'}? This can't be undone.`,
+      }))
+    )
+      return;
     setBusy(true);
     try {
       const updated = await API.protocolChecklist.deleteAttachment(
@@ -153,6 +210,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         <table className="rip-field-grid">
           <thead>
             <tr>
+              <th scope="col">Preview</th>
               <th scope="col">File</th>
               <th scope="col">Description</th>
               <th scope="col">Type</th>
@@ -161,36 +219,65 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
-              <tr key={`att-${row.checklistAttachmentId ?? index}`}>
-                <td>{row.fileName || '—'}</td>
-                <td>{row.description || '—'}</td>
-                <td>{row.mimeTypeCode || '—'}</td>
-                <td>{row.fileSize || '—'}</td>
-                <td className="rip-grid__choice">
-                  <Button
-                    kind="ghost"
-                    size="sm"
-                    hasIconOnly
-                    renderIcon={Download}
-                    iconDescription="Download"
-                    disabled={busy}
-                    onClick={() => void handleDownload(row)}
-                  />
-                  {canManage && (
+            {rows.map((row, index) => {
+              const thumb = row.checklistAttachmentId
+                ? thumbs[row.checklistAttachmentId]
+                : undefined;
+              return (
+                <tr key={`att-${row.checklistAttachmentId ?? index}`}>
+                  <td>
+                    {thumb ? (
+                      <button
+                        type="button"
+                        className="image-thumb-button"
+                        onClick={() =>
+                          setPreview({
+                            src: thumb,
+                            alt: row.description || row.fileName || `Attachment ${index + 1}`,
+                          })
+                        }
+                      >
+                        <img
+                          className="rip-attach__thumb image-thumb--clickable"
+                          src={thumb}
+                          alt={row.description || row.fileName || `Attachment ${index + 1}`}
+                        />
+                      </button>
+                    ) : (
+                      <span className="rip-attach__thumb rip-attach__thumb--placeholder">
+                        {isImage(row) ? '…' : row.mimeTypeCode || 'File'}
+                      </span>
+                    )}
+                  </td>
+                  <td>{row.fileName || '—'}</td>
+                  <td>{row.description || '—'}</td>
+                  <td>{row.mimeTypeCode || '—'}</td>
+                  <td>{row.fileSize || '—'}</td>
+                  <td className="rip-grid__choice">
                     <Button
-                      kind="danger--ghost"
+                      kind="ghost"
                       size="sm"
                       hasIconOnly
-                      renderIcon={TrashCan}
-                      iconDescription="Delete"
+                      renderIcon={Download}
+                      iconDescription="Download"
                       disabled={busy}
-                      onClick={() => void handleDelete(row)}
+                      onClick={() => void handleDownload(row)}
                     />
-                  )}
-                </td>
-              </tr>
-            ))}
+                    {canManage && (
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        hasIconOnly
+                        renderIcon={TrashCan}
+                        iconDescription="Delete"
+                        disabled={busy}
+                        onClick={() => void handleDelete(row)}
+                      />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -252,6 +339,15 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             </div>
           </div>
         </div>
+      )}
+
+      {preview && (
+        <ImagePreviewModal
+          open
+          src={preview.src}
+          alt={preview.alt}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );

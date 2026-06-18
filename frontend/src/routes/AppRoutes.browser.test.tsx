@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { vi, describe, afterEach, it, expect } from 'vitest';
 
-import * as useAuthModule from '@/context/auth/useAuth';
 import PageTitleProvider from '@/context/pageTitle/PageTitleProvider';
 
 import AppRoutes from './AppRoutes';
+
+import * as useAuthModule from '@/context/auth/useAuth';
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('@/routes/routePaths', () => ({
   getPublicRoutes: () => [{ path: '/', element: <div>Public Page</div> }],
   getNoRoleRoutes: () => [{ path: '/', element: <div>No Role Page</div> }],
   getProtectedRoutes: () => [{ path: '/', element: <div>Protected Page</div> }],
+  getOfflineRoutes: () => [{ path: '/chr/offline', element: <div>Offline Page</div> }],
 }));
 
 describe('AppRoutes', () => {

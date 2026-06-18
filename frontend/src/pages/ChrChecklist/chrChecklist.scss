@@ -110,6 +110,61 @@
     }
   }
 
+  // Top-align grid items so a checkbox whose label wraps to two lines keeps its box on the first
+  // line (the shared .rip-form__grid aligns to the bottom, which suits label-over-input grids).
+  &__check-grid {
+    align-items: start;
+  }
+
+  // "Assessed by" read-only value + inline "Assign it to me" text link.
+  &__assessed-by__row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  &__assessed-by__assign {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--cds-link-primary, #0f62fe);
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__assessed-by__notice {
+    margin-bottom: 1rem;
+    max-width: none;
+  }
+
+  // Two-column question/answer layout (Damage, Windthrow, Summary): paired cells flow left→right,
+  // top-aligned so an answer field sits next to its question.
+  &__two-col {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 2rem;
+    align-items: start;
+    margin-bottom: 1rem;
+  }
+
+  // A vertical stack of related questions/fields used as one cell of the two-column layout.
+  &__field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  // The three recommendation checkboxes above the planning grid: top-align them (so a wrapped
+  // label doesn't drop its checkbox) and add breathing room before the strategy table below.
+  &__planning-header {
+    align-items: start;
+    margin-bottom: 2rem;
+  }
+
   &__planning {
     width: 100%;
     border-collapse: collapse;
@@ -126,6 +181,18 @@
     td:not(:first-child) {
       text-align: center;
       width: 6rem;
+    }
+
+    // The cells hold a label-less Carbon checkbox; shrink the wrapper to just the box and centre
+    // it so each box lines up under its FN / AIA/SAP / Site plan heading.
+    td:not(:first-child) {
+      .cds--checkbox-wrapper {
+        display: inline-flex;
+      }
+
+      .cds--checkbox-label {
+        padding-left: 1rem;
+      }
     }
   }
 
@@ -152,5 +219,54 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+}
+
+// Block Summary operational review — each question (col 1) beside its description (col 2).
+.chr-block-qa {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem 2rem;
+  align-items: start;
+  margin-bottom: 1rem;
+
+  // Stack to a single column on narrow viewports (Carbon md breakpoint).
+  @media (max-width: 671px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+// MRVA derivation help — compact disclosure under the computed MRVA tag (Block Summary).
+.chr-mrva-help {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--cds-link-primary, #0f62fe);
+  }
+
+  p {
+    margin: 0.5rem 0;
+    color: var(--cds-text-secondary, #525252);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 32rem;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--cds-border-subtle, #e0e0e0);
+    padding: 0.25rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: var(--cds-layer-accent, #e0e0e0);
+    font-weight: 600;
   }
 }

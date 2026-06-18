@@ -7,6 +7,7 @@ import EvaluatorSearch from '@/pages/ProtocolChecklist/EvaluatorSearch';
 import type { CodeOption } from '@/types/configuration';
 import type { AdministrationData } from '@/types/protocolChecklist';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -66,6 +67,7 @@ const computeTotalHours = (data: AdministrationData | null): string => {
 
 const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
+  const confirm = useConfirm();
   const [data, setData] = useState<AdministrationData | null>(null);
   const [accessCodes, setAccessCodes] = useState<CodeOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,6 +164,13 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
 
   const removeMember = async (evaluatorUserid?: string, revisionCount?: string) => {
     if (!evaluatorUserid) return;
+    if (
+      !(await confirm({
+        title: 'Remove team member?',
+        message: `Remove ${evaluatorUserid} from this checklist? This can't be undone.`,
+      }))
+    )
+      return;
     setBusy(true);
     try {
       const updated = await API.protocolChecklist.removeTeamMember(

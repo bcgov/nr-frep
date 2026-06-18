@@ -1,10 +1,12 @@
 import { Edit } from '@carbon/icons-react';
-import { Button } from '@carbon/react';
+import { Button, InlineNotification } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import { IndicatorCheckbox, TextAreaField, TextField } from '@/pages/ChrChecklist/fields';
 
 import type { CheckList } from '@/types/chrChecklist';
+
+import { useAuth } from '@/context/auth/useAuth';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -15,7 +17,10 @@ const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
 
 const yesNo = (v?: string) => (v === 'true' ? 'Yes' : 'No');
 
-type Draft = Pick<CheckList, 'evaluationDate' | 'firstNationName' | 'generalLocation' | 'targeted'>;
+type Draft = Pick<
+  CheckList,
+  'evaluationDate' | 'firstNationName' | 'generalLocation' | 'targeted' | 'assessedBy'
+>;
 
 /**
  * Section 1 — opening information. Read-only by default with an Edit / Save / Cancel toggle,
@@ -27,8 +32,18 @@ const OpeningInformation: FC<{
   readOnly: boolean;
   busy: boolean;
 }> = ({ value, onSave, readOnly, busy }) => {
+  const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
+
+  // "Assessed by" is read-only. It's set server-side to whoever first saves, and can be reassigned
+  // to the current user via "Assign it to me" (which only takes effect on save). Before the first
+  // save, default the display to the current user so it reflects who will be recorded.
+  const me = user?.providerUsername;
+  const assessedBy = value.assessedBy || me;
+  const editAssessedBy = draft.assessedBy || me;
+  const canAssignToMe = Boolean(me) && editAssessedBy !== me;
+  const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
   const beginEdit = () => {
     setDraft({
@@ -36,6 +51,7 @@ const OpeningInformation: FC<{
       firstNationName: value.firstNationName,
       generalLocation: value.generalLocation,
       targeted: value.targeted,
+      assessedBy: value.assessedBy,
     });
     setEditing(true);
   };
@@ -82,6 +98,16 @@ const OpeningInformation: FC<{
         <legend>Evaluation</legend>
         {editing ? (
           <>
+            {assignPending && (
+              <InlineNotification
+                kind="info"
+                lowContrast
+                hideCloseButton
+                title="Save required"
+                subtitle="You must save the form to update the Assessed By value."
+                className="chr-checklist__assessed-by__notice"
+              />
+            )}
             <div className="rip-form__grid">
               <TextField
                 id="chr-evaluation-date"
@@ -90,9 +116,24 @@ const OpeningInformation: FC<{
                 value={draft.evaluationDate}
                 onChange={(v) => setDraft((d) => ({ ...d, evaluationDate: v }))}
               />
+              <div className="protocol-checklist__field">
+                <span className="protocol-checklist__label">Assessed by</span>
+                <span className="protocol-checklist__value chr-checklist__assessed-by__row">
+                  <span>{editAssessedBy || '—'}</span>
+                  {canAssignToMe && (
+                    <button
+                      type="button"
+                      className="chr-checklist__assessed-by__assign"
+                      onClick={() => setDraft((d) => ({ ...d, assessedBy: me }))}
+                    >
+                      Assign it to me
+                    </button>
+                  )}
+                </span>
+              </div>
               <TextField
                 id="chr-first-nation"
-                labelText="First Nation place name"
+                labelText="First Nations' Place Name or Block Name"
                 value={draft.firstNationName}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
@@ -113,7 +154,11 @@ const OpeningInformation: FC<{
         ) : (
           <div className="rip-form__grid">
             <RoField label="Evaluation date" value={value.evaluationDate} />
-            <RoField label="First Nation place name" value={value.firstNationName} />
+            <RoField label="Assessed by" value={assessedBy} />
+            <RoField
+              label="First Nations' Place Name or Block Name"
+              value={value.firstNationName}
+            />
             <RoField label="Targeted site" value={yesNo(value.targeted)} />
             <RoField label="General location" value={value.generalLocation} />
           </div>

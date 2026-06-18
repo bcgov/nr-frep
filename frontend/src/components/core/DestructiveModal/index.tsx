@@ -107,7 +107,7 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
           {message}
         </p>
       </div>
-      <div className="add-contact-modal__actions">
+      <div className="add-contact-modal__actions destructive-modal__actions">
         <Button kind="secondary" size="md" onClick={onCancel} disabled={loading}>
           {cancelButtonText}
         </Button>

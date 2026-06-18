@@ -263,6 +263,24 @@
 }
 
 // Riparian inline form (FREP230) — grouped fieldsets with a responsive grid of controls.
+// Attachment thumbnail preview (image attachments) — matches the CHR photos thumbnail.
+.rip-attach__thumb {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border: 1px solid var(--cds-border-subtle, #e0e0e0);
+
+  &--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.75rem;
+    padding: 0.5rem;
+    color: var(--cds-text-secondary, #525252);
+  }
+}
+
 .rip-form__group {
   border: none;
   padding: 0;
@@ -280,6 +298,13 @@
   gap: 1rem 2rem;
   align-items: end;
   margin-bottom: 1rem;
+}
+
+// Survey question prompt shown above a grouped control (e.g. the CHR block rating).
+.rip-form__question {
+  @include type.type-style('body-compact-01');
+  margin: 0 0 1rem;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
 // Stacked free-text comment fields (FREP235).

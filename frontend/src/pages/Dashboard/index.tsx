@@ -1,10 +1,19 @@
-import { Document, ListChecked, Search, SettingsAdjust, TableSplit } from '@carbon/icons-react';
+import {
+  CloudOffline,
+  Document,
+  ListChecked,
+  Search,
+  SettingsAdjust,
+  TableSplit,
+} from '@carbon/icons-react';
 import { ClickableTile, Column, Grid } from '@carbon/react';
 import { useNavigate } from 'react-router-dom';
 
 import type { FC } from 'react';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useAuthorization } from '@/hooks/useAuthorization';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 import './dashboard.scss';
 
@@ -55,11 +64,26 @@ const SCREENS: ScreenTile[] = [
   },
 ];
 
+// Shown when offline / logged out — the only screen reachable without a network connection.
+const OFFLINE_SCREEN: ScreenTile = {
+  title: 'Offline Checklist',
+  description: 'Open the CHR checklists saved on this device for offline editing.',
+  to: '/chr/offline',
+  Icon: CloudOffline,
+};
+
 const DashboardPage: FC = () => {
   const navigate = useNavigate();
   const { isSysAdmin } = useAuthorization();
+  const { isLoggedIn } = useAuth();
+  const online = useOnlineStatus();
 
-  const visibleScreens = SCREENS.filter((s) => !s.sysAdminOnly || isSysAdmin);
+  // Offline (or logged out): the server-backed screens can't load, so only the device-local
+  // offline checklists are usable.
+  const offlineOnly = !online || !isLoggedIn;
+  const visibleScreens = offlineOnly
+    ? [OFFLINE_SCREEN]
+    : SCREENS.filter((s) => !s.sysAdminOnly || isSysAdmin);
 
   return (
     <Grid fullWidth className="default-grid dashboard-grid">

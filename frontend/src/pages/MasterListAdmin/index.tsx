@@ -25,6 +25,7 @@ import TableHeaderBar from '@/components/core/TableHeaderBar';
 import type { MasterListYear } from '@/types/configuration';
 import type { GenerateMasterListRequest, MasterListAdmin } from '@/types/masterListAdmin';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 
@@ -48,6 +49,7 @@ const evalStateTag = (ind: string): { type: 'gray' | 'teal' | 'red'; label: stri
 
 const MasterListAdminPage: FC = () => {
   const { display } = useNotification();
+  const confirm = useConfirm();
 
   const [years, setYears] = useState<MasterListYear[]>([]);
   const [effectiveYear, setEffectiveYear] = useState<string>('');
@@ -180,8 +182,14 @@ const MasterListAdminPage: FC = () => {
       'Comments saved',
     );
 
-  const handleDelete = () => {
-    if (!window.confirm(`Delete the generated master list for ${effectiveYear}?`)) return;
+  const handleDelete = async () => {
+    if (
+      !(await confirm({
+        title: 'Delete master list?',
+        message: `Delete the generated master list for ${effectiveYear}? This can't be undone.`,
+      }))
+    )
+      return;
     void runMutation(
       () => API.masterListAdmin.deleteMasterList(effectiveYear),
       'Master list deleted',
@@ -308,7 +316,7 @@ const MasterListAdminPage: FC = () => {
                 {hasList && (
                   <Button
                     kind="danger--tertiary"
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     disabled={generating || locked}
                   >
                     Delete list

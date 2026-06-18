@@ -1,110 +1,212 @@
-import { Add, TrashCan } from '@carbon/icons-react';
-import { Button } from '@carbon/react';
+import { Add, Edit, TrashCan } from '@carbon/icons-react';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@carbon/react';
+import { useState, type FC } from 'react';
 
 import { CodeSelect, IndicatorCheckbox, TextField } from '@/pages/ChrChecklist/fields';
 
 import type { Contact } from '@/types/chrChecklist';
-import type { FC } from 'react';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { CONTACT_ROLE_CODES } from '@/pages/ChrChecklist/codeLists';
 
-/** Section 2 — First Nation / proponent contacts (add/edit/remove rows). */
+const roleLabel = (code?: string) =>
+  CONTACT_ROLE_CODES.find((r) => r.code === code)?.label ?? code ?? '';
+const fullName = (c: Contact) => `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+
+/** A contact form session: editing an existing row (index ≥ 0) or adding a new one (index null). */
+type FormState = { index: number | null; draft: Contact };
+
+/**
+ * Section 2 — First Nation / proponent contacts. Master-detail: a table of contacts with per-row
+ * Edit / Delete and an "Add contact" button (mirroring the Biodiversity Stratum tab). Editing or
+ * adding opens a detail form; Save commits the whole list, Cancel discards the form. Delete removes
+ * the row and persists immediately.
+ */
 const Contacts: FC<{
   contacts: Contact[];
-  onChange: (contacts: Contact[]) => void;
-  onSave: () => Promise<boolean>;
+  onSave: (contacts: Contact[]) => Promise<boolean>;
   readOnly: boolean;
   busy: boolean;
-}> = ({ contacts, onChange, onSave, readOnly, busy }) => {
-  const patchAt = (index: number, patch: Partial<Contact>) => {
-    onChange(contacts.map((c, i) => (i === index ? { ...c, ...patch } : c)));
-  };
-  const removeAt = (index: number) => onChange(contacts.filter((_, i) => i !== index));
-  const add = () => onChange([...contacts, { contactedInd: 'false', attendingOnSiteInd: 'false' }]);
+}> = ({ contacts, onSave, readOnly, busy }) => {
+  const confirm = useConfirm();
+  const [form, setForm] = useState<FormState | null>(null);
 
-  return (
-    <div className="rip-form">
-      {!readOnly && (
+  const openAdd = () =>
+    setForm({ index: null, draft: { contactedInd: 'false', attendingOnSiteInd: 'false' } });
+  const openEdit = (index: number) => setForm({ index, draft: { ...contacts[index] } });
+  const setField = (patch: Partial<Contact>) =>
+    setForm((f) => (f ? { ...f, draft: { ...f.draft, ...patch } } : f));
+
+  const save = async () => {
+    if (!form) return;
+    const next =
+      form.index === null
+        ? [...contacts, form.draft]
+        : contacts.map((c, i) => (i === form.index ? form.draft : c));
+    if (await onSave(next)) setForm(null);
+  };
+  const remove = async (index: number) => {
+    const name = fullName(contacts[index]) || 'this contact';
+    if (
+      !(await confirm({
+        title: 'Delete contact?',
+        message: `Delete ${name}? This can't be undone.`,
+      }))
+    )
+      return;
+    await onSave(contacts.filter((_, i) => i !== index));
+  };
+
+  // Detail form (add / edit a single contact).
+  if (form) {
+    const { draft } = form;
+    return (
+      <div className="rip-form">
         <div className="protocol-checklist__section-actions">
-          <Button size="lg" disabled={busy} onClick={() => void onSave()}>
-            Save
-          </Button>
-        </div>
-      )}
-      {contacts.length === 0 && <p>No contacts recorded.</p>}
-      {contacts.map((contact, index) => (
-        <fieldset key={contact.id ?? `contact-${index}`} className="rip-form__group">
-          <legend>Contact {index + 1}</legend>
-          <div className="rip-form__grid">
-            <TextField
-              id={`contact-first-${index}`}
-              labelText="First name"
-              value={contact.firstName}
-              disabled={readOnly}
-              onChange={(v) => patchAt(index, { firstName: v })}
-            />
-            <TextField
-              id={`contact-last-${index}`}
-              labelText="Last name"
-              value={contact.lastName}
-              disabled={readOnly}
-              onChange={(v) => patchAt(index, { lastName: v })}
-            />
-            <CodeSelect
-              id={`contact-role-${index}`}
-              labelText="Role"
-              value={contact.roleCode}
-              options={CONTACT_ROLE_CODES}
-              disabled={readOnly}
-              onChange={(v) => patchAt(index, { roleCode: v })}
-            />
-            <TextField
-              id={`contact-org-${index}`}
-              labelText="Organization"
-              value={contact.organization}
-              disabled={readOnly}
-              onChange={(v) => patchAt(index, { organization: v })}
-            />
-            <TextField
-              id={`contact-date-${index}`}
-              labelText="Contacted date"
-              placeholder="YYYY-MM-DD"
-              value={contact.contactedDate}
-              disabled={readOnly}
-              onChange={(v) => patchAt(index, { contactedDate: v })}
-            />
-            <IndicatorCheckbox
-              id={`contact-contacted-${index}`}
-              labelText="Contacted"
-              value={contact.contactedInd}
-              disabled={readOnly}
-              onToggle={(v) => patchAt(index, { contactedInd: v })}
-            />
-            <IndicatorCheckbox
-              id={`contact-attending-${index}`}
-              labelText="Attending on site"
-              value={contact.attendingOnSiteInd}
-              disabled={readOnly}
-              onToggle={(v) => patchAt(index, { attendingOnSiteInd: v })}
-            />
-          </div>
           {!readOnly && (
-            <Button
-              kind="danger--ghost"
-              size="sm"
-              renderIcon={TrashCan}
-              onClick={() => removeAt(index)}
-            >
-              Remove contact
+            <Button size="lg" disabled={busy} onClick={() => void save()}>
+              Save
             </Button>
           )}
+          <Button kind="ghost" size="lg" disabled={busy} onClick={() => setForm(null)}>
+            Cancel
+          </Button>
+        </div>
+        <fieldset className="rip-form__group">
+          <legend>{form.index === null ? 'New contact' : 'Edit contact'}</legend>
+          <div className="rip-form__grid">
+            <TextField
+              id="contact-first"
+              labelText="First name"
+              value={draft.firstName}
+              disabled={readOnly}
+              onChange={(v) => setField({ firstName: v })}
+            />
+            <TextField
+              id="contact-last"
+              labelText="Last name"
+              value={draft.lastName}
+              disabled={readOnly}
+              onChange={(v) => setField({ lastName: v })}
+            />
+            <CodeSelect
+              id="contact-role"
+              labelText="Role"
+              value={draft.roleCode}
+              options={CONTACT_ROLE_CODES}
+              disabled={readOnly}
+              onChange={(v) => setField({ roleCode: v })}
+            />
+            <TextField
+              id="contact-org"
+              labelText="Organization"
+              value={draft.organization}
+              disabled={readOnly}
+              onChange={(v) => setField({ organization: v })}
+            />
+            <IndicatorCheckbox
+              id="contact-contacted"
+              labelText="Contacted"
+              value={draft.contactedInd}
+              disabled={readOnly}
+              onToggle={(v) => setField({ contactedInd: v })}
+            />
+            {/* Contacted date shows only once the contact has been contacted (legacy parity). */}
+            {draft.contactedInd === 'true' && (
+              <TextField
+                id="contact-date"
+                labelText="Contacted date"
+                placeholder="YYYY-MM-DD"
+                value={draft.contactedDate}
+                disabled={readOnly}
+                onChange={(v) => setField({ contactedDate: v })}
+              />
+            )}
+            <IndicatorCheckbox
+              id="contact-attending"
+              labelText="Attending on site"
+              value={draft.attendingOnSiteInd}
+              disabled={readOnly}
+              onToggle={(v) => setField({ attendingOnSiteInd: v })}
+            />
+          </div>
         </fieldset>
-      ))}
-      {!readOnly && (
-        <Button kind="tertiary" size="lg" renderIcon={Add} onClick={add}>
-          Add contact
-        </Button>
-      )}
+      </div>
+    );
+  }
+
+  // List view: a table of contacts with per-row Edit / Delete + an "Add contact" toolbar button.
+  return (
+    <div className="rip-form">
+      <div className="bio-strata">
+        {!readOnly && (
+          <div className="bio-strata__toolbar">
+            <Button
+              kind="tertiary"
+              size="lg"
+              className="bio-strata__add"
+              disabled={busy}
+              onClick={openAdd}
+            >
+              <Add size={16} className="bio-strata__add-icon" />
+              Add contact
+            </Button>
+          </div>
+        )}
+        {contacts.length === 0 ? (
+          <p>No contacts recorded.</p>
+        ) : (
+          <Table size="sm" className="bio-strata__table">
+            <TableHead>
+              <TableRow>
+                <TableHeader>Name</TableHeader>
+                <TableHeader>Role</TableHeader>
+                <TableHeader>Organization</TableHeader>
+                <TableHeader>Actions</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {contacts.map((contact, index) => (
+                <TableRow key={contact.id ?? `contact-${index}`}>
+                  <TableCell>{fullName(contact) || '—'}</TableCell>
+                  <TableCell>{roleLabel(contact.roleCode) || '—'}</TableCell>
+                  <TableCell>{contact.organization || '—'}</TableCell>
+                  <TableCell>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      renderIcon={Edit}
+                      iconDescription="Edit"
+                      hasIconOnly
+                      disabled={busy}
+                      onClick={() => openEdit(index)}
+                    />
+                    {!readOnly && (
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        renderIcon={TrashCan}
+                        iconDescription="Delete"
+                        hasIconOnly
+                        disabled={busy}
+                        onClick={() => void remove(index)}
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
   );
 };

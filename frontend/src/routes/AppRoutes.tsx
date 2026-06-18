@@ -2,10 +2,17 @@ import { Loading } from '@carbon/react';
 import { Suspense, useEffect, useMemo, type FC } from 'react';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
+import {
+  getNoRoleRoutes,
+  getOfflineRoutes,
+  getProtectedRoutes,
+  getPublicRoutes,
+} from '@/routes/routePaths';
+
 import { useAuth } from '@/context/auth/useAuth';
 import { usePageTitle } from '@/context/pageTitle/usePageTitle';
 import { env } from '@/env';
-import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/routePaths';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 /**
  * Top-level router. Switches between three route sets based on auth state:
@@ -16,16 +23,19 @@ import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/r
 const AppRoutes: FC = () => {
   const { isLoggedIn, isLoading, user } = useAuth();
   const { setPageTitle } = usePageTitle();
+  const online = useOnlineStatus();
 
   const displayLoading = () => <Loading data-testid="loading" withOverlay={true} />;
 
   const hasAnyRole = (user?.roles?.length ?? 0) > 0;
 
   const routesToUse = useMemo(() => {
-    if (!isLoggedIn) return getPublicRoutes();
+    // Offline + not logged in: IDIR login can't run, so serve the offline route set (FREP Dashboard
+    // landing + device-local CHR checklists) instead of the public marketing Landing.
+    if (!isLoggedIn) return online ? getPublicRoutes() : getOfflineRoutes();
     if (!hasAnyRole) return getNoRoleRoutes();
     return getProtectedRoutes();
-  }, [isLoggedIn, hasAnyRole]);
+  }, [isLoggedIn, hasAnyRole, online]);
 
   const basename = env.VITE_BASE_PATH || '/';
   const browserRouter = useMemo(

@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import '@/styles/index.scss';
 import App from '@/App.tsx';
 import { AuthProvider } from '@/context/auth/AuthProvider';
+import { ConfirmProvider } from '@/context/confirm/ConfirmProvider';
 import NotificationProvider from '@/context/notification/NotificationProvider';
 import PageTitleProvider from '@/context/pageTitle/PageTitleProvider';
 import { PreferenceProvider } from '@/context/preference/PreferenceProvider.tsx';
@@ -37,9 +38,11 @@ createRoot(document.getElementById('root')!).render(
         <PreferenceProvider>
           <ThemeProvider>
             <NotificationProvider>
-              <PageTitleProvider>
-                <App />
-              </PageTitleProvider>
+              <ConfirmProvider>
+                <PageTitleProvider>
+                  <App />
+                </PageTitleProvider>
+              </ConfirmProvider>
             </NotificationProvider>
           </ThemeProvider>
         </PreferenceProvider>

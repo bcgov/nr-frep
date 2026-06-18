@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
+import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -129,6 +131,12 @@ public class ChrObjectStorageService {
         .region(Region.US_EAST_1)
         .endpointOverride(URI.create(properties.host()))
         .forcePathStyle(true)
+        // AWS SDK 2.30+ defaults to adding flexible (CRC32) checksums and aws-chunked
+        // trailers on every request. The BC Gov NRS object store (S3-compatible gateway)
+        // rejects these with a "Content-SHA256 did not match" 400, so only send/validate
+        // checksums when the operation explicitly requires them.
+        .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+        .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
         .credentialsProvider(StaticCredentialsProvider.create(
             AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
         ))

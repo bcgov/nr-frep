@@ -266,6 +266,18 @@ const ProtocolChecklistPage: FC = () => {
             </Tile>
           </Column>
 
+          {submitted && (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind="info"
+                title="Read only"
+                subtitle="This checklist has been submitted and is read-only. Unsubmit it to make changes."
+                hideCloseButton
+                lowContrast
+              />
+            </Column>
+          )}
+
           {canEdit && (
             <Column sm={4} md={8} lg={16}>
               <div className="protocol-checklist__actions">

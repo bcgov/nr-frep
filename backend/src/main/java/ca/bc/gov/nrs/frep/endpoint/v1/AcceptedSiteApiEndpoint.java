@@ -1,12 +1,10 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.struct.v1.frep.MapViewResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -28,7 +26,4 @@ public interface AcceptedSiteApiEndpoint {
 
   @GetMapping("/accepted-sites/print")
   ResponseEntity<NotImplementedResponse> printAcceptedSites();
-
-  @GetMapping("/openings/{openingId}/map-view")
-  ResponseEntity<MapViewResponse> getOpeningMapView(@PathVariable String openingId);
 }

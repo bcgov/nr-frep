@@ -1,13 +1,16 @@
 package ca.bc.gov.nrs.frep.service.v1;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
@@ -125,5 +128,74 @@ class ChrChecklistPersistenceServiceTest {
     assertTrue(persisted.stream().anyMatch(o -> o instanceof ChrFeatureTypeXref type
             && "BURIALSITE".equals(type.getId().getChrFeatureTypeCode())),
         "checked type BURIALSITE should create a type xref");
+  }
+
+  /**
+   * Regression for the composite-removal ORA-02292: when a composite feature is removed, every member
+   * feature that grouped under it (self-FK {@code COMPOSITE_CHR_FEATURE_ID}) must have that reference
+   * nulled before the composite row is deleted, otherwise the parent delete hits the FK.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void removingCompositeDetachesMemberBackReferencesBeforeDelete() {
+    // Existing composite feature — absent from the payload below, so it gets deleted.
+    ChrFeatureIdentity composite = new ChrFeatureIdentity();
+    composite.setChrFeatureId(7000L);
+    // Member feature grouped under the composite via the self-FK.
+    ChrFeatureIdentity member = new ChrFeatureIdentity();
+    member.setChrFeatureId(8000L);
+    member.setCompositeChrFeatureIdentity(7000L);
+
+    // existing-identities sweep -> [composite]; detach query -> [member].
+    stubFeatureIdentityQuery("fi.chrChecklist.chrChecklistId", List.of(composite));
+    stubFeatureIdentityQuery("fi.compositeChrFeatureIdentity", List.of(member));
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>()); // composite removed, nothing re-added
+
+    service.saveChecklist(resource, "IDIR\\tester");
+
+    assertNull(member.getCompositeChrFeatureIdentity(),
+        "member COMPOSITE_CHR_FEATURE_ID must be cleared before the composite is deleted (FK safety)");
+    verify(entityManager).remove(composite);
+  }
+
+  /**
+   * Regression for the "uncombine doesn't detach" gap: saving a feature with no composite must clear
+   * its {@code COMPOSITE_CHR_FEATURE_ID} (the legacy port only ever *set* it, leaving a stale link).
+   */
+  @Test
+  void savingFeatureWithoutCompositeClearsTheCompositeLink() {
+    Feature feature = new Feature();
+    feature.setFeatureLabel("1");
+    feature.setCompositeFeatureInd("false"); // no composite — link must end up null
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>(List.of(feature)));
+
+    service.saveChecklist(resource, "IDIR\\tester");
+
+    ChrFeatureIdentity persistedIdentity = persisted.stream()
+        .filter(ChrFeatureIdentity.class::isInstance)
+        .map(ChrFeatureIdentity.class::cast)
+        .findFirst()
+        .orElseThrow();
+    assertNull(persistedIdentity.getCompositeChrFeatureIdentity(),
+        "feature with no composite should persist a null composite link");
+  }
+
+  /** Stubs the {@code ChrFeatureIdentity} typed query whose JPQL contains the given fragment. */
+  @SuppressWarnings("unchecked")
+  private void stubFeatureIdentityQuery(String jpqlFragment, List<ChrFeatureIdentity> result) {
+    TypedQuery<ChrFeatureIdentity> q = mock(TypedQuery.class);
+    when(entityManager.createQuery(contains(jpqlFragment), eq(ChrFeatureIdentity.class))).thenReturn(q);
+    lenient().when(q.setParameter(anyString(), any())).thenReturn(q);
+    when(q.getResultList()).thenReturn(result);
   }
 }

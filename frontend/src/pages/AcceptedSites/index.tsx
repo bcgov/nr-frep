@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import TableHeaderBar from '@/components/core/TableHeaderBar';
+import OpeningMapModal from '@/components/OpeningMapModal';
 
 import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
@@ -26,7 +27,6 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { runTodoFeature } from '@/utils/featureTodo';
-import { openOpeningMapView } from '@/utils/openMapView';
 
 import './acceptedSites.scss';
 
@@ -91,6 +91,9 @@ const AcceptedSitesPage: FC = () => {
   const [effectiveYear, setEffectiveYear] = useState<string>('');
   const [orgUnit, setOrgUnit] = useState<string>('');
   const [protocolType, setProtocolType] = useState<string>(ALL_PROTOCOLS_VALUE);
+
+  // Opening whose polygon map is shown in the modal (null = closed).
+  const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
 
   const [sites, setSites] = useState<AcceptedSite[]>([]);
   const [loading, setLoading] = useState(false);
@@ -322,9 +325,7 @@ const AcceptedSitesPage: FC = () => {
                                     tooltipPosition="left"
                                     className="accepted-sites__map-btn"
                                     disabled={!cell.value}
-                                    onClick={() =>
-                                      void openOpeningMapView(String(cell.value), display)
-                                    }
+                                    onClick={() => setMapOpeningId(String(cell.value))}
                                   />
                                 </TableCell>
                               );
@@ -341,6 +342,7 @@ const AcceptedSitesPage: FC = () => {
           </DataTable>
         )}
       </Column>
+      <OpeningMapModal openingId={mapOpeningId} onClose={() => setMapOpeningId(null)} />
     </Grid>
   );
 };

@@ -1,0 +1,9 @@
+.opening-map {
+  border-radius: 4px;
+  // Keep Leaflet panes/controls below Carbon modal overlays.
+  z-index: 0;
+
+  .leaflet-control-attribution {
+    font-size: 0.625rem;
+  }
+}

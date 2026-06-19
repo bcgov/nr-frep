@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import TableHeaderBar from '@/components/core/TableHeaderBar';
+import OpeningMapModal from '@/components/OpeningMapModal';
 
 import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
@@ -28,7 +29,6 @@ import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
-import { openOpeningMapView } from '@/utils/openMapView';
 
 import './randomList.scss';
 
@@ -93,6 +93,9 @@ const RandomListPage: FC = () => {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Opening whose polygon map is shown in the modal (null = closed).
+  const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -337,9 +340,7 @@ const RandomListPage: FC = () => {
                                     tooltipPosition="left"
                                     className="random-list__map-btn"
                                     disabled={!cell.value}
-                                    onClick={() =>
-                                      void openOpeningMapView(String(cell.value), display)
-                                    }
+                                    onClick={() => setMapOpeningId(String(cell.value))}
                                   />
                                 </TableCell>
                               );
@@ -367,6 +368,7 @@ const RandomListPage: FC = () => {
           </DataTable>
         )}
       </Column>
+      <OpeningMapModal openingId={mapOpeningId} onClose={() => setMapOpeningId(null)} />
     </Grid>
   );
 };

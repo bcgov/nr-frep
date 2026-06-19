@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.MapViewResponse;
 import ca.bc.gov.nrs.frep.service.frep.AcceptedSiteService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,9 +67,12 @@ class AcceptedSiteControllerTest {
   }
 
   @Test
-  void openingMapViewIsNotYetImplemented() throws Exception {
+  void openingMapViewReturnsComposedUrl() throws Exception {
+    when(acceptedSiteService.buildOpeningMapView(eq("987654")))
+        .thenReturn(new MapViewResponse("https://viewer?a=1&extent=1,2,3,4"));
+
     mockMvc.perform(get("/api/v1/openings/987654/map-view"))
-        .andExpect(status().isNotImplemented())
-        .andExpect(jsonPath("$.feature").value("map-view"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.url").value("https://viewer?a=1&extent=1,2,3,4"));
   }
 }

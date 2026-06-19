@@ -9,10 +9,10 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.nrs.frep.repository.v1.frep.RandomListRepository;
-import ca.bc.gov.nrs.frep.repository.v1.frep.RandomListResult;
-import ca.bc.gov.nrs.frep.repository.v1.frep.RandomListRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.RandomListSummary;
+import ca.bc.gov.nrs.frep.repository.v1.RandomListRepository;
+import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListResult;
+import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListRow;
+import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListSummary;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

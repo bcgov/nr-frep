@@ -2,10 +2,10 @@ package ca.bc.gov.nrs.frep.service.v1.frep;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MapViewResponse;
-import ca.bc.gov.nrs.frep.repository.v1.frep.AcceptedSiteRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.AcceptedSitesRepository;
-import ca.bc.gov.nrs.frep.repository.v1.frep.CodeListRepository;
-import ca.bc.gov.nrs.frep.repository.v1.frep.MapExtent;
+import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
+import ca.bc.gov.nrs.frep.repository.v1.AcceptedSitesRepository;
+import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.v1.bean.MapExtent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

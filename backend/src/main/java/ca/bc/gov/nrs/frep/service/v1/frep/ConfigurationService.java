@@ -1,6 +1,6 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
-import ca.bc.gov.nrs.frep.repository.v1.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BecRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListYearResponse;

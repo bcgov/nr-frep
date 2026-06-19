@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.service.v1.report;
 
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
-import ca.bc.gov.nrs.frep.repository.v1.frep.AbstractFrepRepository;
+import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;

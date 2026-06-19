@@ -2,7 +2,7 @@ package ca.bc.gov.nrs.frep.service.v1.chr;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.exception.ChrRestException;
-import ca.bc.gov.nrs.frep.repository.v1.chr.ChrChecklistPersistenceService;
+import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
@@ -17,7 +17,7 @@ import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
 import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
-import ca.bc.gov.nrs.frep.repository.v1.chr.ChrChecklistRepository;
+import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.Base64;
 import java.util.List;

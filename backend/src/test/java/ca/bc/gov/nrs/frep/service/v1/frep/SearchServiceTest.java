@@ -8,11 +8,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.nrs.frep.repository.v1.frep.ChecklistSearchCriteria;
-import ca.bc.gov.nrs.frep.repository.v1.frep.ChecklistSearchRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.ClientSearchCriteria;
-import ca.bc.gov.nrs.frep.repository.v1.frep.ClientSearchRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.SearchRepository;
+import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchCriteria;
+import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchRow;
+import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchCriteria;
+import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchRow;
+import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;

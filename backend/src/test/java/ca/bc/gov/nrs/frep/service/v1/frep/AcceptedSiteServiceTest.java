@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.nrs.frep.repository.v1.frep.AcceptedSiteRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.AcceptedSitesRepository;
-import ca.bc.gov.nrs.frep.repository.v1.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
+import ca.bc.gov.nrs.frep.repository.v1.AcceptedSitesRepository;
+import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

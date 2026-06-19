@@ -9,9 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
-import ca.bc.gov.nrs.frep.repository.v1.frep.MasterListCriteriaData;
-import ca.bc.gov.nrs.frep.repository.v1.frep.MasterListGenerationRow;
-import ca.bc.gov.nrs.frep.repository.v1.frep.MasterListRepository;
+import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListCriteriaData;
+import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
+import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.List;
 import org.junit.jupiter.api.Test;

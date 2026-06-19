@@ -1,12 +1,12 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.BecRow;
-import ca.bc.gov.nrs.frep.dto.frep.CodeOptionResponse;
-import ca.bc.gov.nrs.frep.dto.frep.EvaluatorSearchResponse;
-import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
-import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
-import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
-import ca.bc.gov.nrs.frep.dto.frep.RejectionReasonResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BecRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CodeOptionResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorSearchResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListYearResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OrgUnitResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.RejectionReasonResponse;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

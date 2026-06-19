@@ -1,6 +1,6 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

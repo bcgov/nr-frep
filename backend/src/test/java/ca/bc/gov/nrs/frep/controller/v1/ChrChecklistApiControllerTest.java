@@ -8,8 +8,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.frep.CheckList;
-import ca.bc.gov.nrs.frep.service.chr.ChrChecklistService;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

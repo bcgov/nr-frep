@@ -5,9 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.frep.SiteDetailResponse;
-import ca.bc.gov.nrs.frep.dto.frep.SiteResourceResponse;
-import ca.bc.gov.nrs.frep.service.frep.SiteDetailService;
+import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceResponse;
+import ca.bc.gov.nrs.frep.service.v1.frep.SiteDetailService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;

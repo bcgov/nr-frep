@@ -8,10 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.report.ReportFormat;
-import ca.bc.gov.nrs.frep.service.report.CSVReportService;
-import ca.bc.gov.nrs.frep.service.report.ReportResult;
-import ca.bc.gov.nrs.frep.service.report.ReportService;
+import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
+import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
+import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
+import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

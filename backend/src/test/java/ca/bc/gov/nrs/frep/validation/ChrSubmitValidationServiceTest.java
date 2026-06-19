@@ -4,10 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import ca.bc.gov.nrs.frep.dto.frep.CheckList;
-import ca.bc.gov.nrs.frep.dto.frep.Feature;
-import ca.bc.gov.nrs.frep.dto.frep.OtherPlannedManagementStrategy;
-import ca.bc.gov.nrs.frep.dto.frep.ValidationError;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ValidationError;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

@@ -1,8 +1,8 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.RandomListResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.RandomListResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.RandomListApiEndpoint;
-import ca.bc.gov.nrs.frep.service.frep.RandomListService;
+import ca.bc.gov.nrs.frep.service.v1.frep.RandomListService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;

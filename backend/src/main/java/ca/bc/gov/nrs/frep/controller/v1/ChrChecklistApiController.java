@@ -1,9 +1,9 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.endpoint.v1.ChrChecklistApiEndpoint;
-import ca.bc.gov.nrs.frep.service.chr.ChrChecklistService;
-import ca.bc.gov.nrs.frep.service.chr.ChrChecklistService.ChrSubmitValidationException;
+import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService;
+import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService.ChrSubmitValidationException;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;

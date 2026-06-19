@@ -1,9 +1,9 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.SiteDetailResponse;
-import ca.bc.gov.nrs.frep.dto.frep.SiteResourceSaveRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
 import ca.bc.gov.nrs.frep.endpoint.v1.SiteDetailApiEndpoint;
-import ca.bc.gov.nrs.frep.service.frep.SiteDetailService;
+import ca.bc.gov.nrs.frep.service.v1.frep.SiteDetailService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;

@@ -1,10 +1,10 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.dto.frep.MapViewResponse;
-import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MapViewResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.AcceptedSiteApiEndpoint;
-import ca.bc.gov.nrs.frep.service.frep.AcceptedSiteService;
+import ca.bc.gov.nrs.frep.service.v1.frep.AcceptedSiteService;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;

@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.GenerateMasterListRequest;
-import ca.bc.gov.nrs.frep.dto.frep.MasterListAdminResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListAdminResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

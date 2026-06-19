@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.exception;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
-import ca.bc.gov.nrs.frep.dto.frep.Error;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Error;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

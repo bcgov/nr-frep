@@ -1,7 +1,7 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.ChecklistSearchResult;
-import ca.bc.gov.nrs.frep.dto.frep.ClientSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ClientSearchResult;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

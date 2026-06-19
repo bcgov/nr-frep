@@ -1,8 +1,8 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.dto.frep.MapViewResponse;
-import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MapViewResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

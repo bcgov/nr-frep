@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
-import ca.bc.gov.nrs.frep.dto.frep.AcceptedSite;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 
 public final class AcceptedSiteListMapper extends FrepMapper{

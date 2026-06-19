@@ -1,9 +1,9 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.frep.GenerateMasterListRequest;
-import ca.bc.gov.nrs.frep.dto.frep.MasterListAdminResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListAdminResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.MasterListAdminApiEndpoint;
-import ca.bc.gov.nrs.frep.service.frep.MasterListAdminService;
+import ca.bc.gov.nrs.frep.service.v1.frep.MasterListAdminService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;

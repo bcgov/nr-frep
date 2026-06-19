@@ -5,14 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.nrs.frep.dto.frep.MasterListYearResponse;
-import ca.bc.gov.nrs.frep.dto.frep.OrgUnitResponse;
-import ca.bc.gov.nrs.frep.dto.frep.ProtocolResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListYearResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OrgUnitResponse;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolResponse;
 
 import java.util.List;
 
-import ca.bc.gov.nrs.frep.service.frep.ConfigurationService;
-import ca.bc.gov.nrs.frep.service.frep.FamUserDirectoryService;
+import ca.bc.gov.nrs.frep.service.v1.frep.ConfigurationService;
+import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

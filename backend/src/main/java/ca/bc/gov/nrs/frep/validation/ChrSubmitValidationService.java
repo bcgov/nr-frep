@@ -1,10 +1,10 @@
 package ca.bc.gov.nrs.frep.validation;
 
-import ca.bc.gov.nrs.frep.dto.frep.CheckList;
-import ca.bc.gov.nrs.frep.dto.frep.Feature;
-import ca.bc.gov.nrs.frep.dto.frep.OtherPlannedManagementStrategy;
-import ca.bc.gov.nrs.frep.dto.frep.Picture;
-import ca.bc.gov.nrs.frep.dto.frep.ValidationError;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ValidationError;
 import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import java.util.ArrayList;
 import java.util.List;

@@ -1,11 +1,11 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.dto.report.ReportRequest;
+import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import ca.bc.gov.nrs.frep.exception.ReportGenerationException;
 import ca.bc.gov.nrs.frep.exception.ReportNotFoundException;
-import ca.bc.gov.nrs.frep.service.report.CSVReportService;
-import ca.bc.gov.nrs.frep.service.report.ReportResult;
-import ca.bc.gov.nrs.frep.service.report.ReportService;
+import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
+import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
+import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.ContentDisposition;

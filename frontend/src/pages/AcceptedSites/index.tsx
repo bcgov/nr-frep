@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import TableHeaderBar from '@/components/core/TableHeaderBar';
+import OpeningMapModal from '@/components/OpeningMapModal';
 
 import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
@@ -26,7 +27,6 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { runTodoFeature } from '@/utils/featureTodo';
-import { openOpeningMapView } from '@/utils/openMapView';
 
 import './acceptedSites.scss';
 
@@ -91,6 +91,9 @@ const AcceptedSitesPage: FC = () => {
   const [effectiveYear, setEffectiveYear] = useState<string>('');
   const [orgUnit, setOrgUnit] = useState<string>('');
   const [protocolType, setProtocolType] = useState<string>(ALL_PROTOCOLS_VALUE);
+
+  // Opening whose polygon map is shown in the modal (null = closed).
+  const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
 
   const [sites, setSites] = useState<AcceptedSite[]>([]);
   const [loading, setLoading] = useState(false);
@@ -168,6 +171,41 @@ const AcceptedSitesPage: FC = () => {
   }, [loadAcceptedSites]);
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
+
+  // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
+  // (DataTable render-prop → rows.map → cells.map → onClick). First cell links to the checklist;
+  // the map cell opens the in-app opening map.
+  const renderCell = (
+    cell: { id: string; value: string; info: { header: string } },
+    idx: number,
+    checklistLink: string | undefined,
+  ) => {
+    if (idx === 0 && checklistLink) {
+      return (
+        <TableCell key={cell.id}>
+          <RouterLink to={checklistLink}>{cell.value}</RouterLink>
+        </TableCell>
+      );
+    }
+    if (cell.info.header === 'mapView') {
+      return (
+        <TableCell key={cell.id} className="accepted-sites__map-cell">
+          <Button
+            kind="ghost"
+            size="sm"
+            hasIconOnly
+            renderIcon={MapIcon}
+            iconDescription="Site Map"
+            tooltipPosition="left"
+            className="accepted-sites__map-btn"
+            disabled={!cell.value}
+            onClick={() => setMapOpeningId(String(cell.value))}
+          />
+        </TableCell>
+      );
+    }
+    return <TableCell key={cell.id}>{cell.value}</TableCell>;
+  };
 
   return (
     <Grid fullWidth className="default-grid accepted-sites-grid">
@@ -302,35 +340,7 @@ const AcceptedSitesPage: FC = () => {
                           key={row.id}
                           className={isSubmitted ? 'accepted-sites__row--submitted' : undefined}
                         >
-                          {row.cells.map((cell, idx) => {
-                            if (idx === 0 && checklistLink) {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <RouterLink to={checklistLink}>{cell.value}</RouterLink>
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'mapView') {
-                              return (
-                                <TableCell key={cell.id} className="accepted-sites__map-cell">
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    hasIconOnly
-                                    renderIcon={MapIcon}
-                                    iconDescription="Site Map"
-                                    tooltipPosition="left"
-                                    className="accepted-sites__map-btn"
-                                    disabled={!cell.value}
-                                    onClick={() =>
-                                      void openOpeningMapView(String(cell.value), display)
-                                    }
-                                  />
-                                </TableCell>
-                              );
-                            }
-                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                          })}
+                          {row.cells.map((cell, idx) => renderCell(cell, idx, checklistLink))}
                         </TableRow>
                       );
                     })}
@@ -341,6 +351,7 @@ const AcceptedSitesPage: FC = () => {
           </DataTable>
         )}
       </Column>
+      <OpeningMapModal openingId={mapOpeningId} onClose={() => setMapOpeningId(null)} />
     </Grid>
   );
 };

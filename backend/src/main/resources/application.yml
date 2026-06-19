@@ -69,6 +69,12 @@ info:
     version: ${APP_VERSION:0.0.1-SNAPSHOT}
     zone: ${APP_ZONE:local}
 
+frep:
+  # BC Gov DataBC public WFS, proxied for the in-app Leaflet map (opening polygon GeoJSON by
+  # OPENING_ID). Public endpoint — overridable per environment but the default is production-correct.
+  open-maps:
+    url: ${OPENMAPS_URL:https://openmaps.gov.bc.ca/geo/ows}
+
 resilience4j:
   circuitbreaker:
     instances:

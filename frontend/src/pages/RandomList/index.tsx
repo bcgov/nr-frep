@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import TableHeaderBar from '@/components/core/TableHeaderBar';
+import OpeningMapModal from '@/components/OpeningMapModal';
 
 import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
@@ -28,7 +29,6 @@ import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
-import { openOpeningMapView } from '@/utils/openMapView';
 
 import './randomList.scss';
 
@@ -93,6 +93,9 @@ const RandomListPage: FC = () => {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Opening whose polygon map is shown in the modal (null = closed).
+  const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +189,57 @@ const RandomListPage: FC = () => {
     () => tableRows.slice((page - 1) * pageSize, page * pageSize),
     [tableRows, page, pageSize],
   );
+
+  // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
+  // (DataTable render-prop → rows.map → cells.map → onClick). Opening links to site-detail, the
+  // review flag renders a tag, and the map cell opens the in-app opening map.
+  // TODO(frep-external-links): legacy linked Opening ID to the external openings viewer (ECAS) and
+  // Licence to FTA; those corporate integrations aren't wired yet, so they render as plain text.
+  const renderCell = (
+    cell: { id: string; value: string; info: { header: string } },
+    meta: { id: string } | undefined,
+  ) => {
+    if (cell.info.header === 'openingNumber' && meta) {
+      return (
+        <TableCell key={cell.id}>
+          <RouterLink to={`/site-detail/${meta.id}`}>{cell.value}</RouterLink>
+        </TableCell>
+      );
+    }
+    if (cell.info.header === 'underReview') {
+      return (
+        <TableCell key={cell.id}>
+          {cell.value ? (
+            <Tag type="green" size="sm">
+              In review
+            </Tag>
+          ) : (
+            <Tag type="gray" size="sm">
+              Pending
+            </Tag>
+          )}
+        </TableCell>
+      );
+    }
+    if (cell.info.header === 'mapView') {
+      return (
+        <TableCell key={cell.id} className="random-list__map-cell">
+          <Button
+            kind="ghost"
+            size="sm"
+            hasIconOnly
+            renderIcon={MapIcon}
+            iconDescription="Site Map"
+            tooltipPosition="left"
+            className="random-list__map-btn"
+            disabled={!cell.value}
+            onClick={() => setMapOpeningId(String(cell.value))}
+          />
+        </TableCell>
+      );
+    }
+    return <TableCell key={cell.id}>{cell.value}</TableCell>;
+  };
 
   return (
     <Grid fullWidth className="default-grid random-list-grid">
@@ -293,59 +347,7 @@ const RandomListPage: FC = () => {
                       const meta = tableRows.find((item) => item.id === row.id);
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
-                          {row.cells.map((cell) => {
-                            // The Opening value links to the internal FREP site-detail page.
-                            // TODO(frep-external-links): Legacy linked Opening ID to the external
-                            // openings viewer (ECAS, resultsLnkAction.do?userAction=Opening) and
-                            // Licence to FTA (ftaLnkAction.do?userAction=Licence). Those corporate
-                            // integrations are not wired in the new app yet, so Opening ID and
-                            // Licence render as plain text — wire the real external URLs once
-                            // available.
-                            if (cell.info.header === 'openingNumber' && meta) {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <RouterLink to={`/site-detail/${meta.id}`}>
-                                    {cell.value}
-                                  </RouterLink>
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'underReview') {
-                              return (
-                                <TableCell key={cell.id}>
-                                  {cell.value ? (
-                                    <Tag type="green" size="sm">
-                                      In review
-                                    </Tag>
-                                  ) : (
-                                    <Tag type="gray" size="sm">
-                                      Pending
-                                    </Tag>
-                                  )}
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'mapView') {
-                              return (
-                                <TableCell key={cell.id} className="random-list__map-cell">
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    hasIconOnly
-                                    renderIcon={MapIcon}
-                                    iconDescription="Site Map"
-                                    tooltipPosition="left"
-                                    className="random-list__map-btn"
-                                    disabled={!cell.value}
-                                    onClick={() =>
-                                      void openOpeningMapView(String(cell.value), display)
-                                    }
-                                  />
-                                </TableCell>
-                              );
-                            }
-                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                          })}
+                          {row.cells.map((cell) => renderCell(cell, meta))}
                         </TableRow>
                       );
                     })}
@@ -367,6 +369,7 @@ const RandomListPage: FC = () => {
           </DataTable>
         )}
       </Column>
+      <OpeningMapModal openingId={mapOpeningId} onClose={() => setMapOpeningId(null)} />
     </Grid>
   );
 };

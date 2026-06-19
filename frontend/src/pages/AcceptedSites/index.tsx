@@ -172,6 +172,41 @@ const AcceptedSitesPage: FC = () => {
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 
+  // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
+  // (DataTable render-prop → rows.map → cells.map → onClick). First cell links to the checklist;
+  // the map cell opens the in-app opening map.
+  const renderCell = (
+    cell: { id: string; value: string; info: { header: string } },
+    idx: number,
+    checklistLink: string | undefined,
+  ) => {
+    if (idx === 0 && checklistLink) {
+      return (
+        <TableCell key={cell.id}>
+          <RouterLink to={checklistLink}>{cell.value}</RouterLink>
+        </TableCell>
+      );
+    }
+    if (cell.info.header === 'mapView') {
+      return (
+        <TableCell key={cell.id} className="accepted-sites__map-cell">
+          <Button
+            kind="ghost"
+            size="sm"
+            hasIconOnly
+            renderIcon={MapIcon}
+            iconDescription="Site Map"
+            tooltipPosition="left"
+            className="accepted-sites__map-btn"
+            disabled={!cell.value}
+            onClick={() => setMapOpeningId(String(cell.value))}
+          />
+        </TableCell>
+      );
+    }
+    return <TableCell key={cell.id}>{cell.value}</TableCell>;
+  };
+
   return (
     <Grid fullWidth className="default-grid accepted-sites-grid">
       <Column sm={4} md={8} lg={16}>
@@ -305,33 +340,7 @@ const AcceptedSitesPage: FC = () => {
                           key={row.id}
                           className={isSubmitted ? 'accepted-sites__row--submitted' : undefined}
                         >
-                          {row.cells.map((cell, idx) => {
-                            if (idx === 0 && checklistLink) {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <RouterLink to={checklistLink}>{cell.value}</RouterLink>
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'mapView') {
-                              return (
-                                <TableCell key={cell.id} className="accepted-sites__map-cell">
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    hasIconOnly
-                                    renderIcon={MapIcon}
-                                    iconDescription="Site Map"
-                                    tooltipPosition="left"
-                                    className="accepted-sites__map-btn"
-                                    disabled={!cell.value}
-                                    onClick={() => setMapOpeningId(String(cell.value))}
-                                  />
-                                </TableCell>
-                              );
-                            }
-                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                          })}
+                          {row.cells.map((cell, idx) => renderCell(cell, idx, checklistLink))}
                         </TableRow>
                       );
                     })}

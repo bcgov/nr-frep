@@ -1,9 +1,11 @@
 package ca.bc.gov.nrs.frep.service.frep;
 
 import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.MapViewResponse;
 import ca.bc.gov.nrs.frep.repository.frep.AcceptedSiteRow;
 import ca.bc.gov.nrs.frep.repository.frep.AcceptedSitesRepository;
 import ca.bc.gov.nrs.frep.repository.frep.CodeListRepository;
+import ca.bc.gov.nrs.frep.repository.frep.MapExtent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -34,13 +37,39 @@ public class AcceptedSiteService {
 
   private final AcceptedSitesRepository acceptedSitesRepository;
   private final CodeListRepository codeListRepository;
+  private final String mapViewerBaseUrl;
 
   public AcceptedSiteService(
       AcceptedSitesRepository acceptedSitesRepository,
-      CodeListRepository codeListRepository
+      CodeListRepository codeListRepository,
+      @Value("${frep.map-viewer.url:}") String mapViewerBaseUrl
   ) {
     this.acceptedSitesRepository = acceptedSitesRepository;
     this.codeListRepository = codeListRepository;
+    this.mapViewerBaseUrl = mapViewerBaseUrl;
+  }
+
+  /**
+   * Composes the external GIS map-viewer URL for an opening, scoped to its bounding box when spatial
+   * data exists. Mirrors legacy {@code MapViewForm.setURL}: append {@code extent=maxX,maxY,minX,minY}
+   * (or the bare viewer URL when the opening has no map image). Returns an empty URL when no viewer is
+   * configured ({@code MAP_VIEWER_URL} unset) so the client can show "Map View unavailable".
+   */
+  public MapViewResponse buildOpeningMapView(String openingId) {
+    String base = StringUtils.trimToEmpty(mapViewerBaseUrl);
+    if (base.isEmpty()) {
+      return new MapViewResponse("");
+    }
+    MapExtent extent = StringUtils.isNumeric(openingId)
+        ? acceptedSitesRepository.getOpeningExtent(openingId)
+        : null;
+    if (extent == null || !extent.isPresent()) {
+      return new MapViewResponse(base);
+    }
+    String separator = base.contains("?") ? "&" : "?";
+    String url = base + separator + "extent="
+        + extent.maxX() + "," + extent.maxY() + "," + extent.minX() + "," + extent.minY();
+    return new MapViewResponse(url);
   }
 
   public List<AcceptedSiteResponse> findAcceptedSites(

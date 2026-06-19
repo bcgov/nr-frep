@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.controller;
 
 import ca.bc.gov.nrs.frep.dto.frep.AcceptedSiteResponse;
+import ca.bc.gov.nrs.frep.dto.frep.MapViewResponse;
 import ca.bc.gov.nrs.frep.dto.frep.NotImplementedResponse;
 import ca.bc.gov.nrs.frep.service.frep.AcceptedSiteService;
 import java.util.List;
@@ -61,19 +62,21 @@ public class AcceptedSiteController {
   }
 
   /**
-   * Build the GIS map-view URL for an opening's spatial extent (legacy per-row "Map"
-   * link on {@code frep100RandomList.jsp} / {@code frep200AcceptedSites.jsp}, which
-   * opened an external map viewer scoped to the opening's bounding box).
+   * Build the GIS map-view URL for an opening's spatial extent (legacy per-row "Map" link on
+   * {@code frep100RandomList.jsp} / {@code frep200AcceptedSites.jsp}, which opened an external map
+   * viewer scoped to the opening's bounding box via {@code MapViewAction} / {@code MapViewForm}).
    *
-   * <p>TODO: resolve the opening's bounding box and the configured map-viewer base URL,
-   * then return the composed URL. Returns HTTP 501 until then.
+   * <p>Resolves the opening's bounding box from {@code frep_map_bounding_values} and appends it to
+   * the configured map-viewer base URL ({@code MAP_VIEWER_URL}). The client opens the returned URL
+   * in a new tab.
    */
   @GetMapping("/openings/{openingId}/map-view")
-  public ResponseEntity<NotImplementedResponse> getOpeningMapView(
+  public ResponseEntity<MapViewResponse> getOpeningMapView(
       @PathVariable String openingId
   ) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(NotImplementedResponse.of(
-        "map-view",
-        "Map / GIS view for opening " + openingId + " is not yet available."));
+    if (StringUtils.isBlank(openingId)) {
+      return ResponseEntity.badRequest().build();
+    }
+    return ResponseEntity.ok(acceptedSiteService.buildOpeningMapView(openingId.trim()));
   }
 }

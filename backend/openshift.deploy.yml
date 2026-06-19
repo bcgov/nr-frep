@@ -54,6 +54,10 @@ parameters:
     required: true
   - name: IDENTITY_LOOKUP_BASE_URL
     required: true
+  # External GIS map-viewer base URL for the per-opening "Map View" action. Optional —
+  # blank disables the feature (the button reports it as unavailable). Non-secret config.
+  - name: MAP_VIEWER_URL
+    value: ""
   - name: DATABASE_HOST
     required: true
   - name: DATABASE_SERVICE_NAME
@@ -160,6 +164,8 @@ objects:
                   value: ${COGNITO_USERINFO_URI}
                 - name: IDENTITY_LOOKUP_BASE_URL
                   value: ${IDENTITY_LOOKUP_BASE_URL}
+                - name: MAP_VIEWER_URL
+                  value: ${MAP_VIEWER_URL}
                 - name: DATABASE_HOST
                   value: ${DATABASE_HOST}
                 - name: DATABASE_SERVICE_NAME

@@ -26,6 +26,7 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { runTodoFeature } from '@/utils/featureTodo';
+import { openOpeningMapView } from '@/utils/openMapView';
 
 import './acceptedSites.scss';
 
@@ -322,12 +323,7 @@ const AcceptedSitesPage: FC = () => {
                                     className="accepted-sites__map-btn"
                                     disabled={!cell.value}
                                     onClick={() =>
-                                      void runTodoFeature(
-                                        () =>
-                                          API.acceptedSites.getOpeningMapView(String(cell.value)),
-                                        display,
-                                        'Site Map',
-                                      )
+                                      void openOpeningMapView(String(cell.value), display)
                                     }
                                   />
                                 </TableCell>

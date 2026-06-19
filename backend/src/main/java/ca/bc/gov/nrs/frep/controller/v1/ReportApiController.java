@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.dto.report.ReportRequest;
 import ca.bc.gov.nrs.frep.exception.ReportGenerationException;
@@ -25,9 +25,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Report-generation endpoint. Mirrors the nr-fspts {@code FspReportController}:
- * POST a request body, get the rendered report back with a
- * {@code Content-Disposition: attachment} header so the browser saves it.
+ * Report-generation endpoint. Mirrors the nr-fspts {@code FspReportController}: POST a request body,
+ * get the rendered report back with a {@code Content-Disposition: attachment} header so the browser
+ * saves it. Like {@code FspReportController}, this controller keeps its mappings directly (no
+ * endpoint interface) because of the {@code @ExceptionHandler} / {@code @Validated} binary handling.
  *
  * <p>Two entry points, routed by path (not by report metadata):</p>
  * <ul>
@@ -43,12 +44,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/reports")
 @Validated
-public class ReportController {
+public class ReportApiController {
 
   private final ReportService reportService;
   private final CSVReportService csvReportService;
 
-  public ReportController(ReportService reportService, CSVReportService csvReportService) {
+  public ReportApiController(ReportService reportService, CSVReportService csvReportService) {
     this.reportService = reportService;
     this.csvReportService = csvReportService;
   }

@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -22,7 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class ReportControllerTest {
+class ReportApiControllerTest {
 
   @Mock private ReportService reportService;
   @Mock private CSVReportService csvReportService;
@@ -32,7 +32,7 @@ class ReportControllerTest {
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders
-        .standaloneSetup(new ReportController(reportService, csvReportService))
+        .standaloneSetup(new ReportApiController(reportService, csvReportService))
         .build();
   }
 

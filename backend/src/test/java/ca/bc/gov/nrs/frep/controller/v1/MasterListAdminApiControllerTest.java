@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class MasterListAdminControllerTest {
+class MasterListAdminApiControllerTest {
 
   @Mock
   private MasterListAdminService masterListAdminService;
@@ -30,7 +30,7 @@ class MasterListAdminControllerTest {
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders
-        .standaloneSetup(new MasterListAdminController(masterListAdminService))
+        .standaloneSetup(new MasterListAdminApiController(masterListAdminService))
         .build();
   }
 

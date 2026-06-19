@@ -1,0 +1,58 @@
+package ca.bc.gov.nrs.frep.controller.v1;
+
+import ca.bc.gov.nrs.frep.dto.frep.ChecklistSearchResult;
+import ca.bc.gov.nrs.frep.dto.frep.ClientSearchResult;
+import ca.bc.gov.nrs.frep.endpoint.v1.SearchApiEndpoint;
+import ca.bc.gov.nrs.frep.service.frep.SearchService;
+import java.util.List;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Read API for FREP400 (checklist search) and FREP410 (client search). Mappings declared on
+ * {@link SearchApiEndpoint}.
+ */
+@RestController
+public class SearchApiController implements SearchApiEndpoint {
+
+  private final SearchService searchService;
+
+  public SearchApiController(SearchService searchService) {
+    this.searchService = searchService;
+  }
+
+  @Override
+  public ResponseEntity<List<ChecklistSearchResult>> searchChecklists(
+      String effectiveYear,
+      String orgUnit,
+      String protocolType,
+      String licenceId,
+      String cuttingPermitId,
+      String cutBlockId,
+      String openingId,
+      String clientNumber,
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo
+  ) {
+    return ResponseEntity.ok(searchService.searchChecklists(
+        effectiveYear, orgUnit, protocolType, licenceId,
+        cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode,
+        checklistId, evaluationDateFrom, evaluationDateTo));
+  }
+
+  @Override
+  public ResponseEntity<List<ClientSearchResult>> searchClients(
+      String clientNumber,
+      String clientAcronym,
+      String clientName,
+      String legalFirstName,
+      String legalMiddleName
+  ) {
+    return ResponseEntity.ok(searchService.searchClients(
+        clientNumber, clientAcronym, clientName, legalFirstName, legalMiddleName));
+  }
+
+  // CSV export moved to ReportApiController (GET /api/v1/reports/checklist-search/csv).
+}

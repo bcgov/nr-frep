@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class SiteDetailControllerTest {
+class SiteDetailApiControllerTest {
 
   @Mock
   private SiteDetailService siteDetailService;
@@ -28,7 +28,7 @@ class SiteDetailControllerTest {
 
   @BeforeEach
   void setUp() {
-    mockMvc = MockMvcBuilders.standaloneSetup(new SiteDetailController(siteDetailService)).build();
+    mockMvc = MockMvcBuilders.standaloneSetup(new SiteDetailApiController(siteDetailService)).build();
   }
 
   @Test

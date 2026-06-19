@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -22,7 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class ConfigurationControllerTest {
+class ConfigurationApiControllerTest {
 
   @Mock
   private ConfigurationService configurationService;
@@ -35,7 +35,7 @@ class ConfigurationControllerTest {
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders
-        .standaloneSetup(new ConfigurationController(configurationService, famUserDirectoryService))
+        .standaloneSetup(new ConfigurationApiController(configurationService, famUserDirectoryService))
         .build();
   }
 

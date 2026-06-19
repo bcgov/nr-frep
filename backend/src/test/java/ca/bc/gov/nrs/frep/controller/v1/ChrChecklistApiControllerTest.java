@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class ChrChecklistControllerTest {
+class ChrChecklistApiControllerTest {
 
   @Mock
   private ChrChecklistService chrChecklistService;
@@ -29,7 +29,7 @@ class ChrChecklistControllerTest {
 
   @BeforeEach
   void setUp() {
-    mockMvc = MockMvcBuilders.standaloneSetup(new ChrChecklistController(chrChecklistService)).build();
+    mockMvc = MockMvcBuilders.standaloneSetup(new ChrChecklistApiController(chrChecklistService)).build();
   }
 
   @Test

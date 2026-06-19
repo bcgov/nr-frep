@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class AcceptedSiteControllerTest {
+class AcceptedSiteApiControllerTest {
 
   @Mock
   private AcceptedSiteService acceptedSiteService;
@@ -29,7 +29,7 @@ class AcceptedSiteControllerTest {
 
   @BeforeEach
   void setUp() {
-    mockMvc = MockMvcBuilders.standaloneSetup(new AcceptedSiteController(acceptedSiteService)).build();
+    mockMvc = MockMvcBuilders.standaloneSetup(new AcceptedSiteApiController(acceptedSiteService)).build();
   }
 
   @Test

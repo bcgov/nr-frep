@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class SearchControllerTest {
+class SearchApiControllerTest {
 
   @Mock
   private SearchService searchService;
@@ -29,7 +29,7 @@ class SearchControllerTest {
 
   @BeforeEach
   void setUp() {
-    mockMvc = MockMvcBuilders.standaloneSetup(new SearchController(searchService)).build();
+    mockMvc = MockMvcBuilders.standaloneSetup(new SearchApiController(searchService)).build();
   }
 
   @Test

@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.controller;
+package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
-class RandomListControllerTest {
+class RandomListApiControllerTest {
 
   @Mock
   private RandomListService randomListService;
@@ -30,7 +30,7 @@ class RandomListControllerTest {
 
   @BeforeEach
   void setUp() {
-    mockMvc = MockMvcBuilders.standaloneSetup(new RandomListController(randomListService)).build();
+    mockMvc = MockMvcBuilders.standaloneSetup(new RandomListApiController(randomListService)).build();
   }
 
   @Test

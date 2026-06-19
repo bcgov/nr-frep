@@ -28,7 +28,7 @@ import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
-import { runTodoFeature } from '@/utils/featureTodo';
+import { openOpeningMapView } from '@/utils/openMapView';
 
 import './randomList.scss';
 
@@ -338,12 +338,7 @@ const RandomListPage: FC = () => {
                                     className="random-list__map-btn"
                                     disabled={!cell.value}
                                     onClick={() =>
-                                      void runTodoFeature(
-                                        () =>
-                                          API.acceptedSites.getOpeningMapView(String(cell.value)),
-                                        display,
-                                        'Site Map',
-                                      )
+                                      void openOpeningMapView(String(cell.value), display)
                                     }
                                   />
                                 </TableCell>

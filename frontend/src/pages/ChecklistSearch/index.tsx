@@ -404,10 +404,10 @@ const ChecklistSearchPage: FC = () => {
                   onChange={({ page: nextPage, pageSize: nextSize }) => {
                     // Carbon's page is 1-based; the backend is 0-based. A page-size change resets to
                     // page 1 so the offset stays valid.
-                    if (nextSize !== pageSize) {
-                      void runSearch(0, nextSize);
-                    } else {
+                    if (nextSize === pageSize) {
                       void runSearch(nextPage - 1, nextSize);
+                    } else {
+                      void runSearch(0, nextSize);
                     }
                   }}
                 />

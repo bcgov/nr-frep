@@ -528,12 +528,14 @@ public class ChrChecklistPersistenceService {
       identity.setChrChecklist(chrChecklist);
       identity.setFeatureLabel(feature.getFeatureLabel());
       identity.setCompositeFeatureInd(ChrStringUtils.booleanToIndictor(feature.getCompositeFeatureInd()));
-      if (ChrStringUtils.hasAValue(feature.getCompositeFeature())) {
-        ChrFeatureIdentity parent = findFeatureIdentity(checklistId, feature.getCompositeFeature());
-        if (parent != null) {
-          identity.setCompositeChrFeatureIdentity(parent.getChrFeatureId());
-        }
-      }
+      // Always reconcile the composite back-reference: link to the named composite parent when present,
+      // otherwise clear it. Only ever *setting* it (the legacy behaviour) leaves a stale
+      // COMPOSITE_CHR_FEATURE_ID when a feature is uncombined, so it never actually becomes individual.
+      ChrFeatureIdentity compositeParent = ChrStringUtils.hasAValue(feature.getCompositeFeature())
+          ? findFeatureIdentity(checklistId, feature.getCompositeFeature())
+          : null;
+      identity.setCompositeChrFeatureIdentity(
+          compositeParent != null ? compositeParent.getChrFeatureId() : null);
       entityManager.persist(identity);
       if (newIdentity) {
         chrChecklist.getChrFeatureIdentities().add(identity);
@@ -962,6 +964,7 @@ public class ChrChecklistPersistenceService {
    */
   private void deleteFeature(ChrFeatureIdentity identity) {
     long featureId = identity.getChrFeatureId();
+    detachComposedMembers(featureId);
     clearIdentityChildren(identity);
     ChrFeatureDetail detail = identity.getChrFeatureDetail();
     if (detail != null) {
@@ -978,6 +981,27 @@ public class ChrChecklistPersistenceService {
     removeAssociatedFeatures(featureId);
     entityManager.remove(identity);
     entityManager.flush();
+  }
+
+  /**
+   * Clears the composite back-reference on any feature that grouped under the feature being deleted.
+   * {@code COMPOSITE_CHR_FEATURE_ID} is a self-FK on {@code CHR_FEATURE_IDENTITY}; without this, removing
+   * a composite while its member features still point at it raises {@code ORA-02292} (child record
+   * found) on the parent delete. The members become individual features, matching the user intent.
+   * Runs on managed entities + flush (not a bulk update) so the persistence context stays consistent.
+   */
+  private void detachComposedMembers(long compositeFeatureId) {
+    List<ChrFeatureIdentity> members = entityManager.createQuery(
+            "SELECT fi FROM ChrFeatureIdentity fi WHERE fi.compositeChrFeatureIdentity = :cid",
+            ChrFeatureIdentity.class)
+        .setParameter("cid", compositeFeatureId)
+        .getResultList();
+    for (ChrFeatureIdentity member : members) {
+      member.setCompositeChrFeatureIdentity(null);
+    }
+    if (!members.isEmpty()) {
+      entityManager.flush();
+    }
   }
 
   /** Removes associated-feature links pointing to or from a feature (both directions) and flushes. */

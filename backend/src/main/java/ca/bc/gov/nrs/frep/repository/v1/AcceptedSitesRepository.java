@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.repository.v1;
 
 import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
-import ca.bc.gov.nrs.frep.repository.v1.bean.MapExtent;
 import java.util.List;
 
 /**
@@ -16,7 +15,4 @@ public interface AcceptedSitesRepository {
 
   /** Supplementary Cultural Heritage (CHR) accepted/targeted sites for a district and year. */
   List<AcceptedSiteRow> findCulturalHeritageSites(String orgUnitNo, String effectiveYear);
-
-  /** Bounding box for an opening via {@code frep_map_bounding_values} (all-null when no map image). */
-  MapExtent getOpeningExtent(String openingId);
 }

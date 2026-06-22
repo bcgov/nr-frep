@@ -29,10 +29,6 @@ spring:
 frep:
   package-name: FREP
   codelist-package-name: FREP_CODE_LISTS
-  # External GIS map-viewer base URL for the per-opening "Map View" action. The opening's bounding
-  # box (frep_map_bounding_values) is appended as &extent=maxX,maxY,minX,minY. Empty = feature off.
-  map-viewer:
-    url: ${MAP_VIEWER_URL:}
   chr:
     object-storage:
       host: ${OBJECT_STORAGE_HOST}

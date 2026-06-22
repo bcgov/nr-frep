@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.struct.v1.frep.MapViewResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.AcceptedSiteApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.frep.AcceptedSiteService;
@@ -57,22 +56,5 @@ public class AcceptedSiteApiController implements AcceptedSiteApiEndpoint {
     return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(NotImplementedResponse.of(
         "print-accepted-sites",
         "Printable accepted-sites view is not yet available."));
-  }
-
-  /**
-   * Build the GIS map-view URL for an opening's spatial extent (legacy per-row "Map" link on
-   * {@code frep100RandomList.jsp} / {@code frep200AcceptedSites.jsp}, which opened an external map
-   * viewer scoped to the opening's bounding box via {@code MapViewAction} / {@code MapViewForm}).
-   *
-   * <p>Resolves the opening's bounding box from {@code frep_map_bounding_values} and appends it to
-   * the configured map-viewer base URL ({@code MAP_VIEWER_URL}). The client opens the returned URL
-   * in a new tab.
-   */
-  @Override
-  public ResponseEntity<MapViewResponse> getOpeningMapView(String openingId) {
-    if (StringUtils.isBlank(openingId)) {
-      return ResponseEntity.badRequest().build();
-    }
-    return ResponseEntity.ok(acceptedSiteService.buildOpeningMapView(openingId.trim()));
   }
 }

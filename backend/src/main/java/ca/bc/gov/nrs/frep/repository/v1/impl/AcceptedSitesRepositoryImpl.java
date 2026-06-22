@@ -3,8 +3,6 @@ package ca.bc.gov.nrs.frep.repository.v1.impl;
 import ca.bc.gov.nrs.frep.repository.v1.AcceptedSitesRepository;
 import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
-import ca.bc.gov.nrs.frep.repository.v1.bean.MapExtent;
-import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
@@ -160,23 +158,6 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
         stringAttr(attrs, 11),
         stringAttr(attrs, 12)
     );
-  }
-
-  /**
-   * Bounding box for an opening via the standalone legacy procedure {@code frep_map_bounding_values}
-   * (1 IN {@code p_opening_id} NUMBER, 4 OUT VARCHAR2 corners). Returns an all-null {@link MapExtent}
-   * when the opening has no {@code OPENING_MAP_IMAGE} row (the proc swallows NO_DATA_FOUND).
-   */
-  @Override
-  public MapExtent getOpeningExtent(String openingId) {
-    String call = "{call frep_map_bounding_values(?,?,?,?,?)}";
-    return executeCall(call, cs -> {
-      cs.setBigDecimal(1, new BigDecimal(openingId));
-      cs.registerOutParameter(2, Types.VARCHAR);
-      cs.registerOutParameter(3, Types.VARCHAR);
-      cs.registerOutParameter(4, Types.VARCHAR);
-      cs.registerOutParameter(5, Types.VARCHAR);
-    }, cs -> new MapExtent(cs.getString(2), cs.getString(3), cs.getString(4), cs.getString(5)));
   }
 
   private static String stringAttr(Object[] attrs, int index) {

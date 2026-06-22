@@ -11,7 +11,9 @@ import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
-import ca.bc.gov.nrs.frep.exception.ChrRestException;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
+import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
@@ -62,7 +64,7 @@ class ChrChecklistServiceTest {
     checklist.setStatus(ChrConstants.FrepChecklistStatusCode.ACT);
     checklist.setRevisionCount("1");
 
-    assertThrows(ChrRestException.class, () -> service.saveChecklist(checklist));
+    assertThrows(InvalidParameterException.class, () -> service.saveChecklist(checklist));
   }
 
   @Test
@@ -81,13 +83,13 @@ class ChrChecklistServiceTest {
     checklist.setStatus(ChrConstants.FrepChecklistStatusCode.ACT);
     checklist.setRevisionCount("1");
 
-    assertThrows(ChrRestException.class, () -> service.submitChecklist(1001L, checklist));
+    assertThrows(FrepApiRuntimeException.class, () -> service.submitChecklist(1001L, checklist));
     verify(persistenceService).saveChecklist(any(), eq("IDIR\\user"));
   }
 
   @Test
   void activateChecklistRequiresAdmin() {
     when(loggedUserHelper.isUpdate()).thenReturn(true);
-    assertThrows(ChrRestException.class, () -> service.activateChecklist(1001L));
+    assertThrows(AccessForbiddenException.class, () -> service.activateChecklist(1001L));
   }
 }

@@ -36,7 +36,8 @@ import ca.bc.gov.nrs.frep.entity.FrepChecklistAnswerCode;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepMrvaRatingCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
-import ca.bc.gov.nrs.frep.exception.ChrRestException;
+import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
@@ -137,10 +138,8 @@ public class ChrChecklistPersistenceService {
   public void uploadChecklist(CheckList resource, String userId) {
     String guidSavedInDb = getDeviceCheckoutGuid(Long.parseLong(resource.getChecklistID()));
     if (!resource.getDeviceCheckoutGuid().equals(guidSavedInDb)) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.VALIDATION,
-          "Upload failed: The resource deviceCheckoutGuid doesn't match the saved value for the checklist in the database."
-      );
+      throw new InvalidParameterException(
+          "Upload failed: The resource deviceCheckoutGuid doesn't match the saved value for the checklist in the database.");
     }
     resource.setDeviceCheckoutGuid(null);
     resource.setStatus(ChrConstants.FrepChecklistStatusCode.ACT);
@@ -227,10 +226,7 @@ public class ChrChecklistPersistenceService {
   private ChrChecklist loadChecklistForSave(CheckList resource) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, Long.parseLong(resource.getChecklistID()));
     if (chrChecklist == null) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "Checklist " + resource.getChecklistID() + " was not found."
-      );
+      throw new EntityNotFoundException("Checklist " + resource.getChecklistID() + " was not found.");
     }
     return chrChecklist;
   }
@@ -250,10 +246,8 @@ public class ChrChecklistPersistenceService {
     try {
       chrChecklist.setEvaluationDate(ChrDateUtils.getDate(resource.getEvaluationDate()));
     } catch (Exception ex) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.VALIDATION,
-          "Invalid evaluation date: " + resource.getEvaluationDate()
-      );
+      throw new InvalidParameterException(
+          "Invalid evaluation date: " + resource.getEvaluationDate());
     }
     chrChecklist.setFirstNationsPlacename(resource.getFirstNationName());
     chrChecklist.setLocationDescription(resource.getGeneralLocation());

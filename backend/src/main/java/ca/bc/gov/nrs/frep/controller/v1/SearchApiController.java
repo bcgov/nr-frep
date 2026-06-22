@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ClientSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.SearchApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.frep.SearchService;
 import java.util.List;
@@ -40,6 +41,30 @@ public class SearchApiController implements SearchApiEndpoint {
         effectiveYear, orgUnit, protocolType, licenceId,
         cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode,
         checklistId, evaluationDateFrom, evaluationDateTo));
+  }
+
+  @Override
+  public ResponseEntity<PagedResponse<ChecklistSearchResult>> searchChecklistsPaginated(
+      String effectiveYear,
+      String orgUnit,
+      String protocolType,
+      String licenceId,
+      String cuttingPermitId,
+      String cutBlockId,
+      String openingId,
+      String clientNumber,
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo,
+      int pageNumber,
+      int pageSize,
+      String sort
+  ) {
+    return ResponseEntity.ok(searchService.searchChecklistsPaged(
+        effectiveYear, orgUnit, protocolType, licenceId,
+        cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode,
+        checklistId, evaluationDateFrom, evaluationDateTo, pageNumber, pageSize, sort));
   }
 
   @Override

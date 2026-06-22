@@ -75,7 +75,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
         FROM THE.frep_evaluation_year fey
            , THE.frep_selected_site fss
            , THE.org_unit ou
-           , for_cli_audit fca
+           --, for_cli_audit fca
            , THE.frep_resource_value frv
            , ( SELECT DISTINCT wc.water_checklist_id checklist_id, wc.frep_checklist_status_code,
                       wc.evaluation_date evaluation_date, wen.evaluator_userid, wc.frep_resource_value_id
@@ -102,8 +102,8 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
            , THE.frep_resource_value_type_code frvtc
        WHERE fey.effective_year = fss.effective_year
          AND ou.org_unit_no = fss.org_unit_no
-         AND ou.org_unit_no = fca.add_org_unit
-         AND ou.org_unit_no = fca.update_org_unit
+         --AND ou.org_unit_no = fca.add_org_unit
+         --AND ou.org_unit_no = fca.update_org_unit
          AND fss.frep_selected_site_id = frv.frep_selected_site_id
          AND frv.frep_resource_value_id = checklist_tbls.frep_resource_value_id
          AND frvtc.frep_resource_value_type_code = frv.frep_resource_value_type_code

@@ -4,6 +4,7 @@ import {
   Column,
   DataTable,
   Grid,
+  Pagination,
   Select,
   SelectItem,
   SkeletonText,
@@ -53,6 +54,9 @@ const STATUS_OPTIONS = [
   { value: 'SUB', label: 'Submitted' },
 ];
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 20;
+
 // Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
 // (RIP) and Water (WTR) are out of scope and have no pages, so their rows are not linked.
 const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
@@ -70,6 +74,11 @@ const ChecklistSearchPage: FC = () => {
 
   const [filters, setFilters] = useState<ChecklistSearchQuery>({});
   const [results, setResults] = useState<ChecklistSearchResult[]>([]);
+  // Server-side paging: page is 0-based (matches the backend); totalElements is the true match count
+  // (no 5000 VARRAY cap), so every page is reachable.
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [clientLookupOpen, setClientLookupOpen] = useState(false);
@@ -127,12 +136,25 @@ const ChecklistSearchPage: FC = () => {
     };
   }, [display]);
 
-  const runSearch = async () => {
+  // Fetches one page. Search/Clear reset to page 0; the Pagination control passes the target page.
+  // queryFilters lets Clear search with the reset filters without waiting for the state update.
+  const runSearch = async (
+    targetPage = page,
+    targetSize = pageSize,
+    queryFilters: ChecklistSearchQuery = filters,
+  ) => {
     setLoading(true);
     setHasError(false);
     try {
-      const data = await API.search.searchChecklists(filters);
-      setResults(data);
+      const data = await API.search.searchChecklistsPaged({
+        ...queryFilters,
+        pageNumber: targetPage,
+        pageSize: targetSize,
+      });
+      setResults(data.content);
+      setTotalElements(data.totalElements);
+      setPage(data.pageNumber);
+      setPageSize(data.pageSize);
     } catch (err) {
       display({
         kind: 'error',
@@ -142,6 +164,7 @@ const ChecklistSearchPage: FC = () => {
       });
       setHasError(true);
       setResults([]);
+      setTotalElements(0);
     } finally {
       setLoading(false);
     }
@@ -285,7 +308,7 @@ const ChecklistSearchPage: FC = () => {
             </div>
           </div>
           <div className="checklist-search__actions">
-            <Button onClick={() => void runSearch()} disabled={loading}>
+            <Button onClick={() => void runSearch(0)} disabled={loading}>
               Search
             </Button>
             <Button
@@ -293,7 +316,7 @@ const ChecklistSearchPage: FC = () => {
               onClick={() => {
                 setFilters({});
                 setClientName('');
-                void runSearch();
+                void runSearch(0, pageSize, {});
               }}
             >
               Clear
@@ -323,7 +346,7 @@ const ChecklistSearchPage: FC = () => {
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
               <TableContainer>
                 <TableHeaderBar
-                  title={`Checklists — ${results.length} match${results.length === 1 ? '' : 'es'}`}
+                  title={`Checklists — ${totalElements} match${totalElements === 1 ? '' : 'es'}`}
                   actions={
                     <Button
                       kind="tertiary"
@@ -372,6 +395,22 @@ const ChecklistSearchPage: FC = () => {
                     })}
                   </TableBody>
                 </Table>
+                <Pagination
+                  page={page + 1}
+                  pageSize={pageSize}
+                  pageSizes={PAGE_SIZE_OPTIONS}
+                  totalItems={totalElements}
+                  disabled={loading}
+                  onChange={({ page: nextPage, pageSize: nextSize }) => {
+                    // Carbon's page is 1-based; the backend is 0-based. A page-size change resets to
+                    // page 1 so the offset stays valid.
+                    if (nextSize === pageSize) {
+                      void runSearch(nextPage - 1, nextSize);
+                    } else {
+                      void runSearch(0, nextSize);
+                    }
+                  }}
+                />
               </TableContainer>
             )}
           </DataTable>

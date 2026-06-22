@@ -30,6 +30,21 @@ export type ChecklistSearchQuery = {
   evaluationDateTo?: string;
 };
 
+export type PagedResponse<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  pageNumber: number;
+  pageSize: number;
+};
+
+export type ChecklistSearchPageQuery = ChecklistSearchQuery & {
+  pageNumber?: number;
+  pageSize?: number;
+  // "field" or "field,(asc|desc)" over the backend's whitelisted sort fields.
+  sort?: string;
+};
+
 export type ClientSearchResult = {
   clientAcronym: string;
   clientNumber: string;

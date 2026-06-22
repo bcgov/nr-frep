@@ -1,7 +1,11 @@
 package ca.bc.gov.nrs.frep.service.v1.chr;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
-import ca.bc.gov.nrs.frep.exception.ChrRestException;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
+import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
@@ -60,10 +64,7 @@ public class ChrChecklistService {
     assertCanReadChecklist();
     ChrChecklist chrChecklist = persistenceService.getAcceptedSiteForChr(checklistId);
     if (chrChecklist == null) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "Checklist " + checklistId + " was not found."
-      );
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
     }
     return mapChecklist(chrChecklist);
   }
@@ -74,10 +75,8 @@ public class ChrChecklistService {
     validateSaveRequest(checklist);
 
     if (!ChrStringUtils.hasAValue(checklist.getChecklistID())) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "checkListId is missing in JSON body and is required to perform save"
-      );
+      throw new InvalidParameterException(
+          "checkListId is missing in JSON body and is required to perform save");
     }
 
     long checklistId = Long.parseLong(checklist.getChecklistID());
@@ -96,10 +95,7 @@ public class ChrChecklistService {
       return checklist;
     }
 
-    throw new ChrRestException(
-        ChrConstants.RestExceptionTypes.UNEXPECTED,
-        ChrConstants.RestMessages.ERROR_CHANGE_STATUS
-    );
+    throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
   }
 
   @Transactional
@@ -141,10 +137,8 @@ public class ChrChecklistService {
   ) {
     assertCanWriteChecklist();
     if (!ChrStringUtils.hasAValue(checklist.getChecklistID())) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "checkListId is missing in JSON body and is required to perform save"
-      );
+      throw new InvalidParameterException(
+          "checkListId is missing in JSON body and is required to perform save");
     }
     if (validate != null) {
       validate.accept(checklist);
@@ -152,10 +146,7 @@ public class ChrChecklistService {
     long checklistId = Long.parseLong(checklist.getChecklistID());
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          ChrConstants.RestMessages.ERROR_CHANGE_STATUS
-      );
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
     }
     assertRevisionCount(checklist, checklistId);
     persist.accept(checklist, loggedUserHelper.getLoggedUserId());
@@ -166,18 +157,14 @@ public class ChrChecklistService {
   public CheckList submitChecklist(long checklistId, CheckList checklist) {
     assertCanWriteChecklist();
     if (checklist != null && !Long.toString(checklistId).equals(checklist.getChecklistID())) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "The checklist ID is not matching:" + checklist.getChecklistID()
-      );
+      throw new InvalidParameterException(
+          "The checklist ID is not matching:" + checklist.getChecklistID());
     }
 
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          "The checklist status is currently " + status + " when ACT is expected."
-      );
+      throw new InvalidParameterException(
+          "The checklist status is currently " + status + " when ACT is expected.");
     }
 
     List<ValidationError> validationErrors = submitValidationService.validateBeforeSubmit(checklist);
@@ -195,10 +182,8 @@ public class ChrChecklistService {
     assertAdminForActivate();
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.VALIDATION,
-          "Activate failed. Checklist status is " + status + " when RDO is expected."
-      );
+      throw new InvalidParameterException(
+          "Activate failed. Checklist status is " + status + " when RDO is expected.");
     }
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
@@ -209,8 +194,7 @@ public class ChrChecklistService {
     assertCanWriteChecklist();
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.VALIDATION,
+      throw new InvalidParameterException(
           "Download failed. The checklist status is currently "
               + ChrConstants.frepChecklistStatusDescriptions().getOrDefault(status, status)
               + " when "
@@ -246,7 +230,7 @@ public class ChrChecklistService {
       populatePhotoBytes(checkList);
       return checkList;
     } catch (Exception ex) {
-      throw new ChrRestException(ChrConstants.RestExceptionTypes.UNEXPECTED, ex.getMessage());
+      throw new FrepApiRuntimeException(ex.getMessage(), ex);
     }
   }
 
@@ -292,20 +276,16 @@ public class ChrChecklistService {
         }
         for (OtherPlannedManagementStrategy strategy : feature.getOtherPlannedManagementStrategy()) {
           if (!ChrStringUtils.hasAValue(strategy.getOtherStrategy())) {
-            throw new ChrRestException(
-                ChrConstants.RestExceptionTypes.VALIDATION,
+            throw new InvalidParameterException(
                 "Feature ID " + feature.getFeatureLabel()
-                    + " has a missing description for 'Other' management strategy."
-            );
+                    + " has a missing description for 'Other' management strategy.");
           }
           if (!("true".equals(strategy.getFnInd())
               || "true".equals(strategy.getAiaInd())
               || "true".equals(strategy.getSpInd()))) {
-            throw new ChrRestException(
-                ChrConstants.RestExceptionTypes.VALIDATION,
+            throw new InvalidParameterException(
                 "Feature ID " + feature.getFeatureLabel()
-                    + " - 'Other' management strategy must have a Management Strategy defined."
-            );
+                    + " - 'Other' management strategy must have a Management Strategy defined.");
           }
         }
       }
@@ -316,10 +296,8 @@ public class ChrChecklistService {
     if (checklist.getPictures() != null) {
       for (Picture picture : checklist.getPictures()) {
         if (!ChrStringUtils.hasAValue(picture.getDescription())) {
-          throw new ChrRestException(
-              ChrConstants.RestExceptionTypes.VALIDATION,
-              "One or more photos are missing mandatory descriptions."
-          );
+          throw new InvalidParameterException(
+              "One or more photos are missing mandatory descriptions.");
         }
       }
     }
@@ -329,13 +307,10 @@ public class ChrChecklistService {
     long revisionCount = checklistRepository.getRevisionCount(checklistId);
     if (Long.parseLong(checklist.getRevisionCount()) != revisionCount) {
       String lastUpdateUser = checklistRepository.getLastUpdatedUser(checklistId);
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.UNEXPECTED,
-          ChrConstants.RestExceptionSubType.REVISION_CONTROL,
+      throw new ConflictFoundException(
           "Checklist " + checklist.getChecklistID()
               + " has been modified by another user (" + lastUpdateUser
-              + ") since you've retreived it. Any changes made have been lost and the latest version has been retrieved."
-      );
+              + ") since you've retreived it. Any changes made have been lost and the latest version has been retrieved.");
     }
   }
 
@@ -345,31 +320,19 @@ public class ChrChecklistService {
 
   private void assertCanWriteChecklist() {
     if (loggedUserHelper.isViewOnly()) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.AUTHORIZATION,
-          ChrConstants.RestMessages.ERROR_AUTHORIZATION
-      );
+      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
     }
     if (!loggedUserHelper.canWrite()) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.AUTHORIZATION,
-          ChrConstants.RestMessages.ERROR_AUTHORIZATION
-      );
+      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
     }
   }
 
   private void assertAdminForActivate() {
     if (loggedUserHelper.isUpdate()) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.AUTHORIZATION,
-          ChrConstants.RestMessages.ERROR_AUTHORIZATION
-      );
+      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
     }
     if (!loggedUserHelper.isSysAdmin()) {
-      throw new ChrRestException(
-          ChrConstants.RestExceptionTypes.AUTHORIZATION,
-          ChrConstants.RestMessages.ERROR_AUTHORIZATION
-      );
+      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
     }
   }
 

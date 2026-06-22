@@ -24,20 +24,6 @@ public final class ChrConstants {
     private FrepResourceValueStatusCode() {}
   }
 
-  public static final class RestExceptionTypes {
-    public static final String AUTHORIZATION = "AUTHORIZATION";
-    public static final String VALIDATION = "VALIDATION";
-    public static final String UNEXPECTED = "UNEXPECTED";
-
-    private RestExceptionTypes() {}
-  }
-
-  public static final class RestExceptionSubType {
-    public static final String REVISION_CONTROL = "REVISION_CONTROL";
-
-    private RestExceptionSubType() {}
-  }
-
   public static final class RestMessages {
     public static final String ERROR_AUTHORIZATION = "You are not authorized to perform this action.";
     public static final String ERROR_CHANGE_STATUS =
@@ -53,14 +39,6 @@ public final class ChrConstants {
         FrepChecklistStatusCode.ACT, "Active",
         FrepChecklistStatusCode.RDO, "Read Only",
         FrepChecklistStatusCode.SUB, "Submitted"
-    );
-  }
-
-  public static Map<String, Integer> restExceptionHttpStatusCodes() {
-    return Map.of(
-        RestExceptionTypes.AUTHORIZATION, 401,
-        RestExceptionTypes.VALIDATION, 400,
-        RestExceptionTypes.UNEXPECTED, 500
     );
   }
 

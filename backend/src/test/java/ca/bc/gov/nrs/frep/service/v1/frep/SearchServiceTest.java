@@ -1,10 +1,12 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +15,8 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +97,71 @@ class SearchServiceTest {
     assertEquals("9001", criteria.checklistId());
     assertEquals("2024-01-01", criteria.evaluationDateFrom());
     assertEquals("2024-12-31", criteria.evaluationDateTo());
+  }
+
+  @Test
+  void searchChecklistsPagedComputesPageMathAndOffset() {
+    when(searchRepository.countChecklists(any())).thenReturn(53L);
+    when(searchRepository.searchChecklistsPage(any(), eq(40), eq(20), eq("opening_id"), eq(true)))
+        .thenReturn(List.of(new ChecklistSearchRow(
+            "9001", "SLB", "Stand Level Biodiversity", "2024", "DCK", "L1234",
+            "CP01", "BLK1", "1700001", "00010001", "2024-05-01", "IDIR\\JDOE", "RDY")));
+
+    PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null,
+        2, 20, "openingId,desc");
+
+    assertEquals(53L, page.totalElements());
+    assertEquals(3, page.totalPages());     // ceil(53 / 20)
+    assertEquals(2, page.pageNumber());
+    assertEquals(20, page.pageSize());
+    assertEquals(1, page.content().size());
+    assertEquals("9001", page.content().get(0).checklistId());
+    // offset = pageNumber * pageSize = 2 * 20 = 40, descending opening_id
+    verify(searchRepository).searchChecklistsPage(any(), eq(40), eq(20), eq("opening_id"), eq(true));
+  }
+
+  @Test
+  void searchChecklistsPagedClampsNegativePageAndCapsSize() {
+    when(searchRepository.countChecklists(any())).thenReturn(0L);
+    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(200), any(), eq(false)))
+        .thenReturn(List.of());
+
+    PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null,
+        -5, 9999, "");
+
+    assertEquals(0, page.pageNumber());     // negative page clamped to 0
+    assertEquals(200, page.pageSize());     // size capped at MAX_PAGE_SIZE
+    verify(searchRepository).searchChecklistsPage(any(), eq(0), eq(200), eq("protocol_name"), eq(false));
+  }
+
+  @Test
+  void searchChecklistsPagedDefaultsBlankSizeToDefaultPageSize() {
+    when(searchRepository.countChecklists(any())).thenReturn(0L);
+    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(20), any(), eq(false)))
+        .thenReturn(List.of());
+
+    PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null,
+        0, 0, "");
+
+    assertEquals(20, page.pageSize());      // zero/blank size -> DEFAULT_PAGE_SIZE
+  }
+
+  @Test
+  void parseSortDefaultsToProtocolNameAscWhenBlankOrUnknown() {
+    assertArrayEquals(new String[] {"protocol_name", "asc"}, SearchService.parseSort(""));
+    assertArrayEquals(new String[] {"protocol_name", "asc"}, SearchService.parseSort(null));
+    // unknown field falls back to default column but keeps a valid direction
+    assertArrayEquals(new String[] {"protocol_name", "desc"}, SearchService.parseSort("bogusField,desc"));
+  }
+
+  @Test
+  void parseSortMapsWhitelistedFieldAndDirection() {
+    assertArrayEquals(new String[] {"opening_id", "desc"}, SearchService.parseSort("openingId,desc"));
+    assertArrayEquals(new String[] {"opening_id", "asc"}, SearchService.parseSort("openingId"));
+    assertArrayEquals(new String[] {"evaluation_date", "asc"}, SearchService.parseSort("evaluationDate,whatever"));
   }
 
   @Test

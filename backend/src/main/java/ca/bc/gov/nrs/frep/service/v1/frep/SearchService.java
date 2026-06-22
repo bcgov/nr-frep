@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.service.v1.frep;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ClientSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchCriteria;
@@ -9,6 +10,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
@@ -68,6 +70,91 @@ public class SearchService {
     } catch (DataAccessException ex) {
       throw translateTooManyResults(ex);
     }
+  }
+
+  /** Default page size + cap, and the sortable result columns (public key -> result-set alias). */
+  private static final int DEFAULT_PAGE_SIZE = 20;
+  private static final int MAX_PAGE_SIZE = 200;
+  private static final String DEFAULT_SORT_COLUMN = "protocol_name";
+  private static final Map<String, String> SORTABLE_COLUMNS = Map.ofEntries(
+      Map.entry("protocolName", "protocol_name"),
+      Map.entry("protocolCode", "protocol_code"),
+      Map.entry("openingId", "opening_id"),
+      Map.entry("effectiveYear", "effective_year"),
+      Map.entry("orgUnitCode", "org_unit_code"),
+      Map.entry("licenceId", "licence_id"),
+      Map.entry("cuttingPermitId", "cutting_permit_id"),
+      Map.entry("cutBlockId", "cut_block_id"),
+      Map.entry("clientNumber", "client_number"),
+      Map.entry("evaluationDate", "evaluation_date"),
+      Map.entry("checklistStatusCode", "checklist_status_code"));
+
+  /**
+   * Server-side paginated checklist search. Unlike {@link #searchChecklists} (the legacy VARRAY proc,
+   * capped at 5000 and unable to page), this runs a native paginated query and returns the true total,
+   * so every page — and counts beyond 5000 — are reachable. {@code sort} is {@code "field"} or
+   * {@code "field,(asc|desc)"} where {@code field} is one of the whitelisted keys (unknown fields fall
+   * back to the default order); the column is never taken raw from the client.
+   */
+  public PagedResponse<ChecklistSearchResult> searchChecklistsPaged(
+      String effectiveYear,
+      String orgUnit,
+      String protocolType,
+      String licenceId,
+      String cuttingPermitId,
+      String cutBlockId,
+      String openingId,
+      String clientNumber,
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo,
+      int pageNumber,
+      int pageSize,
+      String sort
+  ) {
+    int page = Math.max(pageNumber, 0);
+    int size = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+
+    ChecklistSearchCriteria criteria = new ChecklistSearchCriteria(
+        trimToNull(effectiveYear),
+        trimToNull(orgUnit),
+        normalizeProtocolType(protocolType).orElse(null),
+        trimToNull(licenceId),
+        trimToNull(cuttingPermitId),
+        trimToNull(cutBlockId),
+        trimToNull(openingId),
+        trimToNull(clientNumber),
+        trimToNull(checklistStatusCode),
+        trimToNull(checklistId),
+        trimToNull(evaluationDateFrom),
+        trimToNull(evaluationDateTo));
+
+    String[] sortField = parseSort(sort);
+    String column = sortField[0];
+    boolean descending = "desc".equals(sortField[1]);
+
+    long total = searchRepository.countChecklists(criteria);
+    int totalPages = size == 0 ? 0 : (int) Math.ceil((double) total / size);
+
+    List<ChecklistSearchResult> content = searchRepository
+        .searchChecklistsPage(criteria, page * size, size, column, descending)
+        .stream()
+        .map(SearchService::toChecklistSearchResult)
+        .toList();
+
+    return new PagedResponse<>(content, total, totalPages, page, size);
+  }
+
+  /** Resolves a {@code "field,dir"} sort string to a whitelisted column + direction. */
+  static String[] parseSort(String sort) {
+    if (StringUtils.isBlank(sort)) {
+      return new String[] {DEFAULT_SORT_COLUMN, "asc"};
+    }
+    String[] parts = sort.split(",", 2);
+    String column = SORTABLE_COLUMNS.getOrDefault(parts[0].trim(), DEFAULT_SORT_COLUMN);
+    String dir = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim()) ? "desc" : "asc";
+    return new String[] {column, dir};
   }
 
   /**

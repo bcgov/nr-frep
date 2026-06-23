@@ -49,8 +49,8 @@ class CSVReportServiceTest {
     assertThat(result.mediaType()).isEqualTo(ReportFormat.CSV.getMediaType());
     assertThat(csv)
         .startsWith(
-            "Opening,Org Unit,Opening ID,Licence,CP,Blk,Exhibit A(ha),"
-                + "Harvest Start Date,Harvest Complete Date,Mgmt. Unit,"
+            "Opening,Org Unit,Opening ID,Licence,Cutting Permit,Cut Block,Exhibit A(ha),"
+                + "Harvest Start Date,Harvest Complete Date,Management unit,"
                 + "Gross Area(ha),Net Area(ha),Existing Checklists");
     // exhibit 12.5 kept; gross 30.0 -> "30"; net null -> empty; checklists joined + quoted (comma).
     assertThat(csv)
@@ -87,7 +87,7 @@ class CSVReportServiceTest {
     assertThat(csv)
         .startsWith(
             "CheckList ID,Resource Value,Master List,Opening ID,Org Unit,Checklist Status,"
-                + "Licence No.,Cut Block,CP,Client NO.,Evaluation Date,Team Lead");
+                + "Licence No.,Cut Block,Cutting Permit,Client NO.,Evaluation Date,Team Lead");
     // Status uses the code (legacy faithful), resource value uses the protocol name.
     assertThat(csv)
         .contains("100,Biodiversity,2024,987,DCK,SUB,A111,BLK9,CP1,00010001,2024-05-01,IDIR\\jdoe");
@@ -103,8 +103,8 @@ class CSVReportServiceTest {
 
     // Header only, no data rows.
     assertThat(csv.strip()).isEqualTo(
-        "Opening,Org Unit,Opening ID,Licence,CP,Blk,Exhibit A(ha),"
-            + "Harvest Start Date,Harvest Complete Date,Mgmt. Unit,"
+        "Opening,Org Unit,Opening ID,Licence,Cutting Permit,Cut Block,Exhibit A(ha),"
+            + "Harvest Start Date,Harvest Complete Date,Management unit,"
             + "Gross Area(ha),Net Area(ha),Existing Checklists");
   }
 }

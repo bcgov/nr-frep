@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import NotificationProvider from './NotificationProvider';
 import { useNotification } from './useNotification';
 
+import type { NotificationContent } from './NotificationContext';
+
 // Helper component to trigger notification
 const TestComponent = () => {
   const { display } = useNotification();
@@ -24,6 +26,20 @@ const TestComponent = () => {
       Show Notification
     </button>
   );
+};
+
+// Triggers a toast of a given kind/timeout/title for the severity-timeout tests.
+const KindButton = ({
+  kind,
+  timeout,
+  title,
+}: {
+  kind: NotificationContent['kind'];
+  timeout: number;
+  title: string;
+}) => {
+  const { display } = useNotification();
+  return <button onClick={() => display({ title, kind, timeout })}>{`show-${title}`}</button>;
 };
 
 describe('NotificationProvider', () => {
@@ -66,6 +82,41 @@ describe('NotificationProvider', () => {
     });
     // Notification should be removed
     expect(screen.queryByText('Test Title')).not.toBeInTheDocument();
+  });
+
+  it('does not auto-dismiss error toasts (user must close them)', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <NotificationProvider>
+          <KindButton kind="error" timeout={9000} title="Boom" />
+        </NotificationProvider>,
+      );
+      act(() => screen.getByText('show-Boom').click());
+      expect(screen.getByText('Boom')).toBeInTheDocument();
+      // Well past any requested timeout — an error toast stays put.
+      act(() => vi.advanceTimersByTime(60000));
+      expect(screen.getByText('Boom')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps info toasts up past their requested (short) timeout', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <NotificationProvider>
+          <KindButton kind="info" timeout={3000} title="Note" />
+        </NotificationProvider>,
+      );
+      act(() => screen.getByText('show-Note').click());
+      // Requested 3000ms, but info toasts are extended to a minimum read time.
+      act(() => vi.advanceTimersByTime(4000));
+      expect(screen.getByText('Note')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should fail if no provider is present', () => {

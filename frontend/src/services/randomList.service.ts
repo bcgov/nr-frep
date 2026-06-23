@@ -1,7 +1,7 @@
-import type { RandomListQuery, RandomListResponse } from '@/types/randomList';
-
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
+
+import type { RandomListQuery, RandomListResponse } from '@/types/randomList';
 
 export class RandomListService extends HttpClient {
   constructor(readonly config: APIConfig) {
@@ -20,7 +20,4 @@ export class RandomListService extends HttpClient {
       },
     });
   }
-
-  // CSV export is handled by services/reports.ts (requestRandomListCsv → GET
-  // /v1/reports/random-list/csv), which streams the file as a blob for download.
 }

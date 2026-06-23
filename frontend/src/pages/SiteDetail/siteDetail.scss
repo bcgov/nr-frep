@@ -36,11 +36,27 @@
   }
 }
 
-// Resource table sits on the page (no grey panel box). Save button below, right-aligned.
+// Editable cell: the field stacked over its own validation message. We render the message ourselves
+// (rather than Carbon's in-cell invalidText, which gets clipped by the fixed-height table row) so it
+// shows in full below the field. The wrapper grows the cell, so the row expands to fit it.
+.site-detail__editable-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  inline-size: 100%;
+}
+
+.site-detail__cell-error {
+  @include type.type-style('label-01');
+  color: var(--#{vars.$bcgov-prefix}-text-error);
+  line-height: 1.34;
+}
+
+// Save action above the resource table, right-aligned (no header band).
 .site-detail__resource-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 1rem;
+  margin-bottom: 1rem;
 }
 
 // Resource-value cell: optional "submitted" lock icon before the name.

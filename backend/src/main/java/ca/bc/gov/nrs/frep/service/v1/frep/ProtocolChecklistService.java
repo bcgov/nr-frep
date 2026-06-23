@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -39,7 +38,6 @@ import org.springframework.web.server.ResponseStatusException;
  * {@link ChecklistRepository}.
  */
 @Service
-@Profile("oracle")
 public class ProtocolChecklistService {
 
   private final ChecklistRepository checklistRepository;

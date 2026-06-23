@@ -4,14 +4,12 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
 import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
 import ca.bc.gov.nrs.frep.repository.v1.AcceptedSitesRepository;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,11 +19,9 @@ import org.springframework.stereotype.Service;
  * <p>Legacy equivalent: {@code FREP_200_ACCEPTED_SITES.GET}.
  */
 @Service
-@Profile("oracle")
 public class AcceptedSiteService {
 
   private static final String TARGETED_STATUS_CODE = "TAR";
-  private static final String CHR_CODE = "CHR";
 
   // Riparian (RIP) and Water (WTR) are out of scope for the migration — the accepted-sites list
   // surfaces only Biodiversity (SLB) and Cultural Heritage (CHR). The legacy FREP200 proc still
@@ -50,16 +46,10 @@ public class AcceptedSiteService {
   ) {
     Map<String, String> protocolNameToCode = loadProtocolNameToCode();
 
-    // The FREP200 proc returns BIO/RIP/WTR only (it hard-excludes CHR). Cultural Heritage is
-    // fetched via a supplementary query and merged in — a deliberate divergence from legacy,
-    // which surfaces CHR only on its separate dashboard.
-    List<AcceptedSiteRow> rows = new ArrayList<>(
-        acceptedSitesRepository.findAcceptedSites(orgUnit, effectiveYear));
-    if (includesCulturalHeritage(protocolType)) {
-      rows.addAll(acceptedSitesRepository.findCulturalHeritageSites(orgUnit, effectiveYear));
-    }
-
-    return rows.stream()
+    // One native query returns Biodiversity + Cultural Heritage (the legacy proc + the supplementary
+    // CHR query, consolidated). RIP/WTR are out of scope and never returned; the isOutOfScope filter
+    // remains a cheap safety net in case the result set ever widens.
+    return acceptedSitesRepository.findAcceptedSites(orgUnit, effectiveYear).stream()
         .map(row -> toResponse(row, effectiveYear, orgUnit, protocolNameToCode))
         .filter(site -> !isOutOfScope(site))
         .filter(site -> matchesProtocol(site, protocolType))
@@ -69,10 +59,6 @@ public class AcceptedSiteService {
   private static boolean isOutOfScope(AcceptedSiteResponse site) {
     return site.protocolCode() != null
         && OUT_OF_SCOPE_CODES.contains(site.protocolCode().toUpperCase(Locale.ROOT));
-  }
-
-  private static boolean includesCulturalHeritage(String protocolType) {
-    return StringUtils.isBlank(protocolType) || CHR_CODE.equalsIgnoreCase(protocolType);
   }
 
   static AcceptedSiteResponse toResponse(

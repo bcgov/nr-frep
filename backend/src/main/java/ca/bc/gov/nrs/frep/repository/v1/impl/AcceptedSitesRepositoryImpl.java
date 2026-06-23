@@ -3,63 +3,46 @@ package ca.bc.gov.nrs.frep.repository.v1.impl;
 import ca.bc.gov.nrs.frep.repository.v1.AcceptedSitesRepository;
 import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.AcceptedSiteRow;
-import java.sql.Array;
-import java.sql.CallableStatement;
-import java.sql.SQLException;
-import java.sql.Struct;
-import java.sql.Types;
-import java.util.ArrayList;
 import java.util.List;
-import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * Wraps legacy package {@code FREP_200_ACCEPTED_SITES} (FREP200 Accepted Sites).
+ * Accepted/targeted sites for the FREP200 dashboard. Replaces legacy package
+ * {@code FREP_200_ACCEPTED_SITES.get} with a single native query.
+ *
+ * <p>The legacy proc returned BIO/RIP/WTR via a bounded VARRAY ({@code BULK COLLECT}) and hard-excluded
+ * CHR, which the new app then fetched with a separate query and merged in Java. This query does both in
+ * one pass — a {@code UNION ALL} of the BIO and CHR branches — dropping RIP/WTR (out of migration scope),
+ * the unused header counts, and the unused map-extent columns, and removing the VARRAY cap.
+ *
+ * <p>Schema-qualified to {@code THE} (the app connects as a different user; see SearchRepositoryImpl).
+ * The BIO branch keeps the proc's {@code cut_block_open_admin} inner join for exact result parity, so the
+ * app user needs SELECT on {@code THE.cut_block_open_admin}; CHR omits it (it never had it). Tenure
+ * (licence/CP/cut block) comes from {@code frep_selected_site} in both, as in the proc.
  */
 @Repository
-@Profile("oracle")
 public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
     implements AcceptedSitesRepository {
 
-  static final String PACKAGE_NAME = "FREP_200_ACCEPTED_SITES";
-  static final String ARRAY_TYPE_NAME = "THE.FREP_ACC_SITES_VARRAY";
+  private final NamedParameterJdbcTemplate namedJdbc;
 
   public AcceptedSitesRepositoryImpl(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
+    this.namedJdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
   }
 
   @Override
   public List<AcceptedSiteRow> findAcceptedSites(String orgUnitNo, String effectiveYear) {
-    String call = "{call " + PACKAGE_NAME + ".get (?,?,?,?,?,?,?,?,?,?,?,?,?,?)}";
-    return executeCall(call, cs -> {
-      cs.setString(1, orgUnitNo);
-      cs.setString(2, effectiveYear);
-      cs.registerOutParameter(3, Types.VARCHAR);
-      cs.registerOutParameter(4, Types.NUMERIC);
-      cs.registerOutParameter(5, Types.NUMERIC);
-      cs.registerOutParameter(6, Types.NUMERIC);
-      cs.registerOutParameter(7, Types.NUMERIC);
-      cs.registerOutParameter(8, Types.NUMERIC);
-      cs.registerOutParameter(9, Types.NUMERIC);
-      cs.setString(10, "");
-      cs.registerOutParameter(11, Types.VARCHAR);
-      setEmptyAcceptedSitesArray(cs, 12);
-      cs.registerOutParameter(12, Types.ARRAY, ARRAY_TYPE_NAME);
-      cs.registerOutParameter(13, Types.NUMERIC);
-      cs.registerOutParameter(14, Types.NUMERIC);
-    }, cs -> {
-      throwIfError(PACKAGE_NAME, "get", cs.getString(11));
-      return readAcceptedSitesArray(cs.getArray(12));
-    });
-  }
-
-  @Override
-  public List<AcceptedSiteRow> findCulturalHeritageSites(String orgUnitNo, String effectiveYear) {
-    return jdbcTemplate.query(
-        CHR_ACCEPTED_SITES_SQL,
+    MapSqlParameterSource params = new MapSqlParameterSource()
+        .addValue("effectiveYear", effectiveYear)
+        .addValue("orgUnit", orgUnitNo);
+    return namedJdbc.query(
+        ACCEPTED_SITES_SQL,
+        params,
         (rs, rowNum) -> new AcceptedSiteRow(
             cleanString(rs.getString("checklist_id")),
             cleanString(rs.getString("checklist_type")),
@@ -71,12 +54,45 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
             cleanString(rs.getString("licence_id")),
             cleanString(rs.getString("cutting_permit_id")),
             cleanString(rs.getString("cut_block_id")),
-            cleanString(rs.getString("harvest_complete_date"))),
-        effectiveYear,
-        orgUnitNo);
+            cleanString(rs.getString("harvest_complete_date"))));
   }
 
-  private static final String CHR_ACCEPTED_SITES_SQL = """
+  /**
+   * BIO + CHR accepted/targeted sites. The BIO branch ports {@code FREP_200_ACCEPTED_SITES.get} (filtered
+   * to SLB, with the {@code cut_block_open_admin} inner join and the optional checklist outer join, so
+   * targeted sites without a checklist still appear). The CHR branch is the new app's own join (inner —
+   * CHR rows only exist once a checklist does). Both source the same 11 columns the dashboard reads;
+   * {@code sample_number} is always NULL for BIO and CHR (the proc only populates it for RIP).
+   */
+  private static final String ACCEPTED_SITES_SQL = """
+      SELECT bc.biodiversity_checklist_id              AS checklist_id
+           , frvtc.description                         AS checklist_type
+           , NULL                                      AS sample_number
+           , frv.frep_resource_value_stat_code         AS resource_value_stat_code
+           , bc.frep_checklist_status_code             AS checklist_status_code
+           , THE.frep_formatted_mapsheet(fss.mapsheet_grid, fss.mapsheet_letter, fss.mapsheet_square,
+                                         fss.mapsheet_quad, fss.mapsheet_sub_quad, fss.opening_number)
+                                                       AS opening_number
+           , fss.opening_id                            AS opening_id
+           , fss.forest_file_id                        AS licence_id
+           , fss.cutting_permit_id                     AS cutting_permit_id
+           , fss.cut_block_id                          AS cut_block_id
+           , TO_CHAR(fss.disturbance_end_date, 'YYYY-MM-DD')
+                                                       AS harvest_complete_date
+        FROM THE.frep_selected_site fss
+           , THE.frep_resource_value frv
+           , THE.cut_block_open_admin cboa
+           , THE.frep_resource_value_type_code frvtc
+           , THE.biodiversity_checklist bc
+       WHERE fss.frep_selected_site_id = frv.frep_selected_site_id
+         AND frv.frep_resource_value_type_code = frvtc.frep_resource_value_type_code
+         AND fss.cut_block_open_admin_id = cboa.cut_block_open_admin_id
+         AND frv.frep_resource_value_id = bc.frep_resource_value_id (+)
+         AND fss.effective_year = to_number(:effectiveYear)
+         AND fss.org_unit_no = to_number(:orgUnit)
+         AND frv.frep_resource_value_stat_code <> 'REJ'
+         AND frv.frep_resource_value_type_code = 'SLB'
+      UNION ALL
       SELECT cc.chr_checklist_id                       AS checklist_id
            , frvtc.description                         AS checklist_type
            , NULL                                      AS sample_number
@@ -98,11 +114,11 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
        WHERE fss.frep_selected_site_id = frv.frep_selected_site_id
          AND frv.frep_resource_value_id = cc.frep_resource_value_id
          AND frv.frep_resource_value_type_code = frvtc.frep_resource_value_type_code
-         AND fss.effective_year = to_number(?)
-         AND fss.org_unit_no = to_number(?)
+         AND fss.effective_year = to_number(:effectiveYear)
+         AND fss.org_unit_no = to_number(:orgUnit)
          AND frv.frep_resource_value_stat_code <> 'REJ'
          AND frv.frep_resource_value_type_code = 'CHR'
-       ORDER BY fss.opening_id
+       ORDER BY checklist_type, opening_id, checklist_id
       """;
 
   private static String cleanString(String value) {
@@ -119,60 +135,5 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
       }
     }
     return trimmed;
-  }
-
-  private static void setEmptyAcceptedSitesArray(CallableStatement cs, int index) throws SQLException {
-    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    cs.setArray(index, connection.createOracleArray(ARRAY_TYPE_NAME, new Object[0]));
-  }
-
-  private static List<AcceptedSiteRow> readAcceptedSitesArray(Array array) throws SQLException {
-    if (array == null) {
-      return List.of();
-    }
-    Object[] elements = (Object[]) array.getArray();
-    List<AcceptedSiteRow> rows = new ArrayList<>(elements.length);
-    for (Object element : elements) {
-      if (element instanceof Struct struct) {
-        rows.add(fromStruct(struct));
-      }
-    }
-    return rows;
-  }
-
-  /**
-   * Attribute order matches {@code FREP_ACC_SITES_OBJECT} in legacy DDL.
-   */
-  static AcceptedSiteRow fromStruct(Struct struct) throws SQLException {
-    Object[] attrs = struct.getAttributes();
-    return new AcceptedSiteRow(
-        stringAttr(attrs, 2),
-        stringAttr(attrs, 4),
-        stringAttr(attrs, 3),
-        stringAttr(attrs, 5),
-        stringAttr(attrs, 6),
-        stringAttr(attrs, 8),
-        stringAttr(attrs, 7),
-        stringAttr(attrs, 9),
-        stringAttr(attrs, 10),
-        stringAttr(attrs, 11),
-        stringAttr(attrs, 12)
-    );
-  }
-
-  private static String stringAttr(Object[] attrs, int index) {
-    if (attrs == null || index >= attrs.length || attrs[index] == null) {
-      return "";
-    }
-    String value = attrs[index].toString().trim();
-    if (value.endsWith(".0")) {
-      try {
-        Double.parseDouble(value);
-        value = value.substring(0, value.length() - 2);
-      } catch (NumberFormatException ignored) {
-        // keep original string
-      }
-    }
-    return value;
   }
 }

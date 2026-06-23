@@ -1,8 +1,8 @@
 package ca.bc.gov.nrs.frep.repository.v1.bean;
 
 /**
- * Row returned by {@code FREP_200_ACCEPTED_SITES.GET} via
- * {@code THE.FREP_ACC_SITES_OBJECT}.
+ * One accepted/targeted site row from the consolidated FREP200 query (Biodiversity + Cultural
+ * Heritage). Field names align with the legacy {@code THE.FREP_ACC_SITES_OBJECT} the proc returned.
  */
 public record AcceptedSiteRow(
     String checklistId,

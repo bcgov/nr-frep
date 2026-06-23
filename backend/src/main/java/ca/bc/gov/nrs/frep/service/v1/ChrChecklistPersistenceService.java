@@ -59,7 +59,6 @@ import java.util.UUID;
 import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,7 +66,6 @@ import org.springframework.transaction.annotation.Transactional;
  * Spring adaptation of legacy {@code RestDataManager} CHR persistence.
  */
 @Service
-@Profile("oracle")
 @Transactional
 public class ChrChecklistPersistenceService {
 

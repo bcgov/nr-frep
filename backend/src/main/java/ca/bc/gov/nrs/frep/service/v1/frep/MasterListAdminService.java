@@ -10,7 +10,6 @@ import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.math.BigDecimal;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Service;
  * <p>Legacy equivalents: {@code FREP_700_GEN_MASTER.get} and {@code generate}.
  */
 @Service
-@Profile("oracle")
 public class MasterListAdminService {
 
   private static final String DEFAULT_MIN_GROSS_AREA_HA = "2";

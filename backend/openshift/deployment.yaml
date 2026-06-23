@@ -86,9 +86,7 @@ spec:
             - containerPort: 8080
               protocol: TCP
           env:
-            # ── Spring profile + server ───────────────────────
-            - name: SPRING_PROFILES_ACTIVE
-              value: oracle
+            # ── Server ───────────────────────
             - name: SERVER_PORT
               value: "8080"
 
@@ -102,7 +100,7 @@ spec:
             - name: IDENTITY_LOOKUP_BASE_URL
               value: ${IDENTITY_LOOKUP_BASE_URL}
 
-            # ── Oracle DB (consumed by application-oracle.yml) ─
+            # ── Oracle DB (consumed by application.yml) ─
             - name: DATABASE_HOST
               value: ${DATABASE_HOST}
             - name: DATABASE_SERVICE_NAME

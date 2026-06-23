@@ -11,7 +11,6 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Repository;
  * Wraps legacy package {@code FREP_700_GEN_MASTER} (FREP700 Generate Master List).
  */
 @Repository
-@Profile("oracle")
 public class MasterListRepositoryImpl extends AbstractFrepRepository implements MasterListRepository {
 
   static final String PACKAGE_NAME = "FREP_700_GEN_MASTER";

@@ -18,8 +18,10 @@ import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -162,6 +164,27 @@ class SearchServiceTest {
     assertArrayEquals(new String[] {"opening_id", "desc"}, SearchService.parseSort("openingId,desc"));
     assertArrayEquals(new String[] {"opening_id", "asc"}, SearchService.parseSort("openingId"));
     assertArrayEquals(new String[] {"evaluation_date", "asc"}, SearchService.parseSort("evaluationDate,whatever"));
+  }
+
+  @Test
+  void streamChecklistsMapsRowsToResults() {
+    when(searchRepository.streamChecklists(any(), eq("protocol_name"), eq(false), any()))
+        .thenAnswer(invocation -> {
+          Consumer<ChecklistSearchRow> consumer = invocation.getArgument(3);
+          consumer.accept(new ChecklistSearchRow(
+              "9001", "SLB", "Stand Level Biodiversity", "2024", "DCK", "L1234",
+              "CP01", "BLK1", "1700001", "00010001", "2024-05-01", "IDIR\\JDOE", "RDY"));
+          return 1L;
+        });
+
+    List<ChecklistSearchResult> collected = new ArrayList<>();
+    long count = service.streamChecklists(
+        null, null, null, null, null, null, null, null, null, null, null, null, collected::add);
+
+    assertEquals(1L, count);
+    assertEquals(1, collected.size());
+    assertEquals("9001", collected.get(0).checklistId());
+    assertEquals("Stand Level Biodiversity", collected.get(0).protocolName());
   }
 
   @Test

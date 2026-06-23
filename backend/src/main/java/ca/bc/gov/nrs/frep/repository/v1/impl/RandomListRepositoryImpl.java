@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Repository;
  * Wraps legacy package {@code FREP_100_DIST_RAND_LIST} (FREP100 District Random List).
  */
 @Repository
-@Profile("oracle")
 public class RandomListRepositoryImpl extends AbstractFrepRepository implements RandomListRepository {
 
   static final String PACKAGE_NAME = "FREP_100_DIST_RAND_LIST";

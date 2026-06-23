@@ -3,17 +3,15 @@ package ca.bc.gov.nrs.frep.controller.v1;
 import ca.bc.gov.nrs.frep.endpoint.v1.OracleSmokeApiEndpoint;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Smoke endpoint verifying Oracle connectivity via a lightweight query. Active only under the
- * {@code oracle} profile. Mappings declared on {@link OracleSmokeApiEndpoint}.
+ * Smoke endpoint verifying Oracle connectivity via a lightweight query. Mappings declared on
+ * {@link OracleSmokeApiEndpoint}.
  */
 @RestController
-@Profile("oracle")
 public class OracleSmokeApiController implements OracleSmokeApiEndpoint {
 
   private final JdbcTemplate jdbcTemplate;

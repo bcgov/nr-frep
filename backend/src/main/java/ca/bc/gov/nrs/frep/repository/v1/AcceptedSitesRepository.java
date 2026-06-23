@@ -10,9 +10,9 @@ import java.util.List;
  */
 public interface AcceptedSitesRepository {
 
-  /** Loads accepted/targeted sites for a district and master-list year. */
+  /**
+   * Accepted/targeted sites (Biodiversity + Cultural Heritage) for a district and master-list year, in a
+   * single native query. RIP/WTR are out of migration scope and not returned.
+   */
   List<AcceptedSiteRow> findAcceptedSites(String orgUnitNo, String effectiveYear);
-
-  /** Supplementary Cultural Heritage (CHR) accepted/targeted sites for a district and year. */
-  List<AcceptedSiteRow> findCulturalHeritageSites(String orgUnitNo, String effectiveYear);
 }

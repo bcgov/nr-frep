@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -25,7 +24,6 @@ import org.springframework.web.server.ResponseStatusException;
  * <p>Legacy equivalent: {@code FREP_110_SITE_DETAILS.GET}.
  */
 @Service
-@Profile("oracle")
 public class SiteDetailService {
 
   static final String SUBMITTED = "SUB";

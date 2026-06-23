@@ -16,7 +16,6 @@ import java.util.Map;
 import oracle.jdbc.OracleConnection;
 import oracle.jdbc.OracleTypes;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -24,7 +23,6 @@ import org.springframework.stereotype.Repository;
  * Wraps legacy protocol-checklist GET procedures for BIO/SLB, RIP, and WTR.
  */
 @Repository
-@Profile("oracle")
 public class ChecklistRepositoryImpl extends AbstractFrepRepository implements ChecklistRepository {
 
   static final String BIO_OPENING_PACKAGE = "frep_210_bio_opening";

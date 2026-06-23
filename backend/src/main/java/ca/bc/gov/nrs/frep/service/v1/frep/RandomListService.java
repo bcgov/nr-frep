@@ -8,7 +8,6 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListResult;
 import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListRow;
 import ca.bc.gov.nrs.frep.repository.v1.bean.RandomListSummary;
 import java.util.List;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
  * <p>Legacy equivalent: {@code FREP_100_DIST_RAND_LIST.GET}.
  */
 @Service
-@Profile("oracle")
 public class RandomListService {
 
   private final RandomListRepository randomListRepository;

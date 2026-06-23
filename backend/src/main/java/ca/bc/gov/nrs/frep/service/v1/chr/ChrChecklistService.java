@@ -27,12 +27,10 @@ import java.util.Base64;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Profile("oracle")
 public class ChrChecklistService {
 
   private static final Logger log = LoggerFactory.getLogger(ChrChecklistService.class);

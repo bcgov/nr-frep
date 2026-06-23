@@ -27,7 +27,6 @@ import net.sf.jasperreports.export.SimpleWriterExporterOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -43,11 +42,10 @@ import org.springframework.stereotype.Service;
  * now, so {@link #warmCompileCache()} is a no-op and every request 404s until a
  * report is registered + its template added.</p>
  *
- * <p>{@code @Profile("oracle")} because filling reads through the Oracle
- * datasource (the same one repositories use via {@code oracleJdbcTemplate}).</p>
+ * <p>Filling reads through the Oracle datasource (the same one repositories use via
+ * {@code oracleJdbcTemplate}).</p>
  */
 @Service
-@Profile("oracle")
 public class ReportService {
 
   private static final Logger LOG = LoggerFactory.getLogger(ReportService.class);

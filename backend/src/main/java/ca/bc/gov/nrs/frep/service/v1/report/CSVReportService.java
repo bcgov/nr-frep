@@ -9,7 +9,11 @@ import ca.bc.gov.nrs.frep.exception.ReportGenerationException;
 import ca.bc.gov.nrs.frep.service.v1.frep.RandomListService;
 import ca.bc.gov.nrs.frep.service.v1.frep.SearchService;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -17,7 +21,6 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
@@ -28,21 +31,20 @@ import org.springframework.stereotype.Service;
  * PDF. Jasper / {@code ReportService} remains the path for any future templated/PDF reports.
  */
 @Service
-@Profile("oracle")
 public class CSVReportService {
 
   private static final Logger LOG = LoggerFactory.getLogger(CSVReportService.class);
 
   /** Legacy column headers for the FREP100 random-list CSV (order matches the legacy export). */
   private static final List<String> RANDOM_LIST_COLUMNS = List.of(
-      "Opening", "Org Unit", "Opening ID", "Licence", "CP", "Blk", "Exhibit A(ha)",
-      "Harvest Start Date", "Harvest Complete Date", "Mgmt. Unit",
+      "Opening", "Org Unit", "Opening ID", "Licence", "Cutting Permit", "Cut Block", "Exhibit A(ha)",
+      "Harvest Start Date", "Harvest Complete Date", "Management unit",
       "Gross Area(ha)", "Net Area(ha)", "Existing Checklists");
 
   /** Legacy column headers for the FREP400 checklist-search CSV (order matches the legacy export). */
   private static final List<String> CHECKLIST_SEARCH_COLUMNS = List.of(
       "CheckList ID", "Resource Value", "Master List", "Opening ID", "Org Unit",
-      "Checklist Status", "Licence No.", "Cut Block", "CP", "Client NO.",
+      "Checklist Status", "Licence No.", "Cut Block", "Cutting Permit", "Client NO.",
       "Evaluation Date", "Team Lead");
 
   private final ReportExtractRepository extractRepository;
@@ -120,15 +122,21 @@ public class CSVReportService {
         String.join(", ", site.existingChecklists()));
   }
 
+  /** Suggested download filename for the checklist-search export (legacy name). */
+  public static final String CHECKLIST_SEARCH_FILENAME = "frep_checklist_search_results.csv";
+
+  /** Flush the response every N rows so a long stream keeps the connection alive (avoids idle timeouts). */
+  private static final int FLUSH_EVERY_ROWS = 500;
+
   /**
-   * Exports the FREP400 Checklist Search results as CSV — the legacy "Export to Excel" button on
-   * {@code frep400ChecklistSearch.jsp}, which actually emitted a CSV
-   * ({@code frep_checklist_search_results.csv}). Re-runs the same search ({@code SearchService}
-   * over {@code FREP_400_CHECKLIST_SEARCH}) with the supplied filters and renders the legacy 12
-   * columns in order. A &gt;500-row search surfaces as 400 (via {@code SearchService}), same as the
-   * on-screen search.
+   * Streams the FREP400 Checklist Search results as CSV directly to {@code outputStream} — the legacy
+   * "Export to Excel" button on {@code frep400ChecklistSearch.jsp}, which actually emitted a CSV. Unlike
+   * the on-screen list (which is paged) and the old proc path (capped at 5000), this uses the uncapped
+   * native query streamed via a server-side cursor, so the export is complete and memory stays constant
+   * regardless of result size. The repository enforces a max-rows safety cap. Renders the legacy 12
+   * columns in order.
    */
-  public ReportResult generateChecklistSearchCsv(
+  public void streamChecklistSearchCsv(
       String effectiveYear,
       String orgUnit,
       String protocolType,
@@ -140,14 +148,43 @@ public class CSVReportService {
       String checklistStatusCode,
       String checklistId,
       String evaluationDateFrom,
-      String evaluationDateTo) {
-    List<ChecklistSearchResult> results = searchService.searchChecklists(
-        effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
-        clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo);
-    ReportExtract extract = new ReportExtract(
-        CHECKLIST_SEARCH_COLUMNS, results.stream().map(CSVReportService::toChecklistSearchRow).toList());
-    return new ReportResult(
-        toCsv(extract), "frep_checklist_search_results.csv", ReportFormat.CSV.getMediaType());
+      String evaluationDateTo,
+      OutputStream outputStream) {
+    Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
+    CSVFormat format = CSVFormat.DEFAULT.builder()
+        .setHeader(CHECKLIST_SEARCH_COLUMNS.toArray(String[]::new))
+        .build();
+    long[] written = {0L};
+    try (CSVPrinter printer = new CSVPrinter(writer, format)) {
+      searchService.streamChecklists(
+          effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
+          clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo,
+          row -> {
+            printRow(printer, row);
+            if (++written[0] % FLUSH_EVERY_ROWS == 0) {
+              flush(printer);
+            }
+          });
+      printer.flush();
+    } catch (IOException ex) {
+      throw new ReportGenerationException("Failed to stream the checklist-search CSV", ex);
+    }
+  }
+
+  private static void printRow(CSVPrinter printer, ChecklistSearchResult row) {
+    try {
+      printer.printRecord(toChecklistSearchRow(row));
+    } catch (IOException ex) {
+      throw new UncheckedIOException(ex);
+    }
+  }
+
+  private static void flush(CSVPrinter printer) {
+    try {
+      printer.flush();
+    } catch (IOException ex) {
+      throw new UncheckedIOException(ex);
+    }
   }
 
   private static List<String> toChecklistSearchRow(ChecklistSearchResult row) {

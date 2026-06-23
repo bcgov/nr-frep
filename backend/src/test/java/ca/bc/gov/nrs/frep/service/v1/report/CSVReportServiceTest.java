@@ -11,8 +11,10 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.RandomListSummaryResponse;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
 import ca.bc.gov.nrs.frep.service.v1.frep.RandomListService;
 import ca.bc.gov.nrs.frep.service.v1.frep.SearchService;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 
@@ -62,20 +64,26 @@ class CSVReportServiceTest {
   }
 
   @Test
-  void checklistSearchCsvHasLegacyHeaderAndRowInOrder() {
-    when(searchService.searchChecklists(
+  @SuppressWarnings("unchecked")
+  void checklistSearchCsvStreamsLegacyHeaderAndRowInOrder() {
+    // streamChecklists pushes each mapped result to the consumer; the CSV is written to the stream.
+    when(searchService.streamChecklists(
             ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(),
             ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(),
             ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(),
-            ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any()))
-        .thenReturn(List.of(checklist()));
+            ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(),
+            ArgumentMatchers.any()))
+        .thenAnswer(invocation -> {
+          Consumer<ChecklistSearchResult> consumer = invocation.getArgument(12);
+          consumer.accept(checklist());
+          return 1L;
+        });
 
-    ReportResult result = service.generateChecklistSearchCsv(
-        "2024", "DCK", "BIO", null, null, null, null, null, "SUB", null, null, null);
-    String csv = new String(result.content(), StandardCharsets.UTF_8);
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    service.streamChecklistSearchCsv(
+        "2024", "DCK", "BIO", null, null, null, null, null, "SUB", null, null, null, out);
+    String csv = out.toString(StandardCharsets.UTF_8);
 
-    assertThat(result.filename()).isEqualTo("frep_checklist_search_results.csv");
-    assertThat(result.mediaType()).isEqualTo(ReportFormat.CSV.getMediaType());
     assertThat(csv)
         .startsWith(
             "CheckList ID,Resource Value,Master List,Opening ID,Org Unit,Checklist Status,"

@@ -10,10 +10,14 @@ import java.sql.Struct;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Consumer;
 import oracle.jdbc.OracleConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -22,7 +26,6 @@ import org.springframework.stereotype.Repository;
  * Wraps legacy FREP400 checklist search and FREP410 client search procedures.
  */
 @Repository
-@Profile("oracle")
 public class SearchRepositoryImpl extends AbstractFrepRepository implements SearchRepository {
 
   static final String CHECKLIST_SEARCH_PROC = "FREP_400_CHECKLIST_SEARCH";
@@ -32,12 +35,42 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
   static final String CLIENT_SEARCH_TYPE = "THE.FREP_CLIENT_SEARCH_VW_OBJECT";
   static final String CLIENT_SEARCH_ARRAY = "THE.FREP_CLIENT_SEARCH_VW_VARRAY";
 
+  private static final Logger log = LoggerFactory.getLogger(SearchRepositoryImpl.class);
+
+  /** Cursor batch size for the streaming export (Oracle defaults to 10 — too chatty for large pulls). */
+  private static final int STREAM_FETCH_SIZE = 1000;
+  /** Hard safety cap on a single CSV export, so an unfiltered search can't stream an unbounded file. */
+  static final int MAX_EXPORT_ROWS = 100_000;
+
   private final NamedParameterJdbcTemplate namedJdbc;
+  /** Dedicated template for the streaming export: server-side cursor (fetch size) + the max-rows cap. */
+  private final NamedParameterJdbcTemplate streamingJdbc;
 
   public SearchRepositoryImpl(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
     this.namedJdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
+    JdbcTemplate streamingTemplate = new JdbcTemplate(
+        Objects.requireNonNull(jdbcTemplate.getDataSource(), "oracleJdbcTemplate has no DataSource"));
+    streamingTemplate.setFetchSize(STREAM_FETCH_SIZE);
+    streamingTemplate.setMaxRows(MAX_EXPORT_ROWS);
+    this.streamingJdbc = new NamedParameterJdbcTemplate(streamingTemplate);
   }
+
+  /** Maps a checklist-search result-set row. Shared by the paged and streaming reads. */
+  private static final RowMapper<ChecklistSearchRow> CHECKLIST_ROW_MAPPER = (rs, n) -> new ChecklistSearchRow(
+      clean(rs.getString("checklist_id")),
+      clean(rs.getString("protocol_code")),
+      clean(rs.getString("protocol_name")),
+      clean(rs.getString("effective_year")),
+      clean(rs.getString("org_unit_code")),
+      clean(rs.getString("licence_id")),
+      clean(rs.getString("cutting_permit_id")),
+      clean(rs.getString("cut_block_id")),
+      clean(rs.getString("opening_id")),
+      clean(rs.getString("client_number")),
+      clean(rs.getString("evaluation_date")),
+      clean(rs.getString("evaluator_userid")),
+      clean(rs.getString("checklist_status_code")));
 
   /**
    * Inner checklist-search query, ported verbatim from {@code FREP_CHECKLIST_SEARCH.search} (the
@@ -134,25 +167,34 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
   public List<ChecklistSearchRow> searchChecklistsPage(
       ChecklistSearchCriteria criteria, int offset, int pageSize, String orderByColumn, boolean descending) {
     String sql = "SELECT * FROM (" + CHECKLIST_SEARCH_INNER + ") "
-        + "ORDER BY " + orderByColumn + (descending ? " DESC" : " ASC") + ", opening_id, checklist_id "
+        + orderByClause(orderByColumn, descending)
         + "OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY";
     MapSqlParameterSource params = checklistParams(criteria)
         .addValue("offset", offset)
         .addValue("pageSize", pageSize);
-    return namedJdbc.query(sql, params, (rs, n) -> new ChecklistSearchRow(
-        clean(rs.getString("checklist_id")),
-        clean(rs.getString("protocol_code")),
-        clean(rs.getString("protocol_name")),
-        clean(rs.getString("effective_year")),
-        clean(rs.getString("org_unit_code")),
-        clean(rs.getString("licence_id")),
-        clean(rs.getString("cutting_permit_id")),
-        clean(rs.getString("cut_block_id")),
-        clean(rs.getString("opening_id")),
-        clean(rs.getString("client_number")),
-        clean(rs.getString("evaluation_date")),
-        clean(rs.getString("evaluator_userid")),
-        clean(rs.getString("checklist_status_code"))));
+    return namedJdbc.query(sql, params, CHECKLIST_ROW_MAPPER);
+  }
+
+  @Override
+  public long streamChecklists(
+      ChecklistSearchCriteria criteria, String orderByColumn, boolean descending,
+      Consumer<ChecklistSearchRow> consumer) {
+    String sql = "SELECT * FROM (" + CHECKLIST_SEARCH_INNER + ") " + orderByClause(orderByColumn, descending);
+    long[] streamed = {0L};
+    streamingJdbc.query(sql, checklistParams(criteria), rs -> {
+      consumer.accept(CHECKLIST_ROW_MAPPER.mapRow(rs, (int) streamed[0]));
+      streamed[0]++;
+    });
+    if (streamed[0] >= MAX_EXPORT_ROWS) {
+      log.warn("Checklist-search CSV export reached the {}-row safety cap; the file may be truncated.",
+          MAX_EXPORT_ROWS);
+    }
+    return streamed[0];
+  }
+
+  /** Deterministic ORDER BY: the (validated) sort column, then a stable tiebreaker. */
+  private static String orderByClause(String orderByColumn, boolean descending) {
+    return "ORDER BY " + orderByColumn + (descending ? " DESC" : " ASC") + ", opening_id, checklist_id ";
   }
 
   /** Binds the OR-NULL filter values once each (named params are reused across their occurrences). */

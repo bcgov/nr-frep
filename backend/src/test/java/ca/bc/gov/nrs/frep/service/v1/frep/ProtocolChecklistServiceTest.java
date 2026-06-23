@@ -164,7 +164,6 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void submitMapsBioToSlbAndSucceedsWhenNoValidationError() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\u");
     when(writeRepository.submit("SLB", "9001", "IDIR\\u")).thenReturn("");
 
@@ -175,7 +174,6 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void submitThrowsValidationExceptionWithSplitMessages() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     when(writeRepository.submit("SLB", "9001", "u"))
         .thenReturn("frep.submit.common.evaluation;frep.submit.common.teamlead;");
@@ -187,14 +185,7 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void submitForbiddenWhenUserCannotWrite() {
-    when(loggedUserHelper.canWrite()).thenReturn(false);
-    assertThrows(ResponseStatusException.class, () -> service.submit("bio", "9001"));
-  }
-
-  @Test
   void unsubmitMapsBioToSlb() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     when(writeRepository.unsubmit("SLB", "9001", "u")).thenReturn("");
 
@@ -211,7 +202,6 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void saveBiodiversityOpeningDelegatesToRepositoryWhenWritable() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     BiodiversityOpening opening = new BiodiversityOpening(
         "9001", "500", "ACT", "N", "loc", "N", "N", "N", null, "N", null, "W", "ok", "3",
@@ -239,14 +229,7 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void saveBioStratumForbiddenWhenUserCannotWrite() {
-    when(loggedUserHelper.canWrite()).thenReturn(false);
-    assertThrows(ResponseStatusException.class, () -> service.saveBioStratum(null));
-  }
-
-  @Test
   void deleteBioStratumDelegatesWhenWritable() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(writeRepository.deleteBioStratum("900", "2")).thenReturn("");
 
     service.deleteBioStratum("900", "2");
@@ -269,16 +252,7 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void saveBioPlotForbiddenWhenUserCannotWrite() {
-    when(loggedUserHelper.canWrite()).thenReturn(false);
-    assertThrows(ResponseStatusException.class, () -> service.saveBioPlot(new BioPlot(
-        null, "900", null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null)));
-  }
-
-  @Test
   void deleteBioPlotDelegatesWhenWritable() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(writeRepository.deleteBioPlot("500", "2")).thenReturn("");
 
     service.deleteBioPlot("500", "2");

@@ -57,11 +57,4 @@ class AcceptedSiteApiControllerTest {
             .param("effectiveYear", "2024"))
         .andExpect(status().isBadRequest());
   }
-
-  @Test
-  void printAcceptedSitesIsNotYetImplemented() throws Exception {
-    mockMvc.perform(get("/api/v1/accepted-sites/print"))
-        .andExpect(status().isNotImplemented())
-        .andExpect(jsonPath("$.feature").value("print-accepted-sites"));
-  }
 }

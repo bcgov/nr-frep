@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +22,4 @@ public interface AcceptedSiteApiEndpoint {
       @RequestParam String effectiveYear,
       @RequestParam String orgUnit,
       @RequestParam(required = false) String protocolType);
-
-  @GetMapping("/accepted-sites/print")
-  ResponseEntity<NotImplementedResponse> printAcceptedSites();
 }

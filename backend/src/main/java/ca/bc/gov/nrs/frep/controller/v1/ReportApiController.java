@@ -8,6 +8,7 @@ import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
 import ca.bc.gov.nrs.frep.service.v1.report.ExportSlotLimiter;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
+import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.ContentDisposition;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -64,6 +66,7 @@ public class ReportApiController {
   }
 
   /** CSV data-extract reports (Commons CSV, no Jasper). Always returns {@code text/csv}. */
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/csv/{reportName}")
   public ResponseEntity<byte[]> generateCsvReport(
       @PathVariable("reportName") String reportName,
@@ -133,6 +136,7 @@ public class ReportApiController {
   }
 
   /** JasperReports template reports (PDF/CSV). */
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/{reportId}")
   public ResponseEntity<byte[]> generateReport(
       @PathVariable("reportId") String reportId,

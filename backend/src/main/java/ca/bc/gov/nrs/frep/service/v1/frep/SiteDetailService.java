@@ -59,7 +59,6 @@ public class SiteDetailService {
    * than trusted from the client. Returns the refreshed site detail (new statuses + checklist ids).
    */
   public SiteDetailResponse saveResources(String frepSelectedSiteId, List<SiteResourceSaveRequest> resources) {
-    assertCanWrite();
     String siteId = StringUtils.trimToEmpty(frepSelectedSiteId);
     SiteDetailData current = siteDetailRepository.findSiteDetail(siteId);
     if (current.frepSelectedSiteId().isBlank()) {
@@ -210,12 +209,6 @@ public class SiteDetailService {
     }
     String trimmed = masterList.trim();
     return trimmed.length() >= 4 ? trimmed.substring(0, 4) : trimmed;
-  }
-
-  private void assertCanWrite() {
-    if (!loggedUserHelper.canWrite()) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to edit site details.");
-    }
   }
 
   SiteDetailResponse toResponse(SiteDetailData data) {

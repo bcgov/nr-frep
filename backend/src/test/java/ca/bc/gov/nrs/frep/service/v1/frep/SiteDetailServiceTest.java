@@ -93,15 +93,11 @@ class SiteDetailServiceTest {
     assertEquals("8001", resource.resourceValueId());
   }
 
-  @Test
-  void saveResourcesForbiddenWhenUserCannotWrite() {
-    when(loggedUserHelper.canWrite()).thenReturn(false);
-    assertThrows(ResponseStatusException.class, () -> service.saveResources("1001", List.of()));
-  }
+  // Write authorization is now enforced by @PreAuthorize on SiteDetailApiEndpoint, not the service —
+  // see ApiAuthorizationSecurityTest for the 403 coverage.
 
   @Test
   void saveResourcesDerivesContextAndDelegatesThenReloads() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\u");
     when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(List.of()));
     when(siteDetailRepository.saveResources(
@@ -168,7 +164,6 @@ class SiteDetailServiceTest {
 
   @Test
   void saveResourcesRejectedWhenAllResourcesSubmitted() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(List.of(
         new SiteResourceRow("8001", "R", "SLB", "Biodiversity", "REJ", "SUB", "", "", "", "3"))));
 

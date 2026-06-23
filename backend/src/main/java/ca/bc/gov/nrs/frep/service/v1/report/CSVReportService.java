@@ -16,7 +16,11 @@ import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
@@ -114,8 +118,8 @@ public class CSVReportService {
         nullToEmpty(site.cuttingPermitId()),
         nullToEmpty(site.cutBlockId()),
         formatNumber(site.exhibitArea()),
-        nullToEmpty(site.disturbanceStartDate()),
-        nullToEmpty(site.disturbanceEndDate()),
+        formatShortDate(site.disturbanceStartDate()),
+        formatShortDate(site.disturbanceEndDate()),
         nullToEmpty(site.managementUnit()),
         formatNumber(site.grossArea()),
         formatNumber(site.netArea()),
@@ -210,6 +214,23 @@ public class CSVReportService {
   /** Plain decimal (no scientific notation), trailing {@code .0} dropped; blank for null. */
   private static String formatNumber(Double value) {
     return value == null ? "" : BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+  }
+
+  private static final DateTimeFormatter SHORT_DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.CANADA);
+
+  /**
+   * ISO {@code yyyy-MM-dd} → {@code MMM d, yyyy} (e.g. {@code 2002-12-01} → {@code Dec 1, 2002}),
+   * matching the on-screen Random List. Blank/null → empty; anything not an ISO date is left as-is.
+   */
+  private static String formatShortDate(String value) {
+    if (value == null || value.isBlank()) {
+      return "";
+    }
+    try {
+      return LocalDate.parse(value.trim()).format(SHORT_DATE);
+    } catch (DateTimeParseException ex) {
+      return value;
+    }
   }
 
   private static byte[] toCsv(ReportExtract extract) {

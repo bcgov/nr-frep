@@ -11,9 +11,11 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
+import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,11 +40,13 @@ public interface ProtocolChecklistApiEndpoint {
       @PathVariable String protocolType,
       @PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/{protocolType}/{checklistId}/submit")
   ResponseEntity<?> submit(
       @PathVariable String protocolType,
       @PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/{protocolType}/{checklistId}/unsubmit")
   ResponseEntity<Void> unsubmit(
       @PathVariable String protocolType,
@@ -51,6 +55,7 @@ public interface ProtocolChecklistApiEndpoint {
   @GetMapping("/protocol-checklists/bio/{checklistId}/opening")
   ResponseEntity<BiodiversityOpening> getBiodiversityOpening(@PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PutMapping("/protocol-checklists/bio/{checklistId}/opening")
   ResponseEntity<BiodiversityOpening> saveBiodiversityOpening(
       @PathVariable String checklistId,
@@ -68,11 +73,13 @@ public interface ProtocolChecklistApiEndpoint {
   @GetMapping("/protocol-checklists/bio/{checklistId}/new-stratum-computed")
   ResponseEntity<StratumComputed> getNewStratumComputed(@PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/bio/{checklistId}/strata")
   ResponseEntity<BioStratum> saveBioStratum(
       @PathVariable String checklistId,
       @RequestBody BioStratum stratum);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @DeleteMapping("/protocol-checklists/bio/strata/{stratumId}")
   ResponseEntity<Void> deleteBioStratum(
       @PathVariable String stratumId,
@@ -84,11 +91,13 @@ public interface ProtocolChecklistApiEndpoint {
   @GetMapping("/protocol-checklists/bio/plots/{plotId}")
   ResponseEntity<BioPlot> getBioPlot(@PathVariable String plotId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/bio/strata/{stratumId}/plots")
   ResponseEntity<BioPlot> saveBioPlot(
       @PathVariable String stratumId,
       @RequestBody BioPlot plot);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @DeleteMapping("/protocol-checklists/bio/plots/{plotId}")
   ResponseEntity<Void> deleteBioPlot(
       @PathVariable String plotId,
@@ -98,12 +107,14 @@ public interface ProtocolChecklistApiEndpoint {
   ResponseEntity<AdministrationData> getAdministration(
       @PathVariable String protocol, @PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PutMapping("/protocol-checklists/{protocol}/{checklistId}/administration")
   ResponseEntity<AdministrationData> saveAdministration(
       @PathVariable String protocol,
       @PathVariable String checklistId,
       @RequestBody AdministrationData admin);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/{protocol}/{checklistId}/administration/team")
   ResponseEntity<AdministrationData> addTeamMember(
       @PathVariable String protocol,
@@ -111,6 +122,7 @@ public interface ProtocolChecklistApiEndpoint {
       @RequestParam String evaluator,
       @RequestParam(defaultValue = "false") boolean teamLead);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @DeleteMapping("/protocol-checklists/{protocol}/{checklistId}/administration/team/{evaluatorUserid}")
   ResponseEntity<AdministrationData> removeTeamMember(
       @PathVariable String protocol,
@@ -122,6 +134,7 @@ public interface ProtocolChecklistApiEndpoint {
   ResponseEntity<RiparianNotes> getNotes(
       @PathVariable String protocol, @PathVariable String checklistId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PutMapping("/protocol-checklists/{protocol}/{checklistId}/notes")
   ResponseEntity<RiparianNotes> saveNotes(
       @PathVariable String protocol,
@@ -138,12 +151,14 @@ public interface ProtocolChecklistApiEndpoint {
       @PathVariable String checklistId,
       @PathVariable String attachmentId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/protocol-checklists/{protocol}/{checklistId}/attachments")
   ResponseEntity<List<AttachmentRow>> uploadAttachment(
       @PathVariable String protocol,
       @PathVariable String checklistId,
       @RequestBody AttachmentUploadRequest request);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @DeleteMapping("/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}")
   ResponseEntity<List<AttachmentRow>> deleteAttachment(
       @PathVariable String protocol,

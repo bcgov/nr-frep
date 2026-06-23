@@ -52,9 +52,11 @@ class CSVReportServiceTest {
             "Opening,Org Unit,Opening ID,Licence,Cutting Permit,Cut Block,Exhibit A(ha),"
                 + "Harvest Start Date,Harvest Complete Date,Management unit,"
                 + "Gross Area(ha),Net Area(ha),Existing Checklists");
-    // exhibit 12.5 kept; gross 30.0 -> "30"; net null -> empty; checklists joined + quoted (comma).
+    // exhibit 12.5 kept; harvest dates -> "MMM d, yyyy" (quoted, since the comma needs escaping);
+    // gross 30.0 -> "30"; net null -> empty; checklists joined + quoted (comma).
     assertThat(csv)
-        .contains("A12345,DCK,1709463,TFL47,CP01,BLK2,12.5,2021-03-01,2021-09-15,TSA12,30,,\"BIO, RIP\"");
+        .contains(
+            "A12345,DCK,1709463,TFL47,CP01,BLK2,12.5,\"Mar 1, 2021\",\"Sep 15, 2021\",TSA12,30,,\"BIO, RIP\"");
   }
 
   private static ChecklistSearchResult checklist() {

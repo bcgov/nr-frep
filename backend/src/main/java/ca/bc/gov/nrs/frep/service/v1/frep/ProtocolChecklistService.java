@@ -60,7 +60,6 @@ public class ProtocolChecklistService {
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
   public void submit(String protocolType, String checklistId) {
     String resourceType = resolveResourceType(protocolType);
-    assertCanWrite();
     String error = writeRepository.submit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
     if (StringUtils.isNotBlank(error)) {
       throw new ProtocolSubmitValidationException(splitValidationMessages(error));
@@ -70,7 +69,6 @@ public class ProtocolChecklistService {
   /** Revert a submitted checklist to ACT. */
   public void unsubmit(String protocolType, String checklistId) {
     String resourceType = resolveResourceType(protocolType);
-    assertCanWrite();
     String error = writeRepository.unsubmit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
@@ -88,7 +86,6 @@ public class ProtocolChecklistService {
 
   /** Save the Biodiversity Opening screen via FREP_210_BIO_OPENING.SAVE. */
   public BiodiversityOpening saveBiodiversityOpening(String checklistId, BiodiversityOpening opening) {
-    assertCanWrite();
     BiodiversityOpening toSave = opening.checklistId() == null
         ? opening.withIdentity(checklistId, opening.revisionCount())
         : opening;
@@ -108,12 +105,10 @@ public class ProtocolChecklistService {
   }
 
   public BioStratum saveBioStratum(BioStratum stratum) {
-    assertCanWrite();
     return writeRepository.saveBioStratum(stratum, loggedUserHelper.getLoggedUserId());
   }
 
   public void deleteBioStratum(String stratumId, String revisionCount) {
-    assertCanWrite();
     String error = writeRepository.deleteBioStratum(stratumId, revisionCount);
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
@@ -145,12 +140,10 @@ public class ProtocolChecklistService {
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {
-    assertCanWrite();
     return writeRepository.saveBioPlot(plot, loggedUserHelper.getLoggedUserId());
   }
 
   public void deleteBioPlot(String plotId, String revisionCount) {
-    assertCanWrite();
     String error = writeRepository.deleteBioPlot(plotId, revisionCount);
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
@@ -173,20 +166,17 @@ public class ProtocolChecklistService {
   }
 
   public AdministrationData saveAdministration(String protocol, AdministrationData admin) {
-    assertCanWrite();
     return writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId());
   }
 
   public AdministrationData addTeamMember(
       String protocol, String checklistId, String evaluator, boolean teamLead) {
-    assertCanWrite();
     return writeRepository.addTeamMember(checklistId, resourceTypeForProtocol(protocol), evaluator,
         teamLead, loggedUserHelper.getLoggedUserId());
   }
 
   public AdministrationData removeTeamMember(
       String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
-    assertCanWrite();
     return writeRepository.deleteTeamMember(
         checklistId, resourceTypeForProtocol(protocol), evaluatorUserid, revisionCount);
   }
@@ -196,7 +186,6 @@ public class ProtocolChecklistService {
   }
 
   public RiparianNotes saveNotes(String protocol, String checklistId, RiparianNotes notes) {
-    assertCanWrite();
     return writeRepository.saveNotes(
         notes, resourceTypeForProtocol(protocol), loggedUserHelper.getLoggedUserId());
   }
@@ -214,7 +203,6 @@ public class ProtocolChecklistService {
   public List<AttachmentRow> saveAttachment(
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
-    assertCanWrite();
     String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());
@@ -223,7 +211,6 @@ public class ProtocolChecklistService {
 
   public List<AttachmentRow> deleteAttachment(
       String protocol, String checklistId, String attachmentId) {
-    assertCanWrite();
     String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
     return writeRepository.getAttachments(checklistId, resourceType);
@@ -233,12 +220,6 @@ public class ProtocolChecklistService {
     return normalizeProtocolType(protocolType)
         .orElseThrow(() -> new ResponseStatusException(
             HttpStatus.BAD_REQUEST, "Unknown protocol type: " + protocolType));
-  }
-
-  private void assertCanWrite() {
-    if (!loggedUserHelper.canWrite()) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to edit checklists.");
-    }
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */

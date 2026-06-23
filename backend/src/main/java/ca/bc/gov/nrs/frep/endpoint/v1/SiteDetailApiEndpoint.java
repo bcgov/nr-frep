@@ -1,9 +1,11 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
+import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -22,6 +24,7 @@ public interface SiteDetailApiEndpoint {
   @GetMapping("/sites/{frepSelectedSiteId}")
   ResponseEntity<SiteDetailResponse> getSiteDetail(@PathVariable String frepSelectedSiteId);
 
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PutMapping("/sites/{frepSelectedSiteId}/resources")
   ResponseEntity<SiteDetailResponse> saveResources(
       @PathVariable String frepSelectedSiteId,

@@ -7,14 +7,13 @@ import org.springframework.security.config.annotation.web.configurers.AuthorizeH
 import org.springframework.stereotype.Component;
 
 /**
- * URL-level authorization rules.
+ * URL-level authorization: only authentication (every request needs a valid token), plus the small
+ * set of open endpoints. Role-based authorization now lives per-endpoint via {@code @PreAuthorize}
+ * (see {@link FrepAuthorities}), mirroring nr-fspts.
  *
- * <p>Legacy WebADE role semantics are preserved (see {@link RoleConstants}):
- * <ul>
- *   <li>{@code FREP_ADMIN} and {@code FREP_EDITOR} may write.</li>
- *   <li>{@code FREP_VIEW_ONLY} may read but not write.</li>
- *   <li>{@code /api/v1/admin/**} (FREP700, future admin endpoints) is sys-admin only.</li>
- * </ul>
+ * <p>The previous URL-level role rules (PUT/POST/… → write authorities, {@code /admin/**} → sys-admin)
+ * were dropped in favour of the per-endpoint model. {@link RoleConstants} still backs the
+ * {@code @PreAuthorize} expressions and can be reinstated here as a coarse backstop if desired.
  */
 @Component
 public class ApiAuthorizationCustomizer implements
@@ -34,25 +33,7 @@ public class ApiAuthorizationCustomizer implements
     authorize.requestMatchers("/actuator/**").permitAll();
     authorize.requestMatchers("/api/hello").permitAll();
 
-    // Admin endpoints (FREP700 etc.) — sys-admin only, regardless of HTTP method.
-    authorize.requestMatchers("/api/v1/admin/**")
-        .hasAuthority(RoleConstants.SYS_ADMIN_AUTHORITY);
-
-    // State-changing requests on /api/** require write authorities.
-    authorize.requestMatchers(HttpMethod.POST, "/api/**")
-        .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
-    authorize.requestMatchers(HttpMethod.PUT, "/api/**")
-        .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
-    authorize.requestMatchers(HttpMethod.PATCH, "/api/**")
-        .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
-    authorize.requestMatchers(HttpMethod.DELETE, "/api/**")
-        .hasAnyAuthority(RoleConstants.WRITE_AUTHORITIES);
-
-    // Read access on /api/** is granted to any of the three FREP roles.
-    authorize.requestMatchers(HttpMethod.GET, "/api/**")
-        .hasAnyAuthority(RoleConstants.READ_AUTHORITIES);
-
-    // Anything not matched above must be authenticated.
+    // Everything else requires a valid token; role checks are enforced per-endpoint via @PreAuthorize.
     authorize.anyRequest().authenticated();
   }
 }

@@ -1,12 +1,10 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSiteResponse;
-import ca.bc.gov.nrs.frep.struct.v1.frep.NotImplementedResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.AcceptedSiteApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.frep.AcceptedSiteService;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,18 +41,5 @@ public class AcceptedSiteApiController implements AcceptedSiteApiEndpoint {
             protocolType
         )
     );
-  }
-
-  /**
-   * Render a printable accepted-sites summary (legacy "Print" button on
-   * {@code frep200AcceptedSites.jsp}).
-   *
-   * <p>TODO: implement a server-rendered printable/PDF view. Returns HTTP 501 until then.
-   */
-  @Override
-  public ResponseEntity<NotImplementedResponse> printAcceptedSites() {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(NotImplementedResponse.of(
-        "print-accepted-sites",
-        "Printable accepted-sites view is not yet available."));
   }
 }

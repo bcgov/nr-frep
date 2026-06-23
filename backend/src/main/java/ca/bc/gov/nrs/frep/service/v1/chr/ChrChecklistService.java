@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.service.v1.chr;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
-import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
@@ -69,7 +68,6 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList saveChecklist(CheckList checklist) {
-    assertCanWriteChecklist();
     validateSaveRequest(checklist);
 
     if (!ChrStringUtils.hasAValue(checklist.getChecklistID())) {
@@ -133,7 +131,6 @@ public class ChrChecklistService {
       java.util.function.BiConsumer<CheckList, String> persist,
       java.util.function.Consumer<CheckList> validate
   ) {
-    assertCanWriteChecklist();
     if (!ChrStringUtils.hasAValue(checklist.getChecklistID())) {
       throw new InvalidParameterException(
           "checkListId is missing in JSON body and is required to perform save");
@@ -153,7 +150,6 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList submitChecklist(long checklistId, CheckList checklist) {
-    assertCanWriteChecklist();
     if (checklist != null && !Long.toString(checklistId).equals(checklist.getChecklistID())) {
       throw new InvalidParameterException(
           "The checklist ID is not matching:" + checklist.getChecklistID());
@@ -177,7 +173,6 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList activateChecklist(long checklistId) {
-    assertAdminForActivate();
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
       throw new InvalidParameterException(
@@ -189,7 +184,6 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList takeOffline(long checklistId) {
-    assertCanWriteChecklist();
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
       throw new InvalidParameterException(
@@ -206,7 +200,6 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList unsubmitChecklist(long checklistId) {
-    assertCanWriteChecklist();
     checklistRepository.throwIfUnsubmitError(Long.toString(checklistId), loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
@@ -313,25 +306,8 @@ public class ChrChecklistService {
   }
 
   private void assertCanReadChecklist() {
-    // GET is authorized by ApiAuthorizationCustomizer for all FREP roles.
-  }
-
-  private void assertCanWriteChecklist() {
-    if (loggedUserHelper.isViewOnly()) {
-      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
-    }
-    if (!loggedUserHelper.canWrite()) {
-      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
-    }
-  }
-
-  private void assertAdminForActivate() {
-    if (loggedUserHelper.isUpdate()) {
-      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
-    }
-    if (!loggedUserHelper.isSysAdmin()) {
-      throw new AccessForbiddenException(ChrConstants.RestMessages.ERROR_AUTHORIZATION);
-    }
+    // Reads are open to any authenticated user; write/activate authorization is enforced by
+    // @PreAuthorize on ChrChecklistApiEndpoint (see FrepAuthorities).
   }
 
   private String deriveMimeType(String mimeType) {

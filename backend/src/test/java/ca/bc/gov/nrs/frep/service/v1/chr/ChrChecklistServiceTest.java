@@ -11,7 +11,6 @@ import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
-import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
@@ -56,7 +55,6 @@ class ChrChecklistServiceTest {
 
   @Test
   void saveChecklistRejectsMismatchedStatusTransition() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
 
     CheckList checklist = new CheckList();
@@ -69,7 +67,6 @@ class ChrChecklistServiceTest {
 
   @Test
   void submitChecklistPersistsSubmittedStatusWhenValidationPasses() {
-    when(loggedUserHelper.canWrite()).thenReturn(true);
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\user");
     when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
     when(submitValidationService.validateBeforeSubmit(any())).thenReturn(List.of());
@@ -87,9 +84,6 @@ class ChrChecklistServiceTest {
     verify(persistenceService).saveChecklist(any(), eq("IDIR\\user"));
   }
 
-  @Test
-  void activateChecklistRequiresAdmin() {
-    when(loggedUserHelper.isUpdate()).thenReturn(true);
-    assertThrows(AccessForbiddenException.class, () -> service.activateChecklist(1001L));
-  }
+  // Authorization (write/admin) is now enforced by @PreAuthorize on ChrChecklistApiEndpoint, not the
+  // service — see ApiAuthorizationSecurityTest for the 403 coverage.
 }

@@ -18,7 +18,7 @@ import {
   TextInput,
   Tooltip,
 } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import type { RejectionReason } from '@/types/configuration';
@@ -27,6 +27,7 @@ import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
+import { formatShortDate } from '@/utils/date';
 
 import './siteDetail.scss';
 
@@ -94,6 +95,7 @@ function renderEditableCell(
   index: number,
   patchRow: (index: number, patch: Partial<SiteResource>) => void,
   rejectionReasons: RejectionReason[],
+  errors: RowErrors | undefined,
 ): React.ReactNode {
   if (key === 'statusCode') {
     return (
@@ -113,80 +115,89 @@ function renderEditableCell(
     );
   }
   if (key === 'rejectionReasonCode') {
+    const error = errors?.rejectionReasonCode;
     return (
-      <Select
-        id={`rejectionReasonCode-${index}`}
-        labelText=""
-        hideLabel
-        size="sm"
-        value={resource.rejectionReasonCode ?? ''}
-        onChange={(e) => patchRow(index, { rejectionReasonCode: e.target.value || null })}
-      >
-        <SelectItem value="" text="" />
-        {rejectionReasons.map((reason) => (
-          <SelectItem key={reason.code} value={reason.code} text={reason.description} />
-        ))}
-      </Select>
+      <div className="site-detail__editable-cell">
+        <Select
+          id={`rejectionReasonCode-${index}`}
+          labelText=""
+          hideLabel
+          size="sm"
+          value={resource.rejectionReasonCode ?? ''}
+          invalid={!!error}
+          onChange={(e) => patchRow(index, { rejectionReasonCode: e.target.value || null })}
+        >
+          <SelectItem value="" text="" />
+          {rejectionReasons.map((reason) => (
+            <SelectItem key={reason.code} value={reason.code} text={reason.description} />
+          ))}
+        </Select>
+        {error && <span className="site-detail__cell-error">{error}</span>}
+      </div>
     );
   }
   if (key === 'rationale' || key === 'otherComments') {
+    const error = errors?.[key];
     return (
-      <TextInput
-        id={`${key}-${index}`}
-        labelText=""
-        hideLabel
-        size="sm"
-        value={(resource[key as keyof SiteResource] as string | null) ?? ''}
-        onChange={(e) => patchRow(index, { [key]: e.target.value })}
-      />
+      <div className="site-detail__editable-cell">
+        <TextInput
+          id={`${key}-${index}`}
+          labelText=""
+          hideLabel
+          size="sm"
+          value={(resource[key as keyof SiteResource] as string | null) ?? ''}
+          invalid={!!error}
+          onChange={(e) => patchRow(index, { [key]: e.target.value })}
+        />
+        {error && <span className="site-detail__cell-error">{error}</span>}
+      </div>
     );
   }
   // resourceName stays read-only
   return renderResourceCell(key, resource);
 }
 
+/** Editable fields that can carry an inline validation message. */
+type ResourceFieldKey = 'rejectionReasonCode' | 'rationale' | 'otherComments';
+type RowErrors = Partial<Record<ResourceFieldKey, string>>;
+
 /**
- * Per-resource save rules ported from legacy {@code Frep110ValidationManager}. Submitted
- * (locked) rows are skipped — they can't be edited. Returns a list of human-readable errors.
+ * Per-resource save rules ported from legacy {@code Frep110ValidationManager}, returned as per-field
+ * messages so the table can render them inline next to the offending input. The result is parallel to
+ * {@code rows}; submitted (locked) and empty-status rows produce no errors (they aren't saved).
  */
-function validateResources(rows: SiteResource[]): string[] {
-  const errors: string[] = [];
-  rows.forEach((r, i) => {
-    if (isSubmitted(r)) return;
+function validateResources(rows: SiteResource[]): RowErrors[] {
+  return rows.map((r) => {
+    const errors: RowErrors = {};
+    if (isSubmitted(r)) return errors;
     const status = (r.statusCode ?? '').trim();
-    if (!status) return; // empty status is allowed — the row simply isn't saved
-    const n = i + 1;
+    if (!status) return errors; // empty status is allowed — the row simply isn't saved
     const reason = (r.rejectionReasonCode ?? '').trim();
     const rationale = (r.rationale ?? '').trim();
     const comments = (r.otherComments ?? '').trim();
+    const tooLong = `Must be ${MAX_RATIONALE_LENGTH} characters or fewer.`;
 
     if (status === 'TAR') {
-      if (reason)
-        errors.push(`Resource ${n}: rejection reason must be blank for targeted resources.`);
-      if (!rationale) errors.push(`Resource ${n}: rationale is required for targeted resources.`);
-      else if (rationale.length > MAX_RATIONALE_LENGTH)
-        errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+      if (reason) errors.rejectionReasonCode = 'Must be blank for targeted resources.';
+      if (!rationale) errors.rationale = 'Rationale is required for targeted resources.';
+      else if (rationale.length > MAX_RATIONALE_LENGTH) errors.rationale = tooLong;
     } else if (status === 'REJ') {
       if (!reason) {
-        errors.push(`Resource ${n}: rejection reason is required for rejected resources.`);
-      } else if (reason === OTHER_REASON) {
-        if (!rationale)
-          errors.push(`Resource ${n}: rationale is required when the rejection reason is Other.`);
-        else if (rationale.length > MAX_RATIONALE_LENGTH)
-          errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+        errors.rejectionReasonCode = 'Rejection reason is required.';
+      } else if (reason === OTHER_REASON && !rationale) {
+        errors.rationale = 'Rationale is required when the reason is Other.';
       } else if (rationale.length > MAX_RATIONALE_LENGTH) {
-        errors.push(`Resource ${n}: rationale must be 50 characters or fewer.`);
+        errors.rationale = tooLong;
       }
     } else {
-      if (reason)
-        errors.push(`Resource ${n}: rejection reason must be blank for accepted resources.`);
-      if (rationale) errors.push(`Resource ${n}: rationale must be blank for accepted resources.`);
+      if (reason) errors.rejectionReasonCode = 'Must be blank for accepted resources.';
+      if (rationale) errors.rationale = 'Must be blank for accepted resources.';
     }
 
     if (comments.length > MAX_COMMENTS_LENGTH)
-      errors.push(`Resource ${n}: other comments must be 2000 characters or fewer.`);
+      errors.otherComments = `Must be ${MAX_COMMENTS_LENGTH} characters or fewer.`;
+    return errors;
   });
-  return errors;
 }
 
 const HeaderRow: FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
@@ -210,6 +221,12 @@ const SiteDetailPage: FC = () => {
   const [busy, setBusy] = useState(false);
   const [rejectionReasons, setRejectionReasons] = useState<RejectionReason[]>([]);
 
+  // Inline validation runs live off the draft: a field's error shows as soon as the row is invalid
+  // (e.g. status set to Rejected with no reason) and clears the moment it's fixed. Empty-status and
+  // submitted rows produce no errors, so a freshly loaded form isn't a wall of red.
+  const rowErrors = useMemo<RowErrors[]>(() => (draft ? validateResources(draft) : []), [draft]);
+  const hasErrors = rowErrors.some((e) => Object.keys(e).length > 0);
+
   // The resource form is editable by default for authorized users — `draft` is
   // initialized from the loaded detail (see effect below), so there is no edit toggle.
   const editing = canEdit && draft !== null;
@@ -223,16 +240,8 @@ const SiteDetailPage: FC = () => {
 
   const handleSave = async () => {
     if (!draft) return;
-    const errors = validateResources(draft);
-    if (errors.length > 0) {
-      display({
-        kind: 'error',
-        title: 'Please fix the following before saving',
-        subtitle: errors.join(' '),
-        timeout: 9000,
-      });
-      return;
-    }
+    // Errors are already shown inline; just block the save while any remain.
+    if (hasErrors) return;
     // Only save rows the user picked a status for; empty-status rows are left untouched,
     // and submitted (locked) rows are not re-sent.
     const toSave = draft.filter((r) => !isSubmitted(r) && (r.statusCode ?? '').trim() !== '');
@@ -396,10 +405,10 @@ const SiteDetailPage: FC = () => {
                 <HeaderRow label="Opening" value={detail.opening} />
                 <HeaderRow label="Opening ID" value={detail.openingId} />
                 <HeaderRow label="Licence" value={detail.licenceNo} />
-                <HeaderRow label="CP" value={detail.cuttingPermitId} />
+                <HeaderRow label="Cutting Permit" value={detail.cuttingPermitId} />
                 <HeaderRow label="Cut block" value={detail.cutBlockId} />
                 <HeaderRow label="FSP" value={detail.fspLink} />
-                <HeaderRow label="Harvest year" value={detail.harvestYear} />
+                <HeaderRow label="Harvest year" value={formatShortDate(detail.harvestYear)} />
               </div>
             </section>
           </Column>
@@ -410,6 +419,17 @@ const SiteDetailPage: FC = () => {
                 <p>No resource values have been evaluated for this site.</p>
               ) : (
                 <>
+                  {editing && (
+                    <div className="site-detail__resource-actions">
+                      <Button
+                        size="md"
+                        disabled={busy || allSubmitted}
+                        onClick={() => void handleSave()}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
                   <TableContainer>
                     <Table>
                       <TableHead>
@@ -439,6 +459,7 @@ const SiteDetailPage: FC = () => {
                                       index,
                                       patchRow,
                                       rejectionReasons,
+                                      rowErrors[index],
                                     )
                                   : renderResourceCell(header.key, resource)}
                               </TableCell>
@@ -448,17 +469,6 @@ const SiteDetailPage: FC = () => {
                       </TableBody>
                     </Table>
                   </TableContainer>
-                  {editing && (
-                    <div className="site-detail__resource-actions">
-                      <Button
-                        size="md"
-                        disabled={busy || allSubmitted}
-                        onClick={() => void handleSave()}
-                      >
-                        Save
-                      </Button>
-                    </div>
-                  )}
                 </>
               )}
             </section>

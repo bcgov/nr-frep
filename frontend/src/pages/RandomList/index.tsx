@@ -22,13 +22,12 @@ import { Link as RouterLink } from 'react-router-dom';
 
 import TableHeaderBar from '@/components/core/TableHeaderBar';
 import OpeningMapModal from '@/components/OpeningMapModal';
-
-import type { MasterListYear, OrgUnit } from '@/types/configuration';
-import type { RandomListSite, RandomListSummary } from '@/types/randomList';
-
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
+
+import type { MasterListYear, OrgUnit } from '@/types/configuration';
+import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
 import './randomList.scss';
 
@@ -38,12 +37,12 @@ const TABLE_HEADERS = [
   { key: 'orgUnitCode', header: 'Org Unit' },
   { key: 'openingId', header: 'Opening ID' },
   { key: 'licenceId', header: 'Licence' },
-  { key: 'cuttingPermitId', header: 'CP' },
-  { key: 'cutBlockId', header: 'Blk' },
+  { key: 'cuttingPermitId', header: 'Cutting Permit' },
+  { key: 'cutBlockId', header: 'Cut Block' },
   { key: 'exhibitArea', header: 'Exhibit A (ha)' },
   { key: 'disturbanceStartDate', header: 'Harvest start date' },
   { key: 'disturbanceEndDate', header: 'Harvest complete date' },
-  { key: 'managementUnit', header: 'Mgmt. unit' },
+  { key: 'managementUnit', header: 'Management unit' },
   { key: 'grossArea', header: 'Gross area (ha)' },
   { key: 'netArea', header: 'Net area (ha)' },
   { key: 'existingChecklists', header: 'Existing checklists' },

@@ -39,7 +39,7 @@ const TABLE_HEADERS = [
   { key: 'effectiveYear', header: 'Year' },
   { key: 'orgUnitCode', header: 'District' },
   { key: 'licenceId', header: 'Licence' },
-  { key: 'cuttingPermitId', header: 'CP' },
+  { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'openingId', header: 'Opening' },
   { key: 'clientNumber', header: 'Client #' },

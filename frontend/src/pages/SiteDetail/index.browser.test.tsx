@@ -104,7 +104,7 @@ describe('SiteDetailPage resource editing', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
   });
 
-  it('blocks save and shows an error when a rejected resource has no reason', async () => {
+  it('blocks save and shows an inline error when a rejected resource has no reason', async () => {
     api.getSiteDetail.mockResolvedValue(siteDetail('ACC'));
 
     renderPage();
@@ -114,9 +114,28 @@ describe('SiteDetailPage resource editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(api.saveResources).not.toHaveBeenCalled();
-    expect(display).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'error', title: 'Please fix the following before saving' }),
-    );
+    // The error is rendered inline on the rejection-reason field, not as a toast or banner.
+    expect(await screen.findByText('Rejection reason is required.')).toBeTruthy();
+  });
+
+  it('clears the inline error and saves once the rejection reason is fixed', async () => {
+    api.getSiteDetail.mockResolvedValue(siteDetail('ACC'));
+    api.saveResources.mockResolvedValue(siteDetail('REJ'));
+
+    renderPage();
+
+    const [statusSelect] = await screen.findAllByRole('combobox');
+    await userEvent.selectOptions(statusSelect, 'REJ');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Rejection reason is required.')).toBeTruthy();
+
+    // Pick a reason — the inline error clears live and Save now goes through.
+    const reasonSelect = screen.getAllByRole('combobox')[1];
+    await userEvent.selectOptions(reasonSelect, 'DUP');
+    expect(screen.queryByText('Rejection reason is required.')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveResources).toHaveBeenCalledTimes(1);
   });
 
   it('allows empty status and does not save when no row has a status selected', async () => {

@@ -48,7 +48,7 @@ const TABLE_HEADERS = [
   { key: 'openingNumber', header: 'Opening' },
   { key: 'openingId', header: 'Opening ID' },
   { key: 'licenceId', header: 'License' },
-  { key: 'cuttingPermitId', header: 'CP' },
+  { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'harvestCompleteDate', header: 'Harvest complete' },
   { key: 'checklistStatus', header: 'Status' },

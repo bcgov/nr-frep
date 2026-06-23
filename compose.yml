@@ -38,8 +38,9 @@ services:
     working_dir: /app
     entrypoint: sh -c "mvn -DskipTests spring-boot:run"
     environment:
-      # Activates application-local.yml (gitignored credentials).
-      SPRING_PROFILES_ACTIVE: local,oracle
+      # Activates application-local.yml (gitignored credentials). Oracle is wired in
+      # unconditionally now (no `oracle` profile) — `local` only loads the dev overrides.
+      SPRING_PROFILES_ACTIVE: local
       # Truststore path for Oracle TCPS (spring.datasource.hikari property).
       TRUSTSTORE_PATH: /app/src/main/resources/cert/jssecacerts
     ports: ["8080:8080"]

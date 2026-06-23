@@ -12,8 +12,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,7 +24,6 @@ import org.springframework.web.server.ResponseStatusException;
  * schema via {@link SearchRepository}.
  */
 @Service
-@Profile("oracle")
 public class SearchService {
 
   private final SearchRepository searchRepository;
@@ -116,19 +115,9 @@ public class SearchService {
     int page = Math.max(pageNumber, 0);
     int size = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
 
-    ChecklistSearchCriteria criteria = new ChecklistSearchCriteria(
-        trimToNull(effectiveYear),
-        trimToNull(orgUnit),
-        normalizeProtocolType(protocolType).orElse(null),
-        trimToNull(licenceId),
-        trimToNull(cuttingPermitId),
-        trimToNull(cutBlockId),
-        trimToNull(openingId),
-        trimToNull(clientNumber),
-        trimToNull(checklistStatusCode),
-        trimToNull(checklistId),
-        trimToNull(evaluationDateFrom),
-        trimToNull(evaluationDateTo));
+    ChecklistSearchCriteria criteria = buildCriteria(
+        effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
+        clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo);
 
     String[] sortField = parseSort(sort);
     String column = sortField[0];
@@ -155,6 +144,65 @@ public class SearchService {
     String column = SORTABLE_COLUMNS.getOrDefault(parts[0].trim(), DEFAULT_SORT_COLUMN);
     String dir = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim()) ? "desc" : "asc";
     return new String[] {column, dir};
+  }
+
+  /**
+   * Streams the full (uncapped) checklist-search result set to {@code consumer}, mapping each row to a
+   * {@link ChecklistSearchResult} — backs the CSV export, which must not be bounded by the on-screen page
+   * size. Returns the number of rows streamed. Uses the default sort (the legacy CSV applied no user
+   * sort); the repository enforces a max-rows safety cap.
+   */
+  public long streamChecklists(
+      String effectiveYear,
+      String orgUnit,
+      String protocolType,
+      String licenceId,
+      String cuttingPermitId,
+      String cutBlockId,
+      String openingId,
+      String clientNumber,
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo,
+      Consumer<ChecklistSearchResult> consumer
+  ) {
+    ChecklistSearchCriteria criteria = buildCriteria(
+        effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
+        clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo);
+    return searchRepository.streamChecklists(
+        criteria, DEFAULT_SORT_COLUMN, false,
+        row -> consumer.accept(toChecklistSearchResult(row)));
+  }
+
+  /** Builds the native-query criteria (trim-to-null + protocol normalization) shared by paged + stream. */
+  private static ChecklistSearchCriteria buildCriteria(
+      String effectiveYear,
+      String orgUnit,
+      String protocolType,
+      String licenceId,
+      String cuttingPermitId,
+      String cutBlockId,
+      String openingId,
+      String clientNumber,
+      String checklistStatusCode,
+      String checklistId,
+      String evaluationDateFrom,
+      String evaluationDateTo
+  ) {
+    return new ChecklistSearchCriteria(
+        trimToNull(effectiveYear),
+        trimToNull(orgUnit),
+        normalizeProtocolType(protocolType).orElse(null),
+        trimToNull(licenceId),
+        trimToNull(cuttingPermitId),
+        trimToNull(cutBlockId),
+        trimToNull(openingId),
+        trimToNull(clientNumber),
+        trimToNull(checklistStatusCode),
+        trimToNull(checklistId),
+        trimToNull(evaluationDateFrom),
+        trimToNull(evaluationDateTo));
   }
 
   /**

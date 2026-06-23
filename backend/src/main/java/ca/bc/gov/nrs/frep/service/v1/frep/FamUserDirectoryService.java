@@ -10,7 +10,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -43,7 +42,6 @@ import org.springframework.web.server.ResponseStatusException;
  * surfaced (HTTP 502) so the cause is visible rather than a silently-empty result.
  */
 @Service
-@Profile("oracle")
 public class FamUserDirectoryService {
 
   private static final Logger LOG = LoggerFactory.getLogger(FamUserDirectoryService.class);

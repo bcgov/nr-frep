@@ -6,6 +6,10 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
@@ -15,6 +19,9 @@ import org.springframework.validation.ObjectError;
  * The frontend reads {@code message} for display; {@code debugMessage} carries the underlying detail for
  * logs/devs and {@code subErrors} the per-field validation failures. Mirrors the shape used in nr-fspts.
  */
+@AllArgsConstructor
+@Data
+@Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @SuppressWarnings("squid:S1948")
 public class ApiError implements Serializable {

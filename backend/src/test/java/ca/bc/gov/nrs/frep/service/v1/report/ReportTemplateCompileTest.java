@@ -11,7 +11,7 @@ import org.springframework.core.io.ClassPathResource;
 
 /**
  * Compiles every registered report's JRXML template so a malformed template fails the build rather
- * than only surfacing at runtime (the production warm-up needs the oracle profile). Mirrors what
+ * than only surfacing at runtime. Mirrors what
  * {@code ReportService.compileTemplate} does, minus the fill/DB.
  */
 class ReportTemplateCompileTest {

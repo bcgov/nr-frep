@@ -10,14 +10,13 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Oracle-profile configuration. Spring Boot's standard DataSourceAutoConfiguration
+ * Oracle DataSource configuration. Spring Boot's standard DataSourceAutoConfiguration
  * builds the {@code DataSource}, {@code JdbcTemplate}, {@code EntityManagerFactory},
  * and {@code PlatformTransactionManager} from {@code spring.datasource.*} in
- * application-oracle.yml (URL, credentials, Hikari pool tuning, TCPS truststore properties).
+ * application.yml (URL, credentials, Hikari pool tuning, TCPS truststore properties).
  *
  * <p>This class adds two things on top:
  * <ul>
@@ -30,7 +29,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * </ul>
  */
 @Configuration
-@Profile("oracle")
 @EnableConfigurationProperties(ChrObjectStorageProperties.class)
 @Slf4j
 public class OracleJpaConfiguration {

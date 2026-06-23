@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -40,7 +39,6 @@ import org.springframework.stereotype.Repository;
  * {@code BiodiversityDataManager}.
  */
 @Repository
-@Profile("oracle")
 public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository implements ProtocolChecklistWriteRepository {
 
   private static final org.slf4j.Logger log =

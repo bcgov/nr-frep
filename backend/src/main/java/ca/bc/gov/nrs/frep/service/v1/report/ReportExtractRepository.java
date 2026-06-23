@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
@@ -28,7 +27,6 @@ import org.springframework.util.StringUtils;
  * execute (grant/synonym) on them.</p>
  */
 @Repository
-@Profile("oracle")
 public class ReportExtractRepository extends AbstractFrepRepository {
 
   /** Legacy "all" sentinel for the mandatory dropdown filters. */

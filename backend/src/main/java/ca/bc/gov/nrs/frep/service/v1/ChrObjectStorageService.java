@@ -4,7 +4,6 @@ import java.net.URI;
 import java.util.List;
 
 import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -20,7 +19,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 @Service
-@Profile("oracle")
 public class ChrObjectStorageService {
 
   private final ChrObjectStorageProperties properties;

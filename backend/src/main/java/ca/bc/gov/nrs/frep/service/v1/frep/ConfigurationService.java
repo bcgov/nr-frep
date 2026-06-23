@@ -10,7 +10,6 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.RejectionReasonResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
  * {@link CodeListRepository}.
  */
 @Service
-@Profile("oracle")
 public class ConfigurationService {
 
   private static final String[] CODE_KEYS = {"CODE", "code"};

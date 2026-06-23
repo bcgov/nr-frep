@@ -1,9 +1,11 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
+import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import ca.bc.gov.nrs.frep.exception.ReportGenerationException;
 import ca.bc.gov.nrs.frep.exception.ReportNotFoundException;
 import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
+import ca.bc.gov.nrs.frep.service.v1.report.ExportSlotLimiter;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
 import jakarta.validation.Valid;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 /**
  * Report-generation endpoint. Mirrors the nr-fspts {@code FspReportController}: POST a request body,
@@ -48,10 +52,15 @@ public class ReportApiController {
 
   private final ReportService reportService;
   private final CSVReportService csvReportService;
+  private final ExportSlotLimiter exportSlotLimiter;
 
-  public ReportApiController(ReportService reportService, CSVReportService csvReportService) {
+  public ReportApiController(
+      ReportService reportService,
+      CSVReportService csvReportService,
+      ExportSlotLimiter exportSlotLimiter) {
     this.reportService = reportService;
     this.csvReportService = csvReportService;
+    this.exportSlotLimiter = exportSlotLimiter;
   }
 
   /** CSV data-extract reports (Commons CSV, no Jasper). Always returns {@code text/csv}. */
@@ -80,10 +89,13 @@ public class ReportApiController {
 
   /**
    * FREP400 Checklist Search CSV export (legacy "Export to Excel" button, which actually produced a
-   * CSV). Same filters as {@code GET /api/v1/search/checklists}; re-runs the search and streams CSV.
+   * CSV). Same filters as {@code GET /api/v1/search/checklists}; re-runs the search and streams the CSV
+   * row-by-row from a server-side cursor (uncapped, constant memory). Concurrency is bounded by
+   * {@link ExportSlotLimiter} — an over-limit request is rejected with 429 before the response commits,
+   * since each stream holds a DB connection for its whole duration.
    */
   @GetMapping("/checklist-search/csv")
-  public ResponseEntity<byte[]> exportChecklistSearchCsv(
+  public ResponseEntity<StreamingResponseBody> exportChecklistSearchCsv(
       @RequestParam(name = "effectiveYear", required = false) String effectiveYear,
       @RequestParam(name = "orgUnit", required = false) String orgUnit,
       @RequestParam(name = "protocolType", required = false) String protocolType,
@@ -96,9 +108,28 @@ public class ReportApiController {
       @RequestParam(name = "checklistId", required = false) String checklistId,
       @RequestParam(name = "evaluationDateFrom", required = false) String evaluationDateFrom,
       @RequestParam(name = "evaluationDateTo", required = false) String evaluationDateTo) {
-    return toResponse(csvReportService.generateChecklistSearchCsv(
-        effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
-        clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo));
+    if (!exportSlotLimiter.tryAcquire()) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Too many exports are in progress. Please try again in a moment.");
+    }
+    StreamingResponseBody body = outputStream -> {
+      try {
+        csvReportService.streamChecklistSearchCsv(
+            effectiveYear, orgUnit, protocolType, licenceId, cuttingPermitId, cutBlockId, openingId,
+            clientNumber, checklistStatusCode, checklistId, evaluationDateFrom, evaluationDateTo,
+            outputStream);
+      } finally {
+        exportSlotLimiter.release();
+      }
+    };
+    ContentDisposition disposition = ContentDisposition.attachment()
+        .filename(CSVReportService.CHECKLIST_SEARCH_FILENAME, StandardCharsets.UTF_8)
+        .build();
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+        .contentType(ReportFormat.CSV.getMediaType())
+        .body(body);
   }
 
   /** JasperReports template reports (PDF/CSV). */

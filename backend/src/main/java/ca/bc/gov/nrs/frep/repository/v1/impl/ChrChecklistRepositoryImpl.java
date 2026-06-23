@@ -9,12 +9,10 @@ import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import java.sql.Types;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("oracle")
 public class ChrChecklistRepositoryImpl extends AbstractFrepRepository implements ChrChecklistRepository {
 
   private static final String PACKAGE = "FREP_TOMBSTONE";

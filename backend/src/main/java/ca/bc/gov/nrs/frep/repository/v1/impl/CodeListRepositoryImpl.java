@@ -10,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -21,7 +20,6 @@ import org.springframework.stereotype.Repository;
  * rows are surfaced as generic {@code Map} instances.
  */
 @Repository
-@Profile("oracle")
 public class CodeListRepositoryImpl extends AbstractFrepRepository implements CodeListRepository {
 
   static final String PACKAGE_NAME = "FREP_CODE_LISTS";

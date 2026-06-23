@@ -86,6 +86,13 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
     return buildResponseEntity(new ApiError(FORBIDDEN, ex.getMessage()));
   }
 
+  /** Returns the pre-built {@link ApiError} carried by the exception (already has status + message). */
+  @ExceptionHandler(InvalidPayloadException.class)
+  protected ResponseEntity<Object> handleInvalidPayload(InvalidPayloadException ex) {
+    log.warn("{}", ex.getMessage());
+    return buildResponseEntity(ex.getError());
+  }
+
   /** Honour the status + reason carried by a {@link ResponseStatusException} (e.g. search "narrow"). */
   @ExceptionHandler(ResponseStatusException.class)
   protected ResponseEntity<Object> handleResponseStatus(ResponseStatusException ex) {

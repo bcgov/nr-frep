@@ -123,13 +123,12 @@ class AcceptedSiteServiceTest {
 
   @Test
   void findAcceptedSitesMergesCulturalHeritage() {
+    // BIO + CHR now arrive together from the single consolidated query.
     when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
         new AcceptedSiteRow(
             "1001", "Biodiversity", "", "ACC", "RDY",
             "A12345", "987654", "1234567", "CP-8891", "CB-442", "2024-06-15"
-        )
-    ));
-    when(acceptedSitesRepository.findCulturalHeritageSites("56", "2024")).thenReturn(List.of(
+        ),
         new AcceptedSiteRow(
             "9001", "Cultural Heritage", "", "ACC", "ACT",
             "C11111", "987656", "L9", "CP-9", "CB-9", "2024-08-01"

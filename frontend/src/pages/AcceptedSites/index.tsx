@@ -306,7 +306,7 @@ const AcceptedSitesPage: FC = () => {
                       <Button
                         kind="tertiary"
                         size="md"
-                        onClick={() => window.print()}
+                        onClick={() => globalThis.print()}
                         disabled={loading || configLoading || tableRows.length === 0}
                       >
                         Print

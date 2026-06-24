@@ -4,6 +4,8 @@ export type MasterListGenerationStat = {
   orgUnitName: string;
   eligibleSites: number;
   selectedSites: number;
+  /** Legacy resource_value_ind: 'Y' when this district already has evaluated resources (Regenerate disabled). */
+  resourceValueInd: string;
 };
 
 export type MasterListAdmin = {

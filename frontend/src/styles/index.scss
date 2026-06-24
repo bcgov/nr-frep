@@ -75,3 +75,23 @@
     opacity: 0;
   }
 }
+// --- Print -------------------------------------------------------------------
+// Client-side "Printer Version" support (legacy FREP parity). Pages render a
+// print-only <PrintableTable> for the full list and wrap their interactive UI
+// in a `print-hidden` element; here we strip the app chrome so only the
+// PrintableTable prints.
+@media print {
+  .cds--header,
+  .cds--side-nav,
+  .cds--skip-to-content,
+  .print-hidden {
+    display: none !important;
+  }
+
+  .cds--content {
+    margin: 0 !important;
+    padding: 0 !important;
+    inline-size: 100% !important;
+    max-inline-size: 100% !important;
+  }
+}

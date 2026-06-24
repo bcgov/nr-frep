@@ -5,10 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
+import org.springframework.http.HttpStatus;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListCriteriaData;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
 import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
@@ -52,6 +57,7 @@ class MasterListAdminServiceTest {
     assertEquals("DCK", response.generationStats().get(0).orgUnitCode());
     assertEquals(12, response.generationStats().get(0).eligibleSites());
     assertEquals(38, response.generationStats().get(0).selectedSites());
+    assertEquals("N", response.generationStats().get(0).resourceValueInd());
   }
 
   @Test
@@ -109,10 +115,50 @@ class MasterListAdminServiceTest {
   }
 
   @Test
-  void generateRequiresYear() {
-    assertThrows(IllegalArgumentException.class,
+  void generateRejectsMissingRequiredCriteria() {
+    // All criteria fields blank/null → a single 400 listing the violations (legacy parity).
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
         () -> service.generateMasterList(
-            new GenerateMasterListRequest("", null, null, null, null, null)));
+            new GenerateMasterListRequest("2025", null, null, null, null, null)));
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getError().getStatus());
+    assertTrue(ex.getMessage().contains("Min opening gross area"));
+    assertTrue(ex.getMessage().contains("Min harvest-complete date"));
+    assertTrue(ex.getMessage().contains("Max sites per district"));
+  }
+
+  @Test
+  void generateRejectsOutOfRangeAndInvertedValues() {
+    // area > 99999.9999 and > 4 decimals, dates outside window + min not before max, sites > 500.
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "2025-03-31", "2024-04-01", 100000.12345, 999, null)));
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getError().getStatus());
+    assertTrue(ex.getMessage().contains("must be before"));
+    assertTrue(ex.getMessage().contains("99999.9999"));
+    assertTrue(ex.getMessage().contains("1 and 500"));
+  }
+
+  @Test
+  void generateRejectsDateOutsideAllowedWindow() {
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "1990-01-01", "2025-03-31", 5.0, 12, null)));
+    assertTrue(ex.getMessage().contains("1997-06-15 and 2050-12-31"));
+  }
+
+  @Test
+  void generateRejectsTooLongComments() {
+    String longComment = "x".repeat(4001);
+    assertThrows(InvalidPayloadException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "2024-04-01", "2025-03-31", 5.0, 12, longComment)));
+  }
+
+  @Test
+  void saveCommentsRejectsTooLongComments() {
+    String longComment = "x".repeat(4001);
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveComments("2025", longComment));
   }
 
   @Test
@@ -127,9 +173,27 @@ class MasterListAdminServiceTest {
   }
 
   @Test
-  void regenerateDistrictRequiresYearAndOrgUnit() {
-    assertThrows(IllegalArgumentException.class, () -> service.regenerateDistrict("2025", ""));
-    assertThrows(IllegalArgumentException.class, () -> service.regenerateDistrict("", "43"));
+  void regenerateDistrictMapsExistingResourceToConflict() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ADMIN");
+    doThrow(new StoredProcedureException(
+            "FREP_700_GEN_MASTER", "regenerate", "ca.bc.gov.mof.frep.regenerate.existingResource"))
+        .when(masterListRepository).regenerateDistrict("2025", "43", "IDIR\\ADMIN");
+
+    ConflictFoundException ex = assertThrows(
+        ConflictFoundException.class, () -> service.regenerateDistrict("2025", "43"));
+    assertTrue(ex.getMessage().toLowerCase().contains("regenerat"));
+  }
+
+  @Test
+  void deleteListMapsResourcesAssociatedToConflict() {
+    doThrow(new StoredProcedureException(
+            "FREP_700_GEN_MASTER", "delete_list",
+            "The MasterList has resources associated and can not be deleted."))
+        .when(masterListRepository).deleteList("2025");
+
+    ConflictFoundException ex = assertThrows(
+        ConflictFoundException.class, () -> service.deleteList("2025"));
+    assertTrue(ex.getMessage().toLowerCase().contains("deleted"));
   }
 
   @Test

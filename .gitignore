@@ -392,7 +392,6 @@ pyrightconfig.json
 **/application-prod.properties
 **/application-secrets.properties
 **/application-*.yml
-!**/application-oracle.yml
 **/bootstrap-local.yml
 **/bootstrap-prod.yml
 # Other common credential/config files

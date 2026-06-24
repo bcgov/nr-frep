@@ -11,6 +11,8 @@ export type ChecklistSearchResult = {
   clientNumber: string;
   evaluationDate: string;
   evaluatorUserid: string;
+  /** Evaluator's display name when they have FREP access (resolved via FAM), else the userid. */
+  evaluatorName: string;
   checklistStatusCode: string;
   checklistStatus: string;
 };

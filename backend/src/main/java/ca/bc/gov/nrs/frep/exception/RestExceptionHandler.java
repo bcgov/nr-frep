@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.exception;
 
+import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
@@ -84,6 +85,20 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   protected ResponseEntity<Object> handleForbidden(AccessForbiddenException ex) {
     log.warn("{}", ex.getMessage());
     return buildResponseEntity(new ApiError(FORBIDDEN, ex.getMessage()));
+  }
+
+  /** Report id not registered / no JRXML template on the classpath. */
+  @ExceptionHandler(ReportNotFoundException.class)
+  protected ResponseEntity<Object> handleReportNotFound(ReportNotFoundException ex) {
+    log.info("{}", ex.getMessage());
+    return buildResponseEntity(new ApiError(NOT_FOUND, ex.getMessage()));
+  }
+
+  /** Jasper/DB failure while rendering a report — the failing "service" is upstream, so 502. */
+  @ExceptionHandler(ReportGenerationException.class)
+  protected ResponseEntity<Object> handleReportGeneration(ReportGenerationException ex) {
+    log.error("Report generation failed", ex);
+    return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
   }
 
   /** Returns the pre-built {@link ApiError} carried by the exception (already has status + message). */

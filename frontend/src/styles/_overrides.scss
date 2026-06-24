@@ -238,6 +238,37 @@ $types: "error", "info", "success", "warning";
   font-weight: 700;
 }
 
+/* Required-field marker: a red asterisk appended to a label via the shared
+   requiredLabel() helper (src/utils/requiredLabel.tsx). */
+.required-asterisk {
+  color: var(--#{variables.$bcgov-prefix}-text-error);
+  font-size: 1.1rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Zebra striping for every data table: white rows with a faint grey alternate,
+   matching the standard NRIDS results-table look. Applies to all Carbon
+   DataTables (no `useZebraStyles` prop needed). Carbon's White theme maps
+   `layer-02` to white and `layer-01` to #f4f4f4, so the rows read white +
+   subtle grey. Selected and expandable parent rows keep Carbon's own
+   backgrounds; hover is re-asserted so it still wins over the even-row stripe. */
+.#{variables.$bcgov-prefix}--data-table tbody {
+  background-color: var(--#{variables.$bcgov-prefix}-layer-02);
+}
+
+.#{variables.$bcgov-prefix}--data-table
+  tbody
+  tr:not(.#{variables.$bcgov-prefix}--parent-row):not(.#{variables.$bcgov-prefix}--data-table--selected):nth-child(even) {
+  background-color: var(--#{variables.$bcgov-prefix}-layer-01);
+}
+
+.#{variables.$bcgov-prefix}--data-table
+  tbody
+  tr:not(.#{variables.$bcgov-prefix}--parent-row):not(.#{variables.$bcgov-prefix}--data-table--selected):hover {
+  background-color: var(--#{variables.$bcgov-prefix}-layer-hover);
+}
+
 /* ----------------- Tabs (contained) -------------------
    The contained tab panel keeps a gray surface (like a table's gray frame) so
    it reads as one piece with the gray tab bar. Inputs that sit directly on the

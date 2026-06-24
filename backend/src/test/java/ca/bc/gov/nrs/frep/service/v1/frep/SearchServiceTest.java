@@ -38,6 +38,9 @@ class SearchServiceTest {
   @Mock
   private SearchRepository searchRepository;
 
+  @Mock
+  private FamUserDirectoryService famUserDirectoryService;
+
   @InjectMocks
   private SearchService service;
 
@@ -62,6 +65,40 @@ class SearchServiceTest {
     assertEquals("SLB", result.protocolCode());
     assertEquals("RDY", result.checklistStatusCode());
     assertEquals("RDY", result.checklistStatus());
+    // The static mapper (CSV / legacy paths) leaves the evaluator name as the raw userid.
+    assertEquals("IDIR\\JDOE", result.evaluatorUserid());
+    assertEquals("IDIR\\JDOE", result.evaluatorName());
+  }
+
+  @Test
+  void searchChecklistsPagedResolvesEvaluatorNameViaFam() {
+    when(searchRepository.countChecklists(any())).thenReturn(1L);
+    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(20), any(), eq(false)))
+        .thenReturn(List.of(new ChecklistSearchRow(
+            "9001", "SLB", "Biodiversity", "2024", "DCK", "L1", "CP", "BLK", "OP", "CL",
+            "2024-05-01", "JDOE", "SUB")));
+    when(famUserDirectoryService.resolveName("JDOE")).thenReturn(Optional.of("Jane Doe (JDOE)"));
+
+    PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");
+
+    assertEquals("Jane Doe (JDOE)", page.content().get(0).evaluatorName());
+    assertEquals("JDOE", page.content().get(0).evaluatorUserid());
+  }
+
+  @Test
+  void searchChecklistsPagedFallsBackToUseridWhenNotFrepUser() {
+    when(searchRepository.countChecklists(any())).thenReturn(1L);
+    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(20), any(), eq(false)))
+        .thenReturn(List.of(new ChecklistSearchRow(
+            "9002", "SLB", "Biodiversity", "2024", "DCK", "L1", "CP", "BLK", "OP", "CL",
+            "2024-05-01", "OLDUSER", "SUB")));
+    when(famUserDirectoryService.resolveName("OLDUSER")).thenReturn(Optional.empty());
+
+    PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");
+
+    assertEquals("OLDUSER", page.content().get(0).evaluatorName());
   }
 
   @Test
@@ -126,7 +163,7 @@ class SearchServiceTest {
   @Test
   void searchChecklistsPagedClampsNegativePageAndCapsSize() {
     when(searchRepository.countChecklists(any())).thenReturn(0L);
-    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(200), any(), eq(false)))
+    when(searchRepository.searchChecklistsPage(any(), eq(0), eq(100), any(), eq(false)))
         .thenReturn(List.of());
 
     PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
@@ -134,8 +171,8 @@ class SearchServiceTest {
         -5, 9999, "");
 
     assertEquals(0, page.pageNumber());     // negative page clamped to 0
-    assertEquals(200, page.pageSize());     // size capped at MAX_PAGE_SIZE
-    verify(searchRepository).searchChecklistsPage(any(), eq(0), eq(200), eq("protocol_name"), eq(false));
+    assertEquals(100, page.pageSize());     // size capped at MAX_PAGE_SIZE
+    verify(searchRepository).searchChecklistsPage(any(), eq(0), eq(100), eq("protocol_name"), eq(false));
   }
 
   @Test

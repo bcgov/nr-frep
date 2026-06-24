@@ -101,7 +101,9 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
       licence: 'optional',
       clientNumber: 'optional',
     },
-    layout: [['dateRange'], ['licence', 'clientNumber']],
+    // One row → the 3-column field grid flows the fields 3 per row
+    // (Date from, Date to, Licence | Client number).
+    layout: [['dateRange', 'licence', 'clientNumber']],
   },
   // Reports → Checklist Rejection Reason (legacy JCRS FREPRPT018). Jasper PDF: accepted/rejected
   // checklist counts by region / district with a per-district rejection-reason breakdown. Filtered
@@ -117,7 +119,8 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
       orgUnit: 'optional',
       dateRange: 'optional',
     },
-    layout: [['orgUnit'], ['dateRange']],
+    // One row → Organization unit, Date from, Date to align across the 3 columns.
+    layout: [['orgUnit', 'dateRange']],
   },
   // Reports → Cultural Heritage → Data Extract (legacy JCRS FREPRPT022). CSV data extract (97 flat
   // columns) filtered by org unit, master-list year, checklist status and resource value. Admin-only

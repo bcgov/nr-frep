@@ -16,6 +16,8 @@ import {
 } from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import { requiredLabel } from '@/utils/requiredLabel';
+
 import type { CodeOption } from '@/types/configuration';
 import type {
   BioCwdRow,
@@ -438,7 +440,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     ) : (
       <TextInput
         id={`plot-${key}`}
-        labelText={required ? `${label} (required)` : label}
+        labelText={requiredLabel(label, required)}
         value={get(key)}
         maxLength={maxLength}
         disabled={disabled}
@@ -462,7 +464,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     ) : (
       <Select
         id={`plot-${key}`}
-        labelText={required ? `${label} (required)` : label}
+        labelText={requiredLabel(label, required)}
         value={get(key)}
         disabled={disabled}
         invalid={attemptedSave && error !== ''}

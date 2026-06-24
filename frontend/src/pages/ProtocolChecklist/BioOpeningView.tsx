@@ -2,6 +2,8 @@ import { Edit } from '@carbon/icons-react';
 import { Button, Select, SelectItem, SkeletonText, TextArea, TextInput } from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import { requiredLabel } from '@/utils/requiredLabel';
+
 import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
@@ -174,7 +176,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       <TextArea
         key={key}
         id={`bio-${key}`}
-        labelText={required ? `${label} (required)` : label}
+        labelText={requiredLabel(label, required)}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
         invalid={required && attemptedSave && get(key).trim() === ''}

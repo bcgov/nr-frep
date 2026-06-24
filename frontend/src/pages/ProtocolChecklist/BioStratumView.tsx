@@ -16,6 +16,8 @@ import {
 } from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import { requiredLabel } from '@/utils/requiredLabel';
+
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
@@ -716,7 +718,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     (code && strataTypes.find((t) => t.code === code)?.description) || code || '';
 
   const field = (key: string, label: string): ReactNode => {
-    const lbl = REQUIRED_KEYS.has(key) ? `${label} (required)` : label;
+    const lbl = requiredLabel(label, REQUIRED_KEYS.has(key));
     const opts = optionsFor(key);
     const disabled = disabledKey(key);
     const onChange =

@@ -15,6 +15,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tag,
   TextInput,
 } from '@carbon/react';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
@@ -30,31 +31,62 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
+import { formatShortDate } from '@/utils/date';
 
 import './checklistSearch.scss';
 
+// UI labels for the checklist status codes — the single source of truth for the status chip and
+// the status filter dropdown.
+const STATUS_LABELS: Record<string, string> = {
+  ACT: 'Active',
+  SUB: 'Submitted',
+  RDO: 'Read-only',
+};
+
+/** Friendly label for a status code; falls back to the backend description, then the raw code. */
+const statusLabel = (code: string | undefined, fallback?: string): string => {
+  const c = (code ?? '').toUpperCase();
+  return STATUS_LABELS[c] ?? (fallback || c);
+};
+
+/**
+ * Carbon Tag colour for a checklist status code. Mirrors legacy frep400 ("green indicates the
+ * checklist is submitted"): SUB → green; ACT (active) → blue; RDO (read-only) → cool-gray.
+ */
+const statusTagType = (code: string | undefined): 'green' | 'blue' | 'cool-gray' | 'gray' => {
+  switch ((code ?? '').toUpperCase()) {
+    case 'SUB':
+      return 'green';
+    case 'ACT':
+      return 'blue';
+    case 'RDO':
+      return 'cool-gray';
+    default:
+      return 'gray';
+  }
+};
+
 const TABLE_HEADERS = [
+  { key: 'checklistStatus', header: 'Status' },
   { key: 'checklistId', header: 'Checklist' },
   { key: 'protocolCode', header: 'Protocol' },
   { key: 'effectiveYear', header: 'Year' },
-  { key: 'orgUnitCode', header: 'District' },
+  { key: 'orgUnitCode', header: 'Org. unit' },
   { key: 'licenceId', header: 'Licence' },
   { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'openingId', header: 'Opening' },
   { key: 'clientNumber', header: 'Client #' },
-  { key: 'evaluationDate', header: 'Eval. date' },
-  { key: 'evaluatorUserid', header: 'Evaluator' },
-  { key: 'checklistStatus', header: 'Status' },
+  { key: 'evaluationDate', header: 'Evaluation date' },
+  { key: 'evaluatorName', header: 'Evaluator' },
 ] as const;
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Any status' },
-  { value: 'RDY', label: 'Ready' },
-  { value: 'SUB', label: 'Submitted' },
+  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
 
 // Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
@@ -254,7 +286,11 @@ const ChecklistSearchPage: FC = () => {
           >
             <SelectItem value="" text="Any protocol" />
             {protocols.map((protocol) => (
-              <SelectItem key={protocol.code} value={protocol.code} text={protocol.name} />
+              <SelectItem
+                key={protocol.code}
+                value={protocol.code}
+                text={`${protocol.code} - ${protocol.name}`}
+              />
             ))}
           </Select>
           <Select
@@ -385,6 +421,44 @@ const ChecklistSearchPage: FC = () => {
                               return (
                                 <TableCell key={cell.id}>
                                   <RouterLink to={checklistLink}>{cell.value}</RouterLink>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'evaluationDate') {
+                              return (
+                                <TableCell key={cell.id}>{formatShortDate(cell.value)}</TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'protocolCode') {
+                              const proto = protocols.find((p) => p.code === cell.value);
+                              return (
+                                <TableCell key={cell.id}>
+                                  {cell.value && proto
+                                    ? `${cell.value} - ${proto.name}`
+                                    : cell.value}
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'orgUnitCode') {
+                              const unit = orgUnits.find((u) => u.orgUnitCode === cell.value);
+                              return (
+                                <TableCell key={cell.id}>
+                                  {cell.value && unit
+                                    ? `${cell.value} — ${unit.orgUnitName}`
+                                    : cell.value}
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'checklistStatus') {
+                              const code = data?.checklistStatusCode;
+                              const label = statusLabel(code, cell.value);
+                              return (
+                                <TableCell key={cell.id}>
+                                  {label ? (
+                                    <Tag type={statusTagType(code)} size="sm">
+                                      {label}
+                                    </Tag>
+                                  ) : null}
                                 </TableCell>
                               );
                             }

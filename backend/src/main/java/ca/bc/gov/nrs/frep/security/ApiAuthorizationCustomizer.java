@@ -31,7 +31,6 @@ public class ApiAuthorizationCustomizer implements
 
     // Health / actuator endpoints — open for OpenShift probes and Prometheus scraping.
     authorize.requestMatchers("/actuator/**").permitAll();
-    authorize.requestMatchers("/api/hello").permitAll();
 
     // Everything else requires a valid token; role checks are enforced per-endpoint via @PreAuthorize.
     authorize.anyRequest().authenticated();

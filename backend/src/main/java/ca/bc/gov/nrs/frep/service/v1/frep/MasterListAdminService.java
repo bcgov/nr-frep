@@ -1,7 +1,9 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
+import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListAdminResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListGenerationStat;
@@ -11,6 +13,7 @@ import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +21,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 /**
  * Sys-admin API for FREP700 Generate Master List, backed by the legacy Oracle
@@ -56,12 +61,9 @@ public class MasterListAdminService {
   }
 
   public MasterListAdminResponse generateMasterList(GenerateMasterListRequest request) {
-    if (request == null || StringUtils.isBlank(request.effectiveYear())) {
-      throw new IllegalArgumentException("effectiveYear is required");
-    }
     validateGenerateRequest(request);
-
     String effectiveYear = request.effectiveYear().trim();
+
     masterListRepository.generate(
         effectiveYear,
         blankToEmpty(request.maxHarvestCompleteDate()),
@@ -77,9 +79,6 @@ public class MasterListAdminService {
 
   /** Regenerate the master list for a single district (FREP_700_GEN_MASTER.regenerate). */
   public MasterListAdminResponse regenerateDistrict(String effectiveYear, String orgUnitNo) {
-    if (StringUtils.isBlank(effectiveYear) || StringUtils.isBlank(orgUnitNo)) {
-      throw new IllegalArgumentException("effectiveYear and orgUnitNo are required");
-    }
     try {
       masterListRepository.regenerateDistrict(
           effectiveYear.trim(), orgUnitNo.trim(), loggedUserHelper.getLoggedUserId());
@@ -97,9 +96,6 @@ public class MasterListAdminService {
 
   /** Save generation comments without regenerating (FREP_700_GEN_MASTER.save_comments). */
   public MasterListAdminResponse saveComments(String effectiveYear, String comments) {
-    if (StringUtils.isBlank(effectiveYear)) {
-      throw new IllegalArgumentException("effectiveYear is required");
-    }
     List<String> errors = new ArrayList<>();
     validateComments(comments, errors);
     throwIfInvalid(errors);
@@ -110,9 +106,6 @@ public class MasterListAdminService {
 
   /** Delete the generated master list for a year (FREP_700_GEN_MASTER.delete_list). */
   public MasterListAdminResponse deleteList(String effectiveYear) {
-    if (StringUtils.isBlank(effectiveYear)) {
-      throw new IllegalArgumentException("effectiveYear is required");
-    }
     try {
       masterListRepository.deleteList(effectiveYear.trim());
     } catch (StoredProcedureException ex) {
@@ -192,7 +185,9 @@ public class MasterListAdminService {
 
   private static void throwIfInvalid(List<String> errors) {
     if (!errors.isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join(" ", errors));
+      var allErrors = String.join(" ", errors);
+      ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message(allErrors).status(BAD_REQUEST).build();
+      throw new InvalidPayloadException(error);
     }
   }
 

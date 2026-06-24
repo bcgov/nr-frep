@@ -18,7 +18,10 @@
 }
 
 .master-list-admin__panel {
-  padding: 1.5rem;
+  // No horizontal padding: keep the heading + form flush-left with the page title above (the panel
+  // has no visible surface here, so the padding only indented the content). Drop the top padding so
+  // the info banner sits closer to the page subtitle.
+  padding: 0 0 1.5rem;
   height: 100%;
 
   h2 {

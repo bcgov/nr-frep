@@ -2,11 +2,13 @@ package ca.bc.gov.nrs.frep.controller.v1;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.nrs.frep.exception.RestExceptionHandler;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListAdminResponse;
 import ca.bc.gov.nrs.frep.service.v1.frep.MasterListAdminService;
 import java.util.List;
@@ -31,6 +33,7 @@ class MasterListAdminApiControllerTest {
   void setUp() {
     mockMvc = MockMvcBuilders
         .standaloneSetup(new MasterListAdminApiController(masterListAdminService))
+        .setControllerAdvice(new RestExceptionHandler())
         .build();
   }
 
@@ -72,6 +75,28 @@ class MasterListAdminApiControllerTest {
     mockMvc.perform(post("/api/v1/admin/master-list/generate")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"effectiveYear\":\"\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void saveCommentsRejectsBlankYear() throws Exception {
+    mockMvc.perform(post("/api/v1/admin/master-list/comments")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"effectiveYear\":\"\",\"comments\":\"hi\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void regenerateRejectsBlankOrgUnit() throws Exception {
+    mockMvc.perform(post("/api/v1/admin/master-list/regenerate")
+            .param("effectiveYear", "2025")
+            .param("orgUnitNo", ""))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void deleteRejectsBlankYear() throws Exception {
+    mockMvc.perform(delete("/api/v1/admin/master-list").param("effectiveYear", ""))
         .andExpect(status().isBadRequest());
   }
 }

@@ -23,9 +23,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>{@link #warmOraclePool} — forces eager pool initialization at startup so
  *       connectivity failures are caught at boot rather than deferred to the first request.</li>
  *   <li>{@link #oracleJdbcTemplate} — a named {@code JdbcTemplate} alias that repositories
- *       and {@code OracleSmokeController} inject via {@code @Qualifier("oracleJdbcTemplate")}.
- *       Wraps the same auto-configured {@code DataSource} that the default {@code jdbcTemplate}
- *       bean uses.</li>
+ *       inject via {@code @Qualifier("oracleJdbcTemplate")}. Wraps the same auto-configured
+ *       {@code DataSource} that the default {@code jdbcTemplate} bean uses.</li>
  * </ul>
  */
 @Configuration

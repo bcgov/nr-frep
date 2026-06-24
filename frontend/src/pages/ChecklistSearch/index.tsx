@@ -238,6 +238,17 @@ const ChecklistSearchPage: FC = () => {
     [results],
   );
 
+  // Code → display-name lookups so the cell renderer can resolve protocol / org-unit names with a
+  // map get() instead of a nested find() (which pushes the cell function past the 4-level nesting cap).
+  const protocolNameByCode = useMemo(
+    () => new Map(protocols.map((p) => [p.code, p.name] as const)),
+    [protocols],
+  );
+  const orgUnitNameByCode = useMemo(
+    () => new Map(orgUnits.map((u) => [u.orgUnitCode, u.orgUnitName] as const)),
+    [orgUnits],
+  );
+
   return (
     <Grid fullWidth className="default-grid checklist-search-grid">
       <Column sm={4} md={8} lg={16}>
@@ -430,22 +441,18 @@ const ChecklistSearchPage: FC = () => {
                               );
                             }
                             if (cell.info.header === 'protocolCode') {
-                              const proto = protocols.find((p) => p.code === cell.value);
+                              const name = protocolNameByCode.get(cell.value);
                               return (
                                 <TableCell key={cell.id}>
-                                  {cell.value && proto
-                                    ? `${cell.value} - ${proto.name}`
-                                    : cell.value}
+                                  {cell.value && name ? `${cell.value} - ${name}` : cell.value}
                                 </TableCell>
                               );
                             }
                             if (cell.info.header === 'orgUnitCode') {
-                              const unit = orgUnits.find((u) => u.orgUnitCode === cell.value);
+                              const name = orgUnitNameByCode.get(cell.value);
                               return (
                                 <TableCell key={cell.id}>
-                                  {cell.value && unit
-                                    ? `${cell.value} — ${unit.orgUnitName}`
-                                    : cell.value}
+                                  {cell.value && name ? `${cell.value} — ${name}` : cell.value}
                                 </TableCell>
                               );
                             }

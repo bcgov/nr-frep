@@ -67,6 +67,22 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 
 const isRequired = (value: boolean | 'optional' | 'required' | undefined) => value === 'required';
 
+// Required-field rules driving validate(): the report-definition field key, the form-state field it
+// maps to, and the error key. A data table keeps validate() flat (one loop) instead of a long if-chain.
+const REQUIRED_FIELD_CHECKS: {
+  cfg: ReportFieldKey;
+  field: keyof FormState;
+  error: keyof FormErrors;
+}[] = [
+  { cfg: 'orgUnit', field: 'orgUnitCode', error: 'orgUnitCode' },
+  { cfg: 'masterListYear', field: 'masterListYear', error: 'masterListYear' },
+  { cfg: 'resourceValueStatus', field: 'resourceValueStatus', error: 'resourceValueStatus' },
+  { cfg: 'checklistStatus', field: 'checklistStatus', error: 'checklistStatus' },
+  { cfg: 'openingId', field: 'openingId', error: 'openingId' },
+  { cfg: 'clientNumber', field: 'clientNumber', error: 'clientNumber' },
+  { cfg: 'licence', field: 'licenceNumber', error: 'licenceNumber' },
+];
+
 const ReportConfigForm: FC<Props> = ({
   definition,
   orgUnits,
@@ -106,26 +122,10 @@ const ReportConfigForm: FC<Props> = ({
   // Returns a map of field → inline error message; empty when the form is valid.
   const validate = (): FormErrors => {
     const e: FormErrors = {};
-    if (isRequired(definition.fields.orgUnit) && !form.orgUnitCode.trim()) {
-      e.orgUnitCode = 'Required.';
-    }
-    if (isRequired(definition.fields.masterListYear) && !form.masterListYear.trim()) {
-      e.masterListYear = 'Required.';
-    }
-    if (isRequired(definition.fields.resourceValueStatus) && !form.resourceValueStatus.trim()) {
-      e.resourceValueStatus = 'Required.';
-    }
-    if (isRequired(definition.fields.checklistStatus) && !form.checklistStatus.trim()) {
-      e.checklistStatus = 'Required.';
-    }
-    if (isRequired(definition.fields.openingId) && !form.openingId.trim()) {
-      e.openingId = 'Required.';
-    }
-    if (isRequired(definition.fields.clientNumber) && !form.clientNumber.trim()) {
-      e.clientNumber = 'Required.';
-    }
-    if (isRequired(definition.fields.licence) && !form.licenceNumber.trim()) {
-      e.licenceNumber = 'Required.';
+    for (const { cfg, field, error } of REQUIRED_FIELD_CHECKS) {
+      if (isRequired(definition.fields[cfg]) && !form[field].trim()) {
+        e[error] = 'Required.';
+      }
     }
     if (form.startDate && form.endDate && form.startDate > form.endDate) {
       e.endDate = 'Date to must be on or after Date from.';
@@ -347,8 +347,8 @@ const ReportConfigForm: FC<Props> = ({
 
   return (
     <div className="report-form">
-      {rows.map((row, i) => (
-        <div className="report-form__field-group" key={i}>
+      {rows.map((row) => (
+        <div className="report-form__field-group" key={row.join('-')}>
           {row.map((key) => fieldNode(key))}
         </div>
       ))}

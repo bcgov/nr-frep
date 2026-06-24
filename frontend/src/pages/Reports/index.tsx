@@ -89,7 +89,7 @@ const ReportsPage: FC = () => {
           />
         ) : (
           <div className="reports-accordion-table">
-            <div className="reports-row reports-row--header" role="row">
+            <div className="reports-row reports-row--header">
               <div className="reports-row__cell reports-row__cell--name">Report</div>
               <div className="reports-row__cell reports-row__cell--description">Description</div>
             </div>

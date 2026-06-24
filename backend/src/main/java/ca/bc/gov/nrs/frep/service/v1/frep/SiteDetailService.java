@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
@@ -30,6 +31,7 @@ public class SiteDetailService {
   static final String OTHER_REASON = "OTH";
   static final int MAX_RATIONALE_LENGTH = 50;
   static final int MAX_COMMENTS_LENGTH = 2000;
+  private static final String RATIONALE_TOO_LONG = "rationale must be 50 characters or fewer";
 
   private final SiteDetailRepository siteDetailRepository;
   private final LoggedUserHelper loggedUserHelper;
@@ -62,7 +64,7 @@ public class SiteDetailService {
     String siteId = StringUtils.trimToEmpty(frepSelectedSiteId);
     SiteDetailData current = siteDetailRepository.findSiteDetail(siteId);
     if (current.frepSelectedSiteId().isBlank()) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Site not found: " + frepSelectedSiteId);
+      throw new EntityNotFoundException(SiteDetailData.class, "Site not found for ID:", frepSelectedSiteId);
     }
     if (allResourcesSubmitted(current)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -102,64 +104,73 @@ public class SiteDetailService {
     List<String> errors = new ArrayList<>();
     int index = 1;
     for (SiteResourceSaveRequest r : resources) {
-      if (r.resourceValueId() != null && submittedIds.contains(r.resourceValueId())) {
-        index++;
-        continue;
-      }
-      String status = StringUtils.trimToEmpty(r.statusCode()).toUpperCase();
-      if (status.isEmpty()) {
-        // Empty status is allowed — the row simply isn't saved.
-        index++;
-        continue;
-      }
-      String reason = StringUtils.trimToEmpty(r.rejectionReasonCode());
-      String rationale = StringUtils.trimToEmpty(r.rationale());
-      String comments = StringUtils.trimToEmpty(r.otherComments());
-
-      switch (status) {
-        case "TAR" -> {
-          if (!reason.isEmpty()) {
-            errors.add(rowError(index, "rejection reason must be blank for targeted resources"));
-          }
-          if (rationale.isEmpty()) {
-            errors.add(rowError(index, "rationale is required for targeted resources"));
-          } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-            errors.add(rowError(index, "rationale must be 50 characters or fewer"));
-          }
-        }
-        case "REJ" -> {
-          if (reason.isEmpty()) {
-            errors.add(rowError(index, "rejection reason is required for rejected resources"));
-          } else if (OTHER_REASON.equalsIgnoreCase(reason)) {
-            if (rationale.isEmpty()) {
-              errors.add(rowError(index, "rationale is required when the rejection reason is Other"));
-            } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-              errors.add(rowError(index, "rationale must be 50 characters or fewer"));
-            }
-          } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-            errors.add(rowError(index, "rationale must be 50 characters or fewer"));
-          }
-        }
-        case "ACC" -> {
-          if (!reason.isEmpty()) {
-            errors.add(rowError(index, "rejection reason must be blank for accepted resources"));
-          }
-          if (!rationale.isEmpty()) {
-            errors.add(rowError(index, "rationale must be blank for accepted resources"));
-          }
-        }
-        default -> {
-          // Unknown status — no field-level rules.
-        }
-      }
-      if (comments.length() > MAX_COMMENTS_LENGTH) {
-        errors.add(rowError(index, "other comments must be 2000 characters or fewer"));
-      }
+      validateRow(r, index, submittedIds, errors);
       index++;
     }
 
     if (!errors.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", errors));
+    }
+  }
+
+  /** Validates one row, appending any violations to {@code errors}. Submitted/empty rows are skipped. */
+  private static void validateRow(
+      SiteResourceSaveRequest r, int index, Set<String> submittedIds, List<String> errors) {
+    if (r.resourceValueId() != null && submittedIds.contains(r.resourceValueId())) {
+      return; // submitted (locked) rows aren't editable
+    }
+    String status = StringUtils.trimToEmpty(r.statusCode()).toUpperCase();
+    if (status.isEmpty()) {
+      return; // empty status is allowed — the row simply isn't saved
+    }
+    String reason = StringUtils.trimToEmpty(r.rejectionReasonCode());
+    String rationale = StringUtils.trimToEmpty(r.rationale());
+    String comments = StringUtils.trimToEmpty(r.otherComments());
+
+    switch (status) {
+      case "TAR" -> validateTargeted(index, reason, rationale, errors);
+      case "REJ" -> validateRejected(index, reason, rationale, errors);
+      case "ACC" -> validateAccepted(index, reason, rationale, errors);
+      default -> {
+        // Unknown status — no field-level rules.
+      }
+    }
+    if (comments.length() > MAX_COMMENTS_LENGTH) {
+      errors.add(rowError(index, "other comments must be 2000 characters or fewer"));
+    }
+  }
+
+  private static void validateTargeted(int index, String reason, String rationale, List<String> errors) {
+    if (!reason.isEmpty()) {
+      errors.add(rowError(index, "rejection reason must be blank for targeted resources"));
+    }
+    if (rationale.isEmpty()) {
+      errors.add(rowError(index, "rationale is required for targeted resources"));
+    } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
+      errors.add(rowError(index, RATIONALE_TOO_LONG));
+    }
+  }
+
+  private static void validateRejected(int index, String reason, String rationale, List<String> errors) {
+    if (reason.isEmpty()) {
+      errors.add(rowError(index, "rejection reason is required for rejected resources"));
+    } else if (OTHER_REASON.equalsIgnoreCase(reason)) {
+      if (rationale.isEmpty()) {
+        errors.add(rowError(index, "rationale is required when the rejection reason is Other"));
+      } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
+        errors.add(rowError(index, RATIONALE_TOO_LONG));
+      }
+    } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
+      errors.add(rowError(index, RATIONALE_TOO_LONG));
+    }
+  }
+
+  private static void validateAccepted(int index, String reason, String rationale, List<String> errors) {
+    if (!reason.isEmpty()) {
+      errors.add(rowError(index, "rejection reason must be blank for accepted resources"));
+    }
+    if (!rationale.isEmpty()) {
+      errors.add(rowError(index, "rationale must be blank for accepted resources"));
     }
   }
 

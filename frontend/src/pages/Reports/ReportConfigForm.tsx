@@ -5,6 +5,7 @@ import type { GeneratableReport, ReportFieldKey } from './reportDefinitions';
 import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import {
   openBlobInNewTab,
   requestCsvReport,
@@ -71,6 +72,7 @@ const ReportConfigForm: FC<Props> = ({
   loading,
 }) => {
   const { display } = useNotification();
+  const { canEdit } = useAuthorization();
   const [form, setForm] = useState<FormState>(BLANK);
   const [generating, setGenerating] = useState(false);
 
@@ -316,15 +318,22 @@ const ReportConfigForm: FC<Props> = ({
         <Button kind="ghost" disabled={generating} onClick={() => setForm(BLANK)}>
           Reset
         </Button>
-        {formats.includes('csv') && (
+        {/* Report generation requires write access (FREP_ADMIN / FREP_EDITOR) — view-only users see
+            no generate buttons (the backend rejects the POST with 403 regardless). */}
+        {canEdit && formats.includes('csv') && (
           <Button kind="tertiary" disabled={generating} onClick={() => void generate('csv')}>
             Export CSV
           </Button>
         )}
-        {formats.includes('pdf') && (
+        {canEdit && formats.includes('pdf') && (
           <Button disabled={generating} onClick={() => void generate('pdf')}>
             Generate PDF
           </Button>
+        )}
+        {!canEdit && (
+          <span className="report-form__readonly-note">
+            You need editor access to generate reports.
+          </span>
         )}
       </div>
     </div>

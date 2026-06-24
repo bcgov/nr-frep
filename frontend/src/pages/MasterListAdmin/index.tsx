@@ -1,7 +1,10 @@
 import {
   Button,
   Column,
+  DatePicker,
+  DatePickerInput,
   Grid,
+  InlineNotification,
   NumberInput,
   Select,
   SelectItem,
@@ -15,7 +18,6 @@ import {
   TableRow,
   Tag,
   TextArea,
-  TextInput,
   Tile,
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
@@ -28,6 +30,7 @@ import type { GenerateMasterListRequest, MasterListAdmin } from '@/types/masterL
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 import './masterListAdmin.scss';
 
@@ -39,6 +42,9 @@ const emptyForm = (effectiveYear: string): GenerateMasterListRequest => ({
   maxSitesPerDistrict: 12,
   comments: '',
 });
+
+/** Carbon DatePicker hands back a local Date; serialize to the `YYYY-MM-DD` the proc expects. */
+const toIsoDate = (d?: Date): string => (d ? d.toISOString().slice(0, 10) : '');
 
 /** Legacy FREP700 lock state from resource_evaluation_ind: '' none, 'N' generated, 'Y' locked. */
 const evalStateTag = (ind: string): { type: 'gray' | 'teal' | 'red'; label: string } => {
@@ -141,11 +147,10 @@ const MasterListAdminPage: FC = () => {
         timeout: 6000,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
       display({
         kind: 'error',
         title: 'Generation failed',
-        subtitle: message,
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {
@@ -162,7 +167,7 @@ const MasterListAdminPage: FC = () => {
       display({
         kind: 'error',
         title: 'Action failed',
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {
@@ -215,6 +220,16 @@ const MasterListAdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile className="master-list-admin__panel">
+          {!loading && criteria && locked && (
+            <InlineNotification
+              className="master-list-admin__lock-note"
+              kind="info"
+              title="Year locked"
+              subtitle="Resource evaluations are under way for this year — the list is locked, so it can't be (re-)generated or deleted. Use per-district Regenerate where allowed."
+              hideCloseButton
+              lowContrast
+            />
+          )}
           <h2>Eligibility criteria</h2>
           <div className="master-list-admin__year">
             <div className="master-list-admin__year-select">
@@ -249,20 +264,36 @@ const MasterListAdminPage: FC = () => {
           {!loading && criteria && (
             <>
               <div className="master-list-admin__form">
-                <TextInput
-                  id="mla-min-date"
-                  labelText="Min harvest-complete date"
-                  placeholder="YYYY-MM-DD"
-                  value={form.minHarvestCompleteDate ?? ''}
-                  onChange={(e) => setForm({ ...form, minHarvestCompleteDate: e.target.value })}
-                />
-                <TextInput
-                  id="mla-max-date"
-                  labelText="Max harvest-complete date"
-                  placeholder="YYYY-MM-DD"
-                  value={form.maxHarvestCompleteDate ?? ''}
-                  onChange={(e) => setForm({ ...form, maxHarvestCompleteDate: e.target.value })}
-                />
+                <DatePicker
+                  className="master-list-admin__date"
+                  datePickerType="single"
+                  dateFormat="Y-m-d"
+                  value={form.minHarvestCompleteDate ? [form.minHarvestCompleteDate] : []}
+                  onChange={(dates: Date[]) =>
+                    setForm({ ...form, minHarvestCompleteDate: toIsoDate(dates[0]) })
+                  }
+                >
+                  <DatePickerInput
+                    id="mla-min-date"
+                    labelText="Min harvest-complete date"
+                    placeholder="YYYY-MM-DD"
+                  />
+                </DatePicker>
+                <DatePicker
+                  className="master-list-admin__date"
+                  datePickerType="single"
+                  dateFormat="Y-m-d"
+                  value={form.maxHarvestCompleteDate ? [form.maxHarvestCompleteDate] : []}
+                  onChange={(dates: Date[]) =>
+                    setForm({ ...form, maxHarvestCompleteDate: toIsoDate(dates[0]) })
+                  }
+                >
+                  <DatePickerInput
+                    id="mla-max-date"
+                    labelText="Max harvest-complete date"
+                    placeholder="YYYY-MM-DD"
+                  />
+                </DatePicker>
                 <NumberInput
                   id="mla-min-area"
                   label="Min opening gross area (ha)"
@@ -295,13 +326,6 @@ const MasterListAdminPage: FC = () => {
                   onChange={(e) => setForm({ ...form, comments: e.target.value })}
                 />
               </div>
-              {locked && (
-                <p className="master-list-admin__lock-note">
-                  Resource evaluations are under way for this year — the list is locked, so it
-                  can&apos;t be (re-)generated or deleted. Use per-district Regenerate where
-                  allowed.
-                </p>
-              )}
               <div className="master-list-admin__actions">
                 <Button onClick={() => void handleGenerate()} disabled={generating || hasList}>
                   Generate master list
@@ -357,7 +381,9 @@ const MasterListAdminPage: FC = () => {
                           <Button
                             kind="ghost"
                             size="sm"
-                            disabled={generating || !stat.orgUnitNo}
+                            disabled={
+                              generating || !stat.orgUnitNo || stat.resourceValueInd === 'Y'
+                            }
                             onClick={() => void handleRegenerateDistrict(stat.orgUnitNo)}
                           >
                             Regenerate

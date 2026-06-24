@@ -1,5 +1,7 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListAdminResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.MasterListGenerationStat;
@@ -63,8 +65,18 @@ public class MasterListAdminService {
     if (StringUtils.isBlank(effectiveYear) || StringUtils.isBlank(orgUnitNo)) {
       throw new IllegalArgumentException("effectiveYear and orgUnitNo are required");
     }
-    masterListRepository.regenerateDistrict(
-        effectiveYear.trim(), orgUnitNo.trim(), loggedUserHelper.getLoggedUserId());
+    try {
+      masterListRepository.regenerateDistrict(
+          effectiveYear.trim(), orgUnitNo.trim(), loggedUserHelper.getLoggedUserId());
+    } catch (StoredProcedureException ex) {
+      // Proc backstop: the district already has evaluated resources (the UI also disables Regenerate
+      // for these). Surface it as a clean 409 instead of a raw 500.
+      if (StringUtils.containsIgnoreCase(ex.getOracleErrorMessage(), "regenerate.existingResource")) {
+        throw new ConflictFoundException(
+            "This district already has evaluated resources, so its list can't be regenerated.");
+      }
+      throw ex;
+    }
     return getMasterListCriteria(effectiveYear.trim());
   }
 
@@ -83,7 +95,16 @@ public class MasterListAdminService {
     if (StringUtils.isBlank(effectiveYear)) {
       throw new IllegalArgumentException("effectiveYear is required");
     }
-    masterListRepository.deleteList(effectiveYear.trim());
+    try {
+      masterListRepository.deleteList(effectiveYear.trim());
+    } catch (StoredProcedureException ex) {
+      // Proc backstop: the list has evaluated resources and can't be deleted. Clean 409, not a 500.
+      if (StringUtils.containsIgnoreCase(ex.getOracleErrorMessage(), "resources associated")) {
+        throw new ConflictFoundException(
+            "This master list has evaluated resources, so it can't be deleted.");
+      }
+      throw ex;
+    }
     return getMasterListCriteria(effectiveYear.trim());
   }
 
@@ -111,7 +132,8 @@ public class MasterListAdminService {
         orgUnit[0],
         orgUnit[1],
         row.totalAvailableSites(),
-        row.totalSites()
+        row.totalSites(),
+        row.resourceValueInd()
     );
   }
 

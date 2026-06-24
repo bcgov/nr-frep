@@ -23,14 +23,6 @@ export class AcceptedSitesService extends HttpClient {
     });
   }
 
-  /** Printable accepted-sites view. Backend endpoint is a TODO (responds 501). */
-  printAcceptedSites(): CancelablePromise<void> {
-    return this.doRequest<void>(this.config, {
-      method: 'GET',
-      url: '/v1/accepted-sites/print',
-    });
-  }
-
   /**
    * Opening polygon as a GeoJSON FeatureCollection, proxied from the DataBC WFS by the backend
    * (`OPENING_ID`). Drives the in-app Leaflet map; an empty FeatureCollection means no mapped polygon.

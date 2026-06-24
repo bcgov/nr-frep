@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListCriteriaData;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
@@ -52,6 +55,7 @@ class MasterListAdminServiceTest {
     assertEquals("DCK", response.generationStats().get(0).orgUnitCode());
     assertEquals(12, response.generationStats().get(0).eligibleSites());
     assertEquals(38, response.generationStats().get(0).selectedSites());
+    assertEquals("N", response.generationStats().get(0).resourceValueInd());
   }
 
   @Test
@@ -124,6 +128,30 @@ class MasterListAdminServiceTest {
     service.regenerateDistrict("2025", "43");
 
     verify(masterListRepository).regenerateDistrict("2025", "43", "IDIR\\ADMIN");
+  }
+
+  @Test
+  void regenerateDistrictMapsExistingResourceToConflict() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ADMIN");
+    doThrow(new StoredProcedureException(
+            "FREP_700_GEN_MASTER", "regenerate", "ca.bc.gov.mof.frep.regenerate.existingResource"))
+        .when(masterListRepository).regenerateDistrict("2025", "43", "IDIR\\ADMIN");
+
+    ConflictFoundException ex = assertThrows(
+        ConflictFoundException.class, () -> service.regenerateDistrict("2025", "43"));
+    assertTrue(ex.getMessage().toLowerCase().contains("regenerat"));
+  }
+
+  @Test
+  void deleteListMapsResourcesAssociatedToConflict() {
+    doThrow(new StoredProcedureException(
+            "FREP_700_GEN_MASTER", "delete_list",
+            "The MasterList has resources associated and can not be deleted."))
+        .when(masterListRepository).deleteList("2025");
+
+    ConflictFoundException ex = assertThrows(
+        ConflictFoundException.class, () -> service.deleteList("2025"));
+    assertTrue(ex.getMessage().toLowerCase().contains("deleted"));
   }
 
   @Test

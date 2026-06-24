@@ -131,4 +131,67 @@ describe('MasterListAdminPage actions', () => {
     expect(screen.getByRole('button', { name: 'Save comments' })).toHaveProperty('disabled', true);
     expect(screen.queryByRole('button', { name: 'Delete list' })).toBeNull();
   });
+
+  it('criteria inputs are editable with no list (ind = empty)', async () => {
+    config.getMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    api.getMasterList.mockResolvedValue({ ...criteria(false), resourceEvaluationInd: '' });
+
+    render(<MasterListAdminPage />);
+
+    expect(await screen.findByLabelText('Min harvest-complete date')).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(screen.getByLabelText('Max harvest-complete date')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Min opening gross area (ha)')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Max sites per district')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Generation comments')).toHaveProperty('disabled', false);
+  });
+
+  it('blocks generate and shows inline errors when criteria are invalid', async () => {
+    config.getMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    // No list yet (inputs editable), but min date is after max and out of the allowed window.
+    api.getMasterList.mockResolvedValue({
+      ...criteria(false),
+      resourceEvaluationInd: '',
+      minHarvestCompleteDate: '1990-01-01',
+      maxHarvestCompleteDate: '1995-01-01',
+    });
+
+    render(<MasterListAdminPage />);
+
+    const generate = await screen.findByRole('button', { name: 'Generate master list' });
+    await userEvent.click(generate);
+
+    expect(api.generate).not.toHaveBeenCalled();
+    // Both dates are outside the allowed window, so the range error appears on each.
+    expect(
+      (await screen.findAllByText('Must be between 1997-06-15 and 2050-12-31.', { exact: false }))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('disables criteria inputs once a list exists but keeps comments editable (legacy parity)', async () => {
+    config.getMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    api.getMasterList.mockResolvedValue({ ...criteria(true), resourceEvaluationInd: 'N' });
+
+    render(<MasterListAdminPage />);
+
+    // Legacy frep700GenerateMasterList.jsp disables the criteria fields whenever
+    // resourceEvaluationInd != '' (a list exists), but leaves Generation Comments editable.
+    expect(await screen.findByLabelText('Min harvest-complete date')).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByLabelText('Max harvest-complete date')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Min opening gross area (ha)')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Max sites per district')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Generation comments')).toHaveProperty('disabled', false);
+  });
 });

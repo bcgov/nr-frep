@@ -46,6 +46,65 @@ const emptyForm = (effectiveYear: string): GenerateMasterListRequest => ({
 /** Carbon DatePicker hands back a local Date; serialize to the `YYYY-MM-DD` the proc expects. */
 const toIsoDate = (d?: Date): string => (d ? d.toISOString().slice(0, 10) : '');
 
+// Generate-List field rules, mirroring legacy Frep700ValidationManager (and the backend).
+const HARVEST_DATE_MIN = '1997-06-15';
+const HARVEST_DATE_MAX = '2050-12-31';
+const MAX_GROSS_AREA_HA = 99999.9999;
+const MAX_COMMENTS_LENGTH = 4000;
+
+type FormErrors = Partial<
+  Record<'minArea' | 'minDate' | 'maxDate' | 'maxSites' | 'comments', string>
+>;
+
+const decimalPlaces = (n: number): number => {
+  const s = String(n);
+  const dot = s.indexOf('.');
+  return dot < 0 || s.includes('e') ? 0 : s.length - dot - 1;
+};
+
+/** Returns a map of field → message; empty when the form is valid. */
+const validateGenerateForm = (f: GenerateMasterListRequest): FormErrors => {
+  const errors: FormErrors = {};
+
+  const area = f.minOpeningGrossAreaHa;
+  if (area == null || Number.isNaN(area)) {
+    errors.minArea = 'Min opening gross area is required.';
+  } else if (area < 0 || area > MAX_GROSS_AREA_HA) {
+    errors.minArea = 'Must be between 0 and 99999.9999.';
+  } else if (decimalPlaces(area) > 4) {
+    errors.minArea = 'At most 4 decimal places.';
+  }
+
+  const min = (f.minHarvestCompleteDate ?? '').trim();
+  const max = (f.maxHarvestCompleteDate ?? '').trim();
+  if (!min) {
+    errors.minDate = 'Required.';
+  } else if (min < HARVEST_DATE_MIN || min > HARVEST_DATE_MAX) {
+    errors.minDate = 'Must be between 1997-06-15 and 2050-12-31.';
+  }
+  if (!max) {
+    errors.maxDate = 'Required.';
+  } else if (max < HARVEST_DATE_MIN || max > HARVEST_DATE_MAX) {
+    errors.maxDate = 'Must be between 1997-06-15 and 2050-12-31.';
+  }
+  if (!errors.minDate && !errors.maxDate && min >= max) {
+    errors.maxDate = 'Must be after the min harvest-complete date.';
+  }
+
+  const sites = f.maxSitesPerDistrict;
+  if (sites == null || Number.isNaN(sites)) {
+    errors.maxSites = 'Max sites per district is required.';
+  } else if (!Number.isInteger(sites) || sites < 1 || sites > 500) {
+    errors.maxSites = 'Must be a whole number between 1 and 500.';
+  }
+
+  if ((f.comments ?? '').length > MAX_COMMENTS_LENGTH) {
+    errors.comments = 'Must be 4000 characters or fewer.';
+  }
+
+  return errors;
+};
+
 /** Legacy FREP700 lock state from resource_evaluation_ind: '' none, 'N' generated, 'Y' locked. */
 const evalStateTag = (ind: string): { type: 'gray' | 'teal' | 'red'; label: string } => {
   if (ind === 'Y') return { type: 'red', label: 'Evaluations under way (locked)' };
@@ -64,6 +123,7 @@ const MasterListAdminPage: FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +167,7 @@ const MasterListAdminPage: FC = () => {
       .then((data) => {
         if (cancelled) return;
         setCriteria(data);
+        setErrors({});
         setForm({
           effectiveYear: data.effectiveYear,
           minHarvestCompleteDate: data.minHarvestCompleteDate,
@@ -136,6 +197,17 @@ const MasterListAdminPage: FC = () => {
   }, [display, effectiveYear]);
 
   const handleGenerate = async () => {
+    const validationErrors = validateGenerateForm(form);
+    setErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      display({
+        kind: 'error',
+        title: 'Please fix the highlighted fields',
+        subtitle: 'Some eligibility criteria are missing or out of range.',
+        timeout: 9000,
+      });
+      return;
+    }
     setGenerating(true);
     try {
       const response = await API.masterListAdmin.generate(form);
@@ -277,6 +349,9 @@ const MasterListAdminPage: FC = () => {
                     id="mla-min-date"
                     labelText="Min harvest-complete date"
                     placeholder="YYYY-MM-DD"
+                    disabled={generating || hasList}
+                    invalid={!!errors.minDate}
+                    invalidText={errors.minDate}
                   />
                 </DatePicker>
                 <DatePicker
@@ -292,6 +367,9 @@ const MasterListAdminPage: FC = () => {
                     id="mla-max-date"
                     labelText="Max harvest-complete date"
                     placeholder="YYYY-MM-DD"
+                    disabled={generating || hasList}
+                    invalid={!!errors.maxDate}
+                    invalidText={errors.maxDate}
                   />
                 </DatePicker>
                 <NumberInput
@@ -305,6 +383,9 @@ const MasterListAdminPage: FC = () => {
                     })
                   }
                   step={0.5}
+                  disabled={generating || hasList}
+                  invalid={!!errors.minArea}
+                  invalidText={errors.minArea}
                 />
                 <NumberInput
                   id="mla-max-sites"
@@ -317,6 +398,9 @@ const MasterListAdminPage: FC = () => {
                     })
                   }
                   step={1}
+                  disabled={generating || hasList}
+                  invalid={!!errors.maxSites}
+                  invalidText={errors.maxSites}
                 />
                 <TextArea
                   id="mla-comments"
@@ -324,6 +408,9 @@ const MasterListAdminPage: FC = () => {
                   rows={3}
                   value={form.comments ?? ''}
                   onChange={(e) => setForm({ ...form, comments: e.target.value })}
+                  maxLength={MAX_COMMENTS_LENGTH}
+                  invalid={!!errors.comments}
+                  invalidText={errors.comments}
                 />
               </div>
               <div className="master-list-admin__actions">

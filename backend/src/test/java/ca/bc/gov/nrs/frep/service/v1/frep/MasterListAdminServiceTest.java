@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.GenerateMasterListRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListCriteriaData;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
 import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
@@ -110,6 +112,53 @@ class MasterListAdminServiceTest {
 
     verify(masterListRepository).generate(
         eq("2025"), eq("2025-03-31"), eq("2024-04-01"), eq("2.5"), eq("12"), eq("c"), eq("IDIR\\ADMIN"));
+  }
+
+  @Test
+  void generateRejectsMissingRequiredCriteria() {
+    // All criteria fields blank/null → a single 400 listing the violations (legacy parity).
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.generateMasterList(
+            new GenerateMasterListRequest("2025", null, null, null, null, null)));
+    assertEquals(HttpStatus.BAD_REQUEST, HttpStatus.valueOf(ex.getStatusCode().value()));
+    assertTrue(ex.getReason().contains("Min opening gross area"));
+    assertTrue(ex.getReason().contains("Min harvest-complete date"));
+    assertTrue(ex.getReason().contains("Max sites per district"));
+  }
+
+  @Test
+  void generateRejectsOutOfRangeAndInvertedValues() {
+    // area > 99999.9999 and > 4 decimals, dates outside window + min not before max, sites > 500.
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "2025-03-31", "2024-04-01", 100000.12345, 999, null)));
+    assertEquals(HttpStatus.BAD_REQUEST, HttpStatus.valueOf(ex.getStatusCode().value()));
+    assertTrue(ex.getReason().contains("must be before"));
+    assertTrue(ex.getReason().contains("99999.9999"));
+    assertTrue(ex.getReason().contains("1 and 500"));
+  }
+
+  @Test
+  void generateRejectsDateOutsideAllowedWindow() {
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "1990-01-01", "2025-03-31", 5.0, 12, null)));
+    assertTrue(ex.getReason().contains("1997-06-15 and 2050-12-31"));
+  }
+
+  @Test
+  void generateRejectsTooLongComments() {
+    String longComment = "x".repeat(4001);
+    assertThrows(ResponseStatusException.class,
+        () -> service.generateMasterList(new GenerateMasterListRequest(
+            "2025", "2024-04-01", "2025-03-31", 5.0, 12, longComment)));
+  }
+
+  @Test
+  void saveCommentsRejectsTooLongComments() {
+    String longComment = "x".repeat(4001);
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveComments("2025", longComment));
   }
 
   @Test

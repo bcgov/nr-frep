@@ -10,9 +10,14 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
 import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Sys-admin API for FREP700 Generate Master List, backed by the legacy Oracle
@@ -25,6 +30,15 @@ public class MasterListAdminService {
 
   private static final String DEFAULT_MIN_GROSS_AREA_HA = "2";
   private static final String DEFAULT_MAX_SITES_PER_DISTRICT = "300";
+
+  // Generate-List field rules, ported from legacy Frep700ValidationManager.
+  private static final LocalDate MIN_HARVEST_DATE = LocalDate.of(1997, 6, 15);
+  private static final LocalDate MAX_HARVEST_DATE = LocalDate.of(2050, 12, 31);
+  private static final double MAX_GROSS_AREA_HA = 99999.9999;
+  private static final int MAX_GROSS_AREA_DECIMAL_PLACES = 4;
+  private static final int MIN_SITES_PER_DISTRICT = 1;
+  private static final int MAX_SITES_PER_DISTRICT = 500;
+  private static final int MAX_COMMENTS_LENGTH = 4000;
 
   private final MasterListRepository masterListRepository;
   private final LoggedUserHelper loggedUserHelper;
@@ -45,6 +59,7 @@ public class MasterListAdminService {
     if (request == null || StringUtils.isBlank(request.effectiveYear())) {
       throw new IllegalArgumentException("effectiveYear is required");
     }
+    validateGenerateRequest(request);
 
     String effectiveYear = request.effectiveYear().trim();
     masterListRepository.generate(
@@ -85,6 +100,9 @@ public class MasterListAdminService {
     if (StringUtils.isBlank(effectiveYear)) {
       throw new IllegalArgumentException("effectiveYear is required");
     }
+    List<String> errors = new ArrayList<>();
+    validateComments(comments, errors);
+    throwIfInvalid(errors);
     masterListRepository.saveComments(
         effectiveYear.trim(), blankToEmpty(comments), loggedUserHelper.getLoggedUserId());
     return getMasterListCriteria(effectiveYear.trim());
@@ -106,6 +124,76 @@ public class MasterListAdminService {
       throw ex;
     }
     return getMasterListCriteria(effectiveYear.trim());
+  }
+
+  /**
+   * Field validation for a Generate-List request, ported from legacy {@code Frep700ValidationManager}:
+   * <ul>
+   *   <li>Min gross area (ha): required, 0–99999.9999, ≤ 4 decimal places.</li>
+   *   <li>Min/Max harvest-complete dates: required, valid {@code yyyy-MM-dd}, within 1997-06-15…2050-12-31.</li>
+   *   <li>Min harvest date must be before max harvest date.</li>
+   *   <li>Max sites per district: required integer, 1–500.</li>
+   *   <li>Comments ≤ 4000 chars.</li>
+   * </ul>
+   * Throws a {@code 400} listing all violations.
+   */
+  static void validateGenerateRequest(GenerateMasterListRequest request) {
+    List<String> errors = new ArrayList<>();
+
+    Double area = request.minOpeningGrossAreaHa();
+    if (area == null) {
+      errors.add("Min opening gross area (ha) is required.");
+    } else if (area < 0 || area > MAX_GROSS_AREA_HA) {
+      errors.add("Min opening gross area (ha) must be between 0 and 99999.9999.");
+    } else if (BigDecimal.valueOf(area).stripTrailingZeros().scale() > MAX_GROSS_AREA_DECIMAL_PLACES) {
+      errors.add("Min opening gross area (ha) must have at most 4 decimal places.");
+    }
+
+    LocalDate min = parseHarvestDate(request.minHarvestCompleteDate(), "Min harvest-complete date", errors);
+    LocalDate max = parseHarvestDate(request.maxHarvestCompleteDate(), "Max harvest-complete date", errors);
+    if (min != null && max != null && !min.isBefore(max)) {
+      errors.add("Min harvest-complete date must be before max harvest-complete date.");
+    }
+
+    Integer sites = request.maxSitesPerDistrict();
+    if (sites == null) {
+      errors.add("Max sites per district is required.");
+    } else if (sites < MIN_SITES_PER_DISTRICT || sites > MAX_SITES_PER_DISTRICT) {
+      errors.add("Max sites per district must be between 1 and 500.");
+    }
+
+    validateComments(request.comments(), errors);
+    throwIfInvalid(errors);
+  }
+
+  private static LocalDate parseHarvestDate(String value, String label, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      errors.add(label + " is required.");
+      return null;
+    }
+    LocalDate date;
+    try {
+      date = LocalDate.parse(value.trim());
+    } catch (DateTimeParseException ex) {
+      errors.add(label + " must be a valid date (YYYY-MM-DD).");
+      return null;
+    }
+    if (date.isBefore(MIN_HARVEST_DATE) || date.isAfter(MAX_HARVEST_DATE)) {
+      errors.add(label + " must be between 1997-06-15 and 2050-12-31.");
+    }
+    return date;
+  }
+
+  private static void validateComments(String comments, List<String> errors) {
+    if (comments != null && comments.length() > MAX_COMMENTS_LENGTH) {
+      errors.add("Comments must be 4000 characters or fewer.");
+    }
+  }
+
+  private static void throwIfInvalid(List<String> errors) {
+    if (!errors.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join(" ", errors));
+    }
   }
 
   static MasterListAdminResponse toResponse(String effectiveYear, MasterListCriteriaData data) {

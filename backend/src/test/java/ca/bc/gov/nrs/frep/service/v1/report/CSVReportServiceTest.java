@@ -62,7 +62,7 @@ class CSVReportServiceTest {
   private static ChecklistSearchResult checklist() {
     return new ChecklistSearchResult(
         "100", "BIO", "Biodiversity", "2024", "DCK", "A111", "CP1", "BLK9", "987",
-        "00010001", "2024-05-01", "IDIR\\jdoe", "SUB", "Submitted");
+        "00010001", "2024-05-01", "IDIR\\jdoe", "IDIR\\jdoe", "SUB", "Submitted");
   }
 
   @Test

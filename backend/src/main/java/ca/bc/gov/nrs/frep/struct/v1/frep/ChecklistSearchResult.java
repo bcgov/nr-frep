@@ -17,7 +17,8 @@ package ca.bc.gov.nrs.frep.struct.v1.frep;
  * @param clientNumber        client number (8-digit)
  * @param evaluationDate      date the checklist was evaluated
  * @param evaluatorUserid     IDIR of evaluator
- * @param checklistStatusCode {@code RDY} / {@code SUB}
+ * @param evaluatorName       evaluator's display name when they have FREP access (via FAM), else the userid
+ * @param checklistStatusCode {@code ACT} / {@code SUB} / {@code RDO}
  * @param checklistStatus     human-readable status
  */
 public record ChecklistSearchResult(
@@ -33,6 +34,7 @@ public record ChecklistSearchResult(
     String clientNumber,
     String evaluationDate,
     String evaluatorUserid,
+    String evaluatorName,
     String checklistStatusCode,
     String checklistStatus
 ) {}

@@ -5,8 +5,13 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorSearchResponse;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,9 +57,25 @@ public class FamUserDirectoryService {
   private static final int MAX_PAGE_SIZE = 100;
   private static final int DEFAULT_PAGE_SIZE = 25;
 
+  // FAM's idpType is a strict single enum ('IDIR'/'BCEID'/'BCSC') and role takes one value per call,
+  // so multiple IdP types / roles are covered by separate calls that we merge. Gov staff are IDIR;
+  // BCEID is included for completeness.
+  private static final List<String> IDP_TYPES = List.of("IDIR", "BCEID");
+  // Any FREP-app role counts as "has access to FREP" for the checklist-search name lookup.
+  private static final List<String> FREP_ACCESS_ROLES =
+      List.of("FREP_EDITOR", "FREP_ADMIN", "FREP_VIEW_ONLY");
+  // Soft cap so the userid→name cache can't grow unbounded; cleared wholesale when exceeded.
+  private static final int MAX_CACHE_ENTRIES = 5000;
+  // User-facing message for any FAM failure — the raw upstream body is logged, never returned.
+  private static final String EVALUATOR_SEARCH_UNAVAILABLE =
+      "The evaluator directory is unavailable right now. Please try again later.";
+
   private final String baseUrl;
   private final String evaluatorRole;
   private final RestClient restClient;
+  // userid (upper-cased, IDIR\ stripped) → resolved display name (empty = looked up, not a FREP user).
+  // Shared across requests since a userid's name is the same regardless of caller.
+  private final Map<String, Optional<String>> nameCache = new ConcurrentHashMap<>();
 
   public FamUserDirectoryService(
       @Value("${ca.bc.gov.nrs.identity-lookup.base-url:}") String baseUrl,
@@ -83,6 +104,10 @@ public class FamUserDirectoryService {
    * Searches FREP editors, optionally filtered by IDIR username / first name / last name, returning
    * a single page. {@code userId}, {@code firstName}, {@code lastName} are FAM "starts-with" filters
    * (blank = no filter). {@code page} is 1-indexed; {@code size} is clamped to FAM's 10..100 range.
+   *
+   * <p>FAM's {@code idpType} is a single enum per call, so IDIR and BCEID are queried separately and
+   * merged. Paging is applied per IdP and the totals summed — in practice FREP editors are IDIR (BCEID
+   * is effectively empty), so this reads as IDIR paging.
    */
   public EvaluatorSearchResponse searchEvaluators(
       String userId, String firstName, String lastName, int page, int size) {
@@ -94,57 +119,128 @@ public class FamUserDirectoryService {
       return new EvaluatorSearchResponse(List.of(), 0, reqPage, reqSize);
     }
     try {
-      // The base URL is fixed on restClient; the user-supplied filters go only into queryParam on
-      // the framework's UriBuilder (which encodes them), so they can't alter the host/path.
-      FamUserSearchResponse body = restClient.get()
-          .uri(uriBuilder -> {
-            uriBuilder.path(USERS_PATH)
-                .queryParam("role", evaluatorRole)
-                .queryParam("idpType", "IDIR")
-                .queryParam("page", reqPage)
-                .queryParam("size", reqSize);
-            if (StringUtils.hasText(userId)) {
-              uriBuilder.queryParam("idpUsername", userId.trim());
-            }
-            if (StringUtils.hasText(firstName)) {
-              uriBuilder.queryParam("firstName", firstName.trim());
-            }
-            if (StringUtils.hasText(lastName)) {
-              uriBuilder.queryParam("lastName", lastName.trim());
-            }
-            return uriBuilder.build();
-          })
-          .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
-          .retrieve()
-          .body(FamUserSearchResponse.class);
-
-      if (body == null) {
-        return new EvaluatorSearchResponse(List.of(), 0, reqPage, reqSize);
+      List<CodeOptionResponse> users = new ArrayList<>();
+      long total = 0;
+      for (String idpType : IDP_TYPES) {
+        FamUserSearchResponse body =
+            callUsers(evaluatorRole, idpType, userId, firstName, lastName, reqPage, reqSize);
+        if (body == null || body.users() == null) {
+          continue;
+        }
+        body.users().stream()
+            .filter(Objects::nonNull)
+            .map(FamUserDirectoryService::toOption)
+            .filter(Objects::nonNull)
+            .forEach(users::add);
+        total += body.total();
       }
-      List<CodeOptionResponse> users = (body.users() == null ? List.<FamUser>of() : body.users())
-          .stream()
-          .filter(Objects::nonNull)
-          .map(FamUserDirectoryService::toOption)
-          .filter(Objects::nonNull)
-          .toList();
-      return new EvaluatorSearchResponse(
-          users,
-          body.total(),
-          body.page() > 0 ? body.page() : reqPage,
-          body.size() > 0 ? body.size() : reqSize);
+      return new EvaluatorSearchResponse(users, total, reqPage, reqSize);
     } catch (RestClientResponseException ex) {
       // FAM returned a non-2xx — e.g. 401/403 when the FREP client isn't authorized to call FAM's
-      // external API, or 422 for a bad request. Surface it so the cause is visible.
+      // external API, or 422 for a bad request. Log the upstream detail for devs; return a clean
+      // message so the raw FAM body never reaches the UI.
       LOG.error("FAM evaluator search failed: {} {} — body: {}",
           ex.getStatusCode().value(), ex.getStatusText(), ex.getResponseBodyAsString());
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-          "Evaluator search failed (HTTP " + ex.getStatusCode().value() + "): "
-              + ex.getResponseBodyAsString());
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, EVALUATOR_SEARCH_UNAVAILABLE);
     } catch (RuntimeException ex) {
       LOG.error("FAM evaluator search failed", ex);
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-          "Evaluator search failed: " + ex.getMessage());
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, EVALUATOR_SEARCH_UNAVAILABLE);
     }
+  }
+
+  /**
+   * One FAM {@code /external/v1/users} call for a single role + idpType, with optional starts-with
+   * filters. The base URL is fixed on {@code restClient}; user input flows only into {@code queryParam}
+   * (encoded by the UriBuilder), so it can't redirect the request (avoids SSRF).
+   */
+  private FamUserSearchResponse callUsers(
+      String role, String idpType, String idpUsername, String firstName, String lastName,
+      int page, int size) {
+    return restClient.get()
+        .uri(uriBuilder -> {
+          uriBuilder.path(USERS_PATH)
+              .queryParam("role", role)
+              .queryParam("idpType", idpType)
+              .queryParam("page", page)
+              .queryParam("size", size);
+          if (StringUtils.hasText(idpUsername)) {
+            uriBuilder.queryParam("idpUsername", idpUsername.trim());
+          }
+          if (StringUtils.hasText(firstName)) {
+            uriBuilder.queryParam("firstName", firstName.trim());
+          }
+          if (StringUtils.hasText(lastName)) {
+            uriBuilder.queryParam("lastName", lastName.trim());
+          }
+          return uriBuilder.build();
+        })
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
+        .retrieve()
+        .body(FamUserSearchResponse.class);
+  }
+
+  /**
+   * Resolves a checklist evaluator's display name from FAM by userid — used to show names (instead of
+   * raw userids) for evaluators who currently have access to the FREP app. Queries
+   * {@code /external/v1/users?role=FREP_EDITOR,FREP_ADMIN,FREP_VIEW_ONLY&idpType=IDIR,BCEID&idpUsername=…}
+   * and exact-matches the username (FAM's filter is "starts-with"). Returns empty when the lookup base
+   * URL is unset, the userid isn't a current FREP user, or FAM errors — the caller falls back to the
+   * userid. Results are cached by userid (names rarely change; identical for every caller).
+   */
+  public Optional<String> resolveName(String userId) {
+    if (!StringUtils.hasText(userId) || !StringUtils.hasText(baseUrl)) {
+      return Optional.empty();
+    }
+    String bare = stripDirectory(userId);
+    String key = bare.toUpperCase(Locale.ROOT);
+    Optional<String> cached = nameCache.get(key);
+    if (cached != null) {
+      return cached;
+    }
+    Optional<String> resolved;
+    try {
+      resolved = lookupName(bare);
+    } catch (RuntimeException ex) {
+      // Transient FAM failure — fall back to the userid and DON'T cache, so it retries next time.
+      LOG.debug("FAM name lookup failed for {} — using the userid ({})", bare, ex.getMessage());
+      return Optional.empty();
+    }
+    if (nameCache.size() >= MAX_CACHE_ENTRIES) {
+      nameCache.clear();
+    }
+    nameCache.put(key, resolved);
+    return resolved;
+  }
+
+  private Optional<String> lookupName(String bareUserId) {
+    // idpType is a single enum and role is one value per call, so probe each IdP × FREP-role combo
+    // and return the first exact username match. Most evaluators match on (IDIR, FREP_EDITOR) — the
+    // first probe; only userids with no FREP access run the full set (then get negatively cached).
+    for (String idpType : IDP_TYPES) {
+      for (String role : FREP_ACCESS_ROLES) {
+        FamUserSearchResponse body =
+            callUsers(role, idpType, bareUserId, null, null, 1, MIN_PAGE_SIZE);
+        if (body == null || body.users() == null) {
+          continue;
+        }
+        Optional<String> match = body.users().stream()
+            .filter(Objects::nonNull)
+            .filter(user -> bareUserId.equalsIgnoreCase(trimmed(user.idpUsername())))
+            .map(FamUserDirectoryService::displayName)
+            .filter(StringUtils::hasText)
+            .findFirst();
+        if (match.isPresent()) {
+          return match;
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  private static String stripDirectory(String userId) {
+    String trimmed = userId.trim();
+    int slash = trimmed.indexOf('\\');
+    return slash >= 0 ? trimmed.substring(slash + 1) : trimmed;
   }
 
   private static CodeOptionResponse toOption(FamUser user) {
@@ -152,8 +248,18 @@ public class FamUserDirectoryService {
     if (!StringUtils.hasText(userId)) {
       return null;
     }
+    return new CodeOptionResponse(userId, displayName(user));
+  }
+
+  /**
+   * Evaluator display value: {@code "First Last (userid)"}. Falls back to whichever name part FAM
+   * has, and to the bare userid alone when FAM has no name.
+   */
+  private static String displayName(FamUser user) {
+    String userId = trimmed(user.idpUsername());
     String first = trimmed(user.firstName());
     String last = trimmed(user.lastName());
+
     String name;
     if (StringUtils.hasText(first) && StringUtils.hasText(last)) {
       name = first + " " + last;
@@ -162,9 +268,13 @@ public class FamUserDirectoryService {
     } else if (StringUtils.hasText(first)) {
       name = first;
     } else {
-      name = userId;
+      name = "";
     }
-    return new CodeOptionResponse(userId, name);
+
+    if (!StringUtils.hasText(name)) {
+      return StringUtils.hasText(userId) ? userId : "";
+    }
+    return StringUtils.hasText(userId) ? name + " (" + userId + ")" : name;
   }
 
   private static String trimmed(String value) {

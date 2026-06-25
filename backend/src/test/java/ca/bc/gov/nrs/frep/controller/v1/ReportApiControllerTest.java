@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.nrs.frep.exception.RestExceptionHandler;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
 import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
 import ca.bc.gov.nrs.frep.service.v1.report.ExportSlotLimiter;
@@ -40,6 +41,7 @@ class ReportApiControllerTest {
   void setUp() {
     mockMvc = MockMvcBuilders
         .standaloneSetup(new ReportApiController(reportService, csvReportService, new ExportSlotLimiter()))
+        .setControllerAdvice(new RestExceptionHandler())
         .build();
   }
 

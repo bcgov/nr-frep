@@ -66,8 +66,8 @@ describe('BioPlotsView', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
     // No UTM signal for this plot (so UTM coords aren't required); both bearing legs are required.
     await userEvent.click(await screen.findByRole('checkbox', { name: 'No UTM signal available' }));
-    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
-    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg', { exact: false }), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
 
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
@@ -93,8 +93,8 @@ describe('BioPlotsView', () => {
     expect(screen.getByText('2nd leg is required.')).toBeTruthy();
 
     // Fill both legs → save proceeds.
-    await userEvent.type(screen.getByLabelText('Bearing 1st leg (required)'), '120');
-    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.type(screen.getByLabelText('Bearing 1st leg', { exact: false }), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
   });
@@ -109,15 +109,15 @@ describe('BioPlotsView', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
     // Signal available by default → Zone/Easting/Northing are required. Fill bearing legs so only
     // UTM blocks the save.
-    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
-    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg', { exact: false }), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).not.toHaveBeenCalled();
     expect(screen.getByText('Easting is required.')).toBeTruthy();
     expect(screen.getByText('Northing is required.')).toBeTruthy();
 
     // Too-short easting → length error (the input is also capped at 6 chars by maxLength).
-    await userEvent.type(screen.getByLabelText('Easting (required)'), '123');
+    await userEvent.type(screen.getByLabelText('Easting', { exact: false }), '123');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).not.toHaveBeenCalled();
     expect(screen.getByText('Easting must be exactly 6 digits.')).toBeTruthy();
@@ -131,8 +131,8 @@ describe('BioPlotsView', () => {
     render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
-    await userEvent.type(await screen.findByLabelText('Bearing 1st leg (required)'), '120');
-    await userEvent.type(screen.getByLabelText('2nd leg (required)'), '240');
+    await userEvent.type(await screen.findByLabelText('Bearing 1st leg', { exact: false }), '120');
+    await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
 
     // Trees exist but no stand rows → save blocked with an inline stand-table error.

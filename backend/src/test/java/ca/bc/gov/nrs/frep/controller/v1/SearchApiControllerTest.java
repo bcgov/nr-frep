@@ -39,7 +39,7 @@ class SearchApiControllerTest {
         .thenReturn(List.of(new ChecklistSearchResult(
             "9001", "SLB", "Biodiversity", "2024", "DCK",
             "L1234", "CP-8891", "CB-442", "987654", "00010001",
-            "2024-08-12", "IDIR\\JDOE", "RDY", "RDY")));
+            "2024-08-12", "IDIR\\JDOE", "IDIR\\JDOE", "RDY", "RDY")));
 
     mockMvc.perform(get("/api/v1/search/checklists").param("effectiveYear", "2024"))
         .andExpect(status().isOk())

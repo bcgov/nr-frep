@@ -27,9 +27,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class SearchService {
 
   private final SearchRepository searchRepository;
+  private final FamUserDirectoryService famUserDirectoryService;
 
-  public SearchService(SearchRepository searchRepository) {
+  public SearchService(
+      SearchRepository searchRepository, FamUserDirectoryService famUserDirectoryService) {
     this.searchRepository = searchRepository;
+    this.famUserDirectoryService = famUserDirectoryService;
   }
 
   /**
@@ -73,7 +76,7 @@ public class SearchService {
 
   /** Default page size + cap, and the sortable result columns (public key -> result-set alias). */
   private static final int DEFAULT_PAGE_SIZE = 20;
-  private static final int MAX_PAGE_SIZE = 200;
+  private static final int MAX_PAGE_SIZE = 100;
   private static final String DEFAULT_SORT_COLUMN = "protocol_name";
   private static final Map<String, String> SORTABLE_COLUMNS = Map.ofEntries(
       Map.entry("protocolName", "protocol_name"),
@@ -129,7 +132,9 @@ public class SearchService {
     List<ChecklistSearchResult> content = searchRepository
         .searchChecklistsPage(criteria, page * size, size, column, descending)
         .stream()
-        .map(SearchService::toChecklistSearchResult)
+        // Enrich the on-screen page with evaluator names (FAM); the CSV stream + legacy proc keep the
+        // raw userid (no per-row FAM calls in the uncapped paths).
+        .map(row -> toChecklistSearchResult(row, resolveEvaluatorName(row.evaluatorUserid())))
         .toList();
 
     return new PagedResponse<>(content, total, totalPages, page, size);
@@ -251,7 +256,12 @@ public class SearchService {
     return ex;
   }
 
+  /** Falls back to the userid as the display name (the uncapped paths don't resolve FAM names). */
   static ChecklistSearchResult toChecklistSearchResult(ChecklistSearchRow row) {
+    return toChecklistSearchResult(row, row.evaluatorUserid());
+  }
+
+  static ChecklistSearchResult toChecklistSearchResult(ChecklistSearchRow row, String evaluatorName) {
     String statusCode = row.checklistStatusCode();
     return new ChecklistSearchResult(
         row.checklistId(),
@@ -266,9 +276,18 @@ public class SearchService {
         row.clientNumber(),
         blankToNull(row.evaluationDate()),
         row.evaluatorUserid(),
+        evaluatorName,
         statusCode,
         statusCode
     );
+  }
+
+  /** Evaluator's FAM display name when they have FREP access, else the raw userid. */
+  private String resolveEvaluatorName(String evaluatorUserid) {
+    if (StringUtils.isBlank(evaluatorUserid)) {
+      return evaluatorUserid;
+    }
+    return famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
   }
 
   static ClientSearchResult toClientSearchResult(ClientSearchRow row) {

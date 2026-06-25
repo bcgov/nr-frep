@@ -1,8 +1,11 @@
 @use '@carbon/type';
 @use '../../styles/variables' as vars;
 
+// Accordion-table chrome, zebra striping and field-grid layout mirror nr-fspts'
+// JcrsReports/reports.scss — only the containing-grid class differs.
+
 .reports-grid {
-  row-gap: 2rem;
+  row-gap: 1.5rem;
 }
 
 .reports__title {
@@ -17,13 +20,90 @@
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
-.reports__section-title {
-  @include type.type-style('heading-03');
-  margin: 0 0 0.75rem;
+.reports-accordion-table {
+  border: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+  border-radius: 0.25rem;
+  background: var(--#{vars.$bcgov-prefix}-background);
+  color: var(--#{vars.$bcgov-prefix}-text-primary);
+  overflow: hidden;
+
+  .#{vars.$bcgov-prefix}--accordion {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  // Rows default to white (Carbon's White theme maps layer-01 to #f4f4f4 grey, so use
+  // `background`, which is true white).
+  .#{vars.$bcgov-prefix}--accordion__item {
+    border-top: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+    border-bottom: none;
+    background: var(--#{vars.$bcgov-prefix}-background);
+    color: var(--#{vars.$bcgov-prefix}-text-primary);
+  }
+
+  // Subtle zebra striping: alternate (even) closed rows pick up a faint grey; the open item drops
+  // the stripe so the form panel reads as one block.
+  .#{vars.$bcgov-prefix}--accordion__item:nth-of-type(even):not(.#{vars.$bcgov-prefix}--accordion__item--active) {
+    background: var(--#{vars.$bcgov-prefix}-layer-01);
+  }
+
+  .#{vars.$bcgov-prefix}--accordion__heading {
+    width: 100%;
+    padding-block: 0.5rem;
+    align-items: center;
+    background: transparent;
+    color: inherit;
+  }
+
+  .#{vars.$bcgov-prefix}--accordion__title {
+    width: 100%;
+    margin: 0;
+    padding-inline-end: 0.5rem;
+  }
+
+  .#{vars.$bcgov-prefix}--accordion__content {
+    padding-block: 1rem 1.5rem;
+    padding-inline: 1rem 2rem;
+    // Layer-02 so the open form sits on the natural "next layer up" surface —
+    // white in light theme, lighter dark gray in dark theme.
+    background: var(--#{vars.$bcgov-prefix}-layer-02);
+    color: var(--#{vars.$bcgov-prefix}-text-primary);
+  }
+
+  .#{vars.$bcgov-prefix}--accordion__item--active {
+    background: var(--#{vars.$bcgov-prefix}-layer-02);
+  }
 }
 
-.reports__accordion-summary {
-  margin: 0 0 1rem;
+.reports-row {
+  display: grid;
+  grid-template-columns: 1.4fr 3fr;
+  gap: 1rem;
+  align-items: center;
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--#{vars.$bcgov-prefix}-text-primary);
+}
+
+.reports-row--header {
+  // Align with the accordion title content: chevron sits 1rem from the row
+  // edge, the title has padding-inline-start of 1rem, the heading button
+  // itself has padding-inline-end of 1rem.
+  padding: 0.75rem 2rem 0.75rem 3rem;
+  background: var(--#{vars.$bcgov-prefix}-layer-accent-02);
+  font-weight: 700;
+  text-transform: none;
+  font-size: 0.875rem;
+  color: var(--#{vars.$bcgov-prefix}-text-primary);
+}
+
+.reports-row__cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reports-row__cell--description {
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
@@ -31,25 +111,63 @@
 .report-form {
   display: flex;
   flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.report-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 1rem;
+  margin-top: 0;
+}
 
-  &__row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: 1rem;
-    align-items: end;
+.report-form__generating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-form__readonly-note {
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+  font-style: italic;
+}
+
+.report-form__field-group {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  // Force every grid child (DatePicker, Select, etc.) to honour the 1fr cell.
+  // `min-width: 0` overrides grid's default `min-width: auto` which would
+  // otherwise let intrinsic-content widths blow out the column — Carbon's
+  // DatePicker is the main offender.
+  > * {
+    min-width: 0;
   }
 
-  &__actions {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
+  // Carbon hardcodes `.cds--date-picker__input` (single mode) to 18rem via
+  // `inline-size`. Override so the input fills its 1fr grid cell.
+  .#{vars.$bcgov-prefix}--date-picker.#{vars.$bcgov-prefix}--date-picker--single
+    .#{vars.$bcgov-prefix}--date-picker__input {
+    inline-size: 100%;
+    width: 100%;
   }
 
-  &__readonly-note {
-    color: var(--cds-text-secondary);
-    font-style: italic;
+  .#{vars.$bcgov-prefix}--date-picker,
+  .#{vars.$bcgov-prefix}--date-picker-container,
+  .#{vars.$bcgov-prefix}--date-picker-input__wrapper {
+    width: 100%;
+    min-width: 0;
+  }
+
+  // Carbon wraps the <input> in a <span> inside the input wrapper. The span is
+  // inline by default, so it sizes to the input's intrinsic 288px regardless
+  // of the wrapper width. Force it to fill the wrapper so the inner
+  // `inline-size: 100%` expands to the grid cell.
+  .#{vars.$bcgov-prefix}--date-picker-input__wrapper > span {
+    display: block;
+    width: 100%;
   }
 }

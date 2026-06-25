@@ -1,5 +1,7 @@
 import { Button, DatePicker, DatePickerInput, Select, SelectItem, TextInput } from '@carbon/react';
-import { useEffect, useMemo, useState, type FC } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
+
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { GeneratableReport, ReportFieldKey } from './reportDefinitions';
 import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
@@ -61,7 +63,25 @@ const BLANK: FormState = {
   openingId: '',
 };
 
+type FormErrors = Partial<Record<keyof FormState, string>>;
+
 const isRequired = (value: boolean | 'optional' | 'required' | undefined) => value === 'required';
+
+// Required-field rules driving validate(): the report-definition field key, the form-state field it
+// maps to, and the error key. A data table keeps validate() flat (one loop) instead of a long if-chain.
+const REQUIRED_FIELD_CHECKS: {
+  cfg: ReportFieldKey;
+  field: keyof FormState;
+  error: keyof FormErrors;
+}[] = [
+  { cfg: 'orgUnit', field: 'orgUnitCode', error: 'orgUnitCode' },
+  { cfg: 'masterListYear', field: 'masterListYear', error: 'masterListYear' },
+  { cfg: 'resourceValueStatus', field: 'resourceValueStatus', error: 'resourceValueStatus' },
+  { cfg: 'checklistStatus', field: 'checklistStatus', error: 'checklistStatus' },
+  { cfg: 'openingId', field: 'openingId', error: 'openingId' },
+  { cfg: 'clientNumber', field: 'clientNumber', error: 'clientNumber' },
+  { cfg: 'licence', field: 'licenceNumber', error: 'licenceNumber' },
+];
 
 const ReportConfigForm: FC<Props> = ({
   definition,
@@ -74,58 +94,52 @@ const ReportConfigForm: FC<Props> = ({
   const { display } = useNotification();
   const { canEdit } = useAuthorization();
   const [form, setForm] = useState<FormState>(BLANK);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [generating, setGenerating] = useState(false);
 
   // Reset when switching reports.
-  useEffect(() => setForm(BLANK), [definition.id]);
+  useEffect(() => {
+    setForm(BLANK);
+    setErrors({});
+  }, [definition.id]);
 
-  const set = (key: keyof FormState, value: string) =>
+  const set = (key: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    // Clear the field's inline error as soon as the user edits it.
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
   const rows = useMemo<ReportFieldKey[][]>(() => {
     if (definition.layout) return definition.layout;
     return (Object.keys(definition.fields) as ReportFieldKey[]).map((key) => [key]);
   }, [definition]);
 
-  const validate = (): string | null => {
-    if (isRequired(definition.fields.orgUnit) && !form.orgUnitCode.trim()) {
-      return 'Organization unit is required.';
-    }
-    if (isRequired(definition.fields.masterListYear) && !form.masterListYear.trim()) {
-      return 'Master list year is required.';
-    }
-    if (isRequired(definition.fields.resourceValueStatus) && !form.resourceValueStatus.trim()) {
-      return 'Resource value status is required.';
-    }
-    if (isRequired(definition.fields.checklistStatus) && !form.checklistStatus.trim()) {
-      return 'Checklist status is required.';
-    }
-    if (isRequired(definition.fields.openingId) && !form.openingId.trim()) {
-      return 'Opening ID is required.';
-    }
-    if (isRequired(definition.fields.clientNumber) && !form.clientNumber.trim()) {
-      return 'Client number is required.';
-    }
-    if (isRequired(definition.fields.licence) && !form.licenceNumber.trim()) {
-      return 'Licence number is required.';
+  // Returns a map of field → inline error message; empty when the form is valid.
+  const validate = (): FormErrors => {
+    const e: FormErrors = {};
+    for (const { cfg, field, error } of REQUIRED_FIELD_CHECKS) {
+      if (isRequired(definition.fields[cfg]) && !form[field].trim()) {
+        e[error] = 'Required.';
+      }
     }
     if (form.startDate && form.endDate && form.startDate > form.endDate) {
-      return 'The start date must be on or before the end date.';
+      e.endDate = 'Date to must be on or after Date from.';
     }
-    return null;
+    return e;
   };
 
   const generate = async (format: ReportFormat) => {
-    const error = validate();
-    if (error) {
-      display({
-        kind: 'warning',
-        title: 'Check the report fields',
-        subtitle: error,
-        timeout: 6000,
-      });
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
+    setErrors({});
     setGenerating(true);
     try {
       const payload: ReportRequestPayload = {
@@ -168,33 +182,43 @@ const ReportConfigForm: FC<Props> = ({
     const cfg = definition.fields[key];
     if (!cfg) return null;
     const required = isRequired(cfg);
-    const label = (base: string) => (required ? `${base} (required)` : base);
+    const label = (base: string): ReactNode => requiredLabel(base, required);
     switch (key) {
-      case 'dateRange':
+      case 'dateRange': {
+        const iso = (d?: Date) => (d ? d.toISOString().slice(0, 10) : '');
+        // Two single pickers (one grid cell each) rather than one range picker, matching the
+        // nr-fspts field-group layout and the single-mode DatePicker width fix in reports.scss.
         return (
-          <DatePicker
-            key="dateRange"
-            datePickerType="range"
-            dateFormat="Y-m-d"
-            value={[form.startDate, form.endDate].filter(Boolean)}
-            onChange={(dates: Date[]) => {
-              const iso = (d?: Date) => (d ? d.toISOString().slice(0, 10) : '');
-              set('startDate', iso(dates[0]));
-              set('endDate', iso(dates[1]));
-            }}
-          >
-            <DatePickerInput
-              id={`${definition.id}-start`}
-              labelText="Date from"
-              placeholder="YYYY-MM-DD"
-            />
-            <DatePickerInput
-              id={`${definition.id}-end`}
-              labelText="Date to"
-              placeholder="YYYY-MM-DD"
-            />
-          </DatePicker>
+          <Fragment key="dateRange">
+            <DatePicker
+              datePickerType="single"
+              dateFormat="Y-m-d"
+              value={form.startDate ? [form.startDate] : []}
+              onChange={(dates: Date[]) => set('startDate', iso(dates[0]))}
+            >
+              <DatePickerInput
+                id={`${definition.id}-start`}
+                labelText="Date from"
+                placeholder="YYYY-MM-DD"
+              />
+            </DatePicker>
+            <DatePicker
+              datePickerType="single"
+              dateFormat="Y-m-d"
+              value={form.endDate ? [form.endDate] : []}
+              onChange={(dates: Date[]) => set('endDate', iso(dates[0]))}
+            >
+              <DatePickerInput
+                id={`${definition.id}-end`}
+                labelText="Date to"
+                placeholder="YYYY-MM-DD"
+                invalid={!!errors.endDate}
+                invalidText={errors.endDate}
+              />
+            </DatePicker>
+          </Fragment>
         );
+      }
       case 'orgUnit':
         return (
           <Select
@@ -202,6 +226,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-orgUnit`}
             labelText={label('Organization unit')}
             disabled={loading}
+            invalid={!!errors.orgUnitCode}
+            invalidText={errors.orgUnitCode}
             value={form.orgUnitCode}
             onChange={(e) => set('orgUnitCode', e.target.value)}
           >
@@ -223,6 +249,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-mly`}
             labelText={label('Master list year')}
             disabled={loading}
+            invalid={!!errors.masterListYear}
+            invalidText={errors.masterListYear}
             value={form.masterListYear}
             onChange={(e) => set('masterListYear', e.target.value)}
           >
@@ -240,6 +268,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-rvs`}
             labelText={label('Resource value status')}
             disabled={loading}
+            invalid={!!errors.resourceValueStatus}
+            invalidText={errors.resourceValueStatus}
             value={form.resourceValueStatus}
             onChange={(e) => set('resourceValueStatus', e.target.value)}
           >
@@ -257,6 +287,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-cls`}
             labelText={label('Checklist status')}
             disabled={loading}
+            invalid={!!errors.checklistStatus}
+            invalidText={errors.checklistStatus}
             value={form.checklistStatus}
             onChange={(e) => set('checklistStatus', e.target.value)}
           >
@@ -274,6 +306,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-client`}
             labelText={label('Client number')}
             maxLength={8}
+            invalid={!!errors.clientNumber}
+            invalidText={errors.clientNumber}
             value={form.clientNumber}
             onChange={(e) => set('clientNumber', e.target.value)}
           />
@@ -285,6 +319,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-licence`}
             labelText={label('Licence number')}
             maxLength={10}
+            invalid={!!errors.licenceNumber}
+            invalidText={errors.licenceNumber}
             value={form.licenceNumber}
             onChange={(e) => set('licenceNumber', e.target.value)}
           />
@@ -296,6 +332,8 @@ const ReportConfigForm: FC<Props> = ({
             id={`${definition.id}-opening`}
             labelText={label('Opening ID')}
             maxLength={10}
+            invalid={!!errors.openingId}
+            invalidText={errors.openingId}
             value={form.openingId}
             onChange={(e) => set('openingId', e.target.value)}
           />
@@ -309,8 +347,8 @@ const ReportConfigForm: FC<Props> = ({
 
   return (
     <div className="report-form">
-      {rows.map((row, i) => (
-        <div className="report-form__row" key={i}>
+      {rows.map((row) => (
+        <div className="report-form__field-group" key={row.join('-')}>
           {row.map((key) => fieldNode(key))}
         </div>
       ))}

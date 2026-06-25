@@ -41,6 +41,7 @@ const activeChecklist = {
   openingNumber: 'A1',
   effectiveYear: '2024',
   evaluatorUserid: 'u',
+  evaluatorName: 'Active User (u)',
   evaluationDate: '2024-06-01',
   sections: [],
 };

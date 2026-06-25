@@ -25,6 +25,8 @@ export type ProtocolChecklist = {
   statusCode: string;
   statusLabel: string;
   evaluatorUserid: string;
+  /** Evaluator's display name when they have FREP access (resolved via FAM), else the userid. */
+  evaluatorName: string;
   evaluationDate: string;
   sections: ProtocolChecklistSection[];
 };

@@ -6,6 +6,7 @@ import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.TOO_MANY_REQUESTS;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
@@ -99,6 +100,13 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   protected ResponseEntity<Object> handleReportGeneration(ReportGenerationException ex) {
     log.error("Report generation failed", ex);
     return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
+  }
+
+  /** Concurrent-export limit reached (ExportSlotLimiter) — transient backpressure, so 429. */
+  @ExceptionHandler(TooManyExportsException.class)
+  protected ResponseEntity<Object> handleTooManyExports(TooManyExportsException ex) {
+    log.warn("{}", ex.getMessage());
+    return buildResponseEntity(new ApiError(TOO_MANY_REQUESTS, ex.getMessage()));
   }
 
   /** Returns the pre-built {@link ApiError} carried by the exception (already has status + message). */

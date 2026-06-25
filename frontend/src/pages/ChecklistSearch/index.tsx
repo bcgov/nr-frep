@@ -31,40 +31,10 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
+import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
 import './checklistSearch.scss';
-
-// UI labels for the checklist status codes — the single source of truth for the status chip and
-// the status filter dropdown.
-const STATUS_LABELS: Record<string, string> = {
-  ACT: 'Active',
-  SUB: 'Submitted',
-  RDO: 'Read-only',
-};
-
-/** Friendly label for a status code; falls back to the backend description, then the raw code. */
-const statusLabel = (code: string | undefined, fallback?: string): string => {
-  const c = (code ?? '').toUpperCase();
-  return STATUS_LABELS[c] ?? (fallback || c);
-};
-
-/**
- * Carbon Tag colour for a checklist status code. Mirrors legacy frep400 ("green indicates the
- * checklist is submitted"): SUB → green; ACT (active) → blue; RDO (read-only) → cool-gray.
- */
-const statusTagType = (code: string | undefined): 'green' | 'blue' | 'cool-gray' | 'gray' => {
-  switch ((code ?? '').toUpperCase()) {
-    case 'SUB':
-      return 'green';
-    case 'ACT':
-      return 'blue';
-    case 'RDO':
-      return 'cool-gray';
-    default:
-      return 'gray';
-  }
-};
 
 const TABLE_HEADERS = [
   { key: 'checklistStatus', header: 'Status' },

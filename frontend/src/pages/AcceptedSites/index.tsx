@@ -14,6 +14,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tag,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
@@ -27,6 +28,8 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { statusLabel, statusTagType } from '@/utils/checklistStatus';
+import { formatShortDate } from '@/utils/date';
 
 import './acceptedSites.scss';
 
@@ -43,7 +46,8 @@ const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
 };
 
 const TABLE_HEADERS = [
-  { key: 'checklistType', header: 'Checklist type' },
+  { key: 'checklistStatus', header: 'Status' },
+  { key: 'checklistType', header: 'Protocol' },
   { key: 'targeted', header: 'T' },
   { key: 'openingNumber', header: 'Opening' },
   { key: 'openingId', header: 'Opening ID' },
@@ -51,29 +55,22 @@ const TABLE_HEADERS = [
   { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut block' },
   { key: 'harvestCompleteDate', header: 'Harvest complete' },
-  { key: 'checklistStatus', header: 'Status' },
   { key: 'mapView', header: '' },
 ] as const;
-
-function formatChecklistType(site: AcceptedSite): string {
-  if (site.sampleNumber) {
-    return `${site.checklistType} (${site.sampleNumber})`;
-  }
-  return site.checklistType;
-}
 
 function toTableRows(sites: AcceptedSite[]) {
   return sites.map((site) => ({
     id: site.checklistId,
-    checklistType: formatChecklistType(site),
+    // Protocol column — same "code - name" format as the Checklist Search page.
+    checklistType: `${site.protocolCode} - ${site.protocolName}`,
     targeted: site.targeted ? 'T' : '',
     openingNumber: site.openingNumber,
     openingId: site.openingId,
     licenceId: site.licenceId,
     cuttingPermitId: site.cuttingPermitId,
     cutBlockId: site.cutBlockId,
-    harvestCompleteDate: site.harvestCompleteDate,
-    checklistStatus: site.checklistStatus,
+    harvestCompleteDate: formatShortDate(site.harvestCompleteDate),
+    checklistStatus: statusLabel(site.checklistStatusCode, site.checklistStatus),
     statusCode: site.checklistStatusCode,
     protocolCode: site.protocolCode,
     mapView: site.openingId,
@@ -177,10 +174,22 @@ const AcceptedSitesPage: FC = () => {
   // the map cell opens the in-app opening map.
   const renderCell = (
     cell: { id: string; value: string; info: { header: string } },
-    idx: number,
     checklistLink: string | undefined,
+    statusCode: string | undefined,
   ) => {
-    if (idx === 0 && checklistLink) {
+    if (cell.info.header === 'checklistStatus') {
+      const label = statusLabel(statusCode, cell.value);
+      return (
+        <TableCell key={cell.id}>
+          {label ? (
+            <Tag type={statusTagType(statusCode)} size="sm">
+              {label}
+            </Tag>
+          ) : null}
+        </TableCell>
+      );
+    }
+    if (cell.info.header === 'checklistType' && checklistLink) {
       return (
         <TableCell key={cell.id}>
           <RouterLink to={checklistLink}>{cell.value}</RouterLink>
@@ -267,7 +276,11 @@ const AcceptedSitesPage: FC = () => {
             >
               <SelectItem value={ALL_PROTOCOLS_VALUE} text="All protocols" />
               {protocols.map((protocol) => (
-                <SelectItem key={protocol.code} value={protocol.code} text={protocol.name} />
+                <SelectItem
+                  key={protocol.code}
+                  value={protocol.code}
+                  text={`${protocol.code} - ${protocol.name}`}
+                />
               ))}
             </Select>
             <Button
@@ -301,7 +314,9 @@ const AcceptedSitesPage: FC = () => {
               {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
                 <TableContainer>
                   <TableHeaderBar
-                    title="Accepted sites"
+                    title={`Accepted sites — ${tableRows.length} result${
+                      tableRows.length === 1 ? '' : 's'
+                    }`}
                     actions={
                       <Button
                         kind="tertiary"
@@ -326,7 +341,6 @@ const AcceptedSitesPage: FC = () => {
                     <TableBody>
                       {rows.map((row) => {
                         const rowMeta = tableRows.find((item) => item.id === row.id);
-                        const isSubmitted = rowMeta?.statusCode === 'SUB';
                         // Open the row's checklist (legacy FREP200 "Checklist" link): CHR → its own
                         // screen, BIO/RIP/WAT → the protocol checklist; otherwise no link.
                         const protoPath = rowMeta
@@ -340,12 +354,10 @@ const AcceptedSitesPage: FC = () => {
                               : undefined;
 
                         return (
-                          <TableRow
-                            {...getRowProps({ row })}
-                            key={row.id}
-                            className={isSubmitted ? 'accepted-sites__row--submitted' : undefined}
-                          >
-                            {row.cells.map((cell, idx) => renderCell(cell, idx, checklistLink))}
+                          <TableRow {...getRowProps({ row })} key={row.id}>
+                            {row.cells.map((cell) =>
+                              renderCell(cell, checklistLink, rowMeta?.statusCode),
+                            )}
                           </TableRow>
                         );
                       })}

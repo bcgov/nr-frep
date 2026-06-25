@@ -17,6 +17,7 @@ import java.util.List;
  * @param statusCode          {@code RDY} (ready) / {@code SUB} (submitted) etc.
  * @param statusLabel         human-readable status
  * @param evaluatorUserid     IDIR of the person who last touched the checklist
+ * @param evaluatorName       evaluator's display name when they have FREP access (via FAM), else the userid
  * @param evaluationDate      date the field crew evaluated the site
  * @param sections            ordered tabs to render
  */
@@ -30,6 +31,7 @@ public record ProtocolChecklistResponse(
     String statusCode,
     String statusLabel,
     String evaluatorUserid,
+    String evaluatorName,
     String evaluationDate,
     List<ProtocolChecklistSection> sections
 ) {}

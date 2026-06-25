@@ -32,11 +32,6 @@
   align-items: end;
 }
 
-.accepted-sites__row--submitted td {
-  background-color: var(--#{vars.$bcgov-prefix}-support-success-inverse);
-  color: var(--#{vars.$bcgov-prefix}-text-on-color);
-}
-
 // Map column action button — matches the District Random List map icon.
 .accepted-sites__map-cell {
   text-align: left;

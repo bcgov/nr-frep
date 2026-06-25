@@ -1,6 +1,9 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
@@ -8,15 +11,17 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.SiteDetailData;
 import ca.bc.gov.nrs.frep.repository.v1.SiteDetailRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.SiteResourceRow;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 /**
  * Site Details (FREP110) lookup backed by the legacy Oracle schema via
@@ -64,10 +69,10 @@ public class SiteDetailService {
     String siteId = StringUtils.trimToEmpty(frepSelectedSiteId);
     SiteDetailData current = siteDetailRepository.findSiteDetail(siteId);
     if (current.frepSelectedSiteId().isBlank()) {
-      throw new EntityNotFoundException(SiteDetailData.class, "Site not found for ID:", frepSelectedSiteId);
+      throw new EntityNotFoundException(SiteDetailData.class, "FrepSelectedSiteId", frepSelectedSiteId);
     }
     if (allResourcesSubmitted(current)) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT,
+      throw new ConflictFoundException(
           "All resource values for this site are submitted and can no longer be edited.");
     }
     validateResources(resources, current);
@@ -109,7 +114,9 @@ public class SiteDetailService {
     }
 
     if (!errors.isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", errors));
+      var allErrors = String.join(" ", errors);
+      ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message(allErrors).status(BAD_REQUEST).build();
+      throw new InvalidPayloadException(error);
     }
   }
 

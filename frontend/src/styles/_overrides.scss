@@ -118,6 +118,23 @@ input[type="number"] {
   border-radius: 0.25rem;
 }
 
+// Single-mode DatePicker fills its container like a text input. Carbon hard-codes the input to a
+// fixed 18rem (`inline-size`), which overflows narrow grid/flex cells; stretch the whole wrapper
+// chain instead. The inner <span> is `display: inline` by default, so it must become a block for
+// the width to take and the calendar icon to stay pinned to the right edge.
+.#{variables.$bcgov-prefix}--date-picker--single,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-container,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-input__wrapper,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker__input {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-input__wrapper > span {
+  display: block;
+  inline-size: 100%;
+}
+
 /* ------------------ Time Picker ---------------------------
 - Border-radius: 4px on left top corner and right top corners, no border-radius in the middle
 ----------------------------------------------------------------- */
@@ -148,13 +165,11 @@ input[type="number"] {
 }
 
 /* --------------- Notification ------------------------------
-- Border-radius: 4px all corners
-- Update border color for inline notification
-- Add border for toast notification
-- Inline notifications span their full container (override Carbon's 18rem cap)
+- Inline notifications match the "Generate Master List" banner: full-width, SQUARE corners (so the
+  coloured left accent reads as a full-height bar), a light (40%-opacity) border on the other three
+  sides, and the title + subtitle on a single line.
+- Toast notifications keep 4px rounded corners.
 --------------------------------------------- */
-// Dark mode
-.#{variables.$bcgov-prefix}--inline-notification,
 .#{variables.$bcgov-prefix}--toast-notification {
   border-radius: 0.25rem;
 }
@@ -162,12 +177,25 @@ input[type="number"] {
 .#{variables.$bcgov-prefix}--inline-notification {
   max-inline-size: 100%;
   inline-size: 100%;
+  border-radius: 0;
 }
 
-// Light mode
+// Keep the title and subtitle on one line (Carbon defaults the text wrapper to wrap, and a
+// multi-word title can break onto two lines when the subtitle squeezes it).
+.#{variables.$bcgov-prefix}--inline-notification__text-wrapper {
+  flex-wrap: nowrap;
+}
+
+.#{variables.$bcgov-prefix}--inline-notification__title {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+// Three-sided border drawn by the low-contrast pseudo-element: square it and lighten to 40% so it
+// reads like a subtle frame, with the full-height accent supplied by the border-left below.
 div.#{variables.$bcgov-prefix}--inline-notification--low-contrast::before {
-  border-radius: 0 0.25rem 0.25rem 0;
-  filter: none;
+  border-radius: 0;
+  filter: opacity(0.4);
 }
 
 $types: "error", "info", "success", "warning";
@@ -183,9 +211,7 @@ $types: "error", "info", "success", "warning";
       var(--#{variables.$bcgov-prefix}-support-#{$notificationType});
   }
   div.#{variables.$bcgov-prefix}--inline-notification--low-contrast.#{variables.$bcgov-prefix}--inline-notification--#{$notificationType}::before {
-    border-color: var(
-      --#{variables.$bcgov-prefix}-notification-border-#{$notificationType}
-    );
+    border-color: var(--#{variables.$bcgov-prefix}-support-#{$notificationType});
   }
 }
 

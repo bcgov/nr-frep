@@ -32,6 +32,8 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
+import { statusLabel, statusTagType } from '@/utils/checklistStatus';
+import { formatShortDate } from '@/utils/date';
 
 import './protocolChecklist.scss';
 
@@ -239,6 +241,18 @@ const ProtocolChecklistPage: FC = () => {
 
       {!loading && !notFound && !hasError && checklist && (
         <>
+          {submitted && (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind="info"
+                title="Read only"
+                subtitle="This checklist has been submitted and is read-only. Unsubmit it to make changes."
+                hideCloseButton
+                lowContrast
+              />
+            </Column>
+          )}
+
           <Column sm={4} md={8} lg={16}>
             <Tile className="protocol-checklist__summary">
               <div className="protocol-checklist__summary-grid">
@@ -255,28 +269,16 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Cut block', headerExtras['Cut block'])}
                 <div>
                   <span className="protocol-checklist__label">Status</span>
-                  <Tag type={checklist.statusCode === 'SUB' ? 'green' : 'blue'} size="sm">
-                    {checklist.statusLabel}
+                  <Tag type={statusTagType(checklist.statusCode)} size="sm">
+                    {statusLabel(checklist.statusCode, checklist.statusLabel)}
                   </Tag>
                 </div>
-                {headerCell('Evaluator', checklist.evaluatorUserid, true)}
-                {headerCell('Evaluation date', checklist.evaluationDate, true)}
+                {headerCell('Evaluator', checklist.evaluatorName, true)}
+                {headerCell('Evaluation date', formatShortDate(checklist.evaluationDate), true)}
                 {headerCell('Sample #', headerExtras['Sample #'])}
               </div>
             </Tile>
           </Column>
-
-          {submitted && (
-            <Column sm={4} md={8} lg={16}>
-              <InlineNotification
-                kind="info"
-                title="Read only"
-                subtitle="This checklist has been submitted and is read-only. Unsubmit it to make changes."
-                hideCloseButton
-                lowContrast
-              />
-            </Column>
-          )}
 
           {canEdit && (
             <Column sm={4} md={8} lg={16}>

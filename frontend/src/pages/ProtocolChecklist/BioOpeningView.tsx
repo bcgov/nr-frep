@@ -9,6 +9,7 @@ import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { formatShortDate } from '@/utils/date';
 
 /**
  * Biodiversity Opening section (FREP210) — read-only form mirroring the legacy layout, edited
@@ -246,7 +247,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         <legend>Opening identification</legend>
         <div className="rip-form__grid">
           {/* Read-only RESULTS reference fields (from frep_selected_site) — never editable. */}
-          {cell('Harvest complete date', get('harvestDate'))}
+          {cell('Harvest complete date', formatShortDate(get('harvestDate')))}
           {cell('Net area to be reforested (ha)', get('netArea'))}
           {cell('Gross area (ha)', get('grossArea'))}
           {text('frepWtpOverride', 'FREP gross area override (ha)')}

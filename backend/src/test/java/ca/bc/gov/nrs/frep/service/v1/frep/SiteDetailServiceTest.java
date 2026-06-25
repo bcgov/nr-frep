@@ -10,6 +10,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
@@ -24,8 +26,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class SiteDetailServiceTest {
@@ -119,7 +119,7 @@ class SiteDetailServiceTest {
 
   private static void expectInvalid(SiteResourceSaveRequest request) {
     assertThrows(
-        ResponseStatusException.class,
+        InvalidPayloadException.class,
         () -> SiteDetailService.validateResources(List.of(request), siteDetailData(List.of())));
   }
 
@@ -167,10 +167,10 @@ class SiteDetailServiceTest {
     when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(List.of(
         new SiteResourceRow("8001", "R", "SLB", "Biodiversity", "REJ", "SUB", "", "", "", "3"))));
 
-    ResponseStatusException ex = assertThrows(
-        ResponseStatusException.class,
+    ConflictFoundException ex = assertThrows(
+        ConflictFoundException.class,
         () -> service.saveResources("1001", List.of(req("REJ", "NSTR", null, null))));
-    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+    assertTrue(ex.getMessage().contains("submitted"));
     verify(siteDetailRepository, never()).saveResources(any(), any(), any(), any(), any(), any());
   }
 

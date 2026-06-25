@@ -1,6 +1,9 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.endpoint.v1.ReportApiEndpoint;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.exception.TooManyExportsException;
+import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
@@ -8,14 +11,16 @@ import ca.bc.gov.nrs.frep.service.v1.report.ExportSlotLimiter;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 /**
  * Report-generation endpoints. Mappings declared on {@link ReportApiEndpoint}.
@@ -54,12 +59,14 @@ public class ReportApiController implements ReportApiEndpoint {
 
   @Override
   public ResponseEntity<byte[]> exportRandomListCsv(String effectiveYear, String orgUnit) {
-    if (!StringUtils.hasText(effectiveYear)) {
-      throw new IllegalArgumentException("effectiveYear is required");
+    if (StringUtils.isBlank(effectiveYear)) {
+      ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message("Effective year cannot be blank").status(BAD_REQUEST).build();
+      throw new InvalidPayloadException(error);
     }
+    // orgUnit is optional — omitting it exports the whole province (legacy "all districts").
     return toResponse(
         csvReportService.generateRandomListCsv(
-            effectiveYear.trim(), StringUtils.hasText(orgUnit) ? orgUnit.trim() : null));
+            effectiveYear.trim(), StringUtils.isBlank(orgUnit) ? null : orgUnit.trim()));
   }
 
   @Override
@@ -69,8 +76,7 @@ public class ReportApiController implements ReportApiEndpoint {
       String checklistStatusCode, String checklistId, String evaluationDateFrom,
       String evaluationDateTo) {
     if (!exportSlotLimiter.tryAcquire()) {
-      throw new ResponseStatusException(
-          HttpStatus.TOO_MANY_REQUESTS,
+      throw new TooManyExportsException(
           "Too many exports are in progress. Please try again in a moment.");
     }
     StreamingResponseBody body = outputStream -> {

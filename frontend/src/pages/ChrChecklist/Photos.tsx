@@ -16,6 +16,7 @@ import { TextField } from '@/pages/ChrChecklist/fields';
 import type { Picture } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { formatShortDate } from '@/utils/date';
 
 /**
  * Build a displayable image src from a picture's `code`. Newly-added photos already carry a
@@ -185,7 +186,7 @@ const Photos: FC<{
                     )}
                   </TableCell>
                   <TableCell>{picture.description || '—'}</TableCell>
-                  <TableCell>{picture.date || '—'}</TableCell>
+                  <TableCell>{formatShortDate(picture.date) || '—'}</TableCell>
                   <TableCell>
                     <Button
                       kind="ghost"
@@ -226,6 +227,9 @@ const Photos: FC<{
               disabled={busy}
               onChange={setDescription}
             />
+            {/* Plain text input (not DateField): this picker would mount in the always-rendered
+                upload card during the page's load→content transition, which trips a Carbon DatePicker
+                render loop. The other CHR date fields mount on user interaction and use DateField. */}
             <TextField
               id="photo-date"
               labelText="Date"

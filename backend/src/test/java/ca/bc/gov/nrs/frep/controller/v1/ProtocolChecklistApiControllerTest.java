@@ -39,7 +39,7 @@ class ProtocolChecklistApiControllerTest {
     when(protocolChecklistService.findChecklist("bio", "9001"))
         .thenReturn(Optional.of(new ProtocolChecklistResponse(
             "9001", "SLB", "Biodiversity", "1001", "A12345", "2024",
-            "RDY", "Ready", "IDIR\\JDOE", "2024-08-12",
+            "RDY", "Ready", "IDIR\\JDOE", "John Doe (JDOE)", "2024-08-12",
             List.of(new ProtocolChecklistSection("opening", "Opening info",
                 List.of(new ProtocolChecklistField("Stand age", "82", "NUMBER"))))
         )));

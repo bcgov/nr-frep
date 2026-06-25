@@ -43,6 +43,9 @@ class ProtocolChecklistServiceTest {
   @Mock
   private LoggedUserHelper loggedUserHelper;
 
+  @Mock
+  private FamUserDirectoryService famUserDirectoryService;
+
   @InjectMocks
   private ProtocolChecklistService service;
 

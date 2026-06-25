@@ -40,34 +40,10 @@
 // Year-locked info banner sits above the "Eligibility criteria" heading. Carbon caps the
 // notification at 832px and lets its text wrapper wrap onto two lines; compound with the
 // component class to outrank those and span the panel with the title + subtitle inline.
-.master-list-admin__lock-note.#{vars.$bcgov-prefix}--inline-notification {
+// Banner sits above the "Eligibility criteria" heading; the look (square corners, full-height accent,
+// one-line title) now comes from the global inline-notification styles in styles/_overrides.scss.
+.master-list-admin__lock-note {
   margin: 0 0 1.5rem;
-  inline-size: 100%;
-  max-inline-size: 100%;
-
-  // Square corners (our global notification override rounds all four) so the box and the blue
-  // info accent read like the Carbon reference.
-  border-radius: 0;
-
-  .#{vars.$bcgov-prefix}--inline-notification__text-wrapper {
-    flex-wrap: nowrap;
-  }
-
-  // Keep the "Year locked" title on a single line instead of wrapping to "Year" / "locked".
-  .#{vars.$bcgov-prefix}--inline-notification__title {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-}
-
-// The three-sided border is drawn by the low-contrast pseudo-element. Our global override squares
-// only its right corners and removes the opacity (heavy border); restore the Carbon reference —
-// square corners and a light 40%-opacity info-blue border. Needs the low-contrast + info classes
-// to outrank that global rule.
-.master-list-admin__lock-note.#{vars.$bcgov-prefix}--inline-notification--low-contrast.#{vars.$bcgov-prefix}--inline-notification--info::before {
-  border-color: var(--#{vars.$bcgov-prefix}-support-info);
-  border-radius: 0;
-  filter: opacity(0.4);
 }
 
 .master-list-admin__label {

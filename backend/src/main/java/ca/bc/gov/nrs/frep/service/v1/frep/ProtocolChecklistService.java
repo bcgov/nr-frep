@@ -44,17 +44,20 @@ public class ProtocolChecklistService {
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
+  private final FamUserDirectoryService famUserDirectoryService;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
-      LoggedUserHelper loggedUserHelper
+      LoggedUserHelper loggedUserHelper,
+      FamUserDirectoryService famUserDirectoryService
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
+    this.famUserDirectoryService = famUserDirectoryService;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -259,6 +262,10 @@ public class ProtocolChecklistService {
     }
 
     String statusCode = header.statusCode();
+    String evaluatorUserid = header.evaluatorUserid();
+    String evaluatorName = StringUtils.isBlank(evaluatorUserid)
+        ? evaluatorUserid
+        : famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
     return Optional.of(new ProtocolChecklistResponse(
         checklistId,
         oracleProtocol,
@@ -268,7 +275,8 @@ public class ProtocolChecklistService {
         header.effectiveYear(),
         statusCode,
         statusCode,
-        header.evaluatorUserid(),
+        evaluatorUserid,
+        evaluatorName,
         header.evaluationDate(),
         responseSections
     ));

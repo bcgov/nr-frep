@@ -118,6 +118,23 @@ input[type="number"] {
   border-radius: 0.25rem;
 }
 
+// Single-mode DatePicker fills its container like a text input. Carbon hard-codes the input to a
+// fixed 18rem (`inline-size`), which overflows narrow grid/flex cells; stretch the whole wrapper
+// chain instead. The inner <span> is `display: inline` by default, so it must become a block for
+// the width to take and the calendar icon to stay pinned to the right edge.
+.#{variables.$bcgov-prefix}--date-picker--single,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-container,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-input__wrapper,
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker__input {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.#{variables.$bcgov-prefix}--date-picker--single .#{variables.$bcgov-prefix}--date-picker-input__wrapper > span {
+  display: block;
+  inline-size: 100%;
+}
+
 /* ------------------ Time Picker ---------------------------
 - Border-radius: 4px on left top corner and right top corners, no border-radius in the middle
 ----------------------------------------------------------------- */

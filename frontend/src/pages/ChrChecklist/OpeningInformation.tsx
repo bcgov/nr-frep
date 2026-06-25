@@ -2,11 +2,17 @@ import { Edit } from '@carbon/icons-react';
 import { Button, InlineNotification } from '@carbon/react';
 import { useState, type FC } from 'react';
 
-import { IndicatorCheckbox, TextAreaField, TextField } from '@/pages/ChrChecklist/fields';
+import {
+  DateField,
+  IndicatorCheckbox,
+  TextAreaField,
+  TextField,
+} from '@/pages/ChrChecklist/fields';
 
 import type { CheckList } from '@/types/chrChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
+import { formatShortDate } from '@/utils/date';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -109,10 +115,9 @@ const OpeningInformation: FC<{
               />
             )}
             <div className="rip-form__grid">
-              <TextField
+              <DateField
                 id="chr-evaluation-date"
                 labelText="Evaluation date"
-                placeholder="YYYY-MM-DD"
                 value={draft.evaluationDate}
                 onChange={(v) => setDraft((d) => ({ ...d, evaluationDate: v }))}
               />
@@ -153,7 +158,7 @@ const OpeningInformation: FC<{
           </>
         ) : (
           <div className="rip-form__grid">
-            <RoField label="Evaluation date" value={value.evaluationDate} />
+            <RoField label="Evaluation date" value={formatShortDate(value.evaluationDate)} />
             <RoField label="Assessed by" value={assessedBy} />
             <RoField
               label="First Nations' Place Name or Block Name"

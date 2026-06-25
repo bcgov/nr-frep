@@ -10,7 +10,7 @@ import {
 } from '@carbon/react';
 import { useState, type FC } from 'react';
 
-import { CodeSelect, IndicatorCheckbox, TextField } from '@/pages/ChrChecklist/fields';
+import { CodeSelect, DateField, IndicatorCheckbox, TextField } from '@/pages/ChrChecklist/fields';
 
 import type { Contact } from '@/types/chrChecklist';
 
@@ -121,10 +121,9 @@ const Contacts: FC<{
             />
             {/* Contacted date shows only once the contact has been contacted (legacy parity). */}
             {draft.contactedInd === 'true' && (
-              <TextField
+              <DateField
                 id="contact-date"
                 labelText="Contacted date"
-                placeholder="YYYY-MM-DD"
                 value={draft.contactedDate}
                 disabled={readOnly}
                 onChange={(v) => setField({ contactedDate: v })}

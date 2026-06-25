@@ -2,6 +2,8 @@ import { Add, Edit, TrashCan } from '@carbon/icons-react';
 import {
   Button,
   Checkbox,
+  DatePicker,
+  DatePickerInput,
   Modal,
   Select,
   SelectItem,
@@ -24,6 +26,7 @@ import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protoco
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { formatShortDate } from '@/utils/date';
 
 /**
  * Biodiversity Stratum Summary section (FREP211) — edited inline in place. Master-detail editor with
@@ -48,7 +51,7 @@ const TEXT_GROUPS: { title: string; fields: FieldDef[] }[] = [
     fields: [
       { key: 'stratumNumber', label: 'Stratum number' },
       { key: 'strataTypeCode', label: 'Stratum type' },
-      { key: 'summaryDate', label: 'Summary date (YYYY-MM-DD)' },
+      { key: 'summaryDate', label: 'Summary date' },
       { key: 'assessorName', label: 'Assessor name' },
       { key: 'plotCount', label: 'Plot count' },
       { key: 'size', label: 'Stratum size (ha)' },
@@ -755,10 +758,34 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       );
     }
 
+    if (key === 'summaryDate' && !readOnly) {
+      // Summary date uses a calendar picker (writes back the YYYY-MM-DD the proc expects).
+      return (
+        <DatePicker
+          key={key}
+          datePickerType="single"
+          dateFormat="Y-m-d"
+          value={get(key) ? [get(key)] : []}
+          onChange={(dates: Date[]) =>
+            set(key, dates[0] ? dates[0].toISOString().slice(0, 10) : '')
+          }
+        >
+          <DatePickerInput
+            id={`stratum-${key}`}
+            labelText={lbl}
+            placeholder="YYYY-MM-DD"
+            disabled={disabled}
+          />
+        </DatePicker>
+      );
+    }
+
     return readOnly ? (
       <div className="protocol-checklist__field" key={key}>
         <span className="protocol-checklist__label">{lbl}</span>
-        <span className="protocol-checklist__value">{get(key) || '—'}</span>
+        <span className="protocol-checklist__value">
+          {(key === 'summaryDate' ? formatShortDate(get(key)) : get(key)) || '—'}
+        </span>
       </div>
     ) : (
       <TextInput

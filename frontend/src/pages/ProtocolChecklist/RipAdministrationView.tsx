@@ -1,5 +1,14 @@
 import { Edit, TrashCan } from '@carbon/icons-react';
-import { Button, Select, SelectItem, SkeletonText, TextArea, TextInput } from '@carbon/react';
+import {
+  Button,
+  DatePicker,
+  DatePickerInput,
+  Select,
+  SelectItem,
+  SkeletonText,
+  TextArea,
+  TextInput,
+} from '@carbon/react';
 import { useCallback, useEffect, useState, type FC } from 'react';
 
 import EvaluatorSearch from '@/pages/ProtocolChecklist/EvaluatorSearch';
@@ -11,6 +20,7 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { formatShortDate } from '@/utils/date';
 
 /**
  * Checklist Administration tab (legacy FREP301 / checklistCostResource) — read-only view with
@@ -270,6 +280,36 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
       </div>
     );
 
+  // Evaluation date uses a calendar picker (writes back the YYYY-MM-DD the proc expects) rather than
+  // a free-text field.
+  const renderEvaluationDate = () => {
+    const value = get('evaluationDate');
+    if (!editing) {
+      return (
+        <div className="protocol-checklist__field">
+          <span className="protocol-checklist__label">Evaluation date</span>
+          <span className="protocol-checklist__value">{formatShortDate(value) || '—'}</span>
+        </div>
+      );
+    }
+    return (
+      <DatePicker
+        datePickerType="single"
+        dateFormat="Y-m-d"
+        value={value ? [value] : []}
+        onChange={(dates: Date[]) =>
+          set('evaluationDate', dates[0] ? dates[0].toISOString().slice(0, 10) : '')
+        }
+      >
+        <DatePickerInput
+          id="admin-evaluationDate"
+          labelText="Evaluation date"
+          placeholder="YYYY-MM-DD"
+        />
+      </DatePicker>
+    );
+  };
+
   return (
     <div className="rip-form">
       <div className="protocol-checklist__section-actions">
@@ -295,8 +335,8 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
         <div className="rip-form__grid">
-          {/* Evaluation date */}
-          {renderScalar(SCALARS[0])}
+          {/* Evaluation date — calendar picker */}
+          {renderEvaluationDate()}
 
           {/* Access type — dropdown of site-access codes (FREP301) */}
           {editing ? (

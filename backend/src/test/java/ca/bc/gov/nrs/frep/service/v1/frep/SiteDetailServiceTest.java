@@ -60,6 +60,21 @@ class SiteDetailServiceTest {
   }
 
   @Test
+  void supportedProtocolsOnlyKeepsBioAndChrDropsRipAndWater() {
+    SiteDetailData data = siteDetailData(List.of(
+        new SiteResourceRow("1", "R", "SLB", "Biodiversity", "", "", "", "", "", "0"),
+        new SiteResourceRow("2", "R", "RIP", "Riparian", "", "", "", "", "", "0"),
+        new SiteResourceRow("3", "R", "WTR", "Water", "", "", "", "", "", "0"),
+        new SiteResourceRow("4", "R", "CHR", "Cultural Heritage", "", "", "", "", "", "0")));
+
+    List<SiteResourceRow> kept = SiteDetailService.supportedProtocolsOnly(data).resources();
+
+    assertEquals(2, kept.size());
+    assertEquals("SLB", kept.get(0).resourceType());
+    assertEquals("CHR", kept.get(1).resourceType());
+  }
+
+  @Test
   void findSiteDetailMapsRepositoryDataAndResolvesChecklistId() {
     when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(
         List.of(new SiteResourceRow(

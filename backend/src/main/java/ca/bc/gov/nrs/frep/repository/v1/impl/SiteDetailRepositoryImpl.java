@@ -36,6 +36,18 @@ public class SiteDetailRepositoryImpl extends AbstractFrepRepository implements 
    * <p>Legacy equivalent: {@code FrepResourceDataManager.getSiteDetails}.
    */
   public SiteDetailData findSiteDetail(String frepSelectedSiteId) {
+    return getSiteDetail(frepSelectedSiteId, null, null);
+  }
+
+  @Override
+  public SiteDetailData findSiteDetailByOpening(String openingId, String masterList) {
+    // Load by opening with a null selected-site id: GET param 8 is p_master_list, param 9 is
+    // p_opening_id (IN OUT). The proc resolves an existing site for opening+year, or returns the
+    // opening header + a blank row per protocol type when none exists yet (new targeted opening).
+    return getSiteDetail(null, masterList, openingId);
+  }
+
+  private SiteDetailData getSiteDetail(String frepSelectedSiteId, String masterList, String openingId) {
     String call = "{call " + PACKAGE_NAME + ".GET (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}";
     return executeCall(call, cs -> {
       setInOutString(cs, 1, frepSelectedSiteId);
@@ -45,8 +57,8 @@ public class SiteDetailRepositoryImpl extends AbstractFrepRepository implements 
       cs.registerOutParameter(5, Types.VARCHAR);
       cs.registerOutParameter(6, Types.VARCHAR);
       cs.registerOutParameter(7, Types.VARCHAR);
-      setInOutString(cs, 8, null);
-      setInOutString(cs, 9, null);
+      setInOutString(cs, 8, masterList); // p_master_list (year) — drives the opening+year resolve
+      setInOutString(cs, 9, openingId); // p_opening_id — load by opening when the site id is null
       cs.registerOutParameter(10, Types.VARCHAR);
       cs.registerOutParameter(11, Types.VARCHAR);
       cs.registerOutParameter(12, Types.VARCHAR);

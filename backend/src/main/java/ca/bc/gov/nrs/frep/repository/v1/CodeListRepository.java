@@ -20,6 +20,9 @@ public interface CodeListRepository {
   List<Map<String, Object>> getWildlifeTreeDecayCode();
   List<Map<String, Object>> getCwdDecayClassCode();
   List<Map<String, Object>> getEvaluatorCode(String checklistId, String resourceType);
+  List<Map<String, Object>> getBlockStatusCode();
+  List<Map<String, Object>> getOpenCategoryCode();
+  List<Map<String, Object>> getOpeningStatusCode();
   List<Map<String, Object>> getChecklistAnswerCode(String excludeAnswerCode);
   List<BecRow> searchBec(String zone, String subzone, String variant, String phase,
       String siteSeries, String siteSeriesPhase, String seral);

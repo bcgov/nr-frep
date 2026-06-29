@@ -69,6 +69,21 @@ public class ConfigurationApiController implements ConfigurationApiEndpoint {
   }
 
   @Override
+  public ResponseEntity<List<CodeOptionResponse>> getBlockStatusCodes() {
+    return ResponseEntity.ok(configurationService.getBlockStatusCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getOpenCategoryCodes() {
+    return ResponseEntity.ok(configurationService.getOpenCategoryCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getOpeningStatusCodes() {
+    return ResponseEntity.ok(configurationService.getOpeningStatusCodes());
+  }
+
+  @Override
   public ResponseEntity<List<CodeOptionResponse>> getStrataTypes() {
     return ResponseEntity.ok(configurationService.getStrataTypes());
   }

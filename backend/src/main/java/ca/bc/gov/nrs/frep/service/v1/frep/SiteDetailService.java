@@ -4,6 +4,7 @@ import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CreateTargetedSiteRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteDetailResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.SiteResourceSaveRequest;
@@ -34,6 +35,9 @@ public class SiteDetailService {
 
   static final String SUBMITTED = "SUB";
   static final String OTHER_REASON = "OTH";
+  /** Protocol resource types the new app supports (Biodiversity, Cultural Heritage). The legacy GET
+   * also returns Riparian/Water rows, which are out of migration scope and are dropped. */
+  static final Set<String> SUPPORTED_PROTOCOLS = Set.of("SLB", "CHR");
   static final int MAX_RATIONALE_LENGTH = 50;
   static final int MAX_COMMENTS_LENGTH = 2000;
   private static final String RATIONALE_TOO_LONG = "rationale must be 50 characters or fewer";
@@ -57,6 +61,43 @@ public class SiteDetailService {
     }
 
     return Optional.of(toResponse(data));
+  }
+
+  /**
+   * Load the site-detail context for a brand-new targeted opening (no selected site yet), so the
+   * FREP200 "Add Target Site" flow can show the opening header and a blank row per protocol type to
+   * evaluate. {@code effectiveYear} is the master-list year. Returns empty if {@code openingId} is blank.
+   */
+  public Optional<SiteDetailResponse> findSiteDetailForOpening(String openingId, String effectiveYear) {
+    if (StringUtils.isBlank(openingId)) {
+      return Optional.empty();
+    }
+    SiteDetailData data =
+        siteDetailRepository.findSiteDetailByOpening(openingId.trim(), effectiveYear(effectiveYear));
+    return Optional.of(toResponse(supportedProtocolsOnly(data)));
+  }
+
+  /**
+   * Create a targeted site for an opening: validate the resource evaluations, then persist via
+   * {@code FREP_110_SITE_DETAILS.SAVE} with a blank selected-site id (the proc creates the selected
+   * site and spawns the checklists). The opening context is taken from the request — already vetted by
+   * {@code ADD_TARGETED_SITE} — rather than re-read. Returns the newly created site detail.
+   */
+  public SiteDetailResponse createTargetedSite(CreateTargetedSiteRequest request) {
+    String openingId = StringUtils.trimToEmpty(request.openingId());
+    String year = effectiveYear(request.effectiveYear());
+    SiteDetailData context =
+        supportedProtocolsOnly(siteDetailRepository.findSiteDetailByOpening(openingId, year));
+    validateResources(request.resources(), context);
+    String newSiteId =
+        siteDetailRepository.saveResources(
+            context.frepSelectedSiteId(), // blank → create the selected site; existing id → update
+            openingId,
+            StringUtils.trimToEmpty(request.orgUnit()),
+            year,
+            resourcesToPersist(request.resources(), context),
+            loggedUserHelper.getLoggedUserId());
+    return toResponse(siteDetailRepository.findSiteDetail(newSiteId));
   }
 
   /**
@@ -218,6 +259,22 @@ public class SiteDetailService {
     return !current.resources().isEmpty()
         && current.resources().stream()
             .allMatch(r -> SUBMITTED.equalsIgnoreCase(StringUtils.trimToEmpty(r.checklistStatusCode())));
+  }
+
+  /**
+   * Drop resource rows for protocols the new app doesn't support (Riparian/Water), keeping only
+   * Biodiversity ({@code SLB}) and Cultural Heritage ({@code CHR}). Used in the targeted-site create
+   * flow so the picker only offers the protocols that have checklist pages.
+   */
+  static SiteDetailData supportedProtocolsOnly(SiteDetailData data) {
+    List<SiteResourceRow> kept = data.resources().stream()
+        .filter(r -> SUPPORTED_PROTOCOLS.contains(StringUtils.trimToEmpty(r.resourceType()).toUpperCase()))
+        .toList();
+    return new SiteDetailData(
+        data.frepSelectedSiteId(), data.masterList(), data.orgUnit(), data.orgUnitNo(),
+        data.client(), data.clientName(), data.opening(), data.openingId(), data.actualOpening(),
+        data.licenceNo(), data.actualLicence(), data.cuttingPermitId(), data.cutBlockId(),
+        data.fspLink(), data.harvestYear(), kept);
   }
 
   /** The effective year is the first four characters of the master-list value (legacy parity). */

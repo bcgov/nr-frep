@@ -1,7 +1,9 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCwdRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioStandRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
@@ -11,6 +13,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistSection;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
+import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
@@ -19,7 +22,12 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -89,10 +98,332 @@ public class ProtocolChecklistService {
 
   /** Save the Biodiversity Opening screen via FREP_210_BIO_OPENING.SAVE. */
   public BiodiversityOpening saveBiodiversityOpening(String checklistId, BiodiversityOpening opening) {
+    validateBiodiversityOpening(opening);
     BiodiversityOpening toSave = opening.checklistId() == null
         ? opening.withIdentity(checklistId, opening.revisionCount())
         : opening;
     return writeRepository.saveBiodiversityOpening(toSave, loggedUserHelper.getLoggedUserId());
+  }
+
+  /**
+   * Validate the Biodiversity Opening, mirroring the legacy FREP210 {@code Frep210ValidationManager}
+   * "Save" chain: Location description, Invasive plant?, Innovative practice? and Rating are required;
+   * the two practice/invasive comments are required when their answer is Yes; length limits on the
+   * description (50) and the comments (4000) / rationale (2000); and the FREP gross-area override is a
+   * float within 0.01–99999.99 to two decimals. Throws {@link InvalidPayloadException} (HTTP 400).
+   */
+  private static void validateBiodiversityOpening(BiodiversityOpening opening) {
+    List<String> errors = new ArrayList<>();
+
+    if (StringUtils.isBlank(opening.locationDescription())) {
+      errors.add("Location description is required.");
+    } else if (opening.locationDescription().length() > 50) {
+      errors.add("Location description must be 50 characters or fewer.");
+    }
+    if (StringUtils.isBlank(opening.invasivePlantIndicator())) {
+      errors.add("Select whether invasive plant species are present.");
+    }
+    if (StringUtils.isBlank(opening.innovativePracticeInd())) {
+      errors.add("Select whether innovative practices were used.");
+    }
+    if (StringUtils.isBlank(opening.frepSiteEvaluationCode())) {
+      errors.add("A rating is required.");
+    }
+
+    if ("Y".equals(opening.innovativePracticeInd())
+        && StringUtils.isBlank(opening.innovativePracticesComment())) {
+      errors.add("Describe the innovative practice.");
+    } else if (length(opening.innovativePracticesComment()) > 4000) {
+      errors.add("Description must be 4000 characters or fewer.");
+    }
+    if ("Y".equals(opening.invasivePlantIndicator())
+        && StringUtils.isBlank(opening.invasivePlantComment())) {
+      errors.add("Enter a comment about the invasive plants.");
+    } else if (length(opening.invasivePlantComment()) > 4000) {
+      errors.add("Comments must be 4000 characters or fewer.");
+    }
+    if (length(opening.evaluatorOpinionComment()) > 2000) {
+      errors.add("Rationale must be 2000 characters or fewer.");
+    }
+    validateOverride(opening.frepWtpOverride(), errors);
+
+    if (!errors.isEmpty()) {
+      ApiError error = ApiError.builder()
+          .timestamp(LocalDateTime.now())
+          .message(String.join(" ", errors))
+          .status(HttpStatus.BAD_REQUEST)
+          .build();
+      throw new InvalidPayloadException(error);
+    }
+  }
+
+  private static int length(String value) {
+    return value == null ? 0 : value.length();
+  }
+
+  private static void validateOverride(String value, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      return;
+    }
+    String text = value.trim();
+    if (!text.matches("[-+]?\\d*\\.?\\d+")) {
+      errors.add("FREP gross area override must be a number.");
+      return;
+    }
+    double number = Double.parseDouble(text);
+    if (number < 0.01 || number > 99999.99) {
+      errors.add("FREP gross area override must be between 0.01 and 99999.99.");
+      return;
+    }
+    int dot = text.indexOf('.');
+    if (dot >= 0 && text.length() - dot - 1 > 2) {
+      errors.add("FREP gross area override can have at most 2 decimal places.");
+    }
+  }
+
+  // --- Stratum summary validation (legacy FREP211 Frep211ValidationManager) ---
+
+  /**
+   * Validate a Biodiversity Stratum, mirroring the legacy FREP211 {@code Frep211ValidationManager}
+   * "Save" chain: required core fields (incl. BGC subzone, PT #43888); the stratum-id mask; the
+   * 0-plots-needs-patch rule; conditional size / estimated size / patch fields; numeric ranges and
+   * decimal limits; free-text length limits; the constraint-total cross-field rules; the
+   * stratum-type ↔ harvest-area ↔ patch-location coupling; windthrow-treatment exclusivity; and the
+   * other-constraint / other-eco pairings. Throws {@link InvalidPayloadException} (HTTP 400).
+   */
+  private static void validateBioStratum(BioStratum s) {
+    List<String> errors = new ArrayList<>();
+    String type = trimmedOrEmpty(s.strataTypeCode());
+    String harvest = trimmedOrEmpty(s.harvestAreaCode());
+    String consistent = trimmedOrEmpty(s.consistentMapInd());
+
+    requireField(s.stratumNumber(), "Stratum number", errors);
+    requireField(s.strataTypeCode(), "Stratum type", errors);
+    requireField(s.consistentMapInd(), "Consistent with map", errors);
+    requireField(s.plotCount(), "Plot count", errors);
+    requireField(s.harvestAreaCode(), "Harvest area", errors);
+    requireField(s.bgcZoneCode(), "BGC zone", errors);
+    requireField(s.bgcSubzoneCode(), "BGC subzone", errors);
+
+    if (StringUtils.isNotBlank(s.stratumNumber()) && !stratumNumberValid(s.stratumNumber().trim())) {
+      errors.add("Stratum Id must start with a letter, in letters-then-digits order — up to 3 "
+          + "letters then 2 digits, max 5 characters, no spaces (e.g. AB12).");
+    }
+    if ("0".equals(trimmedOrEmpty(s.plotCount())) && !type.isEmpty() && !type.startsWith("P")) {
+      errors.add("A stratum with 0 plots must be a patch stratum type.");
+    }
+    if ("Y".equals(consistent) && StringUtils.isBlank(s.size())) {
+      errors.add("Stratum size is required when consistent with map is \"Yes\".");
+    }
+    if (("N".equals(consistent) || "M".equals(consistent)) && StringUtils.isBlank(s.estimatedSize())) {
+      errors.add("Estimated size is required when not consistent with map.");
+    }
+    if ("M".equals(consistent) && isNumeric(s.size()) && Double.parseDouble(s.size().trim()) != 0) {
+      errors.add("Stratum size must be blank when \"Not mapped\".");
+    }
+    if ("PCH".equals(harvest) && StringUtils.isBlank(s.patchWindthrowPct())) {
+      errors.add("% of trees windthrown is required for a patch reserve.");
+    }
+    if (type.startsWith("P") && StringUtils.isBlank(s.patchLocationCode())) {
+      errors.add("Patch location is required for a patch stratum type.");
+    }
+
+    intRange(s.plotCount(), "Plot count", 0, 99, errors);
+    numRange(s.size(), "Mapped stratum size", 0.01, 9999.99, errors);
+    numRange(s.estimatedSize(), "Estimated size", 0.01, 9999.99, errors);
+    intRange(s.patchEstimatedOldestTreeAge(), "Estimated oldest tree age", 0, 999, errors);
+    numRange(s.patchWindthrowPct(), "% of trees windthrown", 0, 100, errors);
+    intRange(s.wetlandPct(), "Wetland %", 1, 100, errors);
+    intRange(s.riparianManagementZonePct(), "Riparian mgmt zone %", 1, 100, errors);
+    intRange(s.riparianReserveZonePct(), "Riparian reserve zone %", 1, 100, errors);
+    intRange(s.rockOutcropPct(), "Rock outcrop %", 1, 100, errors);
+    intRange(s.nonCommercialBrushPct(), "Non-commercial brush %", 1, 100, errors);
+    intRange(s.nonMerchTimberPct(), "Non-merch timber %", 1, 100, errors);
+    intRange(s.sensitiveSoilPct(), "Sensitive soil %", 1, 100, errors);
+    intRange(s.ungHoofAnimalWinteringPct(), "Ungulate wintering %", 1, 100, errors);
+    intRange(s.wildlifeHabitatAreaPct(), "Wildlife habitat area %", 1, 100, errors);
+    intRange(s.oldGrowthManagementAreaPct(), "OGMA %", 1, 100, errors);
+    intRange(s.visualsPct(), "Visuals %", 1, 100, errors);
+    intRange(s.culturalHeritageFeaturePct(), "Cultural heritage feature %", 1, 100, errors);
+    intRange(s.recreationFeaturePct(), "Recreation feature %", 1, 100, errors);
+    intRange(s.otherConstraintPct(), "Other constraint %", 1, 100, errors);
+    intRange(s.bearDenCnt(), "Bear den count", 1, 999, errors);
+    intRange(s.hibernaculumCnt(), "Hibernaculum count", 1, 999, errors);
+    intRange(s.vetTreeCnt(), "Veteran tree count", 1, 999, errors);
+    intRange(s.mineralLickCnt(), "Mineral lick count", 1, 999, errors);
+    intRange(s.largeStickNestCnt(), "Large stick nest count", 1, 999, errors);
+    intRange(s.cavityNestCnt(), "Cavity nest count", 1, 999, errors);
+    intRange(s.largeHallowTreeCnt(), "Large hollow tree count", 1, 999, errors);
+    intRange(s.largeWitchesBroomCnt(), "Large witches' broom count", 1, 999, errors);
+    intRange(s.otherEcoAnchorCnt(), "Other eco anchor count", 1, 999, errors);
+
+    decimalLimit(s.size(), "Mapped stratum size", 2, errors);
+    decimalLimit(s.estimatedSize(), "Estimated size", 2, errors);
+    decimalLimit(s.patchWindthrowPct(), "% of trees windthrown", 1, errors);
+
+    maxLength(s.otherConstraint(), "Other constraint", 50, errors);
+    maxLength(s.otherEcoAnchorDesc(), "Other eco anchor description", 30, errors);
+    maxLength(s.patchGeneralComment(), "Patch general comment", 2000, errors);
+
+    if (isIntInRange(trimmedOrEmpty(s.constrainedTotal()), 0, 100)) {
+      int total = Integer.parseInt(s.constrainedTotal().trim());
+      int maxSingle = maxConstraintPct(s);
+      if (total > 0 && total < maxSingle) {
+        errors.add("Total constrained must be at least the largest single constraint %.");
+      } else if (total > 0 && maxSingle == 0) {
+        errors.add("Enter at least one constraint when total constrained is greater than 0.");
+      }
+    }
+
+    if (!type.isEmpty()) {
+      boolean isPatch = type.startsWith("P");
+      if (isPatch && !harvest.isEmpty() && !"PCH".equals(harvest)) {
+        errors.add("A patch stratum type requires harvest area \"Patch reserve\".");
+      } else if (!isPatch && "PCH".equals(harvest)) {
+        errors.add("Harvest area \"Patch reserve\" is only valid for a patch stratum type.");
+      }
+    }
+    String patchLoc = trimmedOrEmpty(s.patchLocationCode());
+    if ("PCH".equals(harvest) && "NA".equals(patchLoc)) {
+      errors.add("Patch location cannot be N/A for a patch reserve.");
+    } else if ("HDR".equals(harvest) && !patchLoc.isEmpty() && !"NA".equals(patchLoc)) {
+      errors.add("Patch location must be N/A for dispersed retention.");
+    }
+    if (treatmentChecked(s, "N")
+        && (treatmentChecked(s, "F") || treatmentChecked(s, "T")
+            || StringUtils.isNotBlank(s.otherWindthrowTreatment()))) {
+      errors.add("Windthrow treatment \"None\" cannot be combined with other treatments.");
+    }
+    if (StringUtils.isNotBlank(s.otherConstraint()) != StringUtils.isNotBlank(s.otherConstraintPct())) {
+      errors.add("Other constraint needs both a name and a %.");
+    }
+    if (StringUtils.isNotBlank(s.otherEcoAnchorDesc()) != StringUtils.isNotBlank(s.otherEcoAnchorCnt())) {
+      errors.add("Other eco anchor needs both a description and a count.");
+    }
+
+    if (!errors.isEmpty()) {
+      ApiError error = ApiError.builder()
+          .timestamp(LocalDateTime.now())
+          .message(String.join(" ", errors))
+          .status(HttpStatus.BAD_REQUEST)
+          .build();
+      throw new InvalidPayloadException(error);
+    }
+  }
+
+  private static String trimmedOrEmpty(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private static boolean isNumeric(String value) {
+    return StringUtils.isNotBlank(value) && value.trim().matches("[-+]?\\d*\\.?\\d+");
+  }
+
+  private static boolean isIntInRange(String value, int min, int max) {
+    if (!value.matches("-?\\d+")) {
+      return false;
+    }
+    try {
+      int n = Integer.parseInt(value);
+      return n >= min && n <= max;
+    } catch (NumberFormatException ex) {
+      return false;
+    }
+  }
+
+  private static boolean isNumInRange(String value, double min, double max) {
+    if (!value.matches("[-+]?\\d*\\.?\\d+")) {
+      return false;
+    }
+    double n = Double.parseDouble(value);
+    return n >= min && n <= max;
+  }
+
+  private static void requireField(String value, String label, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      errors.add(label + " is required.");
+    }
+  }
+
+  private static void intRange(String value, String label, int min, int max, List<String> errors) {
+    if (StringUtils.isNotBlank(value) && !isIntInRange(value.trim(), min, max)) {
+      errors.add(label + " must be a whole number from " + min + " to " + max + ".");
+    }
+  }
+
+  private static void numRange(String value, String label, double min, double max,
+      List<String> errors) {
+    if (StringUtils.isNotBlank(value) && !isNumInRange(value.trim(), min, max)) {
+      errors.add(label + " must be a number from " + fmt(min) + " to " + fmt(max) + ".");
+    }
+  }
+
+  private static void decimalLimit(String value, String label, int max, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      return;
+    }
+    String text = value.trim();
+    int dot = text.indexOf('.');
+    int places = dot < 0 ? 0 : text.length() - dot - 1;
+    if (places > max) {
+      errors.add(label + " can have at most " + max + (max == 1 ? " decimal place." : " decimal places."));
+    }
+  }
+
+  private static void maxLength(String value, String label, int max, List<String> errors) {
+    if (value != null && value.length() > max) {
+      errors.add(label + " must be " + max + " characters or fewer.");
+    }
+  }
+
+  private static int maxConstraintPct(BioStratum s) {
+    int max = 0;
+    for (String value : List.of(
+        trimmedOrEmpty(s.wetlandPct()), trimmedOrEmpty(s.riparianManagementZonePct()),
+        trimmedOrEmpty(s.riparianReserveZonePct()), trimmedOrEmpty(s.rockOutcropPct()),
+        trimmedOrEmpty(s.nonCommercialBrushPct()), trimmedOrEmpty(s.nonMerchTimberPct()),
+        trimmedOrEmpty(s.sensitiveSoilPct()), trimmedOrEmpty(s.ungHoofAnimalWinteringPct()),
+        trimmedOrEmpty(s.wildlifeHabitatAreaPct()), trimmedOrEmpty(s.oldGrowthManagementAreaPct()),
+        trimmedOrEmpty(s.visualsPct()), trimmedOrEmpty(s.culturalHeritageFeaturePct()),
+        trimmedOrEmpty(s.recreationFeaturePct()), trimmedOrEmpty(s.otherConstraintPct()))) {
+      if (value.matches("\\d+")) {
+        max = Math.max(max, Integer.parseInt(value));
+      }
+    }
+    return max;
+  }
+
+  private static boolean treatmentChecked(BioStratum s, String code) {
+    return s.windthrowTreatments() != null && s.windthrowTreatments().stream()
+        .anyMatch(t -> code.equals(t.code()) && !"N".equals(t.checkInd()));
+  }
+
+  private static String fmt(double value) {
+    return value == Math.floor(value) ? String.valueOf((long) value) : String.valueOf(value);
+  }
+
+  private static boolean stratumNumberValid(String value) {
+    if (value.isEmpty()) {
+      return true;
+    }
+    if (value.length() > 5 || value.contains(" ") || Character.isDigit(value.charAt(0))) {
+      return false;
+    }
+    boolean seenDigit = false;
+    int digits = 0;
+    int letters = 0;
+    for (char c : value.toCharArray()) {
+      if (Character.isDigit(c)) {
+        seenDigit = true;
+        digits++;
+      } else {
+        if (seenDigit) {
+          return false;
+        }
+        letters++;
+      }
+    }
+    return digits <= 2 && letters <= 3;
   }
 
   public List<BioStratumRow> listBioStrata(String checklistId) {
@@ -108,6 +439,7 @@ public class ProtocolChecklistService {
   }
 
   public BioStratum saveBioStratum(BioStratum stratum) {
+    validateBioStratum(stratum);
     return writeRepository.saveBioStratum(stratum, loggedUserHelper.getLoggedUserId());
   }
 
@@ -143,7 +475,123 @@ public class ProtocolChecklistService {
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {
+    validateBioPlot(plot);
     return writeRepository.saveBioPlot(plot, loggedUserHelper.getLoggedUserId());
+  }
+
+  // --- Plots validation (legacy FREP212 Frep212ValidationManager) ---
+
+  /**
+   * Validate a Biodiversity Plot, mirroring the legacy FREP212 save chains: UTM (conditional on the
+   * "no signal" toggle, easting 6 / northing 7 digits), bearings (required, 0–359), Evaluated by
+   * required, Plot # / BAF / fixed-area / full-count numeric ranges and decimals, comment length,
+   * the "exactly one measurement method" rule, and per-row stand-table (species/WT class/DBH/height)
+   * and CWD (species/decay/diameter/length) rules. Throws {@link InvalidPayloadException} (HTTP 400).
+   *
+   * <p>The clear-cut measurement nuance (must be fixed-area radius specifically) needs the stratum
+   * type, which the plot payload doesn't carry — it's enforced client-side and by the proc; here the
+   * rule is the protocol-agnostic "exactly one".
+   */
+  private static void validateBioPlot(BioPlot p) {
+    List<String> errors = new ArrayList<>();
+
+    if (!"N".equals(trimmedOrEmpty(p.utmSignal()))) {
+      requireField(p.utmZone(), "Zone", errors);
+      if (StringUtils.isBlank(p.utmEasting())) {
+        errors.add("Easting is required.");
+      } else if (!p.utmEasting().trim().matches("\\d{6}")) {
+        errors.add("Easting must be exactly 6 digits.");
+      }
+      if (StringUtils.isBlank(p.utmNorthing())) {
+        errors.add("Northing is required.");
+      } else if (!p.utmNorthing().trim().matches("\\d{7}")) {
+        errors.add("Northing must be exactly 7 digits.");
+      }
+    }
+
+    requireBearing(p.firstLegTransect(), "Bearing 1st leg", errors);
+    requireBearing(p.secondLegTransect(), "2nd leg", errors);
+    requireField(p.assessorName(), "Evaluated by", errors);
+
+    intRange(p.plotNumber(), "Plot #", 0, 999, errors);
+    maxLength(p.plotComment(), "Comments", 2000, errors);
+    intRange(p.basalAreaFactor(), "BAF", 1, 99, errors);
+    numRange(p.fixedAreaRadius(), "Fixed area radius", 0.01, 999.99, errors);
+    decimalLimit(p.fixedAreaRadius(), "Fixed area radius", 2, errors);
+    numRange(p.fullCountArea(), "Full count area", 0.01, 9999.99, errors);
+    decimalLimit(p.fullCountArea(), "Full count area", 2, errors);
+
+    long methods = Stream.of(p.basalAreaFactor(), p.fixedAreaRadius(), p.fullCountArea())
+        .filter(StringUtils::isNotBlank).count();
+    if (methods != 1) {
+      errors.add("Enter exactly one of BAF, fixed area radius, or full count area.");
+    }
+
+    if ("Y".equals(trimmedOrEmpty(p.treeIndicator()))) {
+      List<BioStandRow> stand = p.standTable() == null ? List.of() : p.standTable();
+      if (stand.isEmpty()) {
+        errors.add("\"Trees exist\" is checked — add at least one stand-table row, or uncheck it.");
+      }
+      for (int i = 0; i < stand.size(); i++) {
+        BioStandRow r = stand.get(i);
+        String prefix = "Stand row " + (i + 1) + ": ";
+        requireField(r.speciesCode(), prefix + "Species", errors);
+        requireField(r.decayClassCode(), prefix + "WT class", errors);
+        requireFloat(r.dbh(), prefix + "DBH", 12.6, 400, 1, false, errors);
+        requireFloat(r.height(), prefix + "Height", 1.4, 99.9, 1, false, errors);
+      }
+    }
+    if ("Y".equals(trimmedOrEmpty(p.cwdTransectIndicator()))) {
+      List<BioCwdRow> cwd = p.cwdTable() == null ? List.of() : p.cwdTable();
+      for (int i = 0; i < cwd.size(); i++) {
+        BioCwdRow r = cwd.get(i);
+        String prefix = "CWD row " + (i + 1) + ": ";
+        requireField(r.speciesCode(), prefix + "Species", errors);
+        requireField(r.decayClassCode(), prefix + "Decay class", errors);
+        requireFloat(r.logDiameter(), prefix + "Diameter", 7.6, 400, 1, false, errors);
+        requireFloat(r.logLength(), prefix + "Length", 0, 99.9, 1, true, errors);
+      }
+    }
+
+    if (!errors.isEmpty()) {
+      ApiError error = ApiError.builder()
+          .timestamp(LocalDateTime.now())
+          .message(String.join(" ", errors))
+          .status(HttpStatus.BAD_REQUEST)
+          .build();
+      throw new InvalidPayloadException(error);
+    }
+  }
+
+  private static void requireBearing(String value, String label, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      errors.add(label + " is required.");
+    } else {
+      intRange(value, label, 0, 359, errors);
+    }
+  }
+
+  private static void requireFloat(String value, String label, double min, double max,
+      int maxDecimals, boolean exclusiveMin, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      errors.add(label + " is required.");
+      return;
+    }
+    String text = value.trim();
+    if (!text.matches("\\d*\\.?\\d+")) {
+      errors.add(label + " must be a number.");
+      return;
+    }
+    int dot = text.indexOf('.');
+    if (dot >= 0 && text.length() - dot - 1 > maxDecimals) {
+      errors.add(label + " can have at most " + maxDecimals
+          + (maxDecimals == 1 ? " decimal place." : " decimal places."));
+      return;
+    }
+    double n = Double.parseDouble(text);
+    if ((exclusiveMin ? n <= min : n < min) || n > max) {
+      errors.add(label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+    }
   }
 
   public void deleteBioPlot(String plotId, String revisionCount) {
@@ -165,23 +613,177 @@ public class ProtocolChecklistService {
   }
 
   public AdministrationData getAdministration(String protocol, String checklistId) {
-    return writeRepository.getAdministration(checklistId, resourceTypeForProtocol(protocol));
+    return withResolvedTeamNames(
+        writeRepository.getAdministration(checklistId, resourceTypeForProtocol(protocol)));
   }
 
   public AdministrationData saveAdministration(String protocol, AdministrationData admin) {
-    return writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId());
+    validateAdministration(admin);
+    return withResolvedTeamNames(
+        writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId()));
   }
 
   public AdministrationData addTeamMember(
       String protocol, String checklistId, String evaluator, boolean teamLead) {
-    return writeRepository.addTeamMember(checklistId, resourceTypeForProtocol(protocol), evaluator,
-        teamLead, loggedUserHelper.getLoggedUserId());
+    return withResolvedTeamNames(writeRepository.addTeamMember(checklistId,
+        resourceTypeForProtocol(protocol), evaluator, teamLead, loggedUserHelper.getLoggedUserId()));
   }
 
   public AdministrationData removeTeamMember(
       String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
-    return writeRepository.deleteTeamMember(
-        checklistId, resourceTypeForProtocol(protocol), evaluatorUserid, revisionCount);
+    return withResolvedTeamNames(writeRepository.deleteTeamMember(
+        checklistId, resourceTypeForProtocol(protocol), evaluatorUserid, revisionCount));
+  }
+
+  /**
+   * Resolve the evaluation team's userids to {@code "First Last (userid)"} via FAM, mirroring the
+   * Evaluator display. The cost-resource GET only returns userids (the team lead as a scalar, the
+   * members' {@code evaluatorDescription} comes back null), so both are looked up here; FAM results
+   * are cached and an unresolved userid falls back to itself.
+   */
+  private AdministrationData withResolvedTeamNames(AdministrationData admin) {
+    if (admin == null) {
+      return admin;
+    }
+    String teamLeadName = StringUtils.isBlank(admin.teamLeadNameId())
+        ? admin.teamLeadName()
+        : famUserDirectoryService.resolveName(admin.teamLeadNameId()).orElse(admin.teamLeadNameId());
+    List<EvaluatorRow> members = admin.teamMembers() == null
+        ? admin.teamMembers()
+        : admin.teamMembers().stream().map(this::withResolvedMemberName).toList();
+    return new AdministrationData(
+        admin.checklistId(),
+        admin.selectedSiteId(),
+        admin.resourceValueId(),
+        admin.resourceValueType(),
+        admin.statusCode(),
+        admin.evaluationDate(),
+        admin.siteAccessCode(),
+        admin.blockAccessTime(),
+        admin.hoursOnBlock(),
+        admin.peopleOnBlock(),
+        admin.additionalComments(),
+        admin.teamLeadNameId(),
+        teamLeadName,
+        admin.teamLeadRevisionCount(),
+        admin.revisionCount(),
+        admin.revisionCountAccess(),
+        members);
+  }
+
+  private EvaluatorRow withResolvedMemberName(EvaluatorRow member) {
+    if (member == null || StringUtils.isBlank(member.evaluatorUserid())) {
+      return member;
+    }
+    String name = famUserDirectoryService.resolveName(member.evaluatorUserid())
+        .orElse(StringUtils.isBlank(member.evaluatorDescription())
+            ? member.evaluatorUserid()
+            : member.evaluatorDescription());
+    return new EvaluatorRow(
+        member.evaluatorUserid(),
+        member.frepResourceValueId(),
+        member.teamLeadInd(),
+        name,
+        member.revisionCount());
+  }
+
+  // --- Administration field validation (legacy FREP301 FrepCostResourceValidatingManager) ---
+
+  /**
+   * Validate the Administration scalar fields, mirroring the legacy FREP301
+   * {@code FrepCostResourceValidatingManager} "Save" chain: evaluation date not in the future;
+   * access / on-block hours numeric within 0–9999.99 to two decimals; people on block an integer
+   * 0–10; and people on block ≥ the number of people on the evaluation team. Throws
+   * {@link InvalidPayloadException} (HTTP 400) carrying all collected messages.
+   */
+  private static void validateAdministration(AdministrationData admin) {
+    List<String> errors = new ArrayList<>();
+    validateEvaluationDate(admin.evaluationDate(), errors);
+    validateHours(admin.blockAccessTime(), "Hrs. access time", errors);
+    validateHours(admin.hoursOnBlock(), "Hrs. on block", errors);
+    Integer peopleOnBlock = validatePeople(admin.peopleOnBlock(), errors);
+    if (peopleOnBlock != null && teamCountOf(admin) > peopleOnBlock) {
+      errors.add("People on block must be greater than or equal to the total number of people "
+          + "listed on the team.");
+    }
+    if (!errors.isEmpty()) {
+      ApiError error = ApiError.builder()
+          .timestamp(LocalDateTime.now())
+          .message(String.join(" ", errors))
+          .status(HttpStatus.BAD_REQUEST)
+          .build();
+      throw new InvalidPayloadException(error);
+    }
+  }
+
+  private static void validateEvaluationDate(String value, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      return;
+    }
+    LocalDate date;
+    try {
+      date = LocalDate.parse(value.trim());
+    } catch (DateTimeParseException ex) {
+      errors.add("Evaluation date must be a valid date (YYYY-MM-DD).");
+      return;
+    }
+    if (date.isAfter(LocalDate.now())) {
+      errors.add("Evaluation date cannot be in the future.");
+    }
+  }
+
+  private static void validateHours(String value, String label, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      return;
+    }
+    String text = value.trim();
+    if (!text.matches("[-+]?\\d*\\.?\\d+")) {
+      errors.add(label + " must be a number.");
+      return;
+    }
+    double number = Double.parseDouble(text);
+    if (number < 0 || number > 9999.99) {
+      errors.add(label + " must be between 0 and 9999.99.");
+      return;
+    }
+    int dot = text.indexOf('.');
+    if (dot >= 0 && text.length() - dot - 1 > 2) {
+      errors.add(label + " can have at most 2 decimal places.");
+    }
+  }
+
+  /** Returns the parsed people-on-block (blank → 0), or {@code null} when present but invalid. */
+  private static Integer validatePeople(String value, List<String> errors) {
+    if (StringUtils.isBlank(value)) {
+      return 0;
+    }
+    String text = value.trim();
+    if (!text.matches("-?\\d+")) {
+      errors.add("People on block must be a whole number.");
+      return null;
+    }
+    int number;
+    try {
+      number = Integer.parseInt(text);
+    } catch (NumberFormatException ex) {
+      errors.add("People on block must be between 0 and 10.");
+      return null;
+    }
+    if (number < 0 || number > 10) {
+      errors.add("People on block must be between 0 and 10.");
+      return null;
+    }
+    return number;
+  }
+
+  /** Team size = the team lead (when set) plus the non-lead members, per the legacy people count. */
+  private static int teamCountOf(AdministrationData admin) {
+    int lead = StringUtils.isNotBlank(admin.teamLeadNameId()) ? 1 : 0;
+    long members = admin.teamMembers() == null ? 0
+        : admin.teamMembers().stream()
+            .filter(member -> !"Y".equals(member.teamLeadInd()))
+            .count();
+    return lead + (int) members;
   }
 
   public RiparianNotes getNotes(String protocol, String checklistId) {
@@ -347,10 +949,10 @@ public class ProtocolChecklistService {
 
   private List<SectionDefinition> bioSections(String checklistId) {
     return List.of(
-        section("administration", "Administration (FREP301)", ChecklistSectionData::emptySection),
-        section("opening", "Opening info (FREP210)", () -> checklistRepository.getBioOpening(checklistId)),
-        section("stratum", "Stratum summary (FREP211)", () -> checklistRepository.getBioStratum(checklistId)),
-        section("plots", "Plots (FREP212)", () -> checklistRepository.getBioPlots(checklistId)),
+        section("administration", "Administration", ChecklistSectionData::emptySection),
+        section("opening", "Opening info", () -> checklistRepository.getBioOpening(checklistId)),
+        section("stratum", "Stratum summary", () -> checklistRepository.getBioStratum(checklistId)),
+        section("plots", "Plots", () -> checklistRepository.getBioPlots(checklistId)),
         section("notes", "Notes", ChecklistSectionData::emptySection),
         section("attachments", "Attachments", ChecklistSectionData::emptySection)
     );

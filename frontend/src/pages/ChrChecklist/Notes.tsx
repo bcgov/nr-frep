@@ -28,6 +28,16 @@ const Notes: FC<{
     if (await onSave({ commentaires: draft })) setEditing(false);
   };
 
+  const readOnlyNotes = value.commentaires ? (
+    <div className="protocol-checklist__field">
+      <span className="protocol-checklist__value protocol-checklist__multiline">
+        {value.commentaires}
+      </span>
+    </div>
+  ) : (
+    <p>No notes yet</p>
+  );
+
   return (
     <div className="rip-form">
       <div className="protocol-checklist__section-actions">
@@ -58,14 +68,8 @@ const Notes: FC<{
           value={draft}
           onChange={(v) => setDraft(v)}
         />
-      ) : value.commentaires ? (
-        <div className="protocol-checklist__field">
-          <span className="protocol-checklist__value protocol-checklist__multiline">
-            {value.commentaires}
-          </span>
-        </div>
       ) : (
-        <p>No notes yet</p>
+        readOnlyNotes
       )}
     </div>
   );

@@ -28,7 +28,7 @@ const floatError = (
   maxDecimals: number,
   exclusiveMin = false,
 ): string => {
-  if (!/^\d*\.?\d+$/.test(value)) return `${label} must be a number.`;
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) return `${label} must be a number.`;
   if (decimals(value) > maxDecimals) {
     return `${label} can have at most ${maxDecimals} decimal place${maxDecimals === 1 ? '' : 's'}.`;
   }
@@ -56,38 +56,30 @@ const put = (errors: Record<string, string>, key: string, message: string): void
   if (message) errors[key] = message;
 };
 
-/**
- * Plot-header field errors keyed by field key. Legacy parity: UTM (conditional on the "no signal"
- * toggle), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
- * numeric ranges and decimals, comment length, and the "exactly one measurement method" rule
- * (clear-cut → fixed-area radius only).
- */
-export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<string, string> => {
-  const e: Record<string, string> = {};
-  const g = (k: string) => String((plot as Record<string, unknown>)[k] ?? '').trim();
-  const noUtm = g('utmSignal') === 'N';
+type Getter = (key: string) => string;
 
-  if (!noUtm) {
-    if (isBlank(g('utmZone'))) e.utmZone = 'Zone is required.';
-    if (isBlank(g('utmEasting'))) e.utmEasting = 'Easting is required.';
-    else if (!/^\d{6}$/.test(g('utmEasting'))) e.utmEasting = 'Easting must be exactly 6 digits.';
-    if (isBlank(g('utmNorthing'))) e.utmNorthing = 'Northing is required.';
-    else if (!/^\d{7}$/.test(g('utmNorthing')))
-      e.utmNorthing = 'Northing must be exactly 7 digits.';
-  }
+const utmErrors = (e: Record<string, string>, g: Getter, noUtm: boolean): void => {
+  if (noUtm) return;
+  if (isBlank(g('utmZone'))) e.utmZone = 'Zone is required.';
+  if (isBlank(g('utmEasting'))) e.utmEasting = 'Easting is required.';
+  else if (!/^\d{6}$/.test(g('utmEasting'))) e.utmEasting = 'Easting must be exactly 6 digits.';
+  if (isBlank(g('utmNorthing'))) e.utmNorthing = 'Northing is required.';
+  else if (!/^\d{7}$/.test(g('utmNorthing'))) e.utmNorthing = 'Northing must be exactly 7 digits.';
+};
 
+const bearingErrors = (e: Record<string, string>, g: Getter): void => {
   const leg = (key: string, label: string) => {
     if (isBlank(g(key))) put(e, key, `${label} is required.`);
     else put(e, key, intError(g(key), label, 0, 359));
   };
   leg('firstLegTransect', 'Bearing 1st leg');
   leg('secondLegTransect', '2nd leg');
+};
 
+const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
   if (isBlank(g('assessorName'))) e.assessorName = 'Evaluated by is required.';
-
   if (!isBlank(g('plotNumber'))) put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
   if (g('plotComment').length > 2000) e.plotComment = 'Comments must be 2000 characters or fewer.';
-
   if (!isBlank(g('basalAreaFactor'))) {
     put(e, 'basalAreaFactor', intError(g('basalAreaFactor'), 'BAF', 1, 99));
   }
@@ -101,7 +93,13 @@ export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<str
   if (!isBlank(g('fullCountArea'))) {
     put(e, 'fullCountArea', floatError(g('fullCountArea'), 'Full count area', 0.01, 9999.99, 2));
   }
+};
 
+const measurementMethodErrors = (
+  e: Record<string, string>,
+  g: Getter,
+  stratumType: string,
+): void => {
   // Measurement method: clear-cut → fixed-area radius only; otherwise exactly one of the three.
   const baf = !isBlank(g('basalAreaFactor'));
   const fixed = !isBlank(g('fixedAreaRadius'));
@@ -111,12 +109,31 @@ export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<str
       e.fixedAreaRadius = 'Fixed area radius is required for a clear-cut plot.';
     }
     if (baf && !e.basalAreaFactor) e.basalAreaFactor = 'BAF must be blank for a clear-cut plot.';
-    if (full && !e.fullCountArea)
+    if (full && !e.fullCountArea) {
       e.fullCountArea = 'Full count area must be blank for a clear-cut plot.';
+    }
   } else if ([baf, fixed, full].filter(Boolean).length !== 1 && !e.basalAreaFactor) {
     e.basalAreaFactor = 'Enter exactly one of BAF, fixed area radius, or full count area.';
   }
+};
 
+/**
+ * Plot-header field errors keyed by field key. Legacy parity: UTM (conditional on the "no signal"
+ * toggle), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
+ * numeric ranges and decimals, comment length, and the "exactly one measurement method" rule
+ * (clear-cut → fixed-area radius only). Split into rule groups to keep each simple.
+ */
+export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<string, string> => {
+  const e: Record<string, string> = {};
+  // Read a plot field as a trimmed string; non-string values (e.g. the table arrays) read as ''.
+  const g: Getter = (k) => {
+    const raw = (plot as Record<string, unknown>)[k];
+    return typeof raw === 'string' ? raw.trim() : '';
+  };
+  utmErrors(e, g, g('utmSignal') === 'N');
+  bearingErrors(e, g);
+  plotNumberErrors(e, g);
+  measurementMethodErrors(e, g, stratumType);
   return e;
 };
 

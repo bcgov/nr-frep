@@ -14,7 +14,8 @@ const isBlank = (value?: string): boolean => value == null || value.trim() === '
 const validateOverride = (value: string | undefined): string | null => {
   if (isBlank(value)) return null;
   const text = value!.trim();
-  if (!/^[-+]?\d*\.?\d+$/.test(text)) return 'FREP gross area override must be a number.';
+  if (!/^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text))
+    return 'FREP gross area override must be a number.';
   const number = Number(text);
   if (number < OVERRIDE_MIN || number > OVERRIDE_MAX) {
     return `FREP gross area override must be between ${OVERRIDE_MIN} and ${OVERRIDE_MAX}.`;

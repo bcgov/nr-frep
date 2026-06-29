@@ -21,7 +21,7 @@ export const teamCountOf = (data: AdministrationData): number => {
 const validateHours = (value: string | undefined, label: string): string | null => {
   if (isBlank(value)) return null;
   const text = value!.trim();
-  if (!/^[-+]?\d*\.?\d+$/.test(text)) return `${label} must be a number.`;
+  if (!/^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return `${label} must be a number.`;
   const number = Number(text);
   if (number < 0 || number > HOURS_MAX) return `${label} must be between 0 and ${HOURS_MAX}.`;
   const dot = text.indexOf('.');

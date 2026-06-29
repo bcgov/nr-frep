@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 // E2E_BASE_URL is set by `.github/workflows/reusable-tests.yml` at step
 // level (resolved from the PR slot or test/prod target). For local hand-runs,
@@ -10,11 +10,23 @@ import type { Page } from '@playwright/test';
 if (!process.env.E2E_BASE_URL) {
   throw new Error(
     'E2E_BASE_URL is not set. Export it before running Playwright ' +
-    '(e.g. `E2E_BASE_URL=http://localhost:3000 npm run e2e`).',
+      '(e.g. `E2E_BASE_URL=http://localhost:3000 npm run e2e`).',
   );
 }
 
 export const baseURL = process.env.E2E_BASE_URL;
+
+/**
+ * Assert the SPA rendered a real page rather than falling through to the React
+ * Router error boundary, which renders a "Global Error" heading
+ * ({@code GlobalErrorPage}).
+ */
+export const expectNoGlobalError = async (page: Page): Promise<void> => {
+  await expect(
+    page.getByRole('heading', { name: 'Global Error' }),
+    'global error boundary should not have rendered',
+  ).toHaveCount(0);
+};
 
 /** Path to the saved auth state produced by auth.setup.ts. */
 export const STORAGE_STATE = path.join(import.meta.dirname, '.auth', 'user.json');

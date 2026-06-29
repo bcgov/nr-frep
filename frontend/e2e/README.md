@@ -33,4 +33,15 @@ haven't run the login bootstrap yet.
 
 ## What's covered
 
-- **`smoke.spec.ts`** — visits `/dashboard` and the 404 path, and asserts the global error boundary never takes over.
+All read-only — they navigate and assert rendered UI, never writing to the backend.
+
+- **`smoke.spec.ts`** — the app root returns HTTP 200.
+- **`navigation.spec.ts`** — each top-level protected screen (Dashboard, Accepted Sites, Checklist
+  Search, District Random List, Reports) boots past the auth/loading overlay and renders its own
+  `<h1>`, without tripping the global error boundary.
+- **`dashboard.spec.ts`** — the Dashboard renders its screen tiles, and clicking a tile routes to
+  that screen.
+- **`not-found.spec.ts`** — an unknown route renders the graceful "Not Found" page rather than the
+  global error boundary.
+
+Shared helpers live in `utils.ts` (`gotoProtected`, `expectNoGlobalError`).

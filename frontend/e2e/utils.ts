@@ -28,6 +28,22 @@ export const expectNoGlobalError = async (page: Page): Promise<void> => {
   ).toHaveCount(0);
 };
 
+/**
+ * Wait until a data-loading page has settled into one of its terminal states — results table, empty
+ * message, or error banner — by convention `${prefix}-{table,empty,error}` data-testids.
+ */
+export const waitForSettled = async (page: Page, prefix: string): Promise<void> => {
+  await expect(
+    page
+      .locator(
+        `[data-testid="${prefix}-table"], [data-testid="${prefix}-empty"], ` +
+          `[data-testid="${prefix}-error"]`,
+      )
+      .first(),
+    `${prefix} did not reach a settled (table/empty/error) state`,
+  ).toBeVisible({ timeout: 60_000 });
+};
+
 /** Path to the saved auth state produced by auth.setup.ts. */
 export const STORAGE_STATE = path.join(import.meta.dirname, '.auth', 'user.json');
 

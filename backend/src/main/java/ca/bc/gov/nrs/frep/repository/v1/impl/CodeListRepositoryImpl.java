@@ -24,9 +24,33 @@ public class CodeListRepositoryImpl extends AbstractFrepRepository implements Co
 
   static final String PACKAGE_NAME = "FREP_CODE_LISTS";
   private static final String BGC_SEARCH_PACKAGE = "FREP_52_BGC_SEARCH";
+  // Corporate forestry code lists for the opening-search dropdowns, owned by THE (needs EXECUTE
+  // grant). Each proc returns a single OUT ref cursor of (code, description).
+  private static final String SIL_CODE_PACKAGE = "SIL_CODE_LISTS_V002";
 
   public CodeListRepositoryImpl(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
+  }
+
+  @Override
+  public List<Map<String, Object>> getBlockStatusCode() {
+    return executeCall("{call " + SIL_CODE_PACKAGE + ".GET_BLOCK_STATUS(?)}",
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepositoryImpl::rowToMap));
+  }
+
+  @Override
+  public List<Map<String, Object>> getOpenCategoryCode() {
+    return executeCall("{call " + SIL_CODE_PACKAGE + ".GET_OPEN_CATEGORY(?)}",
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepositoryImpl::rowToMap));
+  }
+
+  @Override
+  public List<Map<String, Object>> getOpeningStatusCode() {
+    return executeCall("{call " + SIL_CODE_PACKAGE + ".GET_OPENING_STATUS(?)}",
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepositoryImpl::rowToMap));
   }
 
   /**

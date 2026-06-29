@@ -115,6 +115,11 @@ public class ChrChecklistPersistenceService {
     );
     chrChecklist.setFrepChecklistStatusCode(status);
     chrChecklist.setDeviceCheckoutGuid(UuidUtils.asBytes(UUID.randomUUID()));
+    // Whoever takes a checklist offline to assess it becomes the assessor — default "Assessed by" to
+    // the checking-out user when it's still unset (this persists server-side immediately).
+    if (!ChrStringUtils.hasAValue(chrChecklist.getAssessedBy())) {
+      chrChecklist.setAssessedBy(userId);
+    }
     chrChecklist.setUpdateUserid(userId);
     chrChecklist.setUpdateTimestamp(new Date());
     return chrChecklist;
@@ -178,11 +183,10 @@ public class ChrChecklistPersistenceService {
     ChrChecklist chrChecklist = loadChecklistForSave(resource);
     chrChecklist.setDeviceCheckoutGuid(null);
     applyOpeningFields(chrChecklist, resource);
-    // "Assessed by" defaults to whoever first saves the opening info, and is otherwise left
-    // untouched — except it can be reassigned to the saving user via the "Assign it to me" action
-    // (the payload sends the current user's id). It is never set to anyone but the saving user.
-    if (!ChrStringUtils.hasAValue(chrChecklist.getAssessedBy())
-        || userId.equals(resource.getAssessedBy())) {
+    // "Assessed by" is set ONLY when the saving user explicitly assigns it to themselves via the
+    // "Assign it to me" action (the payload sends the current user's id). It is never auto-defaulted
+    // on first save, and never set to anyone but the saving user — so it stays unset until assigned.
+    if (userId.equals(resource.getAssessedBy())) {
       chrChecklist.setAssessedBy(userId);
     }
     finishSectionSave(chrChecklist, resource, userId);

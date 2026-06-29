@@ -41,6 +41,15 @@ public interface ConfigurationApiEndpoint {
   @GetMapping("/site-evaluation-codes")
   ResponseEntity<List<CodeOptionResponse>> getSiteEvaluationCodes();
 
+  @GetMapping("/block-status-codes")
+  ResponseEntity<List<CodeOptionResponse>> getBlockStatusCodes();
+
+  @GetMapping("/open-category-codes")
+  ResponseEntity<List<CodeOptionResponse>> getOpenCategoryCodes();
+
+  @GetMapping("/opening-status-codes")
+  ResponseEntity<List<CodeOptionResponse>> getOpeningStatusCodes();
+
   @GetMapping("/strata-types")
   ResponseEntity<List<CodeOptionResponse>> getStrataTypes();
 

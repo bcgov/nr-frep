@@ -83,6 +83,30 @@ public class ConfigurationService {
         .toList();
   }
 
+  /** Block-status options for the "Add Target Site" opening-search dropdown (SIL_CODE_LISTS). */
+  public List<CodeOptionResponse> getBlockStatusCodes() {
+    return codeListRepository.getBlockStatusCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Open-category options for the opening-search dropdown. */
+  public List<CodeOptionResponse> getOpenCategoryCodes() {
+    return codeListRepository.getOpenCategoryCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /** Opening-status options for the opening-search dropdown. */
+  public List<CodeOptionResponse> getOpeningStatusCodes() {
+    return codeListRepository.getOpeningStatusCode().stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
   /** Site-evaluation (rating) options for the FREP210 Opening "Rating" dropdown. */
   public List<CodeOptionResponse> getSiteEvaluationCodes() {
     return codeListRepository.getEvaluationCode().stream()

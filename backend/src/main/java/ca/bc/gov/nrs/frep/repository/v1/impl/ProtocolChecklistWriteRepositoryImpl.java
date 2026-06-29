@@ -836,6 +836,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
               direct != null ? direct.peopleOnBlock() : cs.getString(28),
               cs.getString(29),
               cs.getString(30),
+              null, // teamLeadName — resolved from FAM in ProtocolChecklistService
               cs.getString(31),
               cs.getString(32),
               direct != null ? direct.revisionCountAccess() : cs.getString(33),

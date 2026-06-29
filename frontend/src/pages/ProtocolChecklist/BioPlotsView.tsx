@@ -29,6 +29,11 @@ import type {
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import {
+  cwdRowErrors,
+  plotHeaderErrors,
+  standRowErrors,
+} from '@/pages/ProtocolChecklist/plotValidation';
 import API from '@/services/APIs';
 
 /**
@@ -94,9 +99,6 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const [current, setCurrent] = useState<BioPlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  // Set once a save is attempted on an invalid plot, so required-field highlights only appear after
-  // the user tries to save (not the moment the form opens). Reset whenever a fresh plot form opens.
-  const [attemptedSave, setAttemptedSave] = useState(false);
 
   // Reference data for the coded dropdowns. `evaluators` is null until loaded so we can show the
   // "no evaluator yet" notice only after the lookup resolves.
@@ -242,7 +244,6 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const select = async (plotId: string) => {
     setBusy(true);
     try {
-      setAttemptedSave(false);
       setCurrent(await API.protocolChecklist.getBioPlot(plotId));
     } catch (err) {
       reportError('Could not load the plot', err);
@@ -252,7 +253,6 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   };
 
   const addPlot = () => {
-    setAttemptedSave(false);
     setCurrent({
       stratumId,
       treeIndicator: 'N',
@@ -262,55 +262,44 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     });
   };
 
-  // Per-field validation message ('' = valid). Single source of truth shared by validate() (which
-  // blocks the save) and the inline field controls, so the toast and the field highlights stay in
-  // sync. UTM zone/easting/northing are required + length-checked only when a signal is available
-  // ("No UTM signal available" unchecked); when checked, those fields are disabled and exempt.
-  const plotFieldError = (key: string): string => {
-    const value = get(key).trim();
-    switch (key) {
-      case 'utmZone':
-        return noUtmSignal || value !== '' ? '' : 'Zone is required.';
-      case 'utmEasting':
-        if (noUtmSignal) return '';
-        if (value === '') return 'Easting is required.';
-        return /^\d{6}$/.test(value) ? '' : 'Easting must be exactly 6 digits.';
-      case 'utmNorthing':
-        if (noUtmSignal) return '';
-        if (value === '') return 'Northing is required.';
-        return /^\d{7}$/.test(value) ? '' : 'Northing must be exactly 7 digits.';
-      case 'firstLegTransect':
-        return value === '' ? 'Bearing 1st leg is required.' : '';
-      case 'secondLegTransect':
-        return value === '' ? '2nd leg is required.' : '';
-      default:
-        return '';
-    }
-  };
+  // Inline validation runs live off the edited plot (like SiteDetail): a field's error shows the
+  // moment it's invalid and clears when fixed. plotFieldError is a lookup into the header-error map;
+  // standError / cwdError look up a sub-table cell. The Save handler blocks while any remain — no toast.
+  const stratumType = selectedStratum?.strataTypeCode ?? '';
+  const headerErrors: Record<string, string> =
+    current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
+  const plotFieldError = (key: string): string => headerErrors[key] ?? '';
+  const standError = (index: number, colKey: string): string =>
+    standRowErrors(
+      ((current?.standTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
+    )[colKey] ?? '';
+  const cwdError = (index: number, colKey: string): string =>
+    cwdRowErrors(((current?.cwdTable ?? [])[index] ?? {}) as Record<string, string | undefined>)[
+      colKey
+    ] ?? '';
 
-  const validate = (): string[] => {
-    // Bearing legs are always required; UTM is required only when a signal is available (legacy
-    // submit checks frep.submit.biodiversity.plot.nobearingleg / .utmrequired). Enforce here so they
-    // can't reach submit.
-    const errs = ['utmZone', 'utmEasting', 'utmNorthing', 'firstLegTransect', 'secondLegTransect']
-      .map(plotFieldError)
-      .filter((e) => e !== '');
-    // When "Trees exist" is checked, the stand table must have at least one row (legacy submit check
-    // frep.submit.biodiversity.plot.notrees) — otherwise the indicator and the table disagree.
-    if (get('treeIndicator') === 'Y' && (current?.standTable?.length ?? 0) === 0) {
-      errs.push('"Trees exist" is checked — add at least one stand-table row, or uncheck it.');
-    }
-    return errs;
-  };
+  // When "Trees exist" is checked the stand table must have at least one row (legacy submit check
+  // frep.submit.biodiversity.plot.notrees) — otherwise the indicator and the table disagree.
+  const treesNeedRow = get('treeIndicator') === 'Y' && (current?.standTable?.length ?? 0) === 0;
+  const standHasError =
+    get('treeIndicator') === 'Y' &&
+    (current?.standTable ?? []).some(
+      (r) => Object.keys(standRowErrors(r as Record<string, string | undefined>)).length > 0,
+    );
+  const cwdHasError =
+    get('cwdTransectIndicator') === 'Y' &&
+    (current?.cwdTable ?? []).some(
+      (r) => Object.keys(cwdRowErrors(r as Record<string, string | undefined>)).length > 0,
+    );
+  const hasErrors =
+    !!current &&
+    !readOnly &&
+    (Object.keys(headerErrors).length > 0 || treesNeedRow || standHasError || cwdHasError);
 
   const handleSave = async () => {
     if (!current) return;
-    const errs = validate();
-    if (errs.length > 0) {
-      setAttemptedSave(true);
-      reportError('Please fix the following', new Error(errs.join(' ')));
-      return;
-    }
+    // Errors are already shown inline; just block the save while any remain (no error toast).
+    if (hasErrors) return;
     setBusy(true);
     try {
       // Tree#/Log# are the row order (legacy shows the row index, not an editable field).
@@ -445,7 +434,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         maxLength={maxLength}
         disabled={disabled}
         onChange={(e) => set(key, e.target.value)}
-        invalid={attemptedSave && error !== ''}
+        invalid={error !== ''}
         invalidText={error}
       />
     );
@@ -467,7 +456,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         labelText={requiredLabel(label, required)}
         value={get(key)}
         disabled={disabled}
-        invalid={attemptedSave && error !== ''}
+        invalid={error !== ''}
         invalidText={error}
         onChange={(e) => set(key, e.target.value)}
       >
@@ -498,9 +487,11 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     row: Record<string, string | undefined>,
     index: number,
     onChange: (index: number, key: string, value: string) => void,
+    cellError: (index: number, colKey: string) => string,
   ): ReactNode => {
     if (col.kind === 'index') return String(index + 1); // read-only row number
     const value = row[col.key] ?? '';
+    const error = cellError(index, col.key);
     if (col.kind) {
       const options = colOptions(col.kind);
       if (readOnly) return options.find((o) => o.code === value)?.description ?? value ?? '—';
@@ -511,6 +502,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           hideLabel
           size="sm"
           value={value}
+          invalid={error !== ''}
+          invalidText={error}
           onChange={(e) => onChange(index, col.key, e.target.value)}
         >
           <SelectItem value="" text="—" />
@@ -529,6 +522,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         size="sm"
         maxLength={col.maxLength}
         value={value}
+        invalid={error !== ''}
+        invalidText={error}
         onChange={(e) => onChange(index, col.key, e.target.value)}
       />
     );
@@ -544,6 +539,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     removeRowAt: (index: number) => void,
     addRow: () => void,
     addLabel: string,
+    cellError: (index: number, colKey: string) => string,
   ): ReactNode => (
     <>
       <table className="rip-field-grid">
@@ -566,7 +562,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           {items.map((row, index) => (
             <tr key={keyOf(index)}>
               {cols.map((c) => (
-                <td key={c.key}>{cell(caption, c, row, index, onChange)}</td>
+                <td key={c.key}>{cell(caption, c, row, index, onChange, cellError)}</td>
               ))}
               {!readOnly && (
                 <td>
@@ -740,7 +736,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
             </div>
             <div className="rip-form__grid">
               {textField('plotNumber', 'Plot #', 3)}
-              {selectField('assessorName', 'Evaluated by', evaluators ?? [])}
+              {selectField('assessorName', 'Evaluated by', evaluators ?? [], false, true)}
               {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
               {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
               {textField('utmNorthing', 'Northing', 7, noUtmSignal, !noUtmSignal)}
@@ -770,7 +766,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           {get('treeIndicator') === 'Y' && (
             <fieldset className="rip-form__group">
               <legend>Stand table (trees)</legend>
-              {attemptedSave && (current.standTable ?? []).length === 0 && (
+              {(current.standTable ?? []).length === 0 && (
                 <InlineNotification
                   kind="error"
                   title="Stand table required"
@@ -788,6 +784,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
                 removeStand,
                 addStand,
                 'Add new row',
+                standError,
               )}
             </fieldset>
           )}
@@ -808,6 +805,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
                 removeCwd,
                 addCwd,
                 'Add new row',
+                cwdError,
               )}
             </fieldset>
           )}

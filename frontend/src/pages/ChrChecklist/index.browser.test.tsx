@@ -74,6 +74,10 @@ const renderPage = () =>
 const sampleChecklist = {
   checklistID: '1001',
   status: 'ACT',
+  // The Opening tab requires these to save; pre-fill them (assessedBy = the mock user).
+  assessedBy: String.raw`IDIR\TESTER`,
+  evaluationDate: '2026-06-10',
+  generalLocation: '16 km on Finnegan FSR',
   features: [],
   contacts: [],
   pictures: [],
@@ -92,7 +96,7 @@ describe('ChrChecklistPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('CHR checklist 1001')).toBeTruthy();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
 
     // Opening info is the default tab: Edit reveals the form, Save persists only that section.
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -127,14 +131,17 @@ describe('ChrChecklistPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('CHR checklist 1001')).toBeTruthy();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     expect(screen.getByText('Offline copy')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     // Upload (check in: RDO → ACT) and drop the local draft happen before the submit call.
     expect(repo.upload).toHaveBeenCalledWith('1001');
     expect(repo.remove).toHaveBeenCalledWith('1001');
-    expect(api.submit).toHaveBeenCalledWith('1001', expect.objectContaining({ checklistID: '1001' }));
+    expect(api.submit).toHaveBeenCalledWith(
+      '1001',
+      expect.objectContaining({ checklistID: '1001' }),
+    );
   });
 
   it('lets an admin reactivate a checked-out (RDO) server checklist', async () => {
@@ -149,7 +156,7 @@ describe('ChrChecklistPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('CHR checklist 1001')).toBeTruthy();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     // Checked-out server copy is read-only and shows the recovery banner; tabs are not editable.
     expect(screen.getByText('Read only')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();

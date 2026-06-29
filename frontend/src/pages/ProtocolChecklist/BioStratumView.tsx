@@ -165,6 +165,8 @@ const REQUIRED_KEYS = new Set([
   'plotCount',
   'harvestAreaCode',
   'bgcZoneCode',
+  // Legacy FREP211 (PT #43888) requires BGC subzone in addition to BGC zone.
+  'bgcSubzoneCode',
 ]);
 
 const CONSTRAINT_PCT_KEYS = [
@@ -353,6 +355,158 @@ const isIntInRange = (s: string, min: number, max: number): boolean =>
 const isNumInRange = (s: string, min: number, max: number): boolean => {
   const n = Number(s);
   return s !== '' && !Number.isNaN(n) && n >= min && n <= max;
+};
+
+// --- Stratum validation, split into rule groups so each stays simple (mirrors
+// Frep211ValidationManager + the proc's validate()). Each group mutates the field-keyed error map
+// `e`; the first rule to flag a field wins (guarded by the `!e[k]` checks). `v` reads a trimmed value.
+type StratumErrors = Record<string, string>;
+type ValueReader = (key: string) => string;
+
+const decimalPlaces = (s: string): number => {
+  const dot = s.indexOf('.');
+  return dot < 0 ? 0 : s.length - dot - 1;
+};
+
+/** Range check for one field (whole-number or numeric); no-op when already errored or blank. */
+const checkRange = (
+  e: StratumErrors,
+  v: ValueReader,
+  k: string,
+  min: number,
+  max: number,
+  integer: boolean,
+) => {
+  if (e[k] || !v(k)) return;
+  const ok = integer ? isIntInRange(v(k), min, max) : isNumInRange(v(k), min, max);
+  if (!ok) {
+    const kind = integer ? 'a whole number' : 'a number';
+    e[k] = `${LABELS[k] ?? k} must be ${kind} from ${min} to ${max}.`;
+  }
+};
+
+const checkRequiredAndFormat = (e: StratumErrors, v: ValueReader) => {
+  REQUIRED_KEYS.forEach((k) => {
+    if (!v(k)) e[k] = `${LABELS[k] ?? k} is required.`;
+  });
+  if (!e.stratumNumber && !stratumNumberValid(v('stratumNumber'))) {
+    e.stratumNumber =
+      'Stratum Id must start with a letter, in letters-then-digits order — ' +
+      'up to 3 letters then 2 digits, max 5 characters, no spaces (e.g. AB12).';
+  }
+  // A stratum with 0 plots is only valid for a patch stratum type (legacy numplots.zero).
+  const type = v('strataTypeCode');
+  if (!e.plotCount && v('plotCount') === '0' && type && !type.startsWith('P')) {
+    e.plotCount = 'A stratum with 0 plots must be a patch stratum type.';
+  }
+};
+
+const checkSizeConsistency = (e: StratumErrors, v: ValueReader) => {
+  const type = v('strataTypeCode');
+  const harvestVal = v('harvestAreaCode');
+  const consistent = v('consistentMapInd');
+  if (consistent === 'Y' && !v('size')) {
+    e.size = 'Stratum size is required when consistent with map is "Yes".';
+  }
+  if ((consistent === 'N' || consistent === 'M') && !v('estimatedSize')) {
+    e.estimatedSize = 'Estimated size is required when not consistent with map.';
+  }
+  if (!e.size && consistent === 'M' && v('size') && Number(v('size')) !== 0) {
+    e.size = 'Stratum size must be blank when "Not mapped".';
+  }
+  if (harvestVal === 'PCH' && !v('patchWindthrowPct')) {
+    e.patchWindthrowPct = '% of trees windthrown is required for a patch reserve.';
+  }
+  if (type.startsWith('P') && !v('patchLocationCode')) {
+    e.patchLocationCode = 'Patch location is required for a patch stratum type.';
+  }
+};
+
+const checkNumericRanges = (e: StratumErrors, v: ValueReader) => {
+  checkRange(e, v, 'plotCount', 0, 99, true);
+  checkRange(e, v, 'size', 0.01, 9999.99, false);
+  checkRange(e, v, 'estimatedSize', 0.01, 9999.99, false);
+  checkRange(e, v, 'patchEstimatedOldestTreeAge', 0, 999, true);
+  checkRange(e, v, 'patchWindthrowPct', 0, 100, false);
+  CONSTRAINT_PCT_KEYS.forEach((k) => checkRange(e, v, k, 1, 100, true));
+  ECO_COUNT_KEYS.forEach((k) => checkRange(e, v, k, 1, 999, true));
+};
+
+const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
+  // Decimal-place limits: stratum/estimated size ≤2, % windthrown ≤1.
+  if (!e.size && v('size') && decimalPlaces(v('size')) > 2) {
+    e.size = 'Mapped stratum size can have at most 2 decimal places.';
+  }
+  if (!e.estimatedSize && v('estimatedSize') && decimalPlaces(v('estimatedSize')) > 2) {
+    e.estimatedSize = 'Estimated size can have at most 2 decimal places.';
+  }
+  if (!e.patchWindthrowPct && v('patchWindthrowPct') && decimalPlaces(v('patchWindthrowPct')) > 1) {
+    e.patchWindthrowPct = '% of trees windthrown can have at most 1 decimal place.';
+  }
+  // Free-text length limits.
+  if (!e.otherConstraint && v('otherConstraint').length > 50) {
+    e.otherConstraint = 'Other constraint must be 50 characters or fewer.';
+  }
+  if (!e.otherEcoAnchorDesc && v('otherEcoAnchorDesc').length > 30) {
+    e.otherEcoAnchorDesc = 'Other eco anchor description must be 30 characters or fewer.';
+  }
+  if (!e.patchGeneralComment && v('patchGeneralComment').length > 2000) {
+    e.patchGeneralComment = 'Patch general comment must be 2000 characters or fewer.';
+  }
+};
+
+const checkConstrainedTotal = (e: StratumErrors, v: ValueReader) => {
+  // Total constrained: 0–100, ≥ largest single %, and ≥1 constraint if total > 0.
+  const totalStr = v('constrainedTotal');
+  if (!totalStr || e.constrainedTotal) return;
+  if (!isIntInRange(totalStr, 0, 100)) {
+    e.constrainedTotal = 'Total constrained % must be a whole number from 0 to 100.';
+    return;
+  }
+  const total = Number(totalStr);
+  const maxSingle = Math.max(0, ...CONSTRAINT_PCT_KEYS.map((k) => Number(v(k)) || 0));
+  if (total > 0 && total < maxSingle) {
+    e.constrainedTotal = 'Total constrained must be at least the largest single constraint %.';
+  } else if (total > 0 && maxSingle === 0) {
+    e.constrainedTotal = 'Enter at least one constraint when total constrained is greater than 0.';
+  }
+};
+
+const checkCrossField = (
+  e: StratumErrors,
+  v: ValueReader,
+  treatmentChecked: (code: string) => boolean,
+) => {
+  const type = v('strataTypeCode');
+  const harvestVal = v('harvestAreaCode');
+  if (type && !e.harvestAreaCode) {
+    const isPatch = type.startsWith('P');
+    if (isPatch && harvestVal && harvestVal !== 'PCH') {
+      e.harvestAreaCode = 'A patch stratum type requires harvest area "Patch reserve".';
+    } else if (!isPatch && harvestVal === 'PCH') {
+      e.harvestAreaCode = 'Harvest area "Patch reserve" is only valid for a patch stratum type.';
+    }
+  }
+  if (!e.patchLocationCode) {
+    if (harvestVal === 'PCH' && v('patchLocationCode') === 'NA') {
+      e.patchLocationCode = 'Patch location cannot be N/A for a patch reserve.';
+    } else if (harvestVal === 'HDR' && v('patchLocationCode') && v('patchLocationCode') !== 'NA') {
+      e.patchLocationCode = 'Patch location must be N/A for dispersed retention.';
+    }
+  }
+  if (
+    treatmentChecked('N') &&
+    (treatmentChecked('F') || treatmentChecked('T') || v('otherWindthrowTreatment'))
+  ) {
+    e.otherWindthrowTreatment =
+      'Windthrow treatment "None" cannot be combined with other treatments.';
+  }
+  if (Boolean(v('otherConstraint')) !== Boolean(v('otherConstraintPct'))) {
+    e.otherConstraintPct = 'Other constraint needs both a name and a %.';
+  }
+  if (Boolean(v('otherEcoAnchorDesc')) !== Boolean(v('otherEcoAnchorCnt'))) {
+    e.otherEcoAnchorCnt = 'Other eco anchor needs both a description and a count.';
+  }
 };
 
 const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
@@ -575,112 +729,31 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     setBecOpen(false);
   };
 
-  // Mirror Frep211ValidationManager + the proc's validate().
-  const validate = (): string[] => {
-    const errs: string[] = [];
-    const v = (k: string) => get(k).trim();
-    const type = v('strataTypeCode');
-    const harvestVal = v('harvestAreaCode');
-    const consistent = v('consistentMapInd');
-
-    REQUIRED_KEYS.forEach((k) => {
-      if (!v(k)) errs.push(`${LABELS[k] ?? k} is required.`);
-    });
-    if (!stratumNumberValid(v('stratumNumber'))) {
-      errs.push(
-        'Stratum Id must start with a letter, in letters-then-digits order — ' +
-          'up to 3 letters then 2 digits, max 5 characters, no spaces (e.g. AB12).',
-      );
-    }
-
-    if (consistent === 'Y' && !v('size')) {
-      errs.push('Stratum size is required when consistent with map is "Yes".');
-    }
-    if ((consistent === 'N' || consistent === 'M') && !v('estimatedSize')) {
-      errs.push('Estimated size is required when not consistent with map.');
-    }
-    if (consistent === 'M' && v('size') && Number(v('size')) !== 0) {
-      errs.push('Stratum size must be blank when "Not mapped".');
-    }
-    if (harvestVal === 'PCH' && !v('patchWindthrowPct')) {
-      errs.push('% of trees windthrown is required for a patch reserve.');
-    }
-    if (type.startsWith('P') && !v('patchLocationCode')) {
-      errs.push('Patch location is required for a patch stratum type.');
-    }
-
-    const intIn = (k: string, min: number, max: number) => {
-      if (v(k) && !isIntInRange(v(k), min, max)) {
-        errs.push(`${LABELS[k] ?? k} must be a whole number from ${min} to ${max}.`);
-      }
-    };
-    const numIn = (k: string, min: number, max: number) => {
-      if (v(k) && !isNumInRange(v(k), min, max)) {
-        errs.push(`${LABELS[k] ?? k} must be a number from ${min} to ${max}.`);
-      }
-    };
-    intIn('plotCount', 0, 99);
-    numIn('size', 0.01, 9999.99);
-    numIn('estimatedSize', 0.01, 9999.99);
-    intIn('patchEstimatedOldestTreeAge', 0, 999);
-    numIn('patchWindthrowPct', 0, 100);
-    CONSTRAINT_PCT_KEYS.forEach((k) => intIn(k, 1, 100));
-    ECO_COUNT_KEYS.forEach((k) => intIn(k, 1, 999));
-
-    // Total constrained: 0–100, ≥ largest single %, and ≥1 constraint if total > 0.
-    const totalStr = v('constrainedTotal');
-    if (totalStr) {
-      if (!isIntInRange(totalStr, 0, 100)) {
-        errs.push('Total constrained % must be a whole number from 0 to 100.');
-      } else {
-        const total = Number(totalStr);
-        const maxSingle = Math.max(0, ...CONSTRAINT_PCT_KEYS.map((k) => Number(v(k)) || 0));
-        if (total > 0 && total < maxSingle) {
-          errs.push('Total constrained must be at least the largest single constraint %.');
-        }
-        if (total > 0 && maxSingle === 0) {
-          errs.push('Enter at least one constraint when total constrained is greater than 0.');
-        }
-      }
-    }
-
-    if (type) {
-      const isPatch = type.startsWith('P');
-      if (isPatch && harvestVal && harvestVal !== 'PCH') {
-        errs.push('A patch stratum type requires harvest area "Patch reserve".');
-      }
-      if (!isPatch && harvestVal === 'PCH') {
-        errs.push('Harvest area "Patch reserve" is only valid for a patch stratum type.');
-      }
-    }
-    if (harvestVal === 'PCH' && v('patchLocationCode') === 'NA') {
-      errs.push('Patch location cannot be N/A for a patch reserve.');
-    }
-    if (harvestVal === 'HDR' && v('patchLocationCode') && v('patchLocationCode') !== 'NA') {
-      errs.push('Patch location must be N/A for dispersed retention.');
-    }
-    if (
-      treatmentChecked('N') &&
-      (treatmentChecked('F') || treatmentChecked('T') || v('otherWindthrowTreatment'))
-    ) {
-      errs.push('Windthrow treatment "None" cannot be combined with other treatments.');
-    }
-    if (Boolean(v('otherConstraint')) !== Boolean(v('otherConstraintPct'))) {
-      errs.push('Other constraint needs both a name and a %.');
-    }
-    if (Boolean(v('otherEcoAnchorDesc')) !== Boolean(v('otherEcoAnchorCnt'))) {
-      errs.push('Other eco anchor needs both a description and a count.');
-    }
-    return errs;
+  // Mirror Frep211ValidationManager + the proc's validate(). Returns a field-keyed map (one message
+  // per field) so each error renders inline on its own input; the first rule to flag a field wins.
+  // Orchestrates the rule groups (each a small module-level function); the first rule to flag a
+  // field wins. Mirrors Frep211ValidationManager + the proc's validate().
+  const validate = (): Record<string, string> => {
+    const e: StratumErrors = {};
+    const v: ValueReader = (k) => get(k).trim();
+    checkRequiredAndFormat(e, v);
+    checkSizeConsistency(e, v);
+    checkNumericRanges(e, v);
+    checkDecimalsAndLengths(e, v);
+    checkConstrainedTotal(e, v);
+    checkCrossField(e, v, treatmentChecked);
+    return e;
   };
+
+  // Inline validation runs live off the edited stratum (like SiteDetail): a field's error shows the
+  // moment it's invalid and clears when fixed. The Save handler blocks while any remain — no toast.
+  const fieldErrors: Record<string, string> = current && !readOnly ? validate() : {};
+  const hasErrors = Object.keys(fieldErrors).length > 0;
 
   const handleSave = async () => {
     if (!current) return;
-    const errs = validate();
-    if (errs.length > 0) {
-      reportError('Please fix the following', new Error(errs.join(' ')));
-      return;
-    }
+    // Errors are already shown inline; just block the save while any remain (no error toast).
+    if (hasErrors) return;
     setBusy(true);
     try {
       await API.protocolChecklist.saveBioStratum(checklistId, current);
@@ -748,6 +821,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           labelText={lbl}
           value={get(key)}
           disabled={disabled}
+          invalid={Boolean(fieldErrors[key])}
+          invalidText={fieldErrors[key]}
           onChange={(e) => onChange(e.target.value)}
         >
           <SelectItem value="" text="—" />
@@ -763,6 +838,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       return (
         <DatePicker
           key={key}
+          className="frep-date-picker"
           datePickerType="single"
           dateFormat="Y-m-d"
           value={get(key) ? [get(key)] : []}
@@ -794,6 +870,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         labelText={lbl}
         value={get(key)}
         disabled={disabled}
+        invalid={Boolean(fieldErrors[key])}
+        invalidText={fieldErrors[key]}
         onChange={(e) => set(key, e.target.value)}
       />
     );
@@ -819,6 +897,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         size="sm"
         value={get(key)}
         disabled={disabledKey(key)}
+        invalid={Boolean(fieldErrors[key])}
+        invalidText={fieldErrors[key]}
         onChange={(e) => set(key, e.target.value)}
       />
     );

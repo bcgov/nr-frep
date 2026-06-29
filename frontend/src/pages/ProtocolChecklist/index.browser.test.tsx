@@ -77,6 +77,7 @@ describe('ProtocolChecklistPage submit', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
-    expect(await screen.findByText('frep.submit.common.teamlead')).toBeTruthy();
+    // frep.submit.common.teamlead is mapped to friendly text (title "Administration tab" + detail).
+    expect(await screen.findByText('Team Lead is mandatory for submit.')).toBeTruthy();
   });
 });

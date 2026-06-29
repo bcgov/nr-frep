@@ -108,6 +108,14 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
   const note = data?.noteDescription ?? '';
   const showEditControls = canEdit && !submitted;
 
+  const readOnlyNote = note ? (
+    <div className="protocol-checklist__field">
+      <span className="protocol-checklist__value protocol-checklist__multiline">{note}</span>
+    </div>
+  ) : (
+    <p>No notes yet</p>
+  );
+
   return (
     <div className="rip-form">
       <div className="protocol-checklist__section-actions">
@@ -141,11 +149,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
           }
         />
       ) : (
-        <div className="protocol-checklist__field">
-          <span className="protocol-checklist__value protocol-checklist__multiline">
-            {note || '—'}
-          </span>
-        </div>
+        readOnlyNote
       )}
     </div>
   );

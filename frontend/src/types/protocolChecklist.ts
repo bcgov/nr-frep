@@ -261,6 +261,7 @@ export type AdministrationData = {
   peopleOnBlock?: string;
   additionalComments?: string;
   teamLeadNameId?: string;
+  teamLeadName?: string;
   teamLeadRevisionCount?: string;
   revisionCount?: string;
   revisionCountAccess?: string;

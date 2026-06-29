@@ -15,6 +15,7 @@ import { CodeSelect, DateField, IndicatorCheckbox, TextField } from '@/pages/Chr
 import type { Contact } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { useNotification } from '@/context/notification/useNotification';
 import { CONTACT_ROLE_CODES } from '@/pages/ChrChecklist/codeLists';
 
 const roleLabel = (code?: string) =>
@@ -37,6 +38,7 @@ const Contacts: FC<{
   busy: boolean;
 }> = ({ contacts, onSave, readOnly, busy }) => {
   const confirm = useConfirm();
+  const { display } = useNotification();
   const [form, setForm] = useState<FormState | null>(null);
 
   const openAdd = () =>
@@ -47,10 +49,26 @@ const Contacts: FC<{
 
   const save = async () => {
     if (!form) return;
+    const { draft } = form;
+    // Nothing meaningful entered — don't persist a blank contact (mirrors SiteDetail's guard).
+    const isEmpty =
+      !draft.firstName?.trim() &&
+      !draft.lastName?.trim() &&
+      !draft.roleCode?.trim() &&
+      !draft.organization?.trim();
+    if (isEmpty) {
+      display({
+        kind: 'info',
+        title: 'Nothing to save',
+        subtitle: 'Enter a name, role, or organization before saving the contact.',
+        timeout: 6000,
+      });
+      return;
+    }
     const next =
       form.index === null
-        ? [...contacts, form.draft]
-        : contacts.map((c, i) => (i === form.index ? form.draft : c));
+        ? [...contacts, draft]
+        : contacts.map((c, i) => (i === form.index ? draft : c));
     if (await onSave(next)) setForm(null);
   };
   const remove = async (index: number) => {
@@ -88,6 +106,7 @@ const Contacts: FC<{
               labelText="First name"
               value={draft.firstName}
               disabled={readOnly}
+              maxLength={40}
               onChange={(v) => setField({ firstName: v })}
             />
             <TextField
@@ -95,6 +114,7 @@ const Contacts: FC<{
               labelText="Last name"
               value={draft.lastName}
               disabled={readOnly}
+              maxLength={40}
               onChange={(v) => setField({ lastName: v })}
             />
             <CodeSelect
@@ -110,6 +130,7 @@ const Contacts: FC<{
               labelText="Organization"
               value={draft.organization}
               disabled={readOnly}
+              maxLength={60}
               onChange={(v) => setField({ organization: v })}
             />
             <IndicatorCheckbox

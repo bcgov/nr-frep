@@ -8,6 +8,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
 
@@ -29,6 +30,18 @@ type Draft = Pick<
 >;
 
 /**
+ * Field-level errors keyed by field, mirroring the Biodiversity tabs' live-inline validation and the
+ * CHR submit checks: Evaluation date, General location and Assessed by are all required.
+ */
+const openingErrors = (d: Draft): Record<string, string> => {
+  const e: Record<string, string> = {};
+  if (!d.evaluationDate?.trim()) e.evaluationDate = 'Evaluation date is required.';
+  if (!d.generalLocation?.trim()) e.generalLocation = 'General location is required.';
+  if (!d.assessedBy?.trim()) e.assessedBy = 'Assessed by is required — choose “Assign it to me”.';
+  return e;
+};
+
+/**
  * Section 1 — opening information. Read-only by default with an Edit / Save / Cancel toggle,
  * mirroring the Biodiversity Opening tab. Save persists the whole CHR checklist via `onSave`.
  */
@@ -42,12 +55,13 @@ const OpeningInformation: FC<{
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
 
-  // "Assessed by" is read-only. It's set server-side to whoever first saves, and can be reassigned
-  // to the current user via "Assign it to me" (which only takes effect on save). Before the first
-  // save, default the display to the current user so it reflects who will be recorded.
+  // "Assessed by" is read-only and is set ONLY when the user explicitly assigns it to themselves via
+  // "Assign it to me" (which takes effect on save). It's never auto-defaulted to the current user, so
+  // it shows "—" until assigned — making the assignment a deliberate action that can't be silently
+  // missed (and submit requires it).
   const me = user?.providerUsername;
-  const assessedBy = value.assessedBy || me;
-  const editAssessedBy = draft.assessedBy || me;
+  const assessedBy = value.assessedBy;
+  const editAssessedBy = draft.assessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
   const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
@@ -61,7 +75,11 @@ const OpeningInformation: FC<{
     });
     setEditing(true);
   };
+  // Live inline validation off the draft (like the Biodiversity tabs); Save blocks while any remain.
+  const fieldErrors: Record<string, string> = editing ? openingErrors(draft) : {};
+  const hasErrors = Object.keys(fieldErrors).length > 0;
   const save = async () => {
+    if (hasErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
 
@@ -88,19 +106,6 @@ const OpeningInformation: FC<{
       </div>
 
       <fieldset className="rip-form__group">
-        <legend>Site</legend>
-        <div className="rip-form__grid">
-          <RoField label="District" value={value.district ?? value.orgUnitName} />
-          <RoField label="Opening ID" value={value.openingID} />
-          <RoField label="Licensee" value={value.licensee} />
-          <RoField label="Cutting permit" value={value.cuttingPermit} />
-          <RoField label="Block" value={value.block} />
-          <RoField label="Client" value={value.client} />
-          <RoField label="Year of harvest" value={value.yearOfHarvest} />
-        </div>
-      </fieldset>
-
-      <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
         {editing ? (
           <>
@@ -117,14 +122,18 @@ const OpeningInformation: FC<{
             <div className="rip-form__grid">
               <DateField
                 id="chr-evaluation-date"
-                labelText="Evaluation date"
+                labelText={requiredLabel('Evaluation date', true)}
                 value={draft.evaluationDate}
+                invalid={Boolean(fieldErrors.evaluationDate)}
+                invalidText={fieldErrors.evaluationDate}
                 onChange={(v) => setDraft((d) => ({ ...d, evaluationDate: v }))}
               />
-              <div className="protocol-checklist__field">
-                <span className="protocol-checklist__label">Assessed by</span>
+              <div className="protocol-checklist__field chr-checklist__assessed-by__field">
+                <span className="protocol-checklist__label">
+                  {requiredLabel('Assessed by', true)}
+                </span>
                 <span className="protocol-checklist__value chr-checklist__assessed-by__row">
-                  <span>{editAssessedBy || '—'}</span>
+                  {editAssessedBy && <span>{editAssessedBy}</span>}
                   {canAssignToMe && (
                     <button
                       type="button"
@@ -134,12 +143,19 @@ const OpeningInformation: FC<{
                       Assign it to me
                     </button>
                   )}
+                  {!editAssessedBy && !canAssignToMe && <span>—</span>}
                 </span>
+                {fieldErrors.assessedBy && (
+                  <span className="chr-checklist__assessed-by__error">
+                    {fieldErrors.assessedBy}
+                  </span>
+                )}
               </div>
               <TextField
                 id="chr-first-nation"
                 labelText="First Nations' Place Name or Block Name"
                 value={draft.firstNationName}
+                maxLength={200}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
               <IndicatorCheckbox
@@ -151,8 +167,11 @@ const OpeningInformation: FC<{
             </div>
             <TextAreaField
               id="chr-general-location"
-              labelText="General location"
+              labelText={requiredLabel('General location', true)}
               value={draft.generalLocation}
+              maxLength={200}
+              invalid={Boolean(fieldErrors.generalLocation)}
+              invalidText={fieldErrors.generalLocation}
               onChange={(v) => setDraft((d) => ({ ...d, generalLocation: v }))}
             />
           </>

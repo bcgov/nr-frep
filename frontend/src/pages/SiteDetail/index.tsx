@@ -19,7 +19,7 @@ import {
   Tooltip,
 } from '@carbon/react';
 import { useEffect, useMemo, useState, type FC } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import type { RejectionReason } from '@/types/configuration';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
@@ -209,9 +209,17 @@ const HeaderRow: FC<{ label: string; value: string | null | undefined }> = ({ la
 
 const SiteDetailPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { display } = useNotification();
   const { canEdit } = useAuthorization();
+
+  // "Add Target Site" create mode: no selected site yet, loaded by opening (FREP200 → SIL56 picker).
+  // On save the proc creates the site + checklists, then we redirect to the real /site-detail/:id.
+  const createOpeningId = searchParams.get('openingId') ?? '';
+  const createOrgUnit = searchParams.get('orgUnit') ?? '';
+  const createYear = searchParams.get('year') ?? '';
+  const isCreate = createOpeningId !== '';
 
   const [detail, setDetail] = useState<SiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -254,20 +262,30 @@ const SiteDetailPage: FC = () => {
       });
       return;
     }
+    const payload = toSave.map((r) => ({
+      resourceValueId: r.resourceValueId,
+      resourceType: r.resourceType,
+      statusCode: r.statusCode,
+      rejectionReasonCode: r.rejectionReasonCode,
+      rationale: r.rationale,
+      otherComments: r.otherComments,
+      revisionCount: r.revisionCount,
+    }));
     setBusy(true);
     try {
-      const saved = await API.siteDetail.saveResources(
-        id,
-        toSave.map((r) => ({
-          resourceValueId: r.resourceValueId,
-          resourceType: r.resourceType,
-          statusCode: r.statusCode,
-          rejectionReasonCode: r.rejectionReasonCode,
-          rationale: r.rationale,
-          otherComments: r.otherComments,
-          revisionCount: r.revisionCount,
-        })),
-      );
+      if (isCreate) {
+        // Create the targeted site (spawns the checklists), then land on the real site-detail page.
+        const created = await API.siteDetail.createTargetedSite({
+          openingId: createOpeningId,
+          orgUnit: createOrgUnit,
+          effectiveYear: createYear,
+          resources: payload,
+        });
+        display({ kind: 'success', title: 'Targeted site created', timeout: 4000 });
+        navigate(`/site-detail/${created.frepSelectedSiteId}`, { replace: true });
+        return;
+      }
+      const saved = await API.siteDetail.saveResources(id, payload);
       setDetail(saved);
       display({ kind: 'success', title: 'Site resources saved', timeout: 4000 });
     } catch (err) {
@@ -283,14 +301,17 @@ const SiteDetailPage: FC = () => {
   };
 
   useEffect(() => {
-    if (!id) return;
+    if (!id && !isCreate) return;
     let cancelled = false;
     setLoading(true);
     setNotFound(false);
     setHasError(false);
 
-    API.siteDetail
-      .getSiteDetail(id)
+    const request = isCreate
+      ? API.siteDetail.getSiteDetailByOpening(createOpeningId, createYear)
+      : API.siteDetail.getSiteDetail(id);
+
+    request
       .then((data) => {
         if (cancelled) return;
         setDetail(data);
@@ -318,7 +339,7 @@ const SiteDetailPage: FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [display, id]);
+  }, [display, id, isCreate, createOpeningId, createYear]);
 
   // Keep the editable draft in sync with the loaded detail (and re-seed it after a
   // save). Authorized users edit in place; everyone else sees a read-only table.
@@ -359,7 +380,7 @@ const SiteDetailPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>Site Details</h1>
+          <h1>{isCreate ? 'New Targeted Site' : 'Site Details'}</h1>
         </div>
       </Column>
 

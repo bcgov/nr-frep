@@ -1,4 +1,4 @@
-import { Add, TrashCan } from '@carbon/icons-react';
+import { Add, TrashCan, WarningFilled } from '@carbon/icons-react';
 import {
   Accordion,
   AccordionItem,
@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react';
-import { useState, type FC } from 'react';
+import { useState, type FC, type ReactNode } from 'react';
 
 import {
   CodeSelect,
@@ -21,6 +21,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Feature, Indicator, OtherPlannedManagementStrategy } from '@/types/chrChecklist';
@@ -31,8 +32,19 @@ import {
   RATING_CODES,
   RESERVE_TYPE_CODES,
 } from '@/pages/ChrChecklist/codeLists';
+import { featureErrors } from '@/pages/ChrChecklist/featureValidation';
 
 type PatchFn = (patch: Partial<Feature>) => void;
+
+// Which accordion section each lightweight-validation field lives in, so a section header can show
+// an error badge and stay expanded while any of its fields is invalid (otherwise a blocked Save
+// leaves the error hidden inside a collapsed section). Sections not listed never carry these errors.
+const SECTION_ERROR_FIELDS: Record<string, string[]> = {
+  Description: ['borden', 'ofCMTsNumber', 'standofMonumentalCedar', 'otherdescription'],
+  Location: ['locationOtherDescription', 'locationReservetype'],
+  Effectiveness: ['bufferWidthMeter'],
+  Summary: ['q4Description', 'q5Description', 'q6Description', 'featureRating'],
+};
 
 // Legacy Q3 radio (ManagementEffectiveness.vue): No / Don't Know / Yes → N / D / Y.
 const Q3_OPTIONS: CodeOption[] = [
@@ -40,9 +52,6 @@ const Q3_OPTIONS: CodeOption[] = [
   { code: 'D', label: "Don't know" },
   { code: 'Y', label: 'Yes' },
 ];
-
-// Borden number mask from the legacy SiteFeatureDescription.vue (1–4 trailing digits allowed).
-const BORDEN_RE = /^[A-U][a-l][A-W][a-x]-\d{1,4}$/;
 
 /** A management-strategy row rendered as FN / AIA / SP checkboxes. */
 const PLANNING_STRATEGIES: Array<{
@@ -228,8 +237,30 @@ const FeatureEditor: FC<{
     );
   };
 
-  const bordenValue = str('borden') ?? '';
-  const bordenInvalid = bordenValue.length > 0 && !BORDEN_RE.test(bordenValue);
+  // Live inline validation (lightweight high-value subset; the full rule set runs server-side at
+  // submit). Empty when read-only. Save is blocked in FeatureList while any error remains.
+  const fieldErrors: Record<string, string> = readOnly ? {} : featureErrors(feature);
+  const err = (key: string): string | undefined => fieldErrors[key];
+
+  // Accordion sections track their own open state; a section also stays open (and shows a badge)
+  // while it holds an error, so a blocked Save never hides the reason inside a collapsed section.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ Description: true });
+  const sectionErrorCount = (section: string): number =>
+    (SECTION_ERROR_FIELDS[section] ?? []).filter((key) => Boolean(fieldErrors[key])).length;
+  const isOpen = (section: string): boolean =>
+    Boolean(openSections[section]) || sectionErrorCount(section) > 0;
+  const toggleSection = (section: string) =>
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  const sectionTitle = (section: string): ReactNode => {
+    const count = sectionErrorCount(section);
+    if (count === 0) return section;
+    return (
+      <span className="feature-accordion__title">
+        <span>{section}</span>
+        <WarningFilled size={16} className="feature-accordion__error-icon" />
+      </span>
+    );
+  };
 
   const isComposite = on('compositeFeatureInd');
 
@@ -306,7 +337,11 @@ const FeatureEditor: FC<{
 
   return (
     <Accordion>
-      <AccordionItem title="Description" open>
+      <AccordionItem
+        title={sectionTitle('Description')}
+        open={isOpen('Description')}
+        onHeadingClick={() => toggleSection('Description')}
+      >
         {/* Description */}
         <fieldset className="rip-form__group">
           <legend>Feature description</legend>
@@ -355,8 +390,8 @@ const FeatureEditor: FC<{
                 disabled={readOnly}
                 maxLength={9}
                 helperText="Format: AaBb-0000"
-                invalid={bordenInvalid}
-                invalidText="Must match the Borden format, e.g. AaBb-0000."
+                invalid={Boolean(err('borden'))}
+                invalidText={err('borden')}
                 onChange={(v) => onPatch({ borden: v })}
               />
             )}
@@ -435,9 +470,11 @@ const FeatureEditor: FC<{
             {on('ofCMTs') && (
               <TextField
                 id="feat-cmt-num"
-                labelText="Number of CMTs"
+                labelText={requiredLabel('Number of CMTs', true)}
                 value={str('ofCMTsNumber')}
                 disabled={readOnly}
+                invalid={Boolean(err('ofCMTsNumber'))}
+                invalidText={err('ofCMTsNumber')}
                 onChange={(v) => onPatch({ ofCMTsNumber: v })}
               />
             )}
@@ -445,9 +482,11 @@ const FeatureEditor: FC<{
             {on('ofMonumentalCedars') && (
               <TextField
                 id="feat-mon-num"
-                labelText="Stand of monumental cedar"
+                labelText={requiredLabel('Stand of monumental cedar', true)}
                 value={str('standofMonumentalCedar')}
                 disabled={readOnly}
+                invalid={Boolean(err('standofMonumentalCedar'))}
+                invalidText={err('standofMonumentalCedar')}
                 onChange={(v) => onPatch({ standofMonumentalCedar: v })}
               />
             )}
@@ -455,9 +494,11 @@ const FeatureEditor: FC<{
             {on('other') && (
               <TextField
                 id="feat-other-desc"
-                labelText="Other description"
+                labelText={requiredLabel('Other description', true)}
                 value={str('otherdescription')}
                 disabled={readOnly}
+                invalid={Boolean(err('otherdescription'))}
+                invalidText={err('otherdescription')}
                 onChange={(v) => onPatch({ otherdescription: v })}
               />
             )}
@@ -465,7 +506,11 @@ const FeatureEditor: FC<{
         </fieldset>
       </AccordionItem>
 
-      <AccordionItem title="Location">
+      <AccordionItem
+        title={sectionTitle('Location')}
+        open={isOpen('Location')}
+        onHeadingClick={() => toggleSection('Location')}
+      >
         {/* Location */}
         <div className="rip-form__grid chr-checklist__check-grid">
           {chk('inharvestedarea', 'In harvested area')}
@@ -476,9 +521,11 @@ const FeatureEditor: FC<{
           {on('locationOther') && (
             <TextField
               id="feat-loc-other"
-              labelText="Other location description"
+              labelText={requiredLabel('Other location description', true)}
               value={str('locationOtherDescription')}
               disabled={readOnly}
+              invalid={Boolean(err('locationOtherDescription'))}
+              invalidText={err('locationOtherDescription')}
               onChange={(v) => onPatch({ locationOtherDescription: v })}
             />
           )}
@@ -486,10 +533,12 @@ const FeatureEditor: FC<{
           {on('inReserve') && (
             <CodeSelect
               id="feat-reserve"
-              labelText="Reserve type"
+              labelText={requiredLabel('Reserve type', true)}
               value={str('locationReservetype')}
               options={RESERVE_TYPE_CODES}
               disabled={readOnly}
+              invalid={Boolean(err('locationReservetype'))}
+              invalidText={err('locationReservetype')}
               onChange={(v) => onPatch({ locationReservetype: v })}
             />
           )}
@@ -636,7 +685,11 @@ const FeatureEditor: FC<{
         )}
       </AccordionItem>
 
-      <AccordionItem title="Effectiveness">
+      <AccordionItem
+        title={sectionTitle('Effectiveness')}
+        open={isOpen('Effectiveness')}
+        onHeadingClick={() => toggleSection('Effectiveness')}
+      >
         {/* Effectiveness */}
         <div className="rip-form__grid chr-checklist__check-grid">
           {isComposite &&
@@ -692,9 +745,11 @@ const FeatureEditor: FC<{
           {on('retainabuffer') && (
             <TextField
               id="feat-eff-buffer"
-              labelText="Buffer width (m)"
+              labelText={requiredLabel('Buffer width (m)', true)}
               value={str('bufferWidthMeter')}
               disabled={readOnly}
+              invalid={Boolean(err('bufferWidthMeter'))}
+              invalidText={err('bufferWidthMeter')}
               onChange={(v) => onPatch({ bufferWidthMeter: v })}
             />
           )}
@@ -837,7 +892,11 @@ const FeatureEditor: FC<{
         </div>
       </AccordionItem>
 
-      <AccordionItem title="Summary">
+      <AccordionItem
+        title={sectionTitle('Summary')}
+        open={isOpen('Summary')}
+        onHeadingClick={() => toggleSection('Summary')}
+      >
         {/* Summary */}
         <div className="chr-checklist__two-col">
           {chk(
@@ -848,9 +907,11 @@ const FeatureEditor: FC<{
             {on('q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature') && (
               <TextAreaField
                 id="feat-q4-desc"
-                labelText="Q4 description"
+                labelText={requiredLabel('Q4 description', true)}
                 value={str('q4Description')}
                 disabled={readOnly}
+                invalid={Boolean(err('q4Description'))}
+                invalidText={err('q4Description')}
                 onChange={(v) => onPatch({ q4Description: v })}
               />
             )}
@@ -865,9 +926,11 @@ const FeatureEditor: FC<{
             ) && (
               <TextAreaField
                 id="feat-q5-desc"
-                labelText="Q5 description"
+                labelText={requiredLabel('Q5 description', true)}
                 value={str('q5Description')}
                 disabled={readOnly}
+                invalid={Boolean(err('q5Description'))}
+                invalidText={err('q5Description')}
                 onChange={(v) => onPatch({ q5Description: v })}
               />
             )}
@@ -882,20 +945,24 @@ const FeatureEditor: FC<{
             ) && (
               <TextAreaField
                 id="feat-q6-desc"
-                labelText="Q6 description"
+                labelText={requiredLabel('Q6 description', true)}
                 value={str('q6Description')}
                 disabled={readOnly}
+                invalid={Boolean(err('q6Description'))}
+                invalidText={err('q6Description')}
                 onChange={(v) => onPatch({ q6Description: v })}
               />
             )}
           </div>
           <CodeSelect
             id="feat-rating"
-            labelText="Feature rating"
+            labelText={requiredLabel('Feature rating', true)}
             value={str('featureRating')}
             options={RATING_CODES}
             includeBlank
             disabled={readOnly}
+            invalid={Boolean(err('featureRating'))}
+            invalidText={err('featureRating')}
             onChange={(v) => onPatch({ featureRating: v })}
           />
           <TextAreaField

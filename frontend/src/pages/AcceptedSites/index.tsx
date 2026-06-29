@@ -1,4 +1,4 @@
-import { Map as MapIcon } from '@carbon/icons-react';
+import { Add, Map as MapIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -17,7 +17,7 @@ import {
   Tag,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 import PrintableTable from '@/components/core/PrintableTable';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
@@ -79,6 +79,7 @@ function toTableRows(sites: AcceptedSite[]) {
 
 const AcceptedSitesPage: FC = () => {
   const { display } = useNotification();
+  const navigate = useNavigate();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -91,6 +92,13 @@ const AcceptedSitesPage: FC = () => {
 
   // Opening whose polygon map is shown in the modal (null = closed).
   const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
+  // "Add target site" opens the opening-search page with the current district context.
+  const goToAddTargetSite = () => {
+    const params = new URLSearchParams({ orgUnit, year: effectiveYear });
+    const name = orgUnits.find((u) => u.orgUnitNo === orgUnit)?.orgUnitName;
+    if (name) params.set('orgUnitName', name);
+    navigate(`/add-target-site?${params.toString()}`);
+  };
 
   const [sites, setSites] = useState<AcceptedSite[]>([]);
   const [loading, setLoading] = useState(false);
@@ -318,14 +326,26 @@ const AcceptedSitesPage: FC = () => {
                       tableRows.length === 1 ? '' : 's'
                     }`}
                     actions={
-                      <Button
-                        kind="tertiary"
-                        size="md"
-                        onClick={() => globalThis.print()}
-                        disabled={loading || configLoading || tableRows.length === 0}
-                      >
-                        Print
-                      </Button>
+                      <>
+                        {/* Add Target Site: enabled once a district is selected (legacy gate). */}
+                        <Button
+                          kind="tertiary"
+                          size="md"
+                          renderIcon={Add}
+                          onClick={goToAddTargetSite}
+                          disabled={configLoading || !orgUnit}
+                        >
+                          Add target site
+                        </Button>
+                        <Button
+                          kind="tertiary"
+                          size="md"
+                          onClick={() => globalThis.print()}
+                          disabled={loading || configLoading || tableRows.length === 0}
+                        >
+                          Print
+                        </Button>
+                      </>
                     }
                   />
                   <Table {...getTableProps()}>

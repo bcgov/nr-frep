@@ -1,4 +1,12 @@
-import { ArrowLeft } from '@carbon/icons-react';
+import {
+  ArrowLeft,
+  Attachment,
+  Document,
+  Information,
+  Location,
+  Notebook,
+  UserMultiple,
+} from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -11,6 +19,7 @@ import {
   TabPanels,
   Tabs,
   Tag,
+  Tile,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -36,6 +45,8 @@ import {
   type Picture,
   type ValidationError,
 } from '@/types/chrChecklist';
+import { statusTagType } from '@/utils/checklistStatus';
+import { formatShortDate } from '@/utils/date';
 
 // Reuse the Biodiversity checklist form primitives (rip-form / rip-form__group / rip-form__grid /
 // protocol-checklist__field) so CHR tab content is structured the same way.
@@ -68,6 +79,23 @@ const tabForField = (field?: string): string => {
   if (OPENING_FIELDS.has(field)) return 'Opening info';
   if (BLOCK_SUMMARY_FIELDS.has(field)) return 'Block summary';
   return 'Features';
+};
+
+// The feature number from an error's entityLabel (`"<checklistId>-<featureLabel>"`); '' for a
+// checklist-level error (no trailing label) so the title falls back to the plain tab name.
+const featureLabelFromEntity = (entityLabel?: string): string => {
+  if (!entityLabel) return '';
+  const dash = entityLabel.lastIndexOf('-');
+  return dash === -1 ? '' : entityLabel.slice(dash + 1);
+};
+
+// Notification title for a submit-validation error: the owning tab, plus the feature number for
+// feature-level errors so a stack of "Features" cards is distinguishable.
+const errorTitle = (e: ValidationError): string => {
+  const tab = tabForField(e.field);
+  if (tab !== 'Features') return tab;
+  const label = featureLabelFromEntity(e.entityLabel);
+  return label ? `Features — Feature ${label}` : tab;
 };
 
 /** Strip browser data-URL prefixes from new photos and recompute the MRVA before sending. */
@@ -459,6 +487,16 @@ const ChrChecklistPage: FC = () => {
     );
   }
 
+  // Tombstone header cell — always rendered (with an em-dash when empty) so the layout stays
+  // consistent, matching the Opening info "Site" section.
+  const headerCell = (label: string, value?: string) => (
+    <div key={label}>
+      <span className="protocol-checklist__label">{label}</span>
+      <span>{value || '—'}</span>
+    </div>
+  );
+  const orgUnit = [checkList.orgUnitCode, checkList.orgUnitName].filter(Boolean).join(' - ');
+
   return (
     <Grid fullWidth className="default-grid chr-checklist">
       <Column sm={4} md={8} lg={16}>
@@ -472,17 +510,12 @@ const ChrChecklistPage: FC = () => {
             <ArrowLeft /> Back
           </button>
           <div className="chr-checklist__title-row">
-            <h1>CHR checklist {checkList.checklistID}</h1>
-            {isOfflineCopy ? (
-              // An offline copy is always RDO ("Checked out") under the hood — but it's YOUR
-              // editable local copy, so the "Offline copy" tag conveys that. Showing "Checked out"
-              // alongside it (and an editable form) reads as a contradiction, so suppress it here.
+            <h1>{`${checkList.checklistID}-Cultural Heritage`}</h1>
+            {/* The status itself lives in the tombstone grid below; an offline copy is your editable
+                local copy (always RDO under the hood), so flag that here instead. */}
+            {isOfflineCopy && (
               <Tag type="teal" size="sm">
                 Offline copy
-              </Tag>
-            ) : (
-              <Tag type="blue" size="sm">
-                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
               </Tag>
             )}
             {!online && (
@@ -495,6 +528,32 @@ const ChrChecklistPage: FC = () => {
             </Tag>
           </div>
         </div>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <Tile className="protocol-checklist__summary">
+          <div className="protocol-checklist__summary-grid">
+            {/* Tombstone header laid out like the Biodiversity checklist. Fields the CHR record
+                doesn't carry (client name, opening number) are simply omitted. */}
+            {headerCell('Master list year', checkList.effectiveYear)}
+            {headerCell('Org unit', orgUnit)}
+            {headerCell('Checklist', checkList.checklistID)}
+            {headerCell('Client', checkList.client)}
+            {headerCell('Opening ID', checkList.openingID)}
+            {headerCell('Licence', checkList.licensee)}
+            {headerCell('Cutting permit', checkList.cuttingPermit)}
+            {headerCell('Cut block', checkList.block)}
+            {headerCell('Year of harvest', checkList.yearOfHarvest)}
+            <div>
+              <span className="protocol-checklist__label">Status</span>
+              <Tag type={statusTagType(checkList.status)} size="sm">
+                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
+              </Tag>
+            </div>
+            {headerCell('Evaluator', checkList.assessedBy)}
+            {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
+          </div>
+        </Tile>
       </Column>
 
       {!canEdit && (
@@ -578,7 +637,7 @@ const ChrChecklistPage: FC = () => {
               <InlineNotification
                 key={`err-${i}`}
                 kind="error"
-                title={tabForField(e.field)}
+                title={errorTitle(e)}
                 subtitle={e.message}
                 hideCloseButton
                 lowContrast
@@ -591,12 +650,12 @@ const ChrChecklistPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tabs selectedIndex={tab} onChange={({ selectedIndex }) => setTab(selectedIndex)}>
           <TabList aria-label="CHR checklist sections" contained>
-            <Tab>Opening info</Tab>
-            <Tab>Block summary</Tab>
-            <Tab>Contacts</Tab>
-            <Tab>Features</Tab>
-            <Tab>Notes</Tab>
-            <Tab>Attachments</Tab>
+            <Tab renderIcon={Information}>Opening info</Tab>
+            <Tab renderIcon={Document}>Block summary</Tab>
+            <Tab renderIcon={UserMultiple}>Contacts</Tab>
+            <Tab renderIcon={Location}>Features</Tab>
+            <Tab renderIcon={Notebook}>Notes</Tab>
+            <Tab renderIcon={Attachment}>Attachments</Tab>
           </TabList>
           <TabPanels>
             <TabPanel>
@@ -641,6 +700,7 @@ const ChrChecklistPage: FC = () => {
                 onSave={savePhotos}
                 readOnly={readOnly}
                 busy={busy}
+                active={tab === 5}
               />
             </TabPanel>
           </TabPanels>

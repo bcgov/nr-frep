@@ -54,14 +54,18 @@ const Notes: FC<{
         <TextAreaField
           id="chr-notes"
           labelText="Notes"
+          rows={10}
           value={draft}
           onChange={(v) => setDraft(v)}
         />
-      ) : (
+      ) : value.commentaires ? (
         <div className="protocol-checklist__field">
-          <span className="protocol-checklist__label">Notes</span>
-          <span className="protocol-checklist__value">{value.commentaires || '—'}</span>
+          <span className="protocol-checklist__value protocol-checklist__multiline">
+            {value.commentaires}
+          </span>
         </div>
+      ) : (
+        <p>No notes yet</p>
       )}
     </div>
   );

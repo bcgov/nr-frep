@@ -140,12 +140,12 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
             setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
           }
         />
-      ) : (
+      ) : note ? (
         <div className="protocol-checklist__field">
-          <span className="protocol-checklist__value protocol-checklist__multiline">
-            {note || '—'}
-          </span>
+          <span className="protocol-checklist__value protocol-checklist__multiline">{note}</span>
         </div>
+      ) : (
+        <p>No notes yet</p>
       )}
     </div>
   );

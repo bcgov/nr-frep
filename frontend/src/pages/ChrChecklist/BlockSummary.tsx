@@ -3,6 +3,7 @@ import { Button, Tag } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import { CodeSelect, IndicatorCheckbox, TextAreaField } from '@/pages/ChrChecklist/fields';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
 
@@ -52,6 +53,38 @@ type Draft = Pick<
 >;
 
 /**
+ * Field-level errors keyed by field, mirroring the Biodiversity tabs' live-inline validation and the
+ * CHR submit checks: Rating is required, and a description is required for any Q8/Q9/Q10 answered Yes.
+ */
+const blockSummaryErrors = (d: Draft): Record<string, string> => {
+  const e: Record<string, string> = {};
+  if (!d.rating) e.rating = 'A rating is required.';
+  if (
+    isYes(d.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock) &&
+    !d.q8Comments?.trim()
+  ) {
+    e.q8Comments = 'A description is required.';
+  }
+  if (
+    isYes(
+      d.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
+    ) &&
+    !d.q9Comments?.trim()
+  ) {
+    e.q9Comments = 'A description is required.';
+  }
+  if (
+    isYes(
+      d.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
+    ) &&
+    !d.q10Comments?.trim()
+  ) {
+    e.q10Comments = 'A description is required.';
+  }
+  return e;
+};
+
+/**
  * Section — block summary: Q8/Q9/Q10, block rating + rationale, computed MRVA, comments.
  * Read-only by default with an Edit / Save / Cancel toggle, mirroring the Biodiversity Opening tab.
  * Save persists the whole CHR checklist via `onSave`.
@@ -82,7 +115,11 @@ const BlockSummary: FC<{
     });
     setEditing(true);
   };
+  // Live inline validation off the draft (like the Biodiversity tabs); Save blocks while any remain.
+  const fieldErrors: Record<string, string> = editing ? blockSummaryErrors(draft) : {};
+  const hasErrors = Object.keys(fieldErrors).length > 0;
   const save = async () => {
+    if (hasErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -181,8 +218,11 @@ const BlockSummary: FC<{
               ) ? (
                 <TextAreaField
                   id="chr-q8-comments"
-                  labelText="Q8 description"
+                  labelText={requiredLabel('Q8 description', true)}
                   value={draft.q8Comments}
+                  maxLength={2000}
+                  invalid={Boolean(fieldErrors.q8Comments)}
+                  invalidText={fieldErrors.q8Comments}
                   onChange={(v) => set({ q8Comments: v })}
                 />
               ) : (
@@ -207,8 +247,11 @@ const BlockSummary: FC<{
               ) ? (
                 <TextAreaField
                   id="chr-q9-comments"
-                  labelText="Q9 description"
+                  labelText={requiredLabel('Q9 description', true)}
                   value={draft.q9Comments}
+                  maxLength={2000}
+                  invalid={Boolean(fieldErrors.q9Comments)}
+                  invalidText={fieldErrors.q9Comments}
                   onChange={(v) => set({ q9Comments: v })}
                 />
               ) : (
@@ -233,8 +276,11 @@ const BlockSummary: FC<{
               ) ? (
                 <TextAreaField
                   id="chr-q10-comments"
-                  labelText="Q10 description"
+                  labelText={requiredLabel('Q10 description', true)}
                   value={draft.q10Comments}
+                  maxLength={2000}
+                  invalid={Boolean(fieldErrors.q10Comments)}
+                  invalidText={fieldErrors.q10Comments}
                   onChange={(v) => set({ q10Comments: v })}
                 />
               ) : (
@@ -249,10 +295,12 @@ const BlockSummary: FC<{
             <div className="rip-form__grid">
               <CodeSelect
                 id="chr-block-rating"
-                labelText="Rating"
+                labelText={requiredLabel('Rating', true)}
                 value={draft.rating}
                 options={RATING_CODES}
                 includeBlank
+                invalid={Boolean(fieldErrors.rating)}
+                invalidText={fieldErrors.rating}
                 onChange={(v) => set({ rating: v })}
               />
               {mrvaCell}
@@ -261,6 +309,7 @@ const BlockSummary: FC<{
               id="chr-rating-rationale"
               labelText="Rating rationale"
               value={draft.ratingRationale}
+              maxLength={2000}
               onChange={(v) => set({ ratingRationale: v })}
             />
           </fieldset>

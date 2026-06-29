@@ -214,6 +214,23 @@
   max-width: 28rem;
 }
 
+// Description + Date on one row (CHR Attachments upload card). Wraps to two rows on narrow widths.
+.attach-card__fields {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.attach-card__field--desc {
+  flex: 2 1 18rem;
+}
+
+.attach-card__field--date {
+  flex: 1 1 12rem;
+}
+
 .attach-drop {
   display: flex;
   align-items: center;
@@ -363,8 +380,13 @@
 }
 
 // Selected evaluators (team lead + members) shown at the bottom of the Evaluation team section.
+// Stack the lead / members blocks with a gap, and sit close under the heading (the large top
+// margin is only needed in edit mode, where the evaluator search precedes this block).
 .rip-form__selected-evaluators {
-  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
 }
 
 .rip-form__evaluator-list {
@@ -411,8 +433,11 @@
 
   // Row-label / value text uses the same label type as the rest of the form (was the
   // larger default body font, which looked inconsistent next to the header + field labels).
+  // Middle-align so a tall cell (e.g. an attachment preview image) keeps the other cells centered
+  // rather than dropping their text to the baseline.
   td {
     @include type.type-style('label-01');
+    vertical-align: middle;
   }
 
   thead th {

@@ -1,0 +1,115 @@
+// "Add target site" page (legacy SIL56 Opening Tenure Search).
+
+.add-target-site__header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+
+  h1 {
+    margin: 0.25rem 0 0;
+  }
+}
+
+.add-target-site__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cds-link-primary, #0f62fe);
+  cursor: pointer;
+}
+
+.add-target-site__subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.opening-search__intro {
+  margin-bottom: 1rem;
+}
+
+.opening-search__filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1.5rem;
+}
+
+// Opening-number field: a standard label over four mapsheet segment boxes that share the grid cell.
+.opening-search__opening {
+  display: flex;
+  flex-direction: column;
+}
+
+.opening-search__opening-parts {
+  display: flex;
+  gap: 0.25rem;
+
+  > * {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+}
+
+.opening-search__actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.opening-search__action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+// Client lookup field: read-only name display + lookup/clear icon buttons aligned to its baseline.
+.opening-search__client {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+
+  > .cds--form-item,
+  > .cds--text-input-wrapper {
+    flex: 1 1 auto;
+  }
+
+  // Carbon clears the field background for read-only inputs; restore white to match the other fields.
+  .cds--text-input {
+    background-color: var(--cds-field, #ffffff);
+  }
+}
+
+.opening-search__client-buttons {
+  display: flex;
+}
+
+.opening-search__empty {
+  margin-top: 1rem;
+}
+
+.opening-search__table {
+  margin-top: 1rem;
+}
+
+// Centre the Actions column (header + the target button / "Checking…" loader).
+.opening-search__col-actions {
+  text-align: center;
+
+  .cds--inline-loading {
+    justify-content: center;
+  }
+}
+
+// "+ Add" target button: icon before the label.
+.opening-search__add-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}

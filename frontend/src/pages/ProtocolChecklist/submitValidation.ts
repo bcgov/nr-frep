@@ -11,6 +11,10 @@
  */
 
 const CATALOG: Record<string, string> = {
+  // Administration-tab checks shared across protocols (legacy frep.submit.common.*).
+  'frep.submit.common.teamlead': 'Administration tab: Team Lead is mandatory for submit.',
+  'frep.submit.common.evaluation':
+    'Administration tab: Evaluation Date is mandatory for submission.',
   'frep.submit.biodiversity.failure':
     'Biodiversity submission failed for an unknown reason. Please try again.',
   'frep.submit.biodiversity.stratum.mandatory':

@@ -9,7 +9,7 @@ import {
   TextArea,
   TextInput,
 } from '@carbon/react';
-import { useCallback, useEffect, useState, type FC } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 
 import EvaluatorSearch from '@/pages/ProtocolChecklist/EvaluatorSearch';
 
@@ -18,6 +18,11 @@ import type { AdministrationData } from '@/types/protocolChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import {
+  teamMemberAddBlocked,
+  todayIso,
+  validateAdministration,
+} from '@/pages/ProtocolChecklist/administrationValidation';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
@@ -83,6 +88,15 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Inline validation runs live off the edited data (like SiteDetail): a field's error shows the
+  // moment it's invalid and clears as soon as it's fixed. The Save handler just blocks while any
+  // remain — no separate error toast.
+  const fieldErrors = useMemo<Record<string, string>>(
+    () => (editing && data ? validateAdministration(data) : {}),
+    [editing, data],
+  );
+  const hasErrors = Object.keys(fieldErrors).length > 0;
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -205,6 +219,8 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
 
   const handleSave = async () => {
     if (!data) return;
+    // Errors are already shown inline; just block the save while any remain (no error toast).
+    if (hasErrors) return;
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveAdministration(protocol, checklistId, data);
@@ -258,6 +274,17 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
   );
 
   const handleSelectEvaluator = (user: CodeOption, asTeamLead: boolean) => {
+    // Legacy guard: People on block must leave room before another evaluator can be added.
+    if (teamMemberAddBlocked(data)) {
+      display({
+        kind: 'warning',
+        title: 'Increase people on block first',
+        subtitle:
+          'In order to add a Team Member or a Team Lead you must first increase the people on block field.',
+        timeout: 7000,
+      });
+      return;
+    }
     void addMember(user.code, asTeamLead);
   };
 
@@ -272,6 +299,8 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
         labelText={field.label}
         value={get(field.key)}
         onChange={(e) => set(field.key, e.target.value)}
+        invalid={Boolean(fieldErrors[field.key])}
+        invalidText={fieldErrors[field.key]}
       />
     ) : (
       <div className="protocol-checklist__field" key={field.key}>
@@ -294,8 +323,10 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
     }
     return (
       <DatePicker
+        className="frep-date-picker"
         datePickerType="single"
         dateFormat="Y-m-d"
+        maxDate={todayIso()}
         value={value ? [value] : []}
         onChange={(dates: Date[]) =>
           set('evaluationDate', dates[0] ? dates[0].toISOString().slice(0, 10) : '')
@@ -305,6 +336,8 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
           id="admin-evaluationDate"
           labelText="Evaluation date"
           placeholder="YYYY-MM-DD"
+          invalid={Boolean(fieldErrors.evaluationDate)}
+          invalidText={fieldErrors.evaluationDate}
         />
       </DatePicker>
     );
@@ -404,7 +437,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
             <span className="protocol-checklist__value">
               {leadUserid ? (
                 <span className="rip-form__evaluator">
-                  {leadUserid}
+                  {data.teamLeadName || leadUserid}
                   {editing && (
                     <Button
                       kind="danger--ghost"

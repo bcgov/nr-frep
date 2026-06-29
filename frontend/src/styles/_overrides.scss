@@ -135,6 +135,26 @@ input[type="number"] {
   inline-size: 100%;
 }
 
+// Shared opt-in fix: add `className="frep-date-picker"` to any single-mode <DatePicker> to make it
+// fill its cell. The className lands on the outer `.cds--form-item`; compounding the two classes
+// gives enough specificity to beat Carbon's hard-coded 18rem input (the bare `.cds--date-picker--single`
+// rule above loses to Carbon on specificity). MasterListAdmin/Reports carry their own page version.
+.frep-date-picker.#{variables.$bcgov-prefix}--form-item {
+  inline-size: 100%;
+
+  .#{variables.$bcgov-prefix}--date-picker,
+  .#{variables.$bcgov-prefix}--date-picker-container,
+  .#{variables.$bcgov-prefix}--date-picker-input__wrapper,
+  .#{variables.$bcgov-prefix}--date-picker__input {
+    inline-size: 100%;
+  }
+
+  .#{variables.$bcgov-prefix}--date-picker-input__wrapper > span {
+    display: block;
+    inline-size: 100%;
+  }
+}
+
 /* ------------------ Time Picker ---------------------------
 - Border-radius: 4px on left top corner and right top corners, no border-radius in the middle
 ----------------------------------------------------------------- */

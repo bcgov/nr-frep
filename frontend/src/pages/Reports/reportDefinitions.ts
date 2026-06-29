@@ -49,7 +49,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-block',
     title: 'Biodiversity — Block Table extract',
-    summary: 'Opening/block-level biodiversity checklist data (FREPRPT001).',
+    summary: 'Opening/block-level biodiversity checklist data.',
     availableFormats: ['csv'],
     fields: BIODIVERSITY_EXTRACT_FIELDS,
     layout: BIODIVERSITY_EXTRACT_LAYOUT,
@@ -57,7 +57,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-stratum',
     title: 'Biodiversity — Stratum Table extract',
-    summary: 'Stratum-summary biodiversity data (FREPRPT002).',
+    summary: 'Stratum-summary biodiversity data.',
     availableFormats: ['csv'],
     fields: BIODIVERSITY_EXTRACT_FIELDS,
     layout: BIODIVERSITY_EXTRACT_LAYOUT,
@@ -65,7 +65,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-plot',
     title: 'Biodiversity — Plot Table extract',
-    summary: 'Plot-level biodiversity data (FREPRPT003).',
+    summary: 'Plot-level biodiversity data.',
     availableFormats: ['csv'],
     fields: BIODIVERSITY_EXTRACT_FIELDS,
     layout: BIODIVERSITY_EXTRACT_LAYOUT,
@@ -73,7 +73,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-stand',
     title: 'Biodiversity — Stand Table extract',
-    summary: 'Stand-table (tree) biodiversity data (FREPRPT004).',
+    summary: 'Stand-table (tree) biodiversity data.',
     availableFormats: ['csv'],
     fields: BIODIVERSITY_EXTRACT_FIELDS,
     layout: BIODIVERSITY_EXTRACT_LAYOUT,
@@ -81,7 +81,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-cwd',
     title: 'Biodiversity — Coarse Woody Debris extract',
-    summary: 'CWD-table biodiversity data (FREPRPT005).',
+    summary: 'CWD-table biodiversity data.',
     availableFormats: ['csv'],
     fields: BIODIVERSITY_EXTRACT_FIELDS,
     layout: BIODIVERSITY_EXTRACT_LAYOUT,
@@ -93,8 +93,8 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     id: 'checklist-completion-status',
     title: 'Checklist Completion Status',
     summary:
-      'Resource-value checklist completion statistics by region and district, for a year range '
-      + '(FREPRPT012). Counts in parentheses are unsubmitted checklists.',
+      'Resource-value checklist completion statistics by region and district, for a year range. '
+      + 'Counts in parentheses are unsubmitted checklists.',
     availableFormats: ['pdf'],
     fields: {
       dateRange: 'optional',
@@ -113,7 +113,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     title: 'Checklist Rejection Reason',
     summary:
       'Accepted vs. rejected checklist counts by region and district, with the rejection reasons '
-      + 'per district, for an org unit and year range (FREPRPT018).',
+      + 'per district, for an org unit and year range.',
     availableFormats: ['pdf'],
     fields: {
       orgUnit: 'optional',
@@ -129,7 +129,7 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     id: 'chr-data-extract',
     title: 'Cultural Heritage — Data Extract',
     summary:
-      'Cultural Heritage Resource checklist, site and feature detail (FREPRPT022). Filtered by '
+      'Cultural Heritage Resource checklist, site and feature detail. Filtered by '
       + 'org unit, master-list year, checklist status and resource value.',
     availableFormats: ['csv'],
     fields: {

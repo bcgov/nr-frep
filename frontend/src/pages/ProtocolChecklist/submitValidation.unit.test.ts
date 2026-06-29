@@ -35,6 +35,17 @@ describe('formatSubmitValidation', () => {
     });
   });
 
+  it('maps the Administration-tab team lead and evaluation date submit checks', () => {
+    expect(formatSubmitValidation('frep.submit.common.teamlead')).toEqual({
+      title: 'Administration tab',
+      detail: 'Team Lead is mandatory for submit.',
+    });
+    expect(formatSubmitValidation('frep.submit.common.evaluation')).toEqual({
+      title: 'Administration tab',
+      detail: 'Evaluation Date is mandatory for submission.',
+    });
+  });
+
   it('falls back to the raw code for unknown keys', () => {
     expect(formatSubmitValidation('frep.submit.something.else:9')).toEqual({
       title: 'Validation',

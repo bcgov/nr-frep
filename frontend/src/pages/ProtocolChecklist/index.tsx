@@ -1,4 +1,14 @@
-import { ArrowLeft } from '@carbon/icons-react';
+import {
+  ArrowLeft,
+  Attachment,
+  Document,
+  Information,
+  Layers,
+  Location,
+  Notebook,
+  Settings,
+  type CarbonIconType,
+} from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -36,6 +46,17 @@ import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
 import './protocolChecklist.scss';
+
+// Per-section tab icons (keyed by the backend section id), mirroring the contained-tab style with
+// an icon beside each label. Unknown sections fall back to a generic document icon.
+const SECTION_ICONS: Record<string, CarbonIconType> = {
+  administration: Settings,
+  opening: Information,
+  stratum: Layers,
+  plots: Location,
+  notes: Notebook,
+  attachments: Attachment,
+};
 
 const extractValidationErrors = (err: unknown): string[] | null => {
   const body = (err as { body?: { validationErrors?: string[] } })?.body;
@@ -205,7 +226,7 @@ const ProtocolChecklistPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>{protocolType ? PROTOCOL_TYPE_LABEL[protocolType] : 'Protocol checklist'}</h1>
+          <h1>{protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}</h1>
         </div>
       </Column>
 
@@ -327,7 +348,9 @@ const ProtocolChecklistPage: FC = () => {
             >
               <TabList aria-label="Checklist sections" contained>
                 {checklist.sections.map((section) => (
-                  <Tab key={section.id}>{section.title}</Tab>
+                  <Tab key={section.id} renderIcon={SECTION_ICONS[section.id] ?? Document}>
+                    {section.title}
+                  </Tab>
                 ))}
               </TabList>
               <TabPanels>

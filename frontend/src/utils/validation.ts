@@ -6,6 +6,9 @@
 export interface ValidationError {
   field: string;
   message: string;
+  /** Which entity the error belongs to. For a checklist it is the checklist id; for a CHR feature it
+   * is `"<checklistId>-<featureLabel>"`, so a feature-level error can name the feature it came from. */
+  entityLabel?: string;
 }
 
 export interface ValidationResult {

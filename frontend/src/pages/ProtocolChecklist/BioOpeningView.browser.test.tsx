@@ -36,6 +36,10 @@ describe('BioOpeningView', () => {
     api.getBiodiversityOpening.mockResolvedValue({
       checklistId: '9001',
       locationDescription: 'old',
+      // All four legacy-required fields filled so the save isn't blocked by inline validation.
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
       revisionCount: '3',
     });
     api.saveBiodiversityOpening.mockResolvedValue({ checklistId: '9001', revisionCount: '4' });

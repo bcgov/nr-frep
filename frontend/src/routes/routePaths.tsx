@@ -31,6 +31,7 @@ import { Navigate, type RouteObject } from 'react-router-dom';
 
 import Layout from '@/components/Layout';
 import AcceptedSitesPage from '@/pages/AcceptedSites';
+import AddTargetSitePage from '@/pages/AddTargetSite';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
 import ChrChecklistPage from '@/pages/ChrChecklist';
 import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
@@ -143,6 +144,30 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: true,
+  },
+  {
+    // "Add target site" opening search, reached from Accepted Sites (?orgUnit=&orgUnitName=&year=).
+    path: '/add-target-site',
+    id: 'Add Target Site',
+    icon: TableSplit,
+    element: (
+      <Layout>
+        <AddTargetSitePage />
+      </Layout>
+    ),
+    isSideMenu: false,
+  },
+  {
+    // "Add Target Site" create flow: ?openingId=&orgUnit=&year=. Static segment wins over :id.
+    path: '/site-detail/new',
+    id: 'New Targeted Site',
+    icon: DocumentTasks,
+    element: (
+      <Layout>
+        <SiteDetailPage />
+      </Layout>
+    ),
+    isSideMenu: false,
   },
   {
     path: '/site-detail/:id',

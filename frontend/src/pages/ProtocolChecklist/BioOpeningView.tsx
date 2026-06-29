@@ -1,6 +1,6 @@
 import { Edit } from '@carbon/icons-react';
 import { Button, Select, SelectItem, SkeletonText, TextArea, TextInput } from '@carbon/react';
-import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
 import { requiredLabel } from '@/utils/requiredLabel';
 
@@ -8,6 +8,7 @@ import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
 import API from '@/services/APIs';
 import { formatShortDate } from '@/utils/date';
 
@@ -32,9 +33,15 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Set once the user tries to save with a blank Location description, so the required-field error
-  // only shows after a save attempt (not the moment they enter edit mode).
-  const [attemptedSave, setAttemptedSave] = useState(false);
+
+  // Inline validation runs live off the edited data (like SiteDetail): a field's error shows the
+  // moment it's invalid and clears as soon as it's fixed. The Save handler just blocks while any
+  // remain — no separate error toast.
+  const fieldErrors = useMemo<Record<string, string>>(
+    () => (editing && data ? validateOpening(data) : {}),
+    [editing, data],
+  );
+  const hasErrors = Object.keys(fieldErrors).length > 0;
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -92,25 +99,13 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const handleSave = async () => {
     if (!data) return;
-    // Location description is the one mandatory Opening field (legacy submit check
-    // frep.submit.biodiversity.opening checks COUNT(location_description)). Block the save up front so
-    // it never has to surface as a submit-time validation error.
-    if (get('locationDescription').trim() === '') {
-      setAttemptedSave(true);
-      display({
-        kind: 'error',
-        title: 'Location description is required',
-        subtitle: 'Enter a Location description before saving the Opening.',
-        timeout: 6000,
-      });
-      return;
-    }
+    // Errors are already shown inline; just block the save while any remain (no error toast).
+    if (hasErrors) return;
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveBiodiversityOpening(checklistId, data);
       setData(saved);
       setEditing(false);
-      setAttemptedSave(false);
       display({ kind: 'success', title: 'Opening saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -128,7 +123,6 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       const fresh = await API.protocolChecklist.getBiodiversityOpening(checklistId);
       setData(fresh);
-      setAttemptedSave(false);
       setEditing(true);
     } catch (err) {
       reportError("We couldn't load the opening", err);
@@ -139,7 +133,6 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const cancel = () => {
     loadData();
-    setAttemptedSave(false);
     setEditing(false);
   };
 
@@ -167,6 +160,8 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         labelText={label}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
+        invalid={Boolean(fieldErrors[key])}
+        invalidText={fieldErrors[key]}
       />
     ) : (
       cell(label, get(key))
@@ -180,8 +175,8 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         labelText={requiredLabel(label, required)}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
-        invalid={required && attemptedSave && get(key).trim() === ''}
-        invalidText={`${label} is required.`}
+        invalid={Boolean(fieldErrors[key])}
+        invalidText={fieldErrors[key]}
       />
     ) : (
       cell(label, get(key), true)
@@ -194,14 +189,17 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     key: keyof BiodiversityOpening,
     label: string,
     options: CodeOption[] = answers,
+    required = false,
   ): ReactNode =>
     editing ? (
       <Select
         key={key}
         id={`bio-${key}`}
-        labelText={label}
+        labelText={requiredLabel(label, required)}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
+        invalid={Boolean(fieldErrors[key])}
+        invalidText={fieldErrors[key]}
       >
         <SelectItem value="" text="—" />
         {options.map((o) => (
@@ -258,9 +256,18 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       <fieldset className="rip-form__group">
         <legend>Innovative practices</legend>
         <div className="rip-form__grid">
-          {select('innovativePracticeInd', 'Innovative / unique forest practices used?')}
+          {select(
+            'innovativePracticeInd',
+            'Innovative / unique forest practices used?',
+            answers,
+            true,
+          )}
         </div>
-        {textarea('innovativePracticesComment', 'Please describe')}
+        {textarea(
+          'innovativePracticesComment',
+          'Please describe',
+          get('innovativePracticeInd') === 'Y',
+        )}
       </fieldset>
 
       <fieldset className="rip-form__group">
@@ -270,6 +277,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
             'frepSiteEvaluationCode',
             'Rating (stand-level biodiversity maintained)',
             ratings,
+            true,
           )}
         </div>
         {textarea('evaluatorOpinionComment', 'Rationale')}
@@ -278,9 +286,9 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       <fieldset className="rip-form__group">
         <legend>Invasive plants</legend>
         <div className="rip-form__grid">
-          {select('invasivePlantIndicator', 'Invasive plant species present?')}
+          {select('invasivePlantIndicator', 'Invasive plant species present?', answers, true)}
         </div>
-        {textarea('invasivePlantComment', 'Comments')}
+        {textarea('invasivePlantComment', 'Comments', get('invasivePlantIndicator') === 'Y')}
       </fieldset>
     </div>
   );

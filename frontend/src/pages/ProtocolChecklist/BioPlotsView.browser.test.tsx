@@ -68,6 +68,12 @@ describe('BioPlotsView', () => {
     await userEvent.click(await screen.findByRole('checkbox', { name: 'No UTM signal available' }));
     await userEvent.type(await screen.findByLabelText('Bearing 1st leg', { exact: false }), '120');
     await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
+    // Evaluated by is required, and exactly one measurement method (BAF) must be entered.
+    await userEvent.selectOptions(
+      screen.getByLabelText('Evaluated by', { exact: false }),
+      'IDIR\\JDOE',
+    );
+    await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
 
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
@@ -92,9 +98,14 @@ describe('BioPlotsView', () => {
     expect(screen.getByText('Bearing 1st leg is required.')).toBeTruthy();
     expect(screen.getByText('2nd leg is required.')).toBeTruthy();
 
-    // Fill both legs → save proceeds.
+    // Fill both legs, Evaluated by, and one measurement method → save proceeds.
     await userEvent.type(screen.getByLabelText('Bearing 1st leg', { exact: false }), '120');
     await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
+    await userEvent.selectOptions(
+      screen.getByLabelText('Evaluated by', { exact: false }),
+      'IDIR\\JDOE',
+    );
+    await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
   });

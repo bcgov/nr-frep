@@ -10,6 +10,7 @@ describe('Photos display', () => {
         readOnly={false}
         busy={false}
         onSave={vi.fn()}
+        active={false}
         pictures={[{ id: '7', code: 'QUJD', mimeTypeCode: 'image/jpg', description: 'site' }]}
       />,
     );
@@ -23,6 +24,7 @@ describe('Photos display', () => {
         readOnly={false}
         busy={false}
         onSave={vi.fn()}
+        active={false}
         pictures={[{ id: '8', code: 'data:image/png;base64,XYZ', description: 'cam' }]}
       />,
     );

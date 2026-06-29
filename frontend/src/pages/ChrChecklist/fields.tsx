@@ -10,7 +10,7 @@ import {
 
 import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
 export const IndicatorCheckbox: FC<{
@@ -31,7 +31,7 @@ export const IndicatorCheckbox: FC<{
 
 export const TextField: FC<{
   id: string;
-  labelText: string;
+  labelText: ReactNode;
   value: string | undefined;
   onChange: (next: string) => void;
   disabled?: boolean;
@@ -74,7 +74,7 @@ export const TextField: FC<{
  */
 export const DateField: FC<{
   id: string;
-  labelText: string;
+  labelText: ReactNode;
   value: string | undefined;
   onChange: (next: string) => void;
   disabled?: boolean;
@@ -92,6 +92,7 @@ export const DateField: FC<{
   invalidText,
 }) => (
   <DatePicker
+    className="frep-date-picker"
     datePickerType="single"
     dateFormat="Y-m-d"
     // Pass a plain string (or undefined), never an empty array — Carbon's `setDate([])` re-sync
@@ -119,18 +120,24 @@ export const DateField: FC<{
 
 export const TextAreaField: FC<{
   id: string;
-  labelText: string;
+  labelText: ReactNode;
   value: string | undefined;
   onChange: (next: string) => void;
   disabled?: boolean;
   rows?: number;
-}> = ({ id, labelText, value, onChange, disabled, rows = 3 }) => (
+  maxLength?: number;
+  invalid?: boolean;
+  invalidText?: string;
+}> = ({ id, labelText, value, onChange, disabled, rows = 3, maxLength, invalid, invalidText }) => (
   <TextArea
     id={id}
     labelText={labelText}
     value={value ?? ''}
     rows={rows}
     disabled={disabled}
+    maxLength={maxLength}
+    invalid={invalid}
+    invalidText={invalidText}
     onChange={(e) => onChange(e.target.value)}
   />
 );
@@ -138,18 +145,32 @@ export const TextAreaField: FC<{
 /** Carbon select backed by a CodeOption[] list. */
 export const CodeSelect: FC<{
   id: string;
-  labelText: string;
+  labelText: ReactNode;
   value: string | undefined;
   options: CodeOption[];
   onChange: (next: string) => void;
   disabled?: boolean;
   includeBlank?: boolean;
-}> = ({ id, labelText, value, options, onChange, disabled, includeBlank }) => (
+  invalid?: boolean;
+  invalidText?: string;
+}> = ({
+  id,
+  labelText,
+  value,
+  options,
+  onChange,
+  disabled,
+  includeBlank,
+  invalid,
+  invalidText,
+}) => (
   <Select
     id={id}
     labelText={labelText}
     value={value ?? ''}
     disabled={disabled}
+    invalid={invalid}
+    invalidText={invalidText}
     onChange={(e) => onChange(e.target.value)}
   >
     {includeBlank && <SelectItem value="" text="—" />}

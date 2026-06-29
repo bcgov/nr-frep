@@ -3,6 +3,7 @@ import { Button, SkeletonText, TextInput } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { AttachmentRow } from '@/types/protocolChecklist';
 
@@ -214,7 +215,6 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
               <th scope="col">File</th>
               <th scope="col">Description</th>
               <th scope="col">Type</th>
-              <th scope="col">Size</th>
               <th scope="col" aria-label="Actions" />
             </tr>
           </thead>
@@ -252,7 +252,6 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                   <td>{row.fileName || '—'}</td>
                   <td>{row.description || '—'}</td>
                   <td>{row.mimeTypeCode || '—'}</td>
-                  <td>{row.fileSize || '—'}</td>
                   <td className="rip-grid__choice">
                     <Button
                       kind="ghost"
@@ -289,7 +288,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             <TextInput
               id="attach-description"
               className="attach-card__desc"
-              labelText="Description"
+              labelText={requiredLabel('Description', true)}
               required
               invalid={descInvalid}
               invalidText="The description field must be entered."

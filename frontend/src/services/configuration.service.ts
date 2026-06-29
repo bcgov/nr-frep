@@ -66,6 +66,30 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /** Block-status options for the "Add Target Site" opening-search dropdown. */
+  getBlockStatusCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/block-status-codes',
+    });
+  }
+
+  /** Open-category options for the opening-search dropdown. */
+  getOpenCategoryCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/open-category-codes',
+    });
+  }
+
+  /** Opening-status options for the opening-search dropdown. */
+  getOpeningStatusCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/opening-status-codes',
+    });
+  }
+
   /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
   getStrataTypes(): CancelablePromise<CodeOption[]> {
     return this.doRequest<CodeOption[]>(this.config, {

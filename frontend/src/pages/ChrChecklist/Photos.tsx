@@ -11,7 +11,7 @@ import {
 import { useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
-import { TextField } from '@/pages/ChrChecklist/fields';
+import { DateField, TextField } from '@/pages/ChrChecklist/fields';
 
 import type { Picture } from '@/types/chrChecklist';
 
@@ -99,7 +99,12 @@ const Photos: FC<{
   onSave: (pictures: Picture[]) => Promise<boolean>;
   readOnly: boolean;
   busy: boolean;
-}> = ({ pictures, onSave, readOnly, busy }) => {
+  /** True when the Attachments tab is the selected tab. Gates the date picker's mount: Carbon mounts
+   * every tab panel up front, and mounting the DatePicker during the page's initial load→content
+   * transition trips a flatpickr render loop. Deferring to first activation mounts it post-load
+   * (same timing as the Edit-triggered pickers on the other tabs), which is safe. */
+  active: boolean;
+}> = ({ pictures, onSave, readOnly, busy, active }) => {
   const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -220,24 +225,31 @@ const Photos: FC<{
         <div className="attach-card">
           <div className="attach-card__header">Upload file</div>
           <div className="attach-card__body">
-            <TextField
-              id="photo-description"
-              labelText="Description"
-              value={description}
-              disabled={busy}
-              onChange={setDescription}
-            />
-            {/* Plain text input (not DateField): this picker would mount in the always-rendered
-                upload card during the page's load→content transition, which trips a Carbon DatePicker
-                render loop. The other CHR date fields mount on user interaction and use DateField. */}
-            <TextField
-              id="photo-date"
-              labelText="Date"
-              placeholder="YYYY-MM-DD"
-              value={date}
-              disabled={busy}
-              onChange={setDate}
-            />
+            <div className="attach-card__fields">
+              <div className="attach-card__field attach-card__field--desc">
+                <TextField
+                  id="photo-description"
+                  labelText="Description"
+                  value={description}
+                  disabled={busy}
+                  onChange={setDescription}
+                />
+              </div>
+              <div className="attach-card__field attach-card__field--date">
+                {/* The Carbon DatePicker is mounted only once the Attachments tab is active (see the
+                    `active` prop) — mounting it during the page's initial load trips a flatpickr
+                    render loop, since Carbon mounts every tab panel up front. */}
+                {active && (
+                  <DateField
+                    id="photo-date"
+                    labelText="Date"
+                    value={date}
+                    disabled={busy}
+                    onChange={setDate}
+                  />
+                )}
+              </div>
+            </div>
             <div
               className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
               onDragOver={(e) => {

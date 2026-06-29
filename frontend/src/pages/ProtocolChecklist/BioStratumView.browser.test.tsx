@@ -76,6 +76,7 @@ describe('BioStratumView', () => {
       plotCount: '3', // required
       harvestAreaCode: 'HNR', // required
       bgcZoneCode: 'CWH', // required
+      bgcSubzoneCode: 'ds', // required (legacy PT #43888)
       windthrowTreatments: [],
       revisionCount: '2',
     });
@@ -91,6 +92,34 @@ describe('BioStratumView', () => {
     // On save success the form closes and we return to the table.
     expect(await screen.findByRole('button', { name: 'Add stratum' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+
+  it('shows a live inline error for a 0-plot non-patch stratum and blocks save', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.getBioStratum.mockResolvedValue({
+      stratumId: 'S1',
+      checklistId: '9001',
+      stratumNumber: 'A1',
+      strataTypeCode: 'CC', // non-patch
+      consistentMapInd: 'Y',
+      size: '2.5',
+      plotCount: '0', // 0 plots requires a patch type → inline error
+      harvestAreaCode: 'HNR',
+      bgcZoneCode: 'CWH',
+      bgcSubzoneCode: 'ds',
+      windthrowTreatments: [],
+      revisionCount: '2',
+    });
+
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    // The error appears live on entering edit (before any Save click).
+    expect(
+      await screen.findByText('A stratum with 0 plots must be a patch stratum type.'),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveBioStratum).not.toHaveBeenCalled();
   });
 
   it('blocks save and does not call the API when required fields are blank', async () => {

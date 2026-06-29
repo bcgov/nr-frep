@@ -116,11 +116,23 @@
     align-items: start;
   }
 
+  // Push the "Assessed by" cell right so it isn't crowded against the Evaluation date input.
+  &__assessed-by__field {
+    padding-left: 1.5rem;
+  }
+
   // "Assessed by" read-only value + inline "Assign it to me" text link.
   &__assessed-by__row {
     display: flex;
     align-items: baseline;
     gap: 0.75rem;
+  }
+
+  // Required-field error shown under "Assessed by" when the user saves without assigning one.
+  &__assessed-by__error {
+    color: var(--cds-text-error, #da1e28);
+    font-size: 0.75rem;
+    line-height: 1rem;
   }
 
   &__assessed-by__assign {
@@ -269,4 +281,17 @@
     background: var(--cds-layer-accent, #e0e0e0);
     font-weight: 600;
   }
+}
+
+// Feature accordion section header with an error badge: name + warning icon + count, shown when a
+// section holds a live validation error (the section also stays expanded — see FeatureEditor).
+.feature-accordion__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.feature-accordion__error-icon {
+  fill: var(--cds-support-error, #da1e28);
+  flex-shrink: 0;
 }

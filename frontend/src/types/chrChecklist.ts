@@ -43,6 +43,9 @@ export type ValidationError = {
   message?: string;
   referenceId?: string;
   field?: string;
+  /** Which entity the error belongs to. For a checklist it is the checklist id; for a CHR feature it
+   * is `"<checklistId>-<featureLabel>"`, so a feature-level error can name the feature it came from. */
+  entityLabel?: string;
 };
 
 /**

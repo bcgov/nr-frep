@@ -16,6 +16,7 @@ import type { Feature } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { FEATURE_CLASS_CODES } from '@/pages/ChrChecklist/codeLists';
+import { featureHasErrors } from '@/pages/ChrChecklist/featureValidation';
 
 const classLabel = (code?: string) =>
   FEATURE_CLASS_CODES.find((c) => c.code === code)?.label ?? code ?? '';
@@ -64,6 +65,9 @@ const FeatureList: FC<{
   };
 
   const save = async () => {
+    // Errors are shown inline on the feature fields; just block the save while any remain.
+    const editing = selected === null ? undefined : features[selected];
+    if (editing && featureHasErrors(editing)) return;
     if (await onSave(features)) {
       snapshot.current = null;
       setSelected(null);

@@ -33,4 +33,26 @@ haven't run the login bootstrap yet.
 
 ## What's covered
 
-- **`smoke.spec.ts`** — visits `/dashboard` and the 404 path, and asserts the global error boundary never takes over.
+All **read-only** — they navigate, assert rendered UI, and exercise only non-destructive actions
+(filters, Search/Refresh/Clear, modal open/close, navigation). They never Save/Delete/Submit, so
+they're safe against the shared DEV backend.
+
+- **`smoke.spec.ts`** — the app root returns HTTP 200.
+- **`navigation.spec.ts`** — each top-level protected screen (Dashboard, Accepted Sites, Checklist
+  Search, District Random List, Reports) boots past the auth/loading overlay and renders its `<h1>`,
+  without tripping the global error boundary.
+- **`dashboard.spec.ts`** — the Dashboard renders its screen tiles; clicking a tile routes there.
+- **`accepted-sites.spec.ts`** — filters + Refresh render, changing the Protocol filter re-loads.
+- **`add-target-site.spec.ts`** — the opening-search form renders every filter; Clear resets a field;
+  the client-lookup modal opens/closes; Back navigates away.
+- **`checklist-search.spec.ts`** — filters render; Search settles; Clear resets; client lookup
+  opens/closes.
+- **`random-list.spec.ts`** — filters render and the list settles.
+- **`reports.spec.ts`** — the Reports page renders.
+- **`admin-and-offline.spec.ts`** — the CHR offline list renders; the (role-gated) Generate Master
+  List route loads without the error boundary (Generate is never clicked — it mutates data).
+- **`detail-resilience.spec.ts`** — site-detail / protocol-checklist / CHR-checklist with a bogus id
+  render a graceful in-page state, not the global error boundary.
+- **`not-found.spec.ts`** — an unknown route renders the "Not Found" page, not the error boundary.
+
+Shared helpers live in `utils.ts` (`gotoProtected`, `expectNoGlobalError`, `waitForSettled`).

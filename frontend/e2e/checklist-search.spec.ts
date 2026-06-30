@@ -46,10 +46,11 @@ test.describe('Checklist Search', () => {
     await gotoProtected(page, '/search/checklists');
 
     await page.getByRole('button', { name: 'Look up client' }).click();
-    await expect(page.getByRole('heading', { name: 'Client Search' })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Client Search' });
+    await expect(dialog).toBeVisible();
 
-    await page.getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByRole('heading', { name: 'Client Search' })).toBeHidden();
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toBeHidden();
     await expectNoGlobalError(page);
   });
 });

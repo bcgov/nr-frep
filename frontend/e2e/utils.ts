@@ -29,19 +29,15 @@ export const expectNoGlobalError = async (page: Page): Promise<void> => {
 };
 
 /**
- * Wait until a data-loading page has settled into one of its terminal states — results table, empty
- * message, or error banner — by convention `${prefix}-{table,empty,error}` data-testids.
+ * Wait until a data-loading page has settled — i.e. its `${prefix}-loading` skeleton is gone, leaving
+ * the results table / empty message / error banner rendered. (Keying off the loading indicator avoids
+ * relying on the table's data-testid, which Carbon's DataTable doesn't forward to the DOM.)
  */
 export const waitForSettled = async (page: Page, prefix: string): Promise<void> => {
   await expect(
-    page
-      .locator(
-        `[data-testid="${prefix}-table"], [data-testid="${prefix}-empty"], ` +
-          `[data-testid="${prefix}-error"]`,
-      )
-      .first(),
-    `${prefix} did not reach a settled (table/empty/error) state`,
-  ).toBeVisible({ timeout: 60_000 });
+    page.getByTestId(`${prefix}-loading`),
+    `${prefix} did not finish loading`,
+  ).toBeHidden({ timeout: 60_000 });
 };
 
 /** Path to the saved auth state produced by auth.setup.ts. */

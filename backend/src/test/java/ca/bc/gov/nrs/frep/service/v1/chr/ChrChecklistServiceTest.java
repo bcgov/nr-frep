@@ -8,8 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
-import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
-import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
+import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
@@ -35,7 +35,7 @@ class ChrChecklistServiceTest {
   @Mock
   private ChrSubmitValidationService submitValidationService;
   @Mock
-  private ChrObjectStorageService objectStorageService;
+  private ObjectStorageService objectStorageService;
   @Mock
   private LoggedUserHelper loggedUserHelper;
 
@@ -48,7 +48,7 @@ class ChrChecklistServiceTest {
         checklistRepository,
         submitValidationService,
         objectStorageService,
-        new ChrObjectStorageProperties("http://s3", "bucket", "key", "secret"),
+        new ObjectStorageProperties("http://s3", "bucket", "key", "secret"),
         loggedUserHelper
     );
   }

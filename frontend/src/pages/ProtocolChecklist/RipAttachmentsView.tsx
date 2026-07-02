@@ -24,6 +24,37 @@ type Props = {
   submitted: boolean;
 };
 
+// Allowed attachment extensions = the codes in THE.MIME_TYPE_CODE (keyed by extension). The
+// FREP_CHECKLIST_ATTACHMENTS proc rejects anything else (ORA-01400), so guard here for a friendly
+// message + native picker filter. The backend re-validates authoritatively.
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+  'bmp',
+  'csv',
+  'doc',
+  'gif',
+  'htm',
+  'ifm',
+  'jpg',
+  'jpk',
+  'mdb',
+  'mde',
+  'obd',
+  'pdf',
+  'png',
+  'pps',
+  'ppt',
+  'rpt',
+  'rtf',
+  'tif',
+  'txt',
+  'wav',
+  'xld',
+  'xls',
+  'xml',
+  'zip',
+];
+const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
+
 // True when an attachment is an image we can preview as a thumbnail.
 function isImage(row: AttachmentRow): boolean {
   const mime = (row.mimeTypeCode || '').toLowerCase();
@@ -129,6 +160,16 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     // inline field validation rather than blocking the Browse button.
     if (!description.trim()) {
       setDescInvalid(true);
+      return;
+    }
+    const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+      display({
+        kind: 'error',
+        title: 'Unsupported file type',
+        subtitle: `${ext ? `".${ext}" is not supported. ` : ''}Allowed types: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(', ').toUpperCase()}.`,
+        timeout: 8000,
+      });
       return;
     }
     setBusy(true);
@@ -328,6 +369,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
               <input
                 ref={fileInputRef}
                 type="file"
+                accept={ALLOWED_ATTACHMENT_ACCEPT}
                 hidden
                 onChange={(e) => {
                   const file = e.target.files?.[0];

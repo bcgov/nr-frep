@@ -23,7 +23,7 @@ import ca.bc.gov.nrs.frep.entity.ChrFeatureTypeXref;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValue;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
-import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
@@ -49,7 +49,7 @@ class ChrChecklistPersistenceServiceTest {
   @SuppressWarnings("unchecked")
   void setUp() {
     entityManager = mock(EntityManager.class);
-    ChrObjectStorageService objectStorage = mock(ChrObjectStorageService.class);
+    ObjectStorageService objectStorage = mock(ObjectStorageService.class);
     service = new ChrChecklistPersistenceService(objectStorage);
     ReflectionTestUtils.setField(service, "entityManager", entityManager);
 

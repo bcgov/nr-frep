@@ -17,13 +17,14 @@ import ca.bc.gov.nrs.frep.mapper.CheckListMapper;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
-import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
-import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
+import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,19 +35,25 @@ public class ChrChecklistService {
 
   private static final Logger log = LoggerFactory.getLogger(ChrChecklistService.class);
 
+  // CHR photos are image-only. The derived code is stored in CHR_CHECKLIST_ATTACHMENT.MIME_TYPE_CODE
+  // (VARCHAR2(3), NOT NULL, FK to MIME_TYPE_CODE), so a non-image (or an image type whose code isn't a
+  // valid 3-char code, e.g. WEBP/TIFF) would fail on save with ORA-12899 / ORA-02291. Guard new photos
+  // up front. Mirrors deriveMimeType's output (jpeg->jpg) against the image codes in MIME_TYPE_CODE.
+  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP", "TIF");
+
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
   private final ChrSubmitValidationService submitValidationService;
-  private final ChrObjectStorageService objectStorageService;
-  private final ChrObjectStorageProperties objectStorageProperties;
+  private final ObjectStorageService objectStorageService;
+  private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
 
   public ChrChecklistService(
       ChrChecklistPersistenceService persistenceService,
       ChrChecklistRepository checklistRepository,
       ChrSubmitValidationService submitValidationService,
-      ChrObjectStorageService objectStorageService,
-      ChrObjectStorageProperties objectStorageProperties,
+      ObjectStorageService objectStorageService,
+      ObjectStorageProperties objectStorageProperties,
       LoggedUserHelper loggedUserHelper
   ) {
     this.persistenceService = persistenceService;
@@ -289,6 +296,12 @@ public class ChrChecklistService {
         if (!ChrStringUtils.hasAValue(picture.getDescription())) {
           throw new InvalidParameterException(
               "One or more photos are missing mandatory descriptions.");
+        }
+        // Only validate newly-added photos (no id); existing rows already passed at creation.
+        if (!ChrStringUtils.hasAValue(picture.getId())
+            && !ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
+          throw new InvalidParameterException(
+              "Only image files (JPG, PNG, GIF, BMP, TIF) can be uploaded as photos.");
         }
       }
     }

@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -48,6 +49,16 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class ProtocolChecklistService {
+
+  // Allowed attachment types = the codes in THE.MIME_TYPE_CODE (keyed by file extension). The
+  // FREP_CHECKLIST_ATTACHMENTS proc stores only these and rejects anything else with an ORA-01400
+  // (NULL mime_type_code). Guard here so an unsupported type is a clean 400 instead of a 500.
+  private static final Set<String> ALLOWED_ATTACHMENT_TYPES = Set.of(
+      "BMP", "CSV", "DOC", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "OBD", "PDF", "PNG",
+      "PPS", "PPT", "RPT", "RTF", "TIF", "TXT", "WAV", "XLD", "XLS", "XML", "ZIP");
+  private static final String ALLOWED_ATTACHMENT_TYPES_DISPLAY =
+      "BMP, CSV, DOC, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, RPT, RTF, TIF, TXT, "
+          + "WAV, XLD, XLS, XML, ZIP";
 
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
@@ -808,10 +819,23 @@ public class ProtocolChecklistService {
   public List<AttachmentRow> saveAttachment(
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
+    validateAttachmentType(fileName);
     String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());
     return writeRepository.getAttachments(checklistId, resourceType);
+  }
+
+  /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
+  private static void validateAttachmentType(String fileName) {
+    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
+    String ext = (dot < 0 || dot == fileName.length() - 1)
+        ? "" : fileName.substring(dot + 1).toUpperCase();
+    if (!ALLOWED_ATTACHMENT_TYPES.contains(ext)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Unsupported file type" + (ext.isEmpty() ? "" : " ." + ext.toLowerCase())
+              + ". Allowed types: " + ALLOWED_ATTACHMENT_TYPES_DISPLAY + ".");
+    }
   }
 
   public List<AttachmentRow> deleteAttachment(

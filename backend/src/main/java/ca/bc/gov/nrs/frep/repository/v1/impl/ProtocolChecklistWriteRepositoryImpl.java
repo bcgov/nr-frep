@@ -17,6 +17,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -55,8 +56,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           + "revision_count "
           + "FROM the.biodiversity_checklist WHERE biodiversity_checklist_id = ?";
 
-  public ProtocolChecklistWriteRepositoryImpl(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
+  private final ObjectStorageService objectStorage;
+
+  public ProtocolChecklistWriteRepositoryImpl(
+      @Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate,
+      ObjectStorageService objectStorage) {
     super(jdbcTemplate);
+    this.objectStorage = objectStorage;
   }
 
   /**
@@ -996,6 +1002,24 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   private static final String ATTACH_PKG = "FREP_CHECKLIST_ATTACHMENTS";
 
   /**
+   * Biodiversity (SLB) attachment bytes live in shared object storage, not the Oracle BLOB. Metadata
+   * still goes through {@code FREP_CHECKLIST_ATTACHMENTS} (list/insert/remove); only the file content
+   * moves. Keyed by the unique attachment id under an {@code slr/} prefix — collision-free vs the CHR
+   * photo keys and independent of the DB resource type (still {@code SLB}). Other protocols (RIP/WTR)
+   * keep using the Oracle BLOB path unchanged.
+   */
+  private static final String BIO_RESOURCE_TYPE = "SLB";
+  private static final String BIO_OBJECT_PREFIX = "slr/";
+
+  private static boolean isBioAttachment(String resourceType) {
+    return BIO_RESOURCE_TYPE.equals(resourceType);
+  }
+
+  private static String bioObjectKey(String attachmentId) {
+    return BIO_OBJECT_PREFIX + attachmentId.trim();
+  }
+
+  /**
    * List attachment metadata for a riparian checklist via {@code FREP_CHECKLIST_ATTACHMENTS.GET}
    * (24 params: tombstone 1-18, resource_value_id IN @19, checklist_id IN @20, type @21, status
    * @22, error @23, results cursor @24). Cursor columns per the legacy DataManager.
@@ -1025,10 +1049,32 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   }
 
   /**
-   * Download an attachment's bytes via {@code GET_BLOB} (10 params: id/checklist/type/name/desc/
-   * mime-code/mime-type IN OUT 1-7, file_contents BLOB @8, userid @9, error @10).
+   * Download an attachment's bytes. Metadata (file name, mime) always comes from {@code GET_BLOB}; for
+   * Biodiversity (SLB) the bytes come from object storage ({@code slr/<id>}) instead of the Oracle BLOB,
+   * with a fallback to the BLOB for rows not yet migrated (dual-read during the cutover).
    */
   public AttachmentContent getAttachmentContent(
+      String checklistId, String resourceType, String attachmentId) {
+    AttachmentContent viaBlob = getAttachmentContentFromBlob(checklistId, resourceType, attachmentId);
+    if (!isBioAttachment(resourceType)) {
+      return viaBlob;
+    }
+    String key = bioObjectKey(attachmentId);
+    if (objectStorage.objectExists(key)) {
+      return new AttachmentContent(viaBlob.fileName(), viaBlob.mimeType(), objectStorage.getObjectBytes(key));
+    }
+    // Not in object storage yet — pre-migration row whose bytes are still in the Oracle BLOB.
+    log.warn("BIO attachment {} not found in object storage (key {}); serving from Oracle BLOB",
+        attachmentId, key);
+    return viaBlob;
+  }
+
+  /**
+   * The raw {@code GET_BLOB} read (10 params: id/checklist/type/name/desc/mime-code/mime-type IN OUT
+   * 1-7, file_contents BLOB @8, userid @9, error @10) — returns metadata + whatever bytes are in the
+   * Oracle BLOB (empty for a migrated BIO row).
+   */
+  private AttachmentContent getAttachmentContentFromBlob(
       String checklistId, String resourceType, String attachmentId) {
     return executeCall(
         callSql(ATTACH_PKG, "GET_BLOB", 10),
@@ -1063,8 +1109,29 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       byte[] bytes, String userId) {
     String attachmentId = createAttachmentRecord(checklistId, resourceType, fileName, description,
         mimeType, userId);
+    if (!isBioAttachment(resourceType)) {
+      writeAttachmentContent(attachmentId, checklistId, resourceType, fileName, description, mimeType,
+          bytes, userId);
+      return;
+    }
+    // BIO: finalize the metadata exactly as legacy does but leave the Oracle BLOB empty; the real
+    // bytes go to object storage. GET_BLOB_FOR_UPDATE already committed the metadata row, so if the
+    // object-storage put fails we must compensate by removing that row — otherwise it orphans (a
+    // listed attachment whose bytes 404 on download, with no BLOB fallback after cutover).
     writeAttachmentContent(attachmentId, checklistId, resourceType, fileName, description, mimeType,
-        bytes, userId);
+        new byte[0], userId);
+    try {
+      objectStorage.putObject(bioObjectKey(attachmentId), mimeType, bytes);
+    } catch (RuntimeException ex) {
+      try {
+        removeAttachmentRecord(checklistId, resourceType, attachmentId);
+      } catch (RuntimeException cleanup) {
+        log.error("Orphaned BIO attachment metadata {} could not be removed after object-storage "
+            + "failure; manual cleanup required", attachmentId, cleanup);
+      }
+      throw new IllegalStateException(
+          "Failed to store BIO attachment " + attachmentId + " in object storage", ex);
+    }
   }
 
   /**
@@ -1125,8 +1192,25 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         });
   }
 
-  /** Delete an attachment via {@code REMOVE} (4 params: id, checklist, type, error). */
+  /**
+   * Delete an attachment: remove the metadata row, then (BIO only) delete its object-storage object.
+   * The object delete is best-effort — a stray object with no metadata row is invisible to the app and
+   * harmless (swept up by reconciliation), so it must not fail the delete.
+   */
   public void deleteAttachment(String checklistId, String resourceType, String attachmentId) {
+    removeAttachmentRecord(checklistId, resourceType, attachmentId);
+    if (isBioAttachment(resourceType)) {
+      try {
+        objectStorage.deleteObject(bioObjectKey(attachmentId));
+      } catch (RuntimeException ex) {
+        log.warn("Could not delete BIO attachment object {} after removing its metadata row; "
+            + "leaving a stray object", bioObjectKey(attachmentId), ex);
+      }
+    }
+  }
+
+  /** Remove the attachment metadata row via {@code REMOVE} (4 params: id, checklist, type, error). */
+  private void removeAttachmentRecord(String checklistId, String resourceType, String attachmentId) {
     executeCall(
         callSql(ATTACH_PKG, "REMOVE", 4),
         cs -> {

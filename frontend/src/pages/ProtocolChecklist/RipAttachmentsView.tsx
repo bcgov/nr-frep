@@ -164,10 +164,12 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     }
     const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+      const unsupported = ext ? `".${ext}" is not supported. ` : '';
+      const allowed = ALLOWED_ATTACHMENT_EXTENSIONS.join(', ').toUpperCase();
       display({
         kind: 'error',
         title: 'Unsupported file type',
-        subtitle: `${ext ? `".${ext}" is not supported. ` : ''}Allowed types: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(', ').toUpperCase()}.`,
+        subtitle: `${unsupported}Allowed types: ${allowed}.`,
         timeout: 8000,
       });
       return;

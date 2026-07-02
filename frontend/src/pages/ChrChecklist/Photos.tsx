@@ -16,6 +16,7 @@ import { DateField, TextField } from '@/pages/ChrChecklist/fields';
 import type { Picture } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { useNotification } from '@/context/notification/useNotification';
 import { formatShortDate } from '@/utils/date';
 
 /**
@@ -106,6 +107,7 @@ const Photos: FC<{
   active: boolean;
 }> = ({ pictures, onSave, readOnly, busy, active }) => {
   const confirm = useConfirm();
+  const { display } = useNotification();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [description, setDescription] = useState('');
@@ -116,8 +118,21 @@ const Photos: FC<{
   // persist in a single save. Clear the upload fields once the save succeeds.
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return;
+    // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
+    // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
+    // accept="image/*", but drag-and-drop bypasses it — so re-check here.
+    const images = files.filter((file) => file.type.startsWith('image/'));
+    if (images.length < files.length) {
+      display({
+        kind: 'error',
+        title: 'Only image files can be uploaded',
+        subtitle: 'Photos must be image files (JPG, PNG, GIF, BMP). Other files were skipped.',
+        timeout: 8000,
+      });
+    }
+    if (images.length === 0) return;
     const additions: Picture[] = await Promise.all(
-      files.map(async (file) => ({
+      images.map(async (file) => ({
         ...(await processFile(file)), // code (data URL; prefix stripped at save), mimeTypeCode, fileName
         description: description.trim(),
         date: date.trim(),

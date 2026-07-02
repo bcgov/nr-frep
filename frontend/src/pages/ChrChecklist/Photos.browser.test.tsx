@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import Photos from './Photos';
 
+vi.mock('@/context/notification/useNotification', () => ({
+  useNotification: () => ({ display: vi.fn() }),
+}));
+
 describe('Photos display', () => {
   it('renders server photos (raw base64) by prepending a data-URL prefix from mimeTypeCode', () => {
     render(

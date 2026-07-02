@@ -3,7 +3,7 @@ package ca.bc.gov.nrs.frep.service.v1;
 import java.net.URI;
 import java.util.List;
 
-import ca.bc.gov.nrs.frep.configuration.ChrObjectStorageProperties;
+import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -19,11 +19,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 @Service
-public class ChrObjectStorageService {
+public class ObjectStorageService {
 
-  private final ChrObjectStorageProperties properties;
+  private final ObjectStorageProperties properties;
 
-  public ChrObjectStorageService(ChrObjectStorageProperties properties) {
+  public ObjectStorageService(ObjectStorageProperties properties) {
     this.properties = properties;
   }
 
@@ -71,7 +71,12 @@ public class ChrObjectStorageService {
     }
   }
 
-  private void putObject(String key, String contentType, byte[] content) {
+  /**
+   * Store {@code content} at {@code key} in the shared bucket. Generic key-based op — CHR photos use it
+   * via {@link #syncChecklistPhotos}; Biodiversity attachments call it directly with an
+   * {@code slr/<attachmentId>} key (see the bio-attachments object-storage migration).
+   */
+  public void putObject(String key, String contentType, byte[] content) {
     try (S3Client client = client()) {
       client.putObject(
           PutObjectRequest.builder()
@@ -95,7 +100,9 @@ public class ChrObjectStorageService {
     }
   }
 
-  private void deleteObject(String key) {
+  /** Delete the object at {@code key} (no-op if absent). Generic — used by CHR prefix cleanup and by
+   * Biodiversity attachment delete ({@code slr/<attachmentId>}). */
+  public void deleteObject(String key) {
     try (S3Client client = client()) {
       client.deleteObject(DeleteObjectRequest.builder()
           .bucket(properties.bucket())

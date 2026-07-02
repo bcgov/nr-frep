@@ -91,12 +91,12 @@ frep:
   # OPENING_ID). Public endpoint — overridable per environment but the default is production-correct.
   open-maps:
     url: ${OPENMAPS_URL:https://openmaps.gov.bc.ca/geo/ows}
-  chr:
-    object-storage:
-      host: ${OBJECT_STORAGE_HOST}
-      bucket: ${OBJECT_STORAGE_BUCKET}
-      access-key: ${OBJECT_STORAGE_ACCESS_KEY}
-      secret-key: ${OBJECT_STORAGE_SECRET_KEY}
+  # Shared S3-compatible object storage — CHR photos and Biodiversity attachments (same bucket).
+  object-storage:
+    host: ${OBJECT_STORAGE_HOST}
+    bucket: ${OBJECT_STORAGE_BUCKET}
+    access-key: ${OBJECT_STORAGE_ACCESS_KEY}
+    secret-key: ${OBJECT_STORAGE_SECRET_KEY}
 
 resilience4j:
   circuitbreaker:

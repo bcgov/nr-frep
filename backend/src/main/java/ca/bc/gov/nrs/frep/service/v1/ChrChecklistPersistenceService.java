@@ -1,8 +1,8 @@
 package ca.bc.gov.nrs.frep.service.v1;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
-import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService;
-import ca.bc.gov.nrs.frep.service.v1.ChrObjectStorageService.PhotoUpload;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService.PhotoUpload;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXrefId;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
@@ -74,9 +74,9 @@ public class ChrChecklistPersistenceService {
   @PersistenceContext
   private EntityManager entityManager;
 
-  private final ChrObjectStorageService objectStorageService;
+  private final ObjectStorageService objectStorageService;
 
-  public ChrChecklistPersistenceService(ChrObjectStorageService objectStorageService) {
+  public ChrChecklistPersistenceService(ObjectStorageService objectStorageService) {
     this.objectStorageService = objectStorageService;
   }
 

@@ -266,8 +266,13 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   // moment it's invalid and clears when fixed. plotFieldError is a lookup into the header-error map;
   // standError / cwdError look up a sub-table cell. The Save handler blocks while any remain — no toast.
   const stratumType = selectedStratum?.strataTypeCode ?? '';
+  const stratumNumber = selectedStratum?.stratumNumber ?? '';
+  // "Trees exist" is disallowed on a clear-cut (CC) stratum except NAR — mirror the backend
+  // FREP_BIODIVERSITY_STRATUM.VALIDATE block so the user can't create the stratum-save trap. A blank
+  // stratum type (summary not filled in) is not 'CC', so this relaxes automatically.
+  const blockTrees = stratumType === 'CC' && stratumNumber.trim().toUpperCase() !== 'NAR';
   const headerErrors: Record<string, string> =
-    current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
+    current && !readOnly ? plotHeaderErrors(current, stratumType, stratumNumber) : {};
   const plotFieldError = (key: string): string => headerErrors[key] ?? '';
   const standError = (index: number, colKey: string): string =>
     standRowErrors(
@@ -468,7 +473,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     );
   };
 
-  const checkField = (key: string, label: string): ReactNode =>
+  const checkField = (key: string, label: string, disabled = false): ReactNode =>
     readOnly ? (
       roField(label, get(key) === 'Y' ? 'Yes' : 'No')
     ) : (
@@ -476,9 +481,22 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         id={`plot-${key}`}
         labelText={label}
         checked={get(key) === 'Y'}
+        disabled={disabled}
         onChange={(_e, { checked }) => set(key, checked ? 'Y' : 'N')}
       />
     );
+
+  // Render the inline cell error as a plain block under the control instead of Carbon's `invalidText`.
+  // In this small/in-table context Carbon's `.cds--form-requirement` renders with zero layout height
+  // and overflows the cell, so the row divider cuts straight through the message. A normal block grows
+  // the cell so the divider sits below the whole input + message. (`invalid` still drives the red
+  // border + icon.)
+  const withError = (control: ReactNode, error: string): ReactNode => (
+    <>
+      {control}
+      {error !== '' && <div className="rip-field-grid__cell-error">{error}</div>}
+    </>
+  );
 
   // One sub-table cell control, driven by the column's `kind`.
   const cell = (
@@ -495,7 +513,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     if (col.kind) {
       const options = colOptions(col.kind);
       if (readOnly) return options.find((o) => o.code === value)?.description ?? value ?? '—';
-      return (
+      return withError(
         <Select
           id={`${caption}-${index}-${col.key}`}
           labelText={col.label}
@@ -503,18 +521,18 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           size="sm"
           value={value}
           invalid={error !== ''}
-          invalidText={error}
           onChange={(e) => onChange(index, col.key, e.target.value)}
         >
           <SelectItem value="" text="—" />
           {options.map((o) => (
             <SelectItem key={o.code} value={o.code} text={o.description} />
           ))}
-        </Select>
+        </Select>,
+        error,
       );
     }
     if (readOnly) return value || '—';
-    return (
+    return withError(
       <TextInput
         id={`${caption}-${index}-${col.key}`}
         labelText={col.label}
@@ -523,9 +541,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         maxLength={col.maxLength}
         value={value}
         invalid={error !== ''}
-        invalidText={error}
         onChange={(e) => onChange(index, col.key, e.target.value)}
-      />
+      />,
+      error,
     );
   };
 
@@ -542,7 +560,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     cellError: (index: number, colKey: string) => string,
   ): ReactNode => (
     <>
-      <table className="rip-field-grid">
+      <table className="rip-field-grid rip-field-grid--inputs">
         <thead>
           <tr>
             {cols.map((c) => (
@@ -735,7 +753,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
               )}
             </div>
             <div className="rip-form__grid">
-              {textField('plotNumber', 'Plot #', 3)}
+              {textField('plotNumber', 'Plot #', 3, false, true)}
               {selectField('assessorName', 'Evaluated by', evaluators ?? [], false, true)}
               {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
               {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
@@ -745,7 +763,24 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
           <fieldset className="rip-form__group">
             <legend>Plot information</legend>
-            <div className="rip-form__grid">{checkField('treeIndicator', 'Trees exist')}</div>
+            <div className="rip-form__grid">
+              {checkField(
+                'treeIndicator',
+                'Trees exist',
+                blockTrees && get('treeIndicator') !== 'Y',
+              )}
+            </div>
+            {/* Already-checked-on-a-CC-stratum case (e.g. type changed after entry): the checkbox
+               can't be disabled away without stranding data, so flag it and block the save. */}
+            {plotFieldError('treeIndicator') && (
+              <InlineNotification
+                kind="error"
+                title="Trees exist not allowed"
+                subtitle={plotFieldError('treeIndicator')}
+                hideCloseButton
+                lowContrast
+              />
+            )}
             <p className="rip-form__hint">Fill in one of:</p>
             <div className="rip-form__grid">
               {textField('basalAreaFactor', 'BAF', 2)}

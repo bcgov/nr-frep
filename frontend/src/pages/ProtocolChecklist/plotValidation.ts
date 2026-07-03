@@ -78,7 +78,13 @@ const bearingErrors = (e: Record<string, string>, g: Getter): void => {
 
 const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
   if (isBlank(g('assessorName'))) e.assessorName = 'Evaluated by is required.';
-  if (!isBlank(g('plotNumber'))) put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
+  // FREP_212_BIOPLOT.save_plot rejects a blank plot number (sil.error.usr.isrequired:Plot Number),
+  // so enforce it here too; otherwise validate the range when present.
+  if (isBlank(g('plotNumber'))) {
+    e.plotNumber = 'Plot # is required.';
+  } else {
+    put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
+  }
   if (g('plotComment').length > 2000) e.plotComment = 'Comments must be 2000 characters or fewer.';
   if (!isBlank(g('basalAreaFactor'))) {
     put(e, 'basalAreaFactor', intError(g('basalAreaFactor'), 'BAF', 1, 99));
@@ -118,12 +124,37 @@ const measurementMethodErrors = (
 };
 
 /**
+ * "Trees exist" is not allowed on a clear-cut (CC) stratum — EXCEPT the NAR stratum, which may record
+ * retained/residual trees on a clear cut. Mirrors the backend FREP_BIODIVERSITY_STRATUM.VALIDATE rule
+ * (strata_type = 'CC' AND UPPER(TRIM(stratum_number)) <> 'NAR') so the stratum-save block is caught
+ * inline here instead. A blank stratum type (summary not filled in) is not 'CC', so this relaxes
+ * automatically. Keyed on stratum_number (the UI "Stratum ID"), never the numeric stratum_id PK.
+ */
+const treesExistErrors = (
+  e: Record<string, string>,
+  g: Getter,
+  stratumType: string,
+  stratumNumber: string,
+): void => {
+  const isNar = stratumNumber.trim().toUpperCase() === 'NAR';
+  if (stratumType === 'CC' && !isNar && g('treeIndicator') === 'Y') {
+    e.treeIndicator =
+      "Trees exist isn't allowed on a clear-cut stratum (except NAR). Uncheck it to save.";
+  }
+};
+
+/**
  * Plot-header field errors keyed by field key. Legacy parity: UTM (conditional on the "no signal"
  * toggle), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
- * numeric ranges and decimals, comment length, and the "exactly one measurement method" rule
- * (clear-cut → fixed-area radius only). Split into rule groups to keep each simple.
+ * numeric ranges and decimals, comment length, the "exactly one measurement method" rule
+ * (clear-cut → fixed-area radius only), and the CC/NAR "trees exist" gate. Split into rule groups to
+ * keep each simple. `stratumNumber` (the UI "Stratum ID") is optional — blank relaxes the CC gate.
  */
-export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<string, string> => {
+export const plotHeaderErrors = (
+  plot: BioPlot,
+  stratumType: string,
+  stratumNumber = '',
+): Record<string, string> => {
   const e: Record<string, string> = {};
   // Read a plot field as a trimmed string; non-string values (e.g. the table arrays) read as ''.
   const g: Getter = (k) => {
@@ -134,6 +165,7 @@ export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<str
   bearingErrors(e, g);
   plotNumberErrors(e, g);
   measurementMethodErrors(e, g, stratumType);
+  treesExistErrors(e, g, stratumType, stratumNumber);
   return e;
 };
 

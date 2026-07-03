@@ -28,7 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * </ul>
  */
 @Configuration
-@EnableConfigurationProperties(ChrObjectStorageProperties.class)
+@EnableConfigurationProperties(ObjectStorageProperties.class)
 @Slf4j
 public class OracleJpaConfiguration {
 

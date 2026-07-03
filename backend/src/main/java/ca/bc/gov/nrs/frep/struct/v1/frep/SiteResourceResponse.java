@@ -6,7 +6,7 @@ package ca.bc.gov.nrs.frep.struct.v1.frep;
  * <p>Legacy equivalent: {@code FREP_RESOURCE_OBJECT} returned in
  * {@code FREP_110_SITE_DETAILS.get(...).p_resource_array}.
  *
- * @param resourceType        e.g. {@code "BIO"}, {@code "RIP"}, {@code "WAT"}, {@code "CHR"}
+ * @param resourceType        the DB protocol code, e.g. {@code "SLB"} / {@code "SLR"}, {@code "CHR"}
  * @param resourceName        display name
  * @param statusCode          one of {@code ACC} / {@code REJ} / {@code TAR}
  * @param rejectionReasonCode FK to {@code frep_site_resource_reason_code}, only set when status = REJ

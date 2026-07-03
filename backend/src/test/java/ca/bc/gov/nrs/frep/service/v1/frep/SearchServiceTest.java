@@ -45,11 +45,11 @@ class SearchServiceTest {
   private SearchService service;
 
   @Test
-  void normalizeProtocolTypeMapsLegacyAliases() {
-    assertEquals(Optional.of("SLB"), SearchService.normalizeProtocolType("bio"));
-    assertEquals(Optional.of("WTR"), SearchService.normalizeProtocolType("wat"));
-    assertEquals(Optional.of("RIP"), SearchService.normalizeProtocolType("rip"));
-    assertEquals(Optional.of("CHR"), SearchService.normalizeProtocolType("chr"));
+  void normalizeProtocolTypeNormalisesCaseWithoutAliasing() {
+    // The in-scope codes match the DB (SLB/SLR/CHR), so this only trims + upper-cases — no aliasing.
+    assertEquals(Optional.of("SLB"), SearchService.normalizeProtocolType("slb"));
+    assertEquals(Optional.of("SLR"), SearchService.normalizeProtocolType("slr"));
+    assertEquals(Optional.of("CHR"), SearchService.normalizeProtocolType(" chr "));
     assertTrue(SearchService.normalizeProtocolType("").isEmpty());
   }
 
@@ -122,7 +122,7 @@ class SearchServiceTest {
     when(searchRepository.searchChecklists(any())).thenReturn(List.of());
 
     service.searchChecklists(
-        "2024", "56", "bio", "L1234", null, null, null, null, "RDY",
+        "2024", "56", "slb", "L1234", null, null, null, null, "RDY",
         "9001", "2024-01-01", "2024-12-31");
 
     ArgumentCaptor<ChecklistSearchCriteria> captor = ArgumentCaptor.forClass(ChecklistSearchCriteria.class);

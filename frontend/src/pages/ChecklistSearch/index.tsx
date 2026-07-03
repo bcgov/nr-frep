@@ -59,11 +59,11 @@ const STATUS_OPTIONS = [
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
 
-// Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
-// (RIP) and Water (WTR) are out of scope and have no pages, so their rows are not linked.
-const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
-  SLB: 'biodiversity',
-  BIO: 'biodiversity',
+// SLB (legacy) and SLR (going forward) are the same protocol/page → /protocol-checklists/slr/:id.
+// CHR has its own route slug (handled below). Any other code has no page and is not linked.
+const PROTOCOL_TO_PATH: Record<string, 'slr' | undefined> = {
+  SLB: 'slr',
+  SLR: 'slr',
 };
 
 const ChecklistSearchPage: FC = () => {
@@ -391,7 +391,7 @@ const ChecklistSearchPage: FC = () => {
                       const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
                       const isChr = data?.protocolCode === 'CHR';
                       const checklistLink = isChr
-                        ? `/chr/checklists/${row.id}`
+                        ? `/protocol-checklists/chr/${row.id}`
                         : protoPath
                           ? `/protocol-checklists/${protoPath}/${row.id}`
                           : undefined;

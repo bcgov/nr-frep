@@ -20,8 +20,6 @@ export type RandomListSummary = {
   orgUnitDescription: string | null;
   biodiversity: number;
   culturalHeritage: number;
-  riparian: number;
-  water: number;
 };
 
 export type RandomListResponse = {

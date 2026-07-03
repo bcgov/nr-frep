@@ -9,8 +9,8 @@ import { expectNoGlobalError, gotoProtected } from './utils';
  */
 const BOGUS_DETAIL_ROUTES = [
   '/site-detail/0',
-  '/protocol-checklists/biodiversity/0',
-  '/chr/checklists/0',
+  '/protocol-checklists/slr/0',
+  '/protocol-checklists/chr/0',
 ];
 
 test.describe('Detail page resilience (unknown id)', () => {

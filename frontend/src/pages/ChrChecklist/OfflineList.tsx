@@ -109,7 +109,7 @@ const ChrOfflineListPage: FC = () => {
                             if (cell.info.header === 'checklist') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <RouterLink to={`/chr/checklists/${row.id}`}>
+                                  <RouterLink to={`/protocol-checklists/chr/${row.id}`}>
                                     {cell.value}
                                   </RouterLink>
                                 </TableCell>

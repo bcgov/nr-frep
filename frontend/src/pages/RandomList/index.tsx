@@ -332,8 +332,7 @@ const RandomListPage: FC = () => {
                           {summary.orgUnitDescription ? ` — ${summary.orgUnitDescription}` : ''}
                           {' — '}
                           Biodiversity: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
-                          {summary.culturalHeritage} &nbsp; Riparian: {summary.riparian} &nbsp;
-                          Water: {summary.water}
+                          {summary.culturalHeritage}
                         </span>
                       ) : null
                     }

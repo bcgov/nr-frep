@@ -63,10 +63,6 @@ const extractValidationErrors = (err: unknown): string[] | null => {
   return Array.isArray(body?.validationErrors) ? body.validationErrors : null;
 };
 
-function isProtocolType(value: string | undefined): value is ProtocolType {
-  return value === 'biodiversity';
-}
-
 // Tombstone fields the legacy screen shows in the page header band rather than in a section. The
 // backend returns these inside the section reads; we promote them to the header (in legacy order)
 // and hide them from the section field list to mirror the legacy layout.
@@ -83,7 +79,10 @@ const HEADER_EXTRA_LABELS = [
 const HEADER_EXTRA_LABEL_SET = new Set<string>(HEADER_EXTRA_LABELS);
 
 const ProtocolChecklistPage: FC = () => {
-  const { type, id = '' } = useParams<{ type: string; id: string }>();
+  // Dedicated biodiversity route (/protocol-checklists/slr/:id) — the family is the route, so there is
+  // no type param. The record's actual code (SLB legacy / SLR going forward) comes from the GET, not
+  // the URL. The API contract still uses the 'bio' segment (unchanged here).
+  const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { display } = useNotification();
   const { canEdit } = useAuthorization();
@@ -99,11 +98,11 @@ const ProtocolChecklistPage: FC = () => {
   // mount. Track the active tab so a view can refetch when it becomes visible.
   const [tabIndex, setTabIndex] = useState(0);
 
-  const protocolType: ProtocolType | null = isProtocolType(type) ? type : null;
-  const backendCode = protocolType ? PROTOCOL_TYPE_TO_BACKEND[protocolType] : null;
+  const protocolType: ProtocolType = 'biodiversity';
+  const backendCode = PROTOCOL_TYPE_TO_BACKEND[protocolType];
 
   useEffect(() => {
-    if (!protocolType || !id) {
+    if (!id) {
       setLoading(false);
       setNotFound(true);
       return;
@@ -226,7 +225,9 @@ const ProtocolChecklistPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>{protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}</h1>
+          <h1>
+            {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
+          </h1>
         </div>
       </Column>
 

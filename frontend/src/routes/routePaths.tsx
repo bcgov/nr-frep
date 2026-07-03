@@ -181,7 +181,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
-    path: '/protocol-checklists/:type/:id',
+    path: '/protocol-checklists/slr/:id',
     id: 'Protocol Checklist',
     icon: Tree,
     element: (
@@ -192,7 +192,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
-    path: '/chr/checklists/:id',
+    path: '/protocol-checklists/chr/:id',
     id: 'CHR Checklist',
     icon: Tree,
     element: (
@@ -287,7 +287,7 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
  * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
  * These carry no role restriction, so they render as-is (Layout-wrapped).
  */
-const OFFLINE_PATHS = new Set(['/chr/offline', '/chr/checklists/:id']);
+const OFFLINE_PATHS = new Set(['/chr/offline', '/protocol-checklists/chr/:id']);
 export const getOfflineRoutes = (): RouteDescription[] => [
   {
     path: '/',

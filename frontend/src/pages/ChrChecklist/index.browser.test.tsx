@@ -64,9 +64,9 @@ const useAuthorization = useAuthorizationModule.useAuthorization as ReturnType<t
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={['/chr/checklists/1001']}>
+    <MemoryRouter initialEntries={['/protocol-checklists/chr/1001']}>
       <Routes>
-        <Route path="/chr/checklists/:id" element={<ChrChecklistPage />} />
+        <Route path="/protocol-checklists/chr/:id" element={<ChrChecklistPage />} />
       </Routes>
     </MemoryRouter>,
   );

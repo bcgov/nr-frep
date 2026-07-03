@@ -74,6 +74,8 @@ describe('BioPlotsView', () => {
       'IDIR\\JDOE',
     );
     await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
+    // Plot # is required (mirrors FREP_212_BIOPLOT.save_plot).
+    await userEvent.type(screen.getByLabelText('Plot #', { exact: false }), '1');
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
 
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
@@ -106,6 +108,8 @@ describe('BioPlotsView', () => {
       'IDIR\\JDOE',
     );
     await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
+    // Plot # is required (mirrors FREP_212_BIOPLOT.save_plot).
+    await userEvent.type(screen.getByLabelText('Plot #', { exact: false }), '1');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
   });

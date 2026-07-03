@@ -460,6 +460,22 @@
   }
 }
 
+// Editable stand/CWD grids (BioPlots): each cell renders its own inline error block (see
+// BioPlotsView.cell — Carbon's `invalidText`/`.cds--form-requirement` renders with zero layout height
+// in this small in-table context and overflows the cell, so the row divider cuts through it). A plain
+// block takes normal height, growing the cell so the per-row divider sits below the input + message.
+.rip-field-grid--inputs {
+  td {
+    vertical-align: top;
+  }
+
+  .rip-field-grid__cell-error {
+    @include type.type-style('label-01');
+    margin-top: 0.25rem;
+    color: var(--cds-text-error, #da1e28);
+  }
+}
+
 // Riparian retention matrix (FREP230) — row labels + 4 measurement columns.
 .rip-retention {
   width: 100%;

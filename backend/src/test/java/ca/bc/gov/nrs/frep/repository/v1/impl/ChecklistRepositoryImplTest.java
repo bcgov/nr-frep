@@ -39,6 +39,12 @@ class ChecklistRepositoryImplTest {
       ConnectionCallback<?> callback = inv.getArgument(0);
       return callback.doInConnection(connection);
     });
+    // resolveBioResourceValueId / resolveFirstBioStratumId lookups — return a non-blank id so
+    // getBioStratum's "blank resource_value_id -> empty section" guard doesn't short-circuit the proc.
+    lenient()
+        .when(jdbcTemplate.query(
+            anyString(), any(org.springframework.jdbc.core.RowMapper.class), any()))
+        .thenReturn(java.util.List.of("500"));
   }
 
   // Some reads also call FREP_TOMBSTONE_GET (header merge), so capture all prepared calls and pick

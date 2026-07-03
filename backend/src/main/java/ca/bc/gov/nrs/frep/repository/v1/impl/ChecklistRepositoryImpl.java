@@ -125,6 +125,15 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
     String resourceValueId = resolveBioResourceValueId(checklistId);
     String stratumId = resolveFirstBioStratumId(checklistId);
 
+    // FREP_211.get's status SELECT INTO (deployed line 139) is unguarded: with a blank
+    // resource_value_id, to_number('') is NULL, the WHERE matches no biodiversity_checklist row, and
+    // the proc dies with ORA-01403 -> ORA-06512 -> HTTP 500. A blank id means there is no checklist
+    // row (a bogus/not-yet-persisted id), so there's nothing to load -- return an empty section
+    // instead of letting the proc crash.
+    if (resourceValueId.isBlank()) {
+      return ChecklistSectionData.emptySection();
+    }
+
     // Layout per legacy Frep211DataManager (deployed signature): 82 params, leading OUT block 1-15,
     // stratum_id IN @16, checklist_id IN @17, resource_value_id IN @18, fields 19-80, error @81,
     // wind-treatment REF CURSOR @82.

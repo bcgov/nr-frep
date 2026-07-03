@@ -13,6 +13,7 @@ const validHeader = (overrides: Partial<BioPlot> = {}): BioPlot => ({
   utmSignal: 'N',
   firstLegTransect: '120',
   secondLegTransect: '240',
+  plotNumber: '1',
   assessorName: 'IDIR\\JDOE',
   basalAreaFactor: '10',
   ...overrides,
@@ -52,6 +53,32 @@ describe('plotHeaderErrors', () => {
     expect(plotHeaderErrors(validHeader({ assessorName: '' }), 'DO').assessorName).toMatch(
       /required/,
     );
+  });
+
+  it('requires Plot # and enforces 0–999 when present', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '' }), 'DO').plotNumber).toMatch(/required/);
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1000' }), 'DO').plotNumber).toMatch(
+      /from 0 to 999/,
+    );
+  });
+
+  it('blocks "Trees exist" on a non-NAR clear-cut stratum only', () => {
+    // CC + non-NAR + trees -> blocked (mirrors FREP_BIODIVERSITY_STRATUM.VALIDATE)
+    expect(
+      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'CC', 'CC1').treeIndicator,
+    ).toMatch(/clear-cut/);
+    // CC + NAR + trees -> allowed (the requirement); case/whitespace-insensitive
+    expect(
+      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'CC', ' nar ').treeIndicator,
+    ).toBeUndefined();
+    // CC + non-NAR but trees unchecked -> no error
+    expect(
+      plotHeaderErrors(validHeader({ treeIndicator: 'N' }), 'CC', 'CC1').treeIndicator,
+    ).toBeUndefined();
+    // Blank stratum type (summary not filled in) -> relaxed
+    expect(
+      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), '', '').treeIndicator,
+    ).toBeUndefined();
   });
 
   it('enforces BAF / fixed-area / full-count ranges and decimals', () => {

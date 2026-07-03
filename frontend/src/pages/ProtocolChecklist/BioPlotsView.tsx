@@ -90,6 +90,31 @@ const UTM_ZONE_OPTIONS: CodeOption[] = ['7', '8', '9', '10', '11'].map((z) => ({
 const TABLE_MAX = 100;
 const TABLE_WARN = 50;
 
+const anyRowInvalid = (
+  rows: readonly unknown[] | undefined,
+  rowErrors: (row: Record<string, string | undefined>) => Record<string, string>,
+): boolean =>
+  (rows ?? []).some(
+    (r) => Object.keys(rowErrors(r as Record<string, string | undefined>)).length > 0,
+  );
+
+// A plot blocks Save when the header has errors, or "Trees exist" / "CWD in transect" is checked but the
+// matching sub-table is empty (trees — the legacy `notrees` check) or has an invalid row. Extracted to
+// keep the component's cognitive complexity down.
+const plotHasBlockingErrors = (
+  plot: BioPlot | null,
+  readOnly: boolean,
+  headerErrors: Record<string, string>,
+): boolean => {
+  if (!plot || readOnly) return false;
+  const trees = plot.treeIndicator === 'Y';
+  const treesNeedRow = trees && (plot.standTable?.length ?? 0) === 0;
+  const standInvalid = trees && anyRowInvalid(plot.standTable, standRowErrors);
+  const cwdInvalid =
+    plot.cwdTransectIndicator === 'Y' && anyRowInvalid(plot.cwdTable, cwdRowErrors);
+  return Object.keys(headerErrors).length > 0 || treesNeedRow || standInvalid || cwdInvalid;
+};
+
 const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
   const { display } = useNotification();
   const confirm = useConfirm();
@@ -283,23 +308,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       colKey
     ] ?? '';
 
-  // When "Trees exist" is checked the stand table must have at least one row (legacy submit check
-  // frep.submit.biodiversity.plot.notrees) — otherwise the indicator and the table disagree.
-  const treesNeedRow = get('treeIndicator') === 'Y' && (current?.standTable?.length ?? 0) === 0;
-  const standHasError =
-    get('treeIndicator') === 'Y' &&
-    (current?.standTable ?? []).some(
-      (r) => Object.keys(standRowErrors(r as Record<string, string | undefined>)).length > 0,
-    );
-  const cwdHasError =
-    get('cwdTransectIndicator') === 'Y' &&
-    (current?.cwdTable ?? []).some(
-      (r) => Object.keys(cwdRowErrors(r as Record<string, string | undefined>)).length > 0,
-    );
-  const hasErrors =
-    !!current &&
-    !readOnly &&
-    (Object.keys(headerErrors).length > 0 || treesNeedRow || standHasError || cwdHasError);
+  // Blocks Save while any header/sub-table error remains (incl. the legacy "Trees exist ⇒ ≥1 stand
+  // row" consistency check). See plotHasBlockingErrors.
+  const hasErrors = plotHasBlockingErrors(current, readOnly, headerErrors);
 
   const handleSave = async () => {
     if (!current) return;

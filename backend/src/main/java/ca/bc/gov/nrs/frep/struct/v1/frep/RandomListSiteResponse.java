@@ -23,7 +23,7 @@ import java.util.List;
  * @param disturbanceStartDate  start of harvest disturbance window (harvest-start date)
  * @param disturbanceEndDate    end of harvest disturbance window (harvest-complete date)
  * @param managementUnit      management unit (e.g. TSA/TFL designation)
- * @param existingChecklists  protocol codes already evaluated on this site, e.g. {@code ["BIO", "RIP"]}
+ * @param existingChecklists  protocol codes already evaluated on this site, e.g. {@code ["SLB", "CHR"]}
  */
 public record RandomListSiteResponse(
     String frepSelectedSiteId,

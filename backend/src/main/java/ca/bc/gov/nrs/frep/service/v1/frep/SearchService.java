@@ -309,13 +309,9 @@ public class SearchService {
     if (StringUtils.isBlank(protocolType)) {
       return Optional.empty();
     }
-    return switch (protocolType.trim().toUpperCase()) {
-      case "BIO", "SLB" -> Optional.of("SLB");
-      case "RIP" -> Optional.of("RIP");
-      case "WAT", "WTR" -> Optional.of("WTR");
-      case "CHR" -> Optional.of("CHR");
-      default -> Optional.of(protocolType.trim().toUpperCase());
-    };
+    // Only CHR and biodiversity (SLB legacy / SLR going forward) are in scope; the codes match the DB,
+    // so this just normalises case/whitespace — no protocol aliasing.
+    return Optional.of(protocolType.trim().toUpperCase());
   }
 
   private static String trimToNull(String value) {

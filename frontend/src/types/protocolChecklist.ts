@@ -17,7 +17,8 @@ export type ProtocolChecklistSection = {
 
 export type ProtocolChecklist = {
   checklistId: string;
-  protocolType: 'BIO' | 'RIP' | 'WAT' | 'CHR';
+  // The record's DB protocol code: biodiversity is SLB (legacy) / SLR (going forward); CHR is separate.
+  protocolType: 'SLB' | 'SLR' | 'CHR';
   protocolName: string;
   frepSelectedSiteId: string;
   openingNumber: string;

@@ -48,9 +48,9 @@ const activeChecklist = {
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={['/protocol-checklists/biodiversity/9001']}>
+    <MemoryRouter initialEntries={['/protocol-checklists/slr/9001']}>
       <Routes>
-        <Route path="/protocol-checklists/:type/:id" element={<ProtocolChecklistPage />} />
+        <Route path="/protocol-checklists/slr/:id" element={<ProtocolChecklistPage />} />
       </Routes>
     </MemoryRouter>,
   );

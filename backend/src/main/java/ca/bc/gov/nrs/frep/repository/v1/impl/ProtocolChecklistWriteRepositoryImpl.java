@@ -739,26 +739,20 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     );
   }
 
-  // --- Administration / Notes / Attachments (shared across bio / riparian / water) ---
+  // --- Administration / Notes / Attachments (shared procs, biodiversity only) ---
   //
-  // Each protocol's checklist row carries the frep_resource_value_id the shared procs join on, so
-  // resolve it from the right table per resourceType ('SLB' | 'RIP' | 'WTR').
+  // The biodiversity checklist row carries the frep_resource_value_id the shared procs join on.
+  // Biodiversity is SLB (legacy) / SLR (going forward) — both live in biodiversity_checklist.
 
   private static final String COST_RESOURCE_PKG = "FREP_CHECKLIST_COST_RESOURCES";
 
   private String resolveResourceValueId(String checklistId, String resourceType) {
-    String table = switch (resourceType) {
-      case "SLB" -> "the.biodiversity_checklist";
-      case "WTR" -> "the.water_checklist";
-      default -> "the.riparian_checklist";
-    };
-    String idColumn = switch (resourceType) {
-      case "SLB" -> "biodiversity_checklist_id";
-      case "WTR" -> "water_checklist_id";
-      default -> "riparian_checklist_id";
-    };
+    if (!"SLB".equals(resourceType) && !"SLR".equals(resourceType)) {
+      throw new IllegalArgumentException("Unsupported protocol resource type: " + resourceType);
+    }
     List<String> ids = jdbcTemplate.query(
-        "SELECT frep_resource_value_id FROM " + table + " WHERE " + idColumn + " = ?",
+        "SELECT frep_resource_value_id FROM the.biodiversity_checklist "
+            + "WHERE biodiversity_checklist_id = ?",
         (rs, n) -> rs.getString(1),
         checklistId);
     return ids.isEmpty() ? "" : ids.get(0);

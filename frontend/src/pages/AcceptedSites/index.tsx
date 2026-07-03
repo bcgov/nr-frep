@@ -35,14 +35,12 @@ import './acceptedSites.scss';
 
 const ALL_PROTOCOLS_VALUE = '';
 
-// Maps a resource-value type code to its checklist route. Codes match the legacy app
-// (`Constants.java`: SLB = biodiversity, RIP = riparian, WTR = water, CHR handled separately).
-// BIO/WAT aliases kept as a safety net for any friendly-code source.
-// Only biodiversity (legacy SLB) has a protocol-checklist page; CHR is handled separately. Riparian
-// (RIP) and Water (WTR) are out of scope and have no pages, so their rows are not linked.
-const PROTOCOL_TO_PATH: Record<string, 'biodiversity' | undefined> = {
-  SLB: 'biodiversity',
-  BIO: 'biodiversity',
+// Maps the record's DB protocol code to the biodiversity checklist route slug. SLB (legacy) and SLR
+// (going forward) are the same protocol/page, so both route to /protocol-checklists/slr/:id. CHR has
+// its own route slug (handled below). Any other code has no page and is not linked.
+const PROTOCOL_TO_PATH: Record<string, 'slr' | undefined> = {
+  SLB: 'slr',
+  SLR: 'slr',
 };
 
 const TABLE_HEADERS = [
@@ -117,8 +115,10 @@ const AcceptedSitesPage: FC = () => {
         if (cancelled) return;
         setMasterListYears(years);
         setOrgUnits(units);
-        // Riparian (RIP) and Water (WTR) are out of scope — keep them out of the protocol filter.
-        setProtocols(fetchedProtocols.filter((p) => p.code !== 'RIP' && p.code !== 'WTR'));
+        // Only the in-scope protocols are selectable: biodiversity (SLB legacy / SLR going forward)
+        // and CHR. Anything else the code list returns is filtered out.
+        const IN_SCOPE = new Set(['SLB', 'SLR', 'CHR']);
+        setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
 
         const defaultYear = years.find((year) => year.current) ?? years[0];
         if (defaultYear) setEffectiveYear(defaultYear.effectiveYear);
@@ -368,7 +368,7 @@ const AcceptedSitesPage: FC = () => {
                           : undefined;
                         const checklistLink =
                           rowMeta && rowMeta.protocolCode === 'CHR'
-                            ? `/chr/checklists/${rowMeta.id}`
+                            ? `/protocol-checklists/chr/${rowMeta.id}`
                             : protoPath
                               ? `/protocol-checklists/${protoPath}/${rowMeta?.id}`
                               : undefined;

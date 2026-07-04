@@ -87,6 +87,43 @@ class AcceptedSiteServiceTest {
     assertFalse(sites.get(0).targeted());
   }
 
+  @Test
+  void findAcceptedSitesSlrFilterIncludesHistoricalSlbButNotChr() {
+    // SLB and SLR are one biodiversity family: the single SLR filter returns both (historical SLB
+    // still shows and opens read-only); CHR is excluded.
+    when(acceptedSitesRepository.findAcceptedSites("56", "2024")).thenReturn(List.of(
+        new AcceptedSiteRow(
+            "1001", "Biodiversity", "", "ACC", "RDY",
+            "A12345", "987654", "1234567", "CP-8891", "CB-442", "2024-06-15"
+        ),
+        new AcceptedSiteRow(
+            "1002", "Stand Level Retention", "", "ACC", "RDY",
+            "B67890", "987655", "2345678", "CP-8892", "CB-443", "2024-07-01"
+        ),
+        new AcceptedSiteRow(
+            "1003", "Cultural Heritage", "", "ACC", "RDY",
+            "C11111", "987656", "3456789", "CP-8893", "CB-444", "2024-07-02"
+        )
+    ));
+    Map<String, Object> slb = new LinkedHashMap<>();
+    slb.put("CODE", "SLB");
+    slb.put("DESCRIPTION", "Biodiversity");
+    Map<String, Object> slr = new LinkedHashMap<>();
+    slr.put("CODE", "SLR");
+    slr.put("DESCRIPTION", "Stand Level Retention");
+    Map<String, Object> chr = new LinkedHashMap<>();
+    chr.put("CODE", "CHR");
+    chr.put("DESCRIPTION", "Cultural Heritage");
+    when(codeListRepository.getResourceValue()).thenReturn(List.of(slb, slr, chr));
+
+    var sites = service.findAcceptedSites("2024", "56", "SLR");
+
+    assertEquals(2, sites.size());
+    assertTrue(sites.stream().anyMatch(s -> "SLB".equals(s.protocolCode())));
+    assertTrue(sites.stream().anyMatch(s -> "SLR".equals(s.protocolCode())));
+    assertFalse(sites.stream().anyMatch(s -> "CHR".equals(s.protocolCode())));
+  }
+
 
   @Test
   void findAcceptedSitesMergesCulturalHeritage() {

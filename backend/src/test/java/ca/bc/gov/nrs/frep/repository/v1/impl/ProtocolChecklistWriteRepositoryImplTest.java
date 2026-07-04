@@ -150,7 +150,7 @@ class ProtocolChecklistWriteRepositoryImplTest {
 
     verify(connection).prepareCall(
         "{call FREP_211_BIOSTRATUM.SAVE_STRATUM(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}");
-    verify(cs).setString(3, "SLB"); // resource value type
+    verify(cs).setString(3, "SLR"); // resource value type — new records are SLR
     verify(cs).setString(4, "MAT"); // strata type code
     verify(cs).setString(5, "1"); // stratum number
     verify(cs).setString(6, "2024-05-01"); // summary date
@@ -252,7 +252,7 @@ class ProtocolChecklistWriteRepositoryImplTest {
         "{call FREP_212_BIOPLOT.save_plot(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}");
     verify(connection).prepareCall("{call FREP_212_BIOPLOT.save_bio_stand_detail(?,?,?)}");
     verify(connection).prepareCall("{call FREP_212_BIOPLOT.save_cwd_detail(?,?,?)}");
-    verify(cs).setString(3, "SLB"); // resource value type
+    verify(cs).setString(3, "SLR"); // resource value type — new records are SLR
     verify(cs).setString(4, "1"); // plot number
     verify(cs).setString(17, "cmt"); // plot comment
     verify(cs).registerOutParameter(20, Types.VARCHAR); // save_plot error

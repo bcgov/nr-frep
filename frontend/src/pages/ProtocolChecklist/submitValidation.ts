@@ -16,7 +16,7 @@ const CATALOG: Record<string, string> = {
   'frep.submit.common.evaluation':
     'Administration tab: Evaluation Date is mandatory for submission.',
   'frep.submit.biodiversity.failure':
-    'Biodiversity submission failed for an unknown reason. Please try again.',
+    'Stand Level Retention submission failed for an unknown reason. Please try again.',
   'frep.submit.biodiversity.stratum.mandatory':
     'Stratum summary tab: Add at least one stratum before submitting.',
   'frep.submit.biodiversity.stratum.fields.mandatory':

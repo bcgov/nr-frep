@@ -212,6 +212,10 @@ const ProtocolChecklistPage: FC = () => {
   };
 
   const submitted = checklist?.statusCode === 'SUB';
+  // Historical biodiversity records carry code SLB and are view-only in the new app (SLR is the
+  // go-forward code). The backend also 403s any SLB mutation — this just hides the edit affordances.
+  const isLegacySlb = checklist?.protocolType === 'SLB';
+  const editable = canEdit && !isLegacySlb;
 
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">
@@ -263,12 +267,16 @@ const ProtocolChecklistPage: FC = () => {
 
       {!loading && !notFound && !hasError && checklist && (
         <>
-          {submitted && (
+          {(submitted || isLegacySlb) && (
             <Column sm={4} md={8} lg={16}>
               <InlineNotification
                 kind="info"
                 title="Read only"
-                subtitle="This checklist has been submitted and is read-only. Unsubmit it to make changes."
+                subtitle={
+                  isLegacySlb
+                    ? 'This is a historical Stand Level Retention (SLB) record and is read-only.'
+                    : 'This checklist has been submitted and is read-only. Unsubmit it to make changes.'
+                }
                 hideCloseButton
                 lowContrast
               />
@@ -302,7 +310,7 @@ const ProtocolChecklistPage: FC = () => {
             </Tile>
           </Column>
 
-          {canEdit && (
+          {editable && (
             <Column sm={4} md={8} lg={16}>
               <div className="protocol-checklist__actions">
                 {!submitted && (
@@ -362,31 +370,31 @@ const ProtocolChecklistPage: FC = () => {
                       <RipAdministrationView
                         protocol={backendCode ?? ''}
                         checklistId={id}
-                        canEdit={canEdit}
+                        canEdit={editable}
                         submitted={submitted}
                       />
                     ) : section.id === 'notes' ? (
                       <RipNotesView
                         protocol={backendCode ?? ''}
                         checklistId={id}
-                        canEdit={canEdit}
+                        canEdit={editable}
                         submitted={submitted}
                       />
                     ) : section.id === 'attachments' ? (
                       <RipAttachmentsView
                         protocol={backendCode ?? ''}
                         checklistId={id}
-                        canEdit={canEdit}
+                        canEdit={editable}
                         submitted={submitted}
                       />
                     ) : section.id === 'opening' ? (
-                      <BioOpeningView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      <BioOpeningView checklistId={id} canEdit={editable} submitted={submitted} />
                     ) : section.id === 'stratum' ? (
-                      <BioStratumView checklistId={id} canEdit={canEdit} submitted={submitted} />
+                      <BioStratumView checklistId={id} canEdit={editable} submitted={submitted} />
                     ) : section.id === 'plots' ? (
                       <BioPlotsView
                         checklistId={id}
-                        canEdit={canEdit}
+                        canEdit={editable}
                         submitted={submitted}
                         active={i === tabIndex}
                       />

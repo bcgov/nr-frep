@@ -235,7 +235,7 @@ $P{ORACLE_REF_CURSOR}
           <textElement textAlignment="Center" verticalAlignment="Bottom">
             <font fontName="Arial" size="8" isBold="true"/>
           </textElement>
-          <text><![CDATA[Biodiversity]]></text>
+          <text><![CDATA[Stand Level Retention]]></text>
         </staticText>
         <staticText>
           <reportElement x="260" y="16" width="40" height="44" uuid="d5743d0f-433b-4001-a40f-b339ad161832"/>

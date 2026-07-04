@@ -35,9 +35,10 @@ public class SiteDetailService {
 
   static final String SUBMITTED = "SUB";
   static final String OTHER_REASON = "OTH";
-  /** Protocol resource types the new app supports (Biodiversity, Cultural Heritage). The legacy GET
-   * also returns Riparian/Water rows, which are out of migration scope and are dropped. */
-  static final Set<String> SUPPORTED_PROTOCOLS = Set.of("SLB", "CHR");
+  /** Protocol resource types the new app supports: biodiversity (SLB legacy + SLR go-forward) and
+   * Cultural Heritage. The legacy GET also returns Riparian/Water rows, which are out of migration
+   * scope and are dropped. */
+  static final Set<String> SUPPORTED_PROTOCOLS = Set.of("SLB", "SLR", "CHR");
   static final int MAX_RATIONALE_LENGTH = 50;
   static final int MAX_COMMENTS_LENGTH = 2000;
   private static final String RATIONALE_TOO_LONG = "rationale must be 50 characters or fewer";
@@ -248,7 +249,23 @@ public class SiteDetailService {
     return resources.stream()
         .filter(r -> StringUtils.isNotBlank(r.statusCode()))
         .filter(r -> r.resourceValueId() == null || !submittedIds.contains(r.resourceValueId()))
+        .map(SiteDetailService::withGoForwardBioCode)
         .toList();
+  }
+
+  /**
+   * Biodiversity is created under the go-forward code {@code SLR}; legacy {@code SLB} is view-only and
+   * never re-persisted (all pre-cutover SLB is submitted, so it's filtered out upstream). Force any
+   * new (id-less) biodiversity target to SLR so the backend is authoritative even for a stale client
+   * that still offers SLB. Existing rows keep their stored type.
+   */
+  static SiteResourceSaveRequest withGoForwardBioCode(SiteResourceSaveRequest r) {
+    if (StringUtils.isBlank(r.resourceValueId())
+        && "SLB".equalsIgnoreCase(StringUtils.trimToEmpty(r.resourceType()))) {
+      return new SiteResourceSaveRequest("", "SLR", r.statusCode(), r.rejectionReasonCode(),
+          r.rationale(), r.otherComments(), r.revisionCount());
+    }
+    return r;
   }
 
   /**
@@ -263,18 +280,31 @@ public class SiteDetailService {
 
   /**
    * Drop resource rows for protocols the new app doesn't support (Riparian/Water), keeping only
-   * Biodiversity ({@code SLB}) and Cultural Heritage ({@code CHR}). Used in the targeted-site create
-   * flow so the picker only offers the protocols that have checklist pages.
+   * biodiversity ({@code SLB} legacy + {@code SLR} go-forward) and Cultural Heritage ({@code CHR}).
+   * Used in the targeted-site create flow so the picker only offers the protocols that have checklist pages.
    */
   static SiteDetailData supportedProtocolsOnly(SiteDetailData data) {
     List<SiteResourceRow> kept = data.resources().stream()
         .filter(r -> SUPPORTED_PROTOCOLS.contains(StringUtils.trimToEmpty(r.resourceType()).toUpperCase()))
+        .filter(SiteDetailService::isNotNewLegacyBio)
         .toList();
     return new SiteDetailData(
         data.frepSelectedSiteId(), data.masterList(), data.orgUnit(), data.orgUnitNo(),
         data.client(), data.clientName(), data.opening(), data.openingId(), data.actualOpening(),
         data.licenceNo(), data.actualLicence(), data.cuttingPermitId(), data.cutBlockId(),
         data.fspLink(), data.harvestYear(), kept);
+  }
+
+  /**
+   * SLB is view-only and not creatable. The FREP110 GET seeds a blank row per protocol type for a new
+   * opening; since SLB and its go-forward code SLR are both active codes, that would offer two
+   * biodiversity rows. Drop the blank (id-less, un-evaluated) SLB row so only SLR is offered for new
+   * biodiversity work. Existing SLB rows (with a resource value id) stay visible for read-only viewing.
+   */
+  static boolean isNotNewLegacyBio(SiteResourceRow r) {
+    boolean newRow = StringUtils.isBlank(r.resourceValueId());
+    boolean legacyBio = "SLB".equalsIgnoreCase(StringUtils.trimToEmpty(r.resourceType()));
+    return !(newRow && legacyBio);
   }
 
   /** The effective year is the first four characters of the master-list value (legacy parity). */

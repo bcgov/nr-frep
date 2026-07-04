@@ -367,7 +367,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, s.stratumId());
           setInOutString(cs, 2, s.checklistId());
-          cs.setString(3, "SLB"); // resource_value_type
+          cs.setString(3, "SLR"); // resource_value_type — new records are SLR (SLB saves are guard-blocked)
           cs.setString(4, s.strataTypeCode());
           cs.setString(5, s.stratumNumber());
           cs.setString(6, s.summaryDate());
@@ -505,6 +505,26 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     }
     Long plots = jdbcTemplate.queryForObject(PLOTS_COMPLETED_SELECT, Long.class, stratumId);
     return new StratumComputed(narForChecklist(checklistId), plots == null ? "0" : String.valueOf(plots));
+  }
+
+  @Override
+  public String checklistIdForStratum(String stratumId) {
+    return firstOrNull(jdbcTemplate.query(
+        "SELECT biodiversity_checklist_id FROM the.biodiversity_stratum WHERE stratum_id = ?",
+        (rs, n) -> rs.getString(1), stratumId));
+  }
+
+  @Override
+  public String checklistIdForPlot(String plotId) {
+    return firstOrNull(jdbcTemplate.query(
+        "SELECT s.biodiversity_checklist_id FROM the.biodiversity_stratum s "
+            + "JOIN the.biodiversity_plot p ON p.stratum_id = s.stratum_id "
+            + "WHERE p.biodiversity_plot_id = ?",
+        (rs, n) -> rs.getString(1), plotId));
+  }
+
+  private static String firstOrNull(List<String> rows) {
+    return rows.isEmpty() ? null : rows.get(0);
   }
 
   /**
@@ -660,7 +680,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, p.plotId());
           setInOutString(cs, 2, p.stratumId());
-          cs.setString(3, "SLB"); // resource_value_type
+          cs.setString(3, "SLR"); // resource_value_type — new records are SLR (SLB saves are guard-blocked)
           cs.setString(4, p.plotNumber());
           cs.setString(5, p.assessorName());
           cs.setString(6, p.utmSignal());
@@ -746,8 +766,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
 
   private static final String COST_RESOURCE_PKG = "FREP_CHECKLIST_COST_RESOURCES";
 
+  /** SLB (legacy) and its go-forward code SLR are the two biodiversity resource types. */
+  static boolean isBiodiversity(String resourceType) {
+    return "SLB".equals(resourceType) || "SLR".equals(resourceType);
+  }
+
   private String resolveResourceValueId(String checklistId, String resourceType) {
-    if (!"SLB".equals(resourceType) && !"SLR".equals(resourceType)) {
+    if (!isBiodiversity(resourceType)) {
       throw new IllegalArgumentException("Unsupported protocol resource type: " + resourceType);
     }
     List<String> ids = jdbcTemplate.query(
@@ -794,7 +819,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     // revision token straight from the table so the screen shows what SAVE actually wrote and the
     // save round-trips the true optimistic-lock token.
     BiodiversityAdminScalars direct =
-        "SLB".equals(resourceType) ? readBiodiversityAdminScalars(checklistId) : null;
+        isBiodiversity(resourceType) ? readBiodiversityAdminScalars(checklistId) : null;
     return executeCall(
         callSql(COST_RESOURCE_PKG, "GET", 35),
         cs -> {
@@ -996,17 +1021,16 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   private static final String ATTACH_PKG = "FREP_CHECKLIST_ATTACHMENTS";
 
   /**
-   * Biodiversity (SLB) attachment bytes live in shared object storage, not the Oracle BLOB. Metadata
+   * Biodiversity attachment bytes live in shared object storage, not the Oracle BLOB. Metadata
    * still goes through {@code FREP_CHECKLIST_ATTACHMENTS} (list/insert/remove); only the file content
    * moves. Keyed by the unique attachment id under an {@code slr/} prefix — collision-free vs the CHR
-   * photo keys and independent of the DB resource type (still {@code SLB}). Other protocols (RIP/WTR)
-   * keep using the Oracle BLOB path unchanged.
+   * photo keys and independent of the DB resource type (SLB legacy / SLR go-forward). Other protocols
+   * (RIP/WTR) keep using the Oracle BLOB path unchanged.
    */
-  private static final String BIO_RESOURCE_TYPE = "SLB";
   private static final String BIO_OBJECT_PREFIX = "slr/";
 
   private static boolean isBioAttachment(String resourceType) {
-    return BIO_RESOURCE_TYPE.equals(resourceType);
+    return isBiodiversity(resourceType);
   }
 
   private static String bioObjectKey(String attachmentId) {

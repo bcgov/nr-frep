@@ -102,7 +102,11 @@ const ChecklistSearchPage: FC = () => {
         if (cancelled) return;
         setMasterListYears(years);
         setOrgUnits(units);
-        setProtocols(fetchedProtocols);
+        // Selectable search protocols: biodiversity (SLR — the go-forward code, which the backend
+        // expands to also match legacy SLB), plus historical RIP/WTR and CHR. SLB is not a separate
+        // option; searching SLR returns historical SLB checklists too.
+        const IN_SCOPE = new Set(['SLR', 'RIP', 'WTR', 'CHR']);
+        setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
         // Default the year filter to the latest year in the list.
         const latestYear = years.reduce<string | undefined>(
           (latest, year) =>

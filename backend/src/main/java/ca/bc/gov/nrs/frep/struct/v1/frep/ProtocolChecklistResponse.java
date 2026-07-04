@@ -10,7 +10,7 @@ import java.util.List;
  *
  * @param checklistId         PK of {@code FREP_*_CHECKLIST} table for the protocol
  * @param protocolType        {@code BIO}, {@code RIP}, {@code WAT}, {@code CHR}
- * @param protocolName        display name, e.g. {@code "Biodiversity"}
+ * @param protocolName        display name, e.g. {@code "Stand Level Retention"}
  * @param frepSelectedSiteId  FK back to {@code FREP_SELECTED_SITE}
  * @param openingNumber       formatted opening for the site header strip
  * @param effectiveYear       master-list year

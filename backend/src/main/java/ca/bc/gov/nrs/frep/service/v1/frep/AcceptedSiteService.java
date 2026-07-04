@@ -90,6 +90,16 @@ public class AcceptedSiteService {
     if (StringUtils.isBlank(protocolType)) {
       return true;
     }
-    return protocolType.equalsIgnoreCase(site.protocolCode());
+    return protocolFamily(protocolType).equals(protocolFamily(site.protocolCode()));
+  }
+
+  /**
+   * SLB (legacy) and SLR (go-forward) are the same biodiversity protocol/page, so the single SLR filter
+   * option matches both — historical SLB accepted sites still show (and open read-only). Any other code
+   * matches itself.
+   */
+  private static String protocolFamily(String code) {
+    String c = StringUtils.trimToEmpty(code).toUpperCase();
+    return ("SLB".equals(c) || "SLR".equals(c)) ? "SLR" : c;
   }
 }

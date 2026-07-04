@@ -309,8 +309,9 @@ public class SearchService {
     if (StringUtils.isBlank(protocolType)) {
       return Optional.empty();
     }
-    // Only CHR and biodiversity (SLB legacy / SLR going forward) are in scope; the codes match the DB,
-    // so this just normalises case/whitespace — no protocol aliasing.
+    // Search allows any protocol code (incl. historical RIP/WTR). The codes match the DB, so this just
+    // normalises case/whitespace; the biodiversity family expansion (SLR filter also matches legacy SLB)
+    // lives in the query (CHECKLIST_SEARCH_INNER), not here.
     return Optional.of(protocolType.trim().toUpperCase());
   }
 

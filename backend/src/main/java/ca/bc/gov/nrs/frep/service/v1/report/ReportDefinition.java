@@ -38,15 +38,15 @@ public enum ReportDefinition {
   // ── Reports → Biodiversity → Data Extract (legacy JCRS FREPRPT001-005) ──────
   // CSV extracts filled from an Oracle ref-cursor proc; see ReportDataProvider.
   BIODIVERSITY_EXTRACT_BLOCK(
-      "biodiversity-extract-block", "Biodiversity_Extract_Block", "freprpt_bio_opening"),
+      "biodiversity-extract-block", "Stand_Level_Retention_Extract_Block", "freprpt_bio_opening"),
   BIODIVERSITY_EXTRACT_STRATUM(
-      "biodiversity-extract-stratum", "Biodiversity_Extract_Stratum", "freprpt_bio_stratum_sum"),
+      "biodiversity-extract-stratum", "Stand_Level_Retention_Extract_Stratum", "freprpt_bio_stratum_sum"),
   BIODIVERSITY_EXTRACT_PLOT(
-      "biodiversity-extract-plot", "Biodiversity_Extract_Plot", "freprpt_bio_plot"),
+      "biodiversity-extract-plot", "Stand_Level_Retention_Extract_Plot", "freprpt_bio_plot"),
   BIODIVERSITY_EXTRACT_STAND(
-      "biodiversity-extract-stand", "Biodiversity_Extract_Stand", "freprpt_bio_plot_stand"),
+      "biodiversity-extract-stand", "Stand_Level_Retention_Extract_Stand", "freprpt_bio_plot_stand"),
   BIODIVERSITY_EXTRACT_CWD(
-      "biodiversity-extract-cwd", "Biodiversity_Extract_CWD", "freprpt_bio_plot_cwd"),
+      "biodiversity-extract-cwd", "Stand_Level_Retention_Extract_CWD", "freprpt_bio_plot_cwd"),
 
   // ── Reports → Cultural Heritage → Data Extract (legacy JCRS FREPRPT022, admin-only) ──
   // CSV extract; proc takes a different arg list than the biodiversity extracts (org unit,

@@ -115,9 +115,10 @@ const AcceptedSitesPage: FC = () => {
         if (cancelled) return;
         setMasterListYears(years);
         setOrgUnits(units);
-        // Only the in-scope protocols are selectable: biodiversity (SLB legacy / SLR going forward)
-        // and CHR. Anything else the code list returns is filtered out.
-        const IN_SCOPE = new Set(['SLB', 'SLR', 'CHR']);
+        // Selectable protocols: biodiversity (SLR — the go-forward code) and CHR. SLB is not offered as
+        // a separate option; the backend treats the SLR filter as the whole biodiversity family, so
+        // historical SLB accepted sites still appear under SLR (and open read-only).
+        const IN_SCOPE = new Set(['SLR', 'CHR']);
         setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
 
         const defaultYear = years.find((year) => year.current) ?? years[0];

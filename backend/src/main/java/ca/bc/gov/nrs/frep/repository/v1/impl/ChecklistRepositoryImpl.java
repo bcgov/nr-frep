@@ -80,7 +80,8 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
       putIfPresent(fields, "Rating", cs.getString(32));
       putIfPresent(fields, "Rationale", cs.getString(33));
       return ChecklistSectionData.of(
-          header.mergedWith(getTombstone(checklistId, "SLB", resourceValueId)), fields);
+          header.mergedWith(getTombstone(checklistId, resolveResourceType(checklistId), resourceValueId)),
+          fields);
     });
   }
 
@@ -92,6 +93,24 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
         (rs, n) -> rs.getString(1),
         checklistId);
     return ids.isEmpty() ? "" : trimId(ids.get(0));
+  }
+
+  /**
+   * The biodiversity record's actual protocol code — SLB (legacy) / SLR (going forward) — resolved from
+   * the DB (frep_resource_value) rather than the URL. The shared procs key on this code, so reads must
+   * pass the record's real type. Falls back to {@code SLB} when the checklist row doesn't exist (bogus
+   * id), preserving the not-found behaviour.
+   */
+  public String resolveResourceType(String checklistId) {
+    List<String> types = jdbcTemplate.query(
+        "SELECT rv.frep_resource_value_type_code "
+            + "FROM the.biodiversity_checklist bc "
+            + "JOIN the.frep_resource_value rv "
+            + "  ON rv.frep_resource_value_id = bc.frep_resource_value_id "
+            + "WHERE bc.biodiversity_checklist_id = ?",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return types.isEmpty() || types.get(0) == null ? "SLB" : types.get(0).trim();
   }
 
   /** The checklist's first stratum id (a checklist may have 0..n strata); "" when none. */
@@ -213,7 +232,8 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
       putIfPresent(fields, "NAR", cs.getString(78));
       putIfPresent(fields, "Actual number of plots", cs.getString(79));
       putCursorFields(fields, cs, 82, "Wind treatment ");
-      return ChecklistSectionData.of(header.mergedWith(getTombstone(checklistId, "SLB", "")), fields);
+      return ChecklistSectionData.of(
+          header.mergedWith(getTombstone(checklistId, resolveResourceType(checklistId), "")), fields);
     });
   }
 
@@ -257,7 +277,8 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
       putIfPresent(fields, "Plots completed", cs.getString(40));
       putArrayFields(fields, cs.getArray(20), "Stand table ", STAND_COLS);
       putArrayFields(fields, cs.getArray(21), "CWD table ", CWD_COLS);
-      return ChecklistSectionData.of(header.mergedWith(getTombstone(checklistId, "SLB", "")), fields);
+      return ChecklistSectionData.of(
+          header.mergedWith(getTombstone(checklistId, resolveResourceType(checklistId), "")), fields);
     });
   }
 

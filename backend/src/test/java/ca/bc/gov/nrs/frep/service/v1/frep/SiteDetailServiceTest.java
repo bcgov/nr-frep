@@ -75,6 +75,24 @@ class SiteDetailServiceTest {
   }
 
   @Test
+  void supportedProtocolsOnlyDropsBlankNewSlbRowButKeepsExistingSlbAndOffersSlr() {
+    // A new opening's FREP110 GET seeds a blank row per protocol type. SLB is not creatable, so its
+    // blank (id-less) row is dropped and only the SLR row is offered; an existing SLB row (with an id)
+    // stays visible for read-only viewing.
+    SiteDetailData data = siteDetailData(List.of(
+        new SiteResourceRow("", "R", "SLB", "Biodiversity", "", "", "", "", "", "0"),
+        new SiteResourceRow("", "R", "SLR", "Stand Level Retention", "", "", "", "", "", "0"),
+        new SiteResourceRow("9", "R", "SLB", "Biodiversity", "ACC", "SUB", "", "", "", "3")));
+
+    List<SiteResourceRow> kept = SiteDetailService.supportedProtocolsOnly(data).resources();
+
+    assertEquals(2, kept.size());
+    assertEquals("SLR", kept.get(0).resourceType());
+    assertEquals("SLB", kept.get(1).resourceType());
+    assertEquals("9", kept.get(1).resourceValueId());
+  }
+
+  @Test
   void findSiteDetailMapsRepositoryDataAndResolvesChecklistId() {
     when(siteDetailRepository.findSiteDetail("1001")).thenReturn(siteDetailData(
         List.of(new SiteResourceRow(

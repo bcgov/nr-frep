@@ -82,7 +82,8 @@ public class ProtocolChecklistService {
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
   public void submit(String protocolType, String checklistId) {
-    String resourceType = resolveResourceType(protocolType);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    assertEditable(resourceType);
     String error = writeRepository.submit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
     if (StringUtils.isNotBlank(error)) {
       throw new ProtocolSubmitValidationException(splitValidationMessages(error));
@@ -91,7 +92,8 @@ public class ProtocolChecklistService {
 
   /** Revert a submitted checklist to ACT. */
   public void unsubmit(String protocolType, String checklistId) {
-    String resourceType = resolveResourceType(protocolType);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    assertEditable(resourceType);
     String error = writeRepository.unsubmit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
@@ -102,13 +104,15 @@ public class ProtocolChecklistService {
   public BiodiversityOpening getBiodiversityOpening(String checklistId) {
     BiodiversityOpening opening = writeRepository.getBiodiversityOpening(checklistId);
     if (opening == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Biodiversity checklist not found: " + checklistId);
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+          "Stand Level Retention checklist not found: " + checklistId);
     }
     return opening;
   }
 
   /** Save the Biodiversity Opening screen via FREP_210_BIO_OPENING.SAVE. */
   public BiodiversityOpening saveBiodiversityOpening(String checklistId, BiodiversityOpening opening) {
+    assertChecklistEditable(checklistId);
     validateBiodiversityOpening(opening);
     BiodiversityOpening toSave = opening.checklistId() == null
         ? opening.withIdentity(checklistId, opening.revisionCount())
@@ -450,11 +454,13 @@ public class ProtocolChecklistService {
   }
 
   public BioStratum saveBioStratum(BioStratum stratum) {
+    assertChecklistEditable(stratum.checklistId());
     validateBioStratum(stratum);
     return writeRepository.saveBioStratum(stratum, loggedUserHelper.getLoggedUserId());
   }
 
   public void deleteBioStratum(String stratumId, String revisionCount) {
+    assertChecklistEditable(writeRepository.checklistIdForStratum(stratumId));
     String error = writeRepository.deleteBioStratum(stratumId, revisionCount);
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
@@ -486,6 +492,7 @@ public class ProtocolChecklistService {
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {
+    assertChecklistEditable(writeRepository.checklistIdForStratum(plot.stratumId()));
     validateBioPlot(plot);
     return writeRepository.saveBioPlot(plot, loggedUserHelper.getLoggedUserId());
   }
@@ -606,29 +613,26 @@ public class ProtocolChecklistService {
   }
 
   public void deleteBioPlot(String plotId, String revisionCount) {
+    assertChecklistEditable(writeRepository.checklistIdForPlot(plotId));
     String error = writeRepository.deleteBioPlot(plotId, revisionCount);
     if (StringUtils.isNotBlank(error)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
     }
   }
 
-  // --- Administration / Notes / Attachments (shared across bio / riparian / water) ---
+  // --- Administration / Notes / Attachments (biodiversity) ---
   //
-  // The {protocol} path segment ('bio'/'rip'/'wat') maps to the resource value type used by the
-  // shared procs.
-
-  static String resourceTypeForProtocol(String protocol) {
-    return normalizeProtocolType(protocol)
-        .orElseThrow(() -> new ResponseStatusException(
-            HttpStatus.BAD_REQUEST, "Unknown protocol: " + protocol));
-  }
+  // The resource value type the shared procs key on is resolved from the record
+  // (checklistRepository.resolveResourceType) — SLB (legacy) / SLR (going forward) — not the URL. The
+  // {protocol} path segment only selects the family; it no longer determines the code.
 
   public AdministrationData getAdministration(String protocol, String checklistId) {
     return withResolvedTeamNames(
-        writeRepository.getAdministration(checklistId, resourceTypeForProtocol(protocol)));
+        writeRepository.getAdministration(checklistId, checklistRepository.resolveResourceType(checklistId)));
   }
 
   public AdministrationData saveAdministration(String protocol, AdministrationData admin) {
+    assertChecklistEditable(admin.checklistId());
     validateAdministration(admin);
     return withResolvedTeamNames(
         writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId()));
@@ -636,14 +640,18 @@ public class ProtocolChecklistService {
 
   public AdministrationData addTeamMember(
       String protocol, String checklistId, String evaluator, boolean teamLead) {
+    assertChecklistEditable(checklistId);
     return withResolvedTeamNames(writeRepository.addTeamMember(checklistId,
-        resourceTypeForProtocol(protocol), evaluator, teamLead, loggedUserHelper.getLoggedUserId()));
+        checklistRepository.resolveResourceType(checklistId), evaluator, teamLead,
+        loggedUserHelper.getLoggedUserId()));
   }
 
   public AdministrationData removeTeamMember(
       String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
+    assertChecklistEditable(checklistId);
     return withResolvedTeamNames(writeRepository.deleteTeamMember(
-        checklistId, resourceTypeForProtocol(protocol), evaluatorUserid, revisionCount));
+        checklistId, checklistRepository.resolveResourceType(checklistId), evaluatorUserid,
+        revisionCount));
   }
 
   /**
@@ -798,29 +806,31 @@ public class ProtocolChecklistService {
   }
 
   public RiparianNotes getNotes(String protocol, String checklistId) {
-    return writeRepository.getNotes(checklistId, resourceTypeForProtocol(protocol));
+    return writeRepository.getNotes(checklistId, checklistRepository.resolveResourceType(checklistId));
   }
 
   public RiparianNotes saveNotes(String protocol, String checklistId, RiparianNotes notes) {
-    return writeRepository.saveNotes(
-        notes, resourceTypeForProtocol(protocol), loggedUserHelper.getLoggedUserId());
+    assertChecklistEditable(checklistId);
+    return writeRepository.saveNotes(notes, checklistRepository.resolveResourceType(checklistId),
+        loggedUserHelper.getLoggedUserId());
   }
 
   public List<AttachmentRow> getAttachments(String protocol, String checklistId) {
-    return writeRepository.getAttachments(checklistId, resourceTypeForProtocol(protocol));
+    return writeRepository.getAttachments(checklistId, checklistRepository.resolveResourceType(checklistId));
   }
 
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {
     return writeRepository.getAttachmentContent(
-        checklistId, resourceTypeForProtocol(protocol), attachmentId);
+        checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
   }
 
   public List<AttachmentRow> saveAttachment(
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
     validateAttachmentType(fileName);
-    String resourceType = resourceTypeForProtocol(protocol);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    assertEditable(resourceType);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());
     return writeRepository.getAttachments(checklistId, resourceType);
@@ -840,15 +850,10 @@ public class ProtocolChecklistService {
 
   public List<AttachmentRow> deleteAttachment(
       String protocol, String checklistId, String attachmentId) {
-    String resourceType = resourceTypeForProtocol(protocol);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
     return writeRepository.getAttachments(checklistId, resourceType);
-  }
-
-  private String resolveResourceType(String protocolType) {
-    return normalizeProtocolType(protocolType)
-        .orElseThrow(() -> new ResponseStatusException(
-            HttpStatus.BAD_REQUEST, "Unknown protocol type: " + protocolType));
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */
@@ -863,21 +868,20 @@ public class ProtocolChecklistService {
     if (StringUtils.isBlank(protocolType) || StringUtils.isBlank(checklistId)) {
       return Optional.empty();
     }
-    Optional<String> normalizedProtocol = normalizeProtocolType(protocolType);
-    if (normalizedProtocol.isEmpty()) {
+    // The {protocol} path segment only selects the family — this service handles biodiversity only
+    // (CHR is a separate service/route). The record's actual code (SLB legacy / SLR going forward) is
+    // resolved from the DB, not the URL.
+    if (!isBiodiversity(protocolType)) {
       return Optional.empty();
     }
 
-    String oracleProtocol = normalizedProtocol.get();
-    Map<String, String> protocolNames = loadProtocolNames();
-    List<SectionDefinition> sections = switch (oracleProtocol) {
-      case "SLB" -> bioSections(checklistId);
-      default -> List.of();
-    };
-
+    List<SectionDefinition> sections = bioSections(checklistId);
     if (sections.isEmpty()) {
       return Optional.empty();
     }
+
+    String recordType = checklistRepository.resolveResourceType(checklistId);
+    Map<String, String> protocolNames = loadProtocolNames();
 
     ChecklistHeaderData header = ChecklistHeaderData.empty();
     List<ProtocolChecklistSection> responseSections = new ArrayList<>(sections.size());
@@ -894,8 +898,8 @@ public class ProtocolChecklistService {
         : famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
     return Optional.of(new ProtocolChecklistResponse(
         checklistId,
-        oracleProtocol,
-        protocolNames.getOrDefault(oracleProtocol, oracleProtocol),
+        recordType,
+        protocolNames.getOrDefault(recordType, recordType),
         header.frepSelectedSiteId(),
         header.openingNumber(),
         header.effectiveYear(),
@@ -908,16 +912,31 @@ public class ProtocolChecklistService {
     ));
   }
 
-  static Optional<String> normalizeProtocolType(String protocolType) {
-    if (StringUtils.isBlank(protocolType)) {
-      return Optional.empty();
+  /** The biodiversity family segment ({@code bio}/{@code SLB}/{@code SLR}) — page routing only, not the
+   * record's code (which is resolved from the DB). */
+  private static boolean isBiodiversity(String protocol) {
+    String p = protocol.trim().toUpperCase();
+    return p.equals("BIO") || p.equals("SLB") || p.equals("SLR");
+  }
+
+  /**
+   * Historical biodiversity records carry code {@code SLB} and are view-only in the new app ({@code SLR}
+   * is the go-forward code). Block every mutation authoritatively at the service layer — not just the UI.
+   * See slb-to-slr-rename.local.md.
+   */
+  private static void assertEditable(String resourceType) {
+    if ("SLB".equals(resourceType)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+          "This is a historical Stand Level Retention (SLB) record and is read-only.");
     }
-    // Riparian (RIP) and Water (WTR) are out of scope — only Biodiversity (SLB) and the shared
-    // bio/chr protocol segments are recognised.
-    return switch (protocolType.trim().toUpperCase()) {
-      case "BIO", "SLB" -> Optional.of("SLB");
-      default -> Optional.empty();
-    };
+  }
+
+  /** Resolve the record's code from the checklist id and enforce {@link #assertEditable}. A blank id
+   * (e.g. an orphan stratum/plot lookup) is left for the downstream proc to report as not-found. */
+  private void assertChecklistEditable(String checklistId) {
+    if (StringUtils.isNotBlank(checklistId)) {
+      assertEditable(checklistRepository.resolveResourceType(checklistId));
+    }
   }
 
   static ProtocolChecklistField toField(String label, String value) {

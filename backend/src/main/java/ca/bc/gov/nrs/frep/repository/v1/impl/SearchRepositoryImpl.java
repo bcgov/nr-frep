@@ -151,7 +151,9 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
          AND (fss.client_number = LPAD(:clientNumber, 8, '0') OR :clientNumber IS NULL)
          AND (checklist_tbls.evaluation_date >= TO_DATE(:evalFrom, 'YYYY-MM-DD') OR :evalFrom IS NULL)
          AND (checklist_tbls.evaluation_date <= TO_DATE(:evalTo, 'YYYY-MM-DD') OR :evalTo IS NULL)
-         AND (frv.frep_resource_value_type_code = :protocolType OR :protocolType IS NULL)
+         AND (:protocolType IS NULL
+              OR frv.frep_resource_value_type_code = :protocolType
+              OR (:protocolType = 'SLR' AND frv.frep_resource_value_type_code = 'SLB'))
       """;
 
   @Override

@@ -32,6 +32,9 @@ public interface ProtocolChecklistWriteRepository {
   BioPlot getBioPlot(String plotId);
   BioPlot saveBioPlot(BioPlot p, String userId);
   String deleteBioPlot(String plotId, String revisionCount);
+  /** Resolve the parent biodiversity checklist id for a stratum / plot — for the view-only guard. */
+  String checklistIdForStratum(String stratumId);
+  String checklistIdForPlot(String plotId);
   AdministrationData getAdministration(String checklistId, String resourceType);
   AdministrationData saveAdministration(AdministrationData o, String userId);
   AdministrationData addTeamMember(

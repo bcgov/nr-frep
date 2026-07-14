@@ -1,4 +1,4 @@
-# FREP
+# FREP - Forest and Range Evaluation Program
 
 A full-stack application scaffold for the Natural Resources sector.
 

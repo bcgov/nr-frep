@@ -25,6 +25,7 @@ import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -184,6 +185,28 @@ public class ChrChecklistService {
     if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
       throw new InvalidParameterException(
           "Activate failed. Checklist status is " + status + " when RDO is expected.");
+    }
+    persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
+    return getChecklist(checklistId);
+  }
+
+  /**
+   * Release an offline checkout (RDO → ACT) on behalf of the device that holds it, so the online copy
+   * is editable again — used when a user removes their offline copy. Idempotent: if the checklist
+   * isn't checked out, the current state is returned. Rejects when the supplied deviceCheckoutGuid
+   * doesn't match the server's, i.e. the checkout belongs to another device (admin activate is the
+   * fallback for that case).
+   */
+  @Transactional
+  public CheckList releaseCheckout(long checklistId, String deviceCheckoutGuid) {
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      return getChecklist(checklistId);
+    }
+    UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
+    if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
+      throw new InvalidParameterException(
+          "Release failed. This checklist is checked out on another device.");
     }
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);

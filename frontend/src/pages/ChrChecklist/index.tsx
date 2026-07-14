@@ -31,12 +31,19 @@ import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import {
+  classifyStaleness,
+  isStale,
+  stalenessBanner,
+  type StalenessVerdict,
+} from '@/services/offline/chrStaleness';
 import {
   CHR_STATUS,
   type CheckList,
@@ -117,6 +124,7 @@ const extractValidationErrors = (err: unknown): ValidationError[] | null => {
 const ChrChecklistPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { display } = useNotification();
   const { canEdit, isViewOnly, canPerformSysAdminActions } = useAuthorization();
   const online = useOnlineStatus();
@@ -126,6 +134,12 @@ const ChrChecklistPage: FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isOfflineCopy, setIsOfflineCopy] = useState(false);
+  // Server-vs-local reconcile for an offline copy: verdict + the server's last-updater audit.
+  const [offlineStaleness, setOfflineStaleness] = useState<{
+    verdict: StalenessVerdict;
+    updateUserid?: string;
+    updateTimestamp?: string;
+  } | null>(null);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState(0);
@@ -178,6 +192,42 @@ const ChrChecklistPage: FC = () => {
     };
   }, [id, display]);
 
+  // When viewing an offline copy, reconcile it against the server so we can warn if it's been
+  // superseded (reactivated/submitted/removed elsewhere) — see chrStaleness. Server copies aren't
+  // stale; their last-updated info is read straight off the checklist below.
+  useEffect(() => {
+    if (!isOfflineCopy) {
+      setOfflineStaleness(null);
+      return undefined;
+    }
+    if (!online) {
+      setOfflineStaleness({ verdict: 'UNVERIFIED' });
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [record, server] = await Promise.all([
+          chrOfflineRepo.load(id),
+          API.chrChecklist.getChecklist(id),
+        ]);
+        if (cancelled) return;
+        setOfflineStaleness({
+          verdict: classifyStaleness(record?.deviceCheckoutGuid, server),
+          updateUserid: server.updateUserid,
+          updateTimestamp: server.updateTimestamp,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const status = (err as { status?: number })?.status;
+        setOfflineStaleness({ verdict: status === 404 ? 'GONE' : 'UNVERIFIED' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isOfflineCopy, online]);
+
   // Editability mirrors the backend gate: an online (server) copy can only be saved when its status
   // is ACT — the legacy save rejects any other status with "Checklist status does not allow this
   // operation." An offline copy is the user's own checked-out (RDO) copy, editable locally until
@@ -192,6 +242,12 @@ const ChrChecklistPage: FC = () => {
   const readOnly = isOfflineCopy
     ? checkList?.status === CHR_STATUS.SUBMITTED
     : isViewOnly || !canEdit || statusLocked;
+
+  // A stale offline copy can't be uploaded (the server checkout was reset/submitted/removed), so both
+  // Submit and Sync changes — which upload — are dead ends and are hidden; the banner explains why and
+  // only "Remove from device" is offered.
+  const offlineOutOfDate =
+    isOfflineCopy && offlineStaleness != null && isStale(offlineStaleness.verdict);
 
   const patch = useCallback(
     (p: Partial<CheckList>) => setCheckList((prev) => (prev ? { ...prev, ...p } : prev)),
@@ -423,6 +479,32 @@ const ChrChecklistPage: FC = () => {
     }
   };
 
+  // Discard a stale offline copy (its server checkout is gone, so it can't be uploaded) and return to
+  // the previous screen. No release call — the server has already moved on. Removing a *current*
+  // offline copy still lives on the Offline checklists list, which releases the checkout.
+  const handleRemoveOfflineCopy = async () => {
+    if (
+      !(await confirm({
+        title: 'Remove from device?',
+        message:
+          'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        confirmButtonText: 'Remove',
+      }))
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await chrOfflineRepo.remove(id);
+      display({ kind: 'success', title: 'Offline copy removed', timeout: 4000 });
+      navigate(-1);
+    } catch (err) {
+      reportError('Could not remove offline copy', err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUpload = async () => {
     if (!checkList) return;
     setBusy(true);
@@ -530,31 +612,23 @@ const ChrChecklistPage: FC = () => {
         </div>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile className="protocol-checklist__summary">
-          <div className="protocol-checklist__summary-grid">
-            {/* Tombstone header laid out like the Biodiversity checklist. Fields the CHR record
-                doesn't carry (client name, opening number) are simply omitted. */}
-            {headerCell('Master list year', checkList.effectiveYear)}
-            {headerCell('Org unit', orgUnit)}
-            {headerCell('Checklist', checkList.checklistID)}
-            {headerCell('Client', checkList.client)}
-            {headerCell('Opening ID', checkList.openingID)}
-            {headerCell('Licence', checkList.licensee)}
-            {headerCell('Cutting permit', checkList.cuttingPermit)}
-            {headerCell('Cut block', checkList.block)}
-            {headerCell('Year of harvest', checkList.yearOfHarvest)}
-            <div>
-              <span className="protocol-checklist__label">Status</span>
-              <Tag type={statusTagType(checkList.status)} size="sm">
-                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
-              </Tag>
-            </div>
-            {headerCell('Evaluator', checkList.assessedBy)}
-            {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
-          </div>
-        </Tile>
-      </Column>
+      {isOfflineCopy &&
+        offlineStaleness &&
+        (() => {
+          const banner = stalenessBanner(offlineStaleness.verdict, offlineStaleness);
+          if (!banner) return null;
+          return (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind={banner.kind}
+                title={banner.title}
+                subtitle={banner.subtitle}
+                hideCloseButton
+                lowContrast
+              />
+            </Column>
+          );
+        })()}
 
       {!canEdit && (
         <Column sm={4} md={8} lg={16}>
@@ -587,8 +661,34 @@ const ChrChecklistPage: FC = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
+        <Tile className="protocol-checklist__summary">
+          <div className="protocol-checklist__summary-grid">
+            {/* Tombstone header laid out like the Biodiversity checklist. Fields the CHR record
+                doesn't carry (client name, opening number) are simply omitted. */}
+            {headerCell('Master list year', checkList.effectiveYear)}
+            {headerCell('Org unit', orgUnit)}
+            {headerCell('Checklist', checkList.checklistID)}
+            {headerCell('Client', checkList.client)}
+            {headerCell('Opening ID', checkList.openingID)}
+            {headerCell('Licence', checkList.licensee)}
+            {headerCell('Cutting permit', checkList.cuttingPermit)}
+            {headerCell('Cut block', checkList.block)}
+            {headerCell('Year of harvest', checkList.yearOfHarvest)}
+            <div>
+              <span className="protocol-checklist__label">Status</span>
+              <Tag type={statusTagType(checkList.status)} size="sm">
+                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
+              </Tag>
+            </div>
+            {headerCell('Evaluator', checkList.assessedBy)}
+            {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
+          </div>
+        </Tile>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
         <div className="chr-checklist__actions">
-          {!readOnly && online && (
+          {!readOnly && online && !offlineOutOfDate && (
             <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
               Submit
             </Button>
@@ -617,9 +717,18 @@ const ChrChecklistPage: FC = () => {
                 Reactivate
               </Button>
             )}
-          {isOfflineCopy && online && (
+          {isOfflineCopy && online && !offlineOutOfDate && (
             <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
               Sync changes
+            </Button>
+          )}
+          {isOfflineCopy && offlineOutOfDate && (
+            <Button
+              kind="danger--tertiary"
+              onClick={() => void handleRemoveOfflineCopy()}
+              disabled={busy}
+            >
+              Remove from device
             </Button>
           )}
         </div>

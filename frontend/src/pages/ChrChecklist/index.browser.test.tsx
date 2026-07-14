@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -39,12 +39,19 @@ vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
 
 vi.mock('@/hooks/useAuthorization', () => ({ useAuthorization: vi.fn() }));
 
+// Stable display fn — the real useNotification is context-memoized. A fresh fn per render would make
+// the load effect's [id, display] dep re-fire every render (re-entering the loading state).
+const { displayMock } = vi.hoisted(() => ({ displayMock: vi.fn() }));
 vi.mock('@/context/notification/useNotification', () => ({
-  useNotification: () => ({ display: vi.fn() }),
+  useNotification: () => ({ display: displayMock }),
 }));
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: () => ({ user: { providerUsername: String.raw`IDIR\TESTER` } }),
+}));
+
+vi.mock('@/context/confirm/useConfirm', () => ({
+  useConfirm: () => vi.fn().mockResolvedValue(true),
 }));
 
 const api = API.chrChecklist as unknown as {
@@ -128,6 +135,8 @@ describe('ChrChecklistPage', () => {
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
     repo.remove.mockResolvedValue(undefined);
     api.submit.mockResolvedValue({ ...sampleChecklist, status: 'SUB' });
+    // The page probes the server to reconcile the offline copy's staleness (chrStaleness).
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
 
     renderPage();
 
@@ -136,12 +145,41 @@ describe('ChrChecklistPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     // Upload (check in: RDO → ACT) and drop the local draft happen before the submit call.
-    expect(repo.upload).toHaveBeenCalledWith('1001');
+    // waitFor: the submit chain is async.
+    await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
     expect(repo.remove).toHaveBeenCalledWith('1001');
     expect(api.submit).toHaveBeenCalledWith(
       '1001',
       expect.objectContaining({ checklistID: '1001' }),
     );
+  });
+
+  it('warns when an offline copy has been superseded on the server', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false });
+    repo.load.mockResolvedValue({
+      checklistId: '1001',
+      checkList: { ...sampleChecklist, status: 'RDO' },
+      deviceCheckoutGuid: 'guid-A',
+      dirty: false,
+    });
+    // Someone reactivated + submitted it on the server since this device checked it out.
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist,
+      status: 'SUB',
+      deviceCheckoutGuid: undefined,
+      updateUserid: String.raw`IDIR\jsmith`,
+      updateTimestamp: '2012-10-01 14:30:00',
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Offline copy out of date')).toBeTruthy();
+    expect(screen.getByText(/Last updated by jsmith on Oct 1, 2012/)).toBeTruthy();
+    // A stale copy can't be uploaded, so Submit and Sync changes are hidden…
+    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+    expect(screen.queryByText('Sync changes')).toBeNull();
+    // …leaving only the Remove from device escape hatch.
+    expect(screen.getByText('Remove from device')).toBeTruthy();
   });
 
   it('lets an admin reactivate a checked-out (RDO) server checklist', async () => {

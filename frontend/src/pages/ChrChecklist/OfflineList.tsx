@@ -18,10 +18,27 @@ import { Link as RouterLink } from 'react-router-dom';
 import type { OfflineChecklist } from '@/services/offline/chrDb';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { useNotification } from '@/context/notification/useNotification';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import { classifyStaleness, isStale, type StalenessVerdict } from '@/services/offline/chrStaleness';
 
 // All offline records come from the CHR store (chrOfflineRepo / the "frep-chr" IndexedDB).
 const PROTOCOL_LABEL = 'Cultural Heritage';
+
+type StatusDisplay = { label: string; tag: 'red' | 'magenta' | 'green' | 'cool-gray' };
+
+/**
+ * Row status: server staleness takes priority (a superseded copy can't be uploaded, so its local
+ * sync state is moot), then unverified, then the local sync state. `verdict` is undefined while the
+ * server probe is still in flight — fall back to the sync state so the row isn't blank.
+ */
+const statusDisplay = (dirty: boolean, verdict: StalenessVerdict | undefined): StatusDisplay => {
+  if (verdict && isStale(verdict)) return { label: 'Out of date', tag: 'red' };
+  if (verdict === 'UNVERIFIED') return { label: 'Unverified', tag: 'cool-gray' };
+  return dirty ? { label: 'Unsynced changes', tag: 'magenta' } : { label: 'Synced', tag: 'green' };
+};
 
 const TABLE_HEADERS = [
   { key: 'checklist', header: 'Checklist' },
@@ -34,7 +51,11 @@ const TABLE_HEADERS = [
 /** Lists CHR checklists currently stored offline in this browser, with quick links to open them. */
 const ChrOfflineListPage: FC = () => {
   const confirm = useConfirm();
+  const { display } = useNotification();
+  const online = useOnlineStatus();
   const [records, setRecords] = useState<OfflineChecklist[]>([]);
+  // checklistId → staleness verdict from reconciling each offline copy against the server.
+  const [verdicts, setVerdicts] = useState<Record<string, StalenessVerdict>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +67,47 @@ const ChrOfflineListPage: FC = () => {
     };
   }, []);
 
+  // Probe each offline copy against the server so the Status column can flag superseded copies. Reuses
+  // the full GET (fine at the low offline-copy volume) — see chrStaleness. Offline → all unverified.
+  useEffect(() => {
+    if (records.length === 0) return undefined;
+    if (!online) {
+      setVerdicts(Object.fromEntries(records.map((r) => [r.checklistId, 'UNVERIFIED'])));
+      return undefined;
+    }
+    let cancelled = false;
+    void Promise.all(
+      records.map(async (record): Promise<readonly [string, StalenessVerdict]> => {
+        try {
+          const server = await API.chrChecklist.getChecklist(record.checklistId);
+          return [record.checklistId, classifyStaleness(record.deviceCheckoutGuid, server)];
+        } catch (err) {
+          const status = (err as { status?: number })?.status;
+          return [record.checklistId, status === 404 ? 'GONE' : 'UNVERIFIED'];
+        }
+      }),
+    ).then((entries) => {
+      if (!cancelled) setVerdicts(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [records, online]);
+
   const rows = useMemo(
     () =>
-      records.map((record) => ({
-        id: record.checklistId,
-        checklist: `Checklist ${record.checklistId}`,
-        protocol: PROTOCOL_LABEL,
-        openingId: record.checkList.openingID || '—',
-        status: record.dirty ? 'Unsynced changes' : 'Synced',
-        dirty: record.dirty,
-      })),
-    [records],
+      records.map((record) => {
+        const display = statusDisplay(record.dirty, verdicts[record.checklistId]);
+        return {
+          id: record.checklistId,
+          checklist: `Checklist ${record.checklistId}`,
+          protocol: PROTOCOL_LABEL,
+          openingId: record.checkList.openingID || '—',
+          status: display.label,
+          statusTag: display.tag,
+        };
+      }),
+    [records, verdicts],
   );
 
   const remove = async (id: string) => {
@@ -69,6 +120,23 @@ const ChrOfflineListPage: FC = () => {
       }))
     )
       return;
+    // Release the server checkout (RDO → ACT) first so the online copy isn't stranded read-only. The
+    // backend is guid-guarded + idempotent (no-ops for a stale copy). On failure, keep the local copy
+    // so it stays recoverable rather than orphaning the checkout. Remove is disabled offline.
+    const record = records.find((r) => r.checklistId === id);
+    if (record?.deviceCheckoutGuid) {
+      try {
+        await API.chrChecklist.release(id, record.deviceCheckoutGuid);
+      } catch (err) {
+        display({
+          kind: 'error',
+          title: 'Could not release the checkout',
+          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          timeout: 9000,
+        });
+        return;
+      }
+    }
     await chrOfflineRepo.remove(id);
     setRecords((prev) => prev.filter((r) => r.checklistId !== id));
   };
@@ -118,7 +186,7 @@ const ChrOfflineListPage: FC = () => {
                             if (cell.info.header === 'status') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <Tag type={meta?.dirty ? 'magenta' : 'green'} size="sm">
+                                  <Tag type={meta?.statusTag ?? 'green'} size="sm">
                                     {cell.value}
                                   </Tag>
                                 </TableCell>
@@ -130,6 +198,12 @@ const ChrOfflineListPage: FC = () => {
                                   <Button
                                     size="sm"
                                     kind="danger--tertiary"
+                                    disabled={!online}
+                                    title={
+                                      online
+                                        ? undefined
+                                        : 'Connect to the internet to remove — this releases the checkout so the checklist can be edited online.'
+                                    }
                                     onClick={() => void remove(row.id)}
                                   >
                                     Remove from device

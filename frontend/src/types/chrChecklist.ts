@@ -255,6 +255,10 @@ export type CheckList = {
   status?: string;
   revisionCount?: string;
   deviceCheckoutGuid?: string;
+  /** IDIR of the user who last updated the record (server-provided). */
+  updateUserid?: string;
+  /** When the record was last updated, "yyyy-MM-dd HH:mm:ss" (server-provided). */
+  updateTimestamp?: string;
 
   // Read-only context (display)
   effectiveYear?: string;

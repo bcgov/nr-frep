@@ -50,6 +50,12 @@ public class CheckList {
 	private String downloadedBy;
 	@JsonProperty("downloadedDate")
 	private String downloadedDate;
+	/** IDIR of the user who last updated the record (CHR_CHECKLIST.UPDATE_USERID). */
+	@JsonProperty("updateUserid")
+	private String updateUserid;
+	/** When the record was last updated, formatted yyyy-MM-dd HH:mm:ss (CHR_CHECKLIST.UPDATE_TIMESTAMP). */
+	@JsonProperty("updateTimestamp")
+	private String updateTimestamp;
 	@JsonProperty("FREPAssessment")
 	private String fREPAssessment;
 	@JsonProperty("evaluationYear")
@@ -1031,6 +1037,26 @@ public class CheckList {
 	@JsonProperty("downloadedDate")
 	public void setDownloadedDate(String downloadedDate) {
 		this.downloadedDate = downloadedDate;
+	}
+
+	@JsonProperty("updateUserid")
+	public String getUpdateUserid() {
+		return updateUserid;
+	}
+
+	@JsonProperty("updateUserid")
+	public void setUpdateUserid(String updateUserid) {
+		this.updateUserid = updateUserid;
+	}
+
+	@JsonProperty("updateTimestamp")
+	public String getUpdateTimestamp() {
+		return updateTimestamp;
+	}
+
+	@JsonProperty("updateTimestamp")
+	public void setUpdateTimestamp(String updateTimestamp) {
+		this.updateTimestamp = updateTimestamp;
 	}
 
 	@JsonProperty("deviceCheckoutGuid")

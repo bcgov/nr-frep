@@ -3,7 +3,10 @@ package ca.bc.gov.nrs.frep.service.v1.chr;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -82,6 +85,26 @@ class ChrChecklistServiceTest {
 
     assertThrows(FrepApiRuntimeException.class, () -> service.submitChecklist(1001L, checklist));
     verify(persistenceService).saveChecklist(any(), eq("IDIR\\user"));
+  }
+
+  @Test
+  void unsubmitChecklistDelegatesToPersistenceWhenSubmitted() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\user");
+    when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(new ChrChecklist());
+
+    // The trailing getChecklist() maps a bare entity and throws (wrapped), like the submit test above;
+    // we only assert that a submitted checklist passes the guard and delegates the SUB → ACT transition.
+    assertThrows(FrepApiRuntimeException.class, () -> service.unsubmitChecklist(1001L));
+    verify(persistenceService).unsubmitChecklist(1001L, "IDIR\\user");
+  }
+
+  @Test
+  void unsubmitChecklistRejectsWhenNotSubmitted() {
+    when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+
+    assertThrows(InvalidParameterException.class, () -> service.unsubmitChecklist(1001L));
+    verify(persistenceService, never()).unsubmitChecklist(anyLong(), anyString());
   }
 
   // Authorization (write/admin) is now enforced by @PreAuthorize on ChrChecklistApiEndpoint, not the

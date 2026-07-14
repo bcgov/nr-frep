@@ -207,7 +207,12 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList unsubmitChecklist(long checklistId) {
-    checklistRepository.throwIfUnsubmitError(Long.toString(checklistId), loggedUserHelper.getLoggedUserId());
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.SUB.equals(status)) {
+      throw new InvalidParameterException(
+          "Unsubmit failed. Checklist status is " + status + " when SUB is expected.");
+    }
+    persistenceService.unsubmitChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 

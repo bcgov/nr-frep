@@ -138,6 +138,20 @@ public class ChrChecklistPersistenceService {
     return chrChecklist;
   }
 
+  /** Unsubmit a submitted checklist: SUB → ACT. Mirrors the JPA lifecycle used by activate/offline
+   *  rather than the FREP_TOMBSTONE.UNSUBMIT proc, whose CASE has no CHR branch (ORA-06592). */
+  public ChrChecklist unsubmitChecklist(Long checklistId, String userId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    FrepChecklistStatusCode status = entityManager.find(
+        FrepChecklistStatusCode.class,
+        ChrConstants.FrepChecklistStatusCode.ACT
+    );
+    chrChecklist.setFrepChecklistStatusCode(status);
+    chrChecklist.setUpdateUserid(userId);
+    chrChecklist.setUpdateTimestamp(new Date());
+    return chrChecklist;
+  }
+
   public void uploadChecklist(CheckList resource, String userId) {
     String guidSavedInDb = getDeviceCheckoutGuid(Long.parseLong(resource.getChecklistID()));
     if (!resource.getDeviceCheckoutGuid().equals(guidSavedInDb)) {

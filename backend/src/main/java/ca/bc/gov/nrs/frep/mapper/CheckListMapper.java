@@ -65,6 +65,8 @@ public final class CheckListMapper extends FrepMapper {
 		// 1. Opening Information ***************************************************************************************************************************************
 		resource.setEvaluationDate(acceptedSite.getEvaluationDate());
 		resource.setAssessedBy(chrChecklist.getAssessedBy());
+		resource.setUpdateUserid(chrChecklist.getUpdateUserid());
+		resource.setUpdateTimestamp(ChrDateUtils.formatDateTime(chrChecklist.getUpdateTimestamp()));
         // Already have these in acceptedSites, probably don't need to get
 		resource.setDistrict(acceptedSite.getOrgUnitCode()+"-"+acceptedSite.getOrgUnitName());
 		resource.setOpeningID(acceptedSite.getOpeningID());

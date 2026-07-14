@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import ca.bc.gov.nrs.frep.endpoint.v1.ChrChecklistApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService;
 import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService.ChrSubmitValidationException;
@@ -66,6 +67,11 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
   @Override
   public ResponseEntity<CheckList> activateChecklist(long id) {
     return ResponseEntity.ok(chrChecklistService.activateChecklist(id));
+  }
+
+  @Override
+  public ResponseEntity<CheckList> releaseCheckout(long id, ReleaseCheckoutRequest body) {
+    return ResponseEntity.ok(chrChecklistService.releaseCheckout(id, body.deviceCheckoutGuid()));
   }
 
   @Override

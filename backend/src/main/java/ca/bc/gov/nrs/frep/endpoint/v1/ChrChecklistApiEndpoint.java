@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.endpoint.v1;
 
 import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,6 +54,13 @@ public interface ChrChecklistApiEndpoint {
   @PreAuthorize(FrepAuthorities.ADMIN)
   @PostMapping("/checklists/{id}/activate")
   ResponseEntity<CheckList> activateChecklist(@PathVariable long id);
+
+  // Self-service release of an offline checkout (RDO → ACT): editor-callable, but only succeeds when
+  // the request's deviceCheckoutGuid matches the server's, so it releases only the caller's own
+  // checkout. Admin activate above is the fallback for a checkout stranded on another device.
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  @PostMapping("/checklists/{id}/release")
+  ResponseEntity<CheckList> releaseCheckout(@PathVariable long id, @RequestBody ReleaseCheckoutRequest body);
 
   @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
   @PostMapping("/checklists/{id}/offline")

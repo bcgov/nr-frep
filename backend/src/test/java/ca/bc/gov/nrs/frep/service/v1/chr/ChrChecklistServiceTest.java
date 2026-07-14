@@ -22,6 +22,7 @@ import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,6 +106,43 @@ class ChrChecklistServiceTest {
 
     assertThrows(InvalidParameterException.class, () -> service.unsubmitChecklist(1001L));
     verify(persistenceService, never()).unsubmitChecklist(anyLong(), anyString());
+  }
+
+  @Test
+  void releaseCheckoutActivatesWhenGuidMatches() {
+    UUID guid = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\user");
+    when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getDeviceCheckoutGuid(1001L)).thenReturn(guid);
+    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(new ChrChecklist());
+
+    // Trailing getChecklist() maps a bare entity and throws (wrapped); we assert the release delegated.
+    assertThrows(FrepApiRuntimeException.class, () -> service.releaseCheckout(1001L, guid.toString()));
+    verify(persistenceService).activateChecklist(1001L, "IDIR\\user");
+  }
+
+  @Test
+  void releaseCheckoutRejectsWhenGuidHeldByAnotherDevice() {
+    when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getDeviceCheckoutGuid(1001L))
+        .thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000002"));
+
+    assertThrows(
+        InvalidParameterException.class,
+        () -> service.releaseCheckout(1001L, "00000000-0000-0000-0000-000000000001"));
+    verify(persistenceService, never()).activateChecklist(anyLong(), anyString());
+  }
+
+  @Test
+  void releaseCheckoutIsNoOpWhenNotCheckedOut() {
+    when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(new ChrChecklist());
+
+    // Already active — returns current state (getChecklist maps a bare entity → wrapped throw) without
+    // touching the guid or activating.
+    assertThrows(FrepApiRuntimeException.class, () -> service.releaseCheckout(1001L, "any-guid"));
+    verify(checklistRepository, never()).getDeviceCheckoutGuid(anyLong());
+    verify(persistenceService, never()).activateChecklist(anyLong(), anyString());
   }
 
   // Authorization (write/admin) is now enforced by @PreAuthorize on ChrChecklistApiEndpoint, not the

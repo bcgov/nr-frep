@@ -100,4 +100,18 @@ export class ChrChecklistService extends HttpClient {
       path: { checklistId },
     });
   }
+
+  /**
+   * Release an offline checkout (RDO → ACT) held by this device, so the online copy is editable again.
+   * The deviceCheckoutGuid proves ownership; the backend no-ops if it doesn't match / isn't checked out.
+   */
+  release(checklistId: string, deviceCheckoutGuid: string): CancelablePromise<CheckList> {
+    return this.doRequest<CheckList>(this.config, {
+      method: 'POST',
+      url: '/v1/chr/checklists/{checklistId}/release',
+      path: { checklistId },
+      body: { deviceCheckoutGuid },
+      mediaType: 'application/json',
+    });
+  }
 }

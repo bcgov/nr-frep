@@ -33,6 +33,16 @@ public final class ChrDateUtils {
     return new SimpleDateFormat(DATE_PATTERN).format(date);
   }
 
+  private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
+
+  /** Format a timestamp as {@code yyyy-MM-dd HH:mm:ss} (matches the downloadedDate convention). */
+  public static String formatDateTime(Date date) {
+    if (date == null) {
+      return null;
+    }
+    return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
+  }
+
   public static short getYear(String value) {
     if (StringUtils.isBlank(value)) {
       return 0;

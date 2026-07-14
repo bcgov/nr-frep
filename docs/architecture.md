@@ -20,15 +20,13 @@ Runtimes: backend targets **Java 21**; the frontend production image and CI pin 
 
 ## System context
 
-FREP is one of **three apps sharing one Oracle `THE` schema**:
+FREP spans **two repositories over one Oracle `THE` schema**:
 
-- **`nr-frep`** (this repo) — the modern React + Spring Boot app.
-- **`nr-frep-legacy`** — the legacy app, still in use, hitting the same tables through the same shared
-  `FREP_*` stored procedures.
-- **`nr-mof-db`** — the Oracle schema + stored procedures, versioned with Flyway.
+- **`nr-frep`** (this repo) — the React + Spring Boot app.
+- **`nr-mof-db`** — the Oracle schema + `FREP_*` stored procedures, versioned with Flyway.
 
-Because the new and legacy apps share data and procedures, DB changes must remain compatible with
-both. See [database.md](./database.md) and [deployment.md](./deployment.md).
+The app never issues direct table writes — all reads and writes go through the `FREP_*` stored
+procedures. See [database.md](./database.md) and [deployment.md](./deployment.md).
 
 ```mermaid
 flowchart TB
@@ -46,7 +44,6 @@ flowchart TB
     end
 
     s3[("Object storage<br/>(S3 — checklist<br/>attachments/photos)")]
-    legacy["nr-frep-legacy<br/>(legacy app)"]
     db[("Oracle THE schema")]
     mofdb["nr-mof-db<br/>schema + FREP_* procs<br/>(Flyway-versioned)"]
 
@@ -57,11 +54,10 @@ flowchart TB
     be -.->|"validate JWT / userInfo"| cognito
     be -->|"{call FREP_*} stored procs"| db
     be -->|attachments| s3
-    legacy -->|"same shared procs"| db
     mofdb -.->|"deploys schema + procs"| db
 
     classDef ext fill:#eee,stroke:#999,color:#333;
-    class cognito,idir,legacy,mofdb,s3 ext;
+    class cognito,idir,mofdb,s3 ext;
 ```
 
 ## Frontend domains

@@ -34,6 +34,57 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/configuratio
 - Many procs exchange data via Oracle object/VARRAY types (e.g. `FREP_RESOURCE_VARRAY`,
   `FREP_CHKLST_SEARCH_VW_VARRAY`) rather than plain scalars.
 
+## Checklist read / write sequence
+
+A biodiversity checklist illustrates the pattern. The record's protocol code (`SLB` vs `SLR`) is
+resolved **from the record** — a small direct SELECT — not from the URL, and the write path enforces
+a **view-only guard** so historical `SLB` records can't be mutated.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Frontend
+    participant SVC as Backend<br/>(controller + service)
+    participant REPO as Repository<br/>(AbstractFrepRepository)
+    participant DB as Oracle THE
+
+    rect rgb(235, 244, 255)
+    note over FE,DB: READ — open a checklist
+    FE->>SVC: GET /api/v1/protocol-checklists/{type}/{id}
+    SVC->>REPO: resolveResourceType(checklistId)
+    REPO->>DB: SELECT type_code (direct SQL)
+    DB-->>REPO: SLB | SLR
+    REPO-->>SVC: resolved code
+    SVC->>REPO: get opening / strata / plots (resolved type)
+    REPO->>DB: {call FREP_210_BIO_OPENING.GET}<br/>{call FREP_211_BioStratum.get}<br/>{call FREP_212_BioPlot.get}
+    DB-->>REPO: REF CURSOR / VARRAY rows
+    REPO-->>SVC: mapped structs
+    SVC-->>FE: checklist JSON (incl. resolved protocolType)
+    end
+
+    rect rgb(240, 240, 240)
+    note over FE,DB: WRITE — save (view-only guard)
+    FE->>SVC: PUT/POST save (e.g. save stratum)
+    SVC->>REPO: resolveResourceType(checklistId)
+    REPO->>DB: SELECT type_code
+    DB-->>REPO: SLB | SLR
+    alt record is SLB (historical)
+        SVC-->>FE: 403 Forbidden (read-only)
+    else record is SLR (editable)
+        SVC->>REPO: save(..., "SLR")
+        REPO->>DB: {call FREP_211_BIOSTRATUM.SAVE_STRATUM}<br/>(positional params + VARRAY)
+        DB-->>REPO: OUT params / p_error_message
+        note right of REPO: throwIfError() →<br/>StoredProcedureException<br/>if p_error_message set
+        REPO-->>SVC: saved
+        SVC-->>FE: 200 OK
+    end
+    end
+```
+
+New biodiversity records are always created as `SLR` (the service rewrites any id-less `SLB` on
+persist), and the same `assertEditable` guard is wired into **every** mutation (submit, unsubmit,
+save/delete stratum & plot, admin, team, notes, attachments).
+
 ## Stored procedures by feature
 
 | Feature | Procedure(s) |
@@ -72,13 +123,11 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/configuratio
 - **A DB change must deploy before app code that depends on it.** A common pattern is to keep the app
   PR in **draft** until the `nr-mof-db` PR merges and deploys — see [deployment.md](./deployment.md).
 
-## Grants, synonyms & the shared legacy app
+## Grants & synonyms
 
 - Procs run with **definer rights**; converting a proc call to native SQL in the app requires
   THE-qualification (or the PUBLIC synonym) **and** per-table `SELECT` grants the proc didn't need.
   A missing/ungranted table surfaces as `ORA-00942`.
-- The **`nr-frep-legacy`** app reads and writes the **same** schema through the same shared procs, so
-  DB changes must stay compatible with both apps. See [architecture.md](./architecture.md).
 
 ## Related
 

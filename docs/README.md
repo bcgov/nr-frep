@@ -11,7 +11,8 @@ versioned alongside the code — update them in the same PR as the change they d
 
 | Doc | What it covers |
 |---|---|
-| [Architecture](./architecture.md) | System overview, the new app vs. the shared legacy app, key components |
+| [Architecture](./architecture.md) | System overview, components, and data flow |
+| [Site map](./site-map.md) | Pages, routes, auth-gated route sets, and navigation flow |
 | [Local development](./local-development.md) | Prerequisites and how to run backend + frontend locally |
 | [Deployment](./deployment.md) | OpenShift per-PR slots, environments, and cross-repo release coordination |
 | [Database](./database.md) | Oracle `THE` schema, the `FREP_*` stored-proc pattern, and `nr-mof-db` migrations |
@@ -25,6 +26,5 @@ versioned alongside the code — update them in the same PR as the change they d
 ## Related repositories
 
 - **`nr-mof-db`** — Oracle schema + stored procedures (Flyway-versioned). All FREP DB changes land here.
-- **`nr-frep-legacy`** — the legacy app sharing the same Oracle database.
 
 <!-- TODO: link the migration-plan / team-status docs here once they move under docs/. -->

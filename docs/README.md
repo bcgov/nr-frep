@@ -26,5 +26,3 @@ versioned alongside the code — update them in the same PR as the change they d
 ## Related repositories
 
 - **`nr-mof-db`** — Oracle schema + stored procedures (Flyway-versioned). All FREP DB changes land here.
-
-<!-- TODO: link the migration-plan / team-status docs here once they move under docs/. -->

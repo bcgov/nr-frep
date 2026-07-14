@@ -8,7 +8,11 @@ per-PR into numbered slots; the **database is a single shared external Oracle**,
 - Cluster domain: `apps.gold.devops.gov.bc.ca`
 - Per-PR app URL: `https://nr-frep-<slot>.apps.gold.devops.gov.bc.ca`
 - **TEST**: `https://nr-frep-test.apps.gold.devops.gov.bc.ca` (deployed on merge to `main`)
-- **PROD**: <!-- TODO: confirm prod URL / promotion step -->
+  - **PROD**: `https://frep.nrs.gov.bc.ca` —
+    **currently not auto-deployed.** PROD deploy + image promotion are **temporarily disabled** in
+    `merge.yml` (the `deploy-prod` and `promote` jobs are commented out), so merges to `main` deploy only
+    to TEST. Re-enabling them restores the flow: deploy the merged PR's image tag to PROD, then alias
+    that image as `:prod` in GHCR (a durable "this is what's running in production" record).
 
 ## Per-PR slots
 

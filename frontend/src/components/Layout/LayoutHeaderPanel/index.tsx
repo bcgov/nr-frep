@@ -3,6 +3,7 @@ import { HeaderPanel, IconButton } from '@carbon/react';
 import { type FC } from 'react';
 
 import HeaderPanelProfile from '@/components/Layout/HeaderPanelProfile';
+
 import { useLayout } from '@/context/layout/useLayout';
 
 import './index.scss';

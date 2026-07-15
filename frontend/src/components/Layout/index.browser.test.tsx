@@ -7,9 +7,10 @@ import { AuthProvider } from '@/context/auth/AuthProvider';
 import { LayoutProvider } from '@/context/layout/LayoutProvider';
 import { PreferenceProvider } from '@/context/preference/PreferenceProvider';
 import ThemeProvider from '@/context/theme/ThemeProvider';
-import APIs from '@/services/APIs';
 
 import Layout from './index';
+
+import APIs from '@/services/APIs';
 
 vi.mock('@/routes/routePaths', () => ({
   getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/chr/offline' }],

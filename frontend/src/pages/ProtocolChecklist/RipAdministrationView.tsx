@@ -103,7 +103,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

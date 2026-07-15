@@ -100,10 +100,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
    * - CHECKLIST, ACCEPTEDSITES: all three roles (view-only may read, not POST-save)
    */
   it('maps legacy write actions to sys-admin and update roles', () => {
-    const writeActionsRoles: Array<FamLoginUser['roles']> = [
-      ['FREP_ADMIN'],
-      ['FREP_EDITOR'],
-    ];
+    const writeActionsRoles: Array<FamLoginUser['roles']> = [['FREP_ADMIN'], ['FREP_EDITOR']];
 
     for (const roles of writeActionsRoles) {
       withRoles(roles);

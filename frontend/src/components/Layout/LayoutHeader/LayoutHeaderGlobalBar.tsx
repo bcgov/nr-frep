@@ -3,6 +3,7 @@ import { HeaderGlobalAction, HeaderGlobalBar } from '@carbon/react';
 import { type FC } from 'react';
 
 import ThemeToggle from '@/components/Layout/ThemeToggle';
+
 import { useLayout } from '@/context/layout/useLayout';
 
 import './LayoutHeaderGlobalBar.scss';

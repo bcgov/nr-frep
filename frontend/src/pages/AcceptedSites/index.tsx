@@ -28,6 +28,7 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -126,7 +127,7 @@ const AcceptedSitesPage: FC = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load filter options",
@@ -157,7 +158,7 @@ const AcceptedSitesPage: FC = () => {
       });
       setSites(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = apiErrorMessage(err);
       display({
         kind: 'error',
         title: "We couldn't load accepted sites",

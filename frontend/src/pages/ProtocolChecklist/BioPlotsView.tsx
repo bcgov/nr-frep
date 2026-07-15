@@ -35,6 +35,7 @@ import {
   standRowErrors,
 } from '@/pages/ProtocolChecklist/plotValidation';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 /**
  * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
@@ -138,7 +139,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

@@ -75,7 +75,10 @@ const OpeningMapModal: FC<Props> = ({ openingId, onClose }) => {
           lowContrast
         />
       )}
-      {!error && (polygon === null || polygon.features.length > 0) && (
+      {/* Only mount the map while the modal is open. Carbon keeps modal children in the DOM when
+          closed, and a Leaflet map initialized in a hidden (0-size) container renders broken tiles.
+          Gating on openingId means it mounts fresh and visible each time the modal opens. */}
+      {openingId !== null && !error && (polygon === null || polygon.features.length > 0) && (
         <OpeningMap polygon={polygon} />
       )}
     </Modal>

@@ -47,12 +47,23 @@ const FitBounds: FC<{ polygon: FeatureCollection | null }> = ({ polygon }) => {
   return null;
 };
 
-/** Invalidates map size after mount/resize (needed when the map lives inside a modal). */
+/**
+ * Keeps the map sized to its container. The map lives inside a Carbon modal, so its container grows
+ * from ~0 to full size as the modal opens/animates — a single delayed invalidateSize can miss that.
+ * A ResizeObserver invalidates whenever the container actually resizes (open animation, window
+ * resize), with one delayed call as a belt-and-suspenders for the initial paint.
+ */
 const Resizer: FC = () => {
   const map = useMap();
   useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 120);
-    return () => clearTimeout(t);
+    const el = map.getContainer();
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(el);
+    const t = setTimeout(() => map.invalidateSize(), 150);
+    return () => {
+      observer.disconnect();
+      clearTimeout(t);
+    };
   }, [map]);
   return null;
 };

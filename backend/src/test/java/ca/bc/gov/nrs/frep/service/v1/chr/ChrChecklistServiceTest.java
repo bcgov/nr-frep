@@ -1,7 +1,9 @@
 package ca.bc.gov.nrs.frep.service.v1.chr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -18,6 +20,7 @@ import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
@@ -143,6 +146,39 @@ class ChrChecklistServiceTest {
     assertThrows(FrepApiRuntimeException.class, () -> service.releaseCheckout(1001L, "any-guid"));
     verify(checklistRepository, never()).getDeviceCheckoutGuid(anyLong());
     verify(persistenceService, never()).activateChecklist(anyLong(), anyString());
+  }
+
+  @Test
+  void savePicturesSectionRejectsNewPhotoWithBlankDescription() {
+    Picture newPhoto = new Picture();
+    newPhoto.setDescription("");
+    newPhoto.setMimeTypeCode("image/jpeg");
+    CheckList checklist = new CheckList();
+    checklist.setChecklistID("1001");
+    checklist.setPictures(List.of(newPhoto));
+
+    InvalidParameterException ex =
+        assertThrows(InvalidParameterException.class, () -> service.savePicturesSection(checklist));
+    assertTrue(ex.getMessage().contains("missing mandatory descriptions"));
+  }
+
+  @Test
+  void savePicturesSectionAllowsExistingPhotoWithBlankDescription() {
+    // A legacy photo (has an id) with a blank description must not block a section save (add/delete);
+    // only new photos are validated. Validation passes here, so the save fails the status gate instead
+    // — proving it didn't trip the photo-description check.
+    Picture existing = new Picture();
+    existing.setId("p1");
+    existing.setDescription("");
+    CheckList checklist = new CheckList();
+    checklist.setChecklistID("1001");
+    checklist.setPictures(List.of(existing));
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    InvalidParameterException ex =
+        assertThrows(InvalidParameterException.class, () -> service.savePicturesSection(checklist));
+    assertFalse(ex.getMessage().contains("missing mandatory descriptions"));
   }
 
   // Authorization (write/admin) is now enforced by @PreAuthorize on ChrChecklistApiEndpoint, not the

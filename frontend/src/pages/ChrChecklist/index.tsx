@@ -52,6 +52,7 @@ import {
   type Picture,
   type ValidationError,
 } from '@/types/chrChecklist';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -259,7 +260,9 @@ const ChrChecklistPage: FC = () => {
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        // The backend's real reason lives in the response body's `message` (e.g. a validation error);
+        // apiErrorMessage prefers that over the bare status phrase ("Bad Request").
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

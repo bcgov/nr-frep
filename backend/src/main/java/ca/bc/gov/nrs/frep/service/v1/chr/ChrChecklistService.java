@@ -321,13 +321,17 @@ public class ChrChecklistService {
   private void validatePictures(CheckList checklist) {
     if (checklist.getPictures() != null) {
       for (Picture picture : checklist.getPictures()) {
+        // Only validate newly-added photos (no id). Existing rows already passed at creation, and
+        // re-validating them here would block add/delete of any photo when a legacy row has a blank
+        // description. Submit (ChrSubmitValidationService) still validates every photo's description.
+        if (ChrStringUtils.hasAValue(picture.getId())) {
+          continue;
+        }
         if (!ChrStringUtils.hasAValue(picture.getDescription())) {
           throw new InvalidParameterException(
               "One or more photos are missing mandatory descriptions.");
         }
-        // Only validate newly-added photos (no id); existing rows already passed at creation.
-        if (!ChrStringUtils.hasAValue(picture.getId())
-            && !ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
+        if (!ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
           throw new InvalidParameterException(
               "Only image files (JPG, PNG, GIF, BMP, TIF) can be uploaded as photos.");
         }

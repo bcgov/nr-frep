@@ -23,6 +23,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 import { classifyStaleness, isStale, type StalenessVerdict } from '@/services/offline/chrStaleness';
+import { apiErrorMessage } from '@/utils/apiError';
 
 // All offline records come from the CHR store (chrOfflineRepo / the "frep-chr" IndexedDB).
 const PROTOCOL_LABEL = 'Cultural Heritage';
@@ -131,7 +132,7 @@ const ChrOfflineListPage: FC = () => {
         display({
           kind: 'error',
           title: 'Could not release the checkout',
-          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
         return;

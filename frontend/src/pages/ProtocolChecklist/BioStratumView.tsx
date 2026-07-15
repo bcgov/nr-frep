@@ -26,6 +26,7 @@ import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protoco
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
 
 /**
@@ -530,7 +531,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

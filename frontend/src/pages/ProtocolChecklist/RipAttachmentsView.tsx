@@ -10,6 +10,7 @@ import type { AttachmentRow } from '@/types/protocolChecklist';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
@@ -94,7 +95,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

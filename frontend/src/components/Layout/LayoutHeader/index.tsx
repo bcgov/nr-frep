@@ -4,10 +4,11 @@ import { Link } from 'react-router-dom';
 
 import { LayoutHeaderPanel } from '@/components/Layout/LayoutHeaderPanel';
 import { LayoutSideNav } from '@/components/Layout/LayoutSideNav';
-import { useLayout } from '@/context/layout/useLayout';
-import { env } from '@/env';
 
 import LayoutHeaderGlobalBar from './LayoutHeaderGlobalBar';
+
+import { useLayout } from '@/context/layout/useLayout';
+import { env } from '@/env';
 
 import './index.scss';
 

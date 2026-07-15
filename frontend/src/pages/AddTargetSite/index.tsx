@@ -30,6 +30,7 @@ import type { OpeningSearchQuery, OpeningSearchResult } from '@/types/acceptedSi
 import type { CodeOption } from '@/types/configuration';
 
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 type Filters = {
   forestFileId: string;
@@ -236,7 +237,7 @@ const AddTargetSitePage: FC = () => {
       setPageSize(data.pageSize);
     } catch (err) {
       setResults(null);
-      setError(err instanceof Error ? err.message : 'The opening search failed. Please try again.');
+      setError(apiErrorMessage(err, 'The opening search failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -256,7 +257,7 @@ const AddTargetSitePage: FC = () => {
       }
     } catch (err) {
       setValidationErrors([
-        err instanceof Error ? err.message : "We couldn't validate that opening. Please try again.",
+        apiErrorMessage(err, "We couldn't validate that opening. Please try again."),
       ]);
     } finally {
       setValidatingKey(null);

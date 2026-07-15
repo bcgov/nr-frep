@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 
 import Subtitle from '@/components/core/Subtitle';
 import UnderConstructionTag from '@/components/core/Tags/UnderConstructionTag';
-import { usePageTitle } from '@/context/pageTitle/usePageTitle';
 
 import { type BreadCrumbType } from './types';
+
+import { usePageTitle } from '@/context/pageTitle/usePageTitle';
 
 import './index.scss';
 

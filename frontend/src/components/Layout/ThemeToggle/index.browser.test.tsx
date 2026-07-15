@@ -1,9 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, beforeEach, it, expect } from 'vitest';
 
-import { useTheme } from '@/context/theme/useTheme';
-
 import ThemeToggle from './index';
+
+import { useTheme } from '@/context/theme/useTheme';
 
 vi.mock('@/context/theme/useTheme');
 

@@ -1,10 +1,10 @@
 import FormData from 'form-data';
 import { describe, it, expect, vi } from 'vitest';
 
-import type { OnCancel } from './CancelablePromise';
 import * as requestModule from './request';
 import { ApiError, type APIConfig, type ApiRequestOptions, type HttpMethod } from './types';
 
+import type { OnCancel } from './CancelablePromise';
 import type { AxiosInstance, AxiosResponse } from 'axios';
 
 const validConfig: APIConfig = {
@@ -27,9 +27,7 @@ const fullAxiosResponse = {
 
 const onCancelMock = (() => {}) as unknown as OnCancel;
 
-const makeAxiosMock = (
-  request: ReturnType<typeof vi.fn> = vi.fn(),
-): AxiosInstance =>
+const makeAxiosMock = (request: ReturnType<typeof vi.fn> = vi.fn()): AxiosInstance =>
   ({
     request,
     CancelToken: { source: () => ({ token: 1, cancel: vi.fn() }) },
@@ -276,7 +274,12 @@ describe('resolve', () => {
 
 describe('getHeaders', () => {
   it('returns headers with defaults', async () => {
-    const config: APIConfig = { BASE: '', VERSION: '', WITH_CREDENTIALS: false, CREDENTIALS: 'omit' };
+    const config: APIConfig = {
+      BASE: '',
+      VERSION: '',
+      WITH_CREDENTIALS: false,
+      CREDENTIALS: 'omit',
+    };
     const headers = await requestModule.getHeaders(config, validOptions);
     expect(headers['Content-Type']).toBe('application/json');
     expect(headers['Accept']).toBe('application/json');

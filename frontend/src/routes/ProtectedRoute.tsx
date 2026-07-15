@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
 
-import { useAuth } from '@/context/auth/useAuth';
-
 import type { ROLE_TYPE } from '@/context/auth/types';
+
+import { useAuth } from '@/context/auth/useAuth';
 
 export default function ProtectedRoute({
   children,

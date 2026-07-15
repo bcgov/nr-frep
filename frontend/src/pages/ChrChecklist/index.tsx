@@ -179,7 +179,7 @@ const ChrChecklistPage: FC = () => {
         display({
           kind: 'error',
           title: "We couldn't load the CHR checklist",
-          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
         setHasError(true);

@@ -3,10 +3,11 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { PreferenceProvider } from '@/context/preference/PreferenceProvider';
-import { CARBON_THEMES, type UserPreference } from '@/context/preference/types';
 
 import { ThemeProvider } from './ThemeProvider';
 import { useTheme } from './useTheme';
+
+import { CARBON_THEMES, type UserPreference } from '@/context/preference/types';
 
 const seedStoredPreference = (preference: UserPreference) => {
   window.localStorage.setItem('userPreference', JSON.stringify(preference));

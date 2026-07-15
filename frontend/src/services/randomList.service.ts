@@ -1,7 +1,7 @@
+import type { RandomListQuery, RandomListResponse } from '@/types/randomList';
+
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
-
-import type { RandomListQuery, RandomListResponse } from '@/types/randomList';
 
 export class RandomListService extends HttpClient {
   constructor(readonly config: APIConfig) {

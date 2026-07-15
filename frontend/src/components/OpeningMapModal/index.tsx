@@ -6,6 +6,7 @@ import OpeningMap from '@/components/OpeningMap';
 import type { FeatureCollection } from 'geojson';
 
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 type Props = {
   /** Opening ID to map; null closes the modal. */
@@ -35,8 +36,7 @@ const OpeningMapModal: FC<Props> = ({ openingId, onClose }) => {
         if (!cancelled) setPolygon(fc);
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : 'Failed to load the opening map.');
+        if (!cancelled) setError(apiErrorMessage(err, 'Failed to load the opening map.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

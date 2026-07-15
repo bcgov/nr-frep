@@ -1,7 +1,7 @@
+import type { UserPreference } from '@/context/preference/types';
+
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
-
-import type { UserPreference } from '@/context/preference/types';
 
 /**
  * In the POC template we avoid calling the backend for user preferences. Keep the service

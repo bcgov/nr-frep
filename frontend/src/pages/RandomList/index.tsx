@@ -30,6 +30,7 @@ import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
+import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
 
 import './randomList.scss';
@@ -115,7 +116,7 @@ const RandomListPage: FC = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load filter options",
@@ -146,7 +147,7 @@ const RandomListPage: FC = () => {
       setSites(data.sites ?? []);
       setSummary(data.summary ?? null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = apiErrorMessage(err);
       display({
         kind: 'error',
         title: "We couldn't load the district random list",
@@ -174,7 +175,7 @@ const RandomListPage: FC = () => {
       display({
         kind: 'error',
         title: "We couldn't export the random list",
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     }

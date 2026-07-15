@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 
-import { useAuth } from '@/context/auth/useAuth';
-
 import type { FamLoginUser, ROLE_TYPE } from '@/context/auth/types';
+
+import { useAuth } from '@/context/auth/useAuth';
 
 /**
  * Authorization result returned by {@link useAuthorization}.

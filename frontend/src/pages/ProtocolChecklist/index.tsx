@@ -42,6 +42,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -126,7 +127,7 @@ const ProtocolChecklistPage: FC = () => {
           setNotFound(true);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load the checklist",
@@ -183,7 +184,7 @@ const ProtocolChecklistPage: FC = () => {
         display({
           kind: 'error',
           title: 'Submit failed',
-          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
       }
@@ -203,7 +204,7 @@ const ProtocolChecklistPage: FC = () => {
       display({
         kind: 'error',
         title: 'Unsubmit failed',
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {

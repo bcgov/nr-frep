@@ -16,6 +16,7 @@ import {
   type ReportFormat,
   type ReportRequestPayload,
 } from '@/services/reports';
+import { apiErrorMessage } from '@/utils/apiError';
 
 /**
  * Per-report parameter form, modelled on the nr-fspts `ReportConfigForm`. Renders
@@ -170,7 +171,7 @@ const ReportConfigForm: FC<Props> = ({
       display({
         kind: 'error',
         title: 'Unable to generate the report',
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {

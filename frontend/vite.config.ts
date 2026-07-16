@@ -7,6 +7,14 @@ import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { configDefaults } from 'vitest/config';
 
+// Per-build id injected into index.html (see the frep-build-id plugin below). Without it, a deploy
+// that changes only response headers / infra config (e.g. the CSP in the Caddyfile) leaves index.html
+// byte-identical, so its Workbox precache revision is unchanged — the service worker keeps serving the
+// stale precached shell (with the OLD header) until users manually clear their cache. Tying the shell
+// to a per-commit id busts the shell precache on every deploy, so such changes propagate. Uses the CI
+// commit SHA when available (no churn on identical redeploys); falls back to a build timestamp.
+const BUILD_ID = process.env.GITHUB_SHA ?? process.env.VITE_BUILD_ID ?? String(Date.now());
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const projectRootDir = fileURLToPath(new URL('.', import.meta.url));
@@ -30,6 +38,15 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tsconfigPaths(),
+      // Stamp a build id into index.html so its precache revision changes each deploy — see BUILD_ID.
+      {
+        name: 'frep-build-id',
+        transformIndexHtml() {
+          return [
+            { tag: 'meta', attrs: { name: 'frep-build', content: BUILD_ID }, injectTo: 'head' },
+          ];
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         // App shell is precached so the CHR editor loads with zero connectivity.

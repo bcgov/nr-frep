@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeTeamUpdate } from './RipAdministrationView';
+import { mergeTeamUpdate } from './administrationTeamMerge';
 
 import type { AdministrationData } from '@/types/protocolChecklist';
 

@@ -85,6 +85,66 @@ const blockSummaryErrors = (d: Draft): Record<string, string> => {
 };
 
 /**
+ * One Q8/Q9/Q10 row in edit mode: the Yes/No checkbox plus a description box that appears (and is
+ * required) only when the answer is Yes; a spacer keeps the 2-column rhythm otherwise.
+ */
+const EditQaRow: FC<{
+  id: string;
+  labelText: string;
+  value?: string;
+  onToggle: (v: string) => void;
+  commentId: string;
+  commentLabel: string;
+  commentValue?: string;
+  commentError?: string;
+  onCommentChange: (v: string) => void;
+}> = ({
+  id,
+  labelText,
+  value,
+  onToggle,
+  commentId,
+  commentLabel,
+  commentValue,
+  commentError,
+  onCommentChange,
+}) => (
+  <>
+    <IndicatorCheckbox id={id} labelText={labelText} value={value} onToggle={onToggle} />
+    {isYes(value) ? (
+      <TextAreaField
+        id={commentId}
+        labelText={requiredLabel(commentLabel, true)}
+        value={commentValue}
+        maxLength={2000}
+        invalid={Boolean(commentError)}
+        invalidText={commentError}
+        onChange={onCommentChange}
+      />
+    ) : (
+      <div className="chr-block-qa__spacer" aria-hidden="true" />
+    )}
+  </>
+);
+
+/** Read-only counterpart of {@link EditQaRow}: Yes/No plus the description, shown only when Yes. */
+const ReadOnlyQaRow: FC<{
+  label: string;
+  value?: string;
+  commentLabel: string;
+  comment?: string;
+}> = ({ label, value, commentLabel, comment }) => (
+  <>
+    <RoField label={label} value={yesNo(value)} />
+    {isYes(value) ? (
+      <RoField label={commentLabel} value={comment} />
+    ) : (
+      <div className="chr-block-qa__spacer" aria-hidden="true" />
+    )}
+  </>
+);
+
+/**
  * Section — block summary: Q8/Q9/Q10, block rating + rationale, computed MRVA, comments.
  * Read-only by default with an Edit / Save / Cancel toggle, mirroring the Biodiversity Opening tab.
  * Save persists the whole CHR checklist via `onSave`.
@@ -206,7 +266,7 @@ const BlockSummary: FC<{
             {/* Each question sits beside its description; the description appears only when the
                 question is Yes (legacy parity), otherwise a spacer keeps the 2-column rhythm. */}
             <div className="chr-block-qa">
-              <IndicatorCheckbox
+              <EditQaRow
                 id="chr-q8"
                 labelText={Q8_LABEL}
                 value={
@@ -217,24 +277,13 @@ const BlockSummary: FC<{
                     q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock: v,
                   })
                 }
+                commentId="chr-q8-comments"
+                commentLabel="Q8 description"
+                commentValue={draft.q8Comments}
+                commentError={fieldErrors.q8Comments}
+                onCommentChange={(v) => set({ q8Comments: v })}
               />
-              {isYes(
-                draft.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
-              ) ? (
-                <TextAreaField
-                  id="chr-q8-comments"
-                  labelText={requiredLabel('Q8 description', true)}
-                  value={draft.q8Comments}
-                  maxLength={2000}
-                  invalid={Boolean(fieldErrors.q8Comments)}
-                  invalidText={fieldErrors.q8Comments}
-                  onChange={(v) => set({ q8Comments: v })}
-                />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
-
-              <IndicatorCheckbox
+              <EditQaRow
                 id="chr-q9"
                 labelText={Q9_LABEL}
                 value={
@@ -246,24 +295,13 @@ const BlockSummary: FC<{
                       v,
                   })
                 }
+                commentId="chr-q9-comments"
+                commentLabel="Q9 description"
+                commentValue={draft.q9Comments}
+                commentError={fieldErrors.q9Comments}
+                onCommentChange={(v) => set({ q9Comments: v })}
               />
-              {isYes(
-                draft.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
-              ) ? (
-                <TextAreaField
-                  id="chr-q9-comments"
-                  labelText={requiredLabel('Q9 description', true)}
-                  value={draft.q9Comments}
-                  maxLength={2000}
-                  invalid={Boolean(fieldErrors.q9Comments)}
-                  invalidText={fieldErrors.q9Comments}
-                  onChange={(v) => set({ q9Comments: v })}
-                />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
-
-              <IndicatorCheckbox
+              <EditQaRow
                 id="chr-q10"
                 labelText={Q10_LABEL}
                 value={
@@ -275,22 +313,12 @@ const BlockSummary: FC<{
                       v,
                   })
                 }
+                commentId="chr-q10-comments"
+                commentLabel="Q10 description"
+                commentValue={draft.q10Comments}
+                commentError={fieldErrors.q10Comments}
+                onCommentChange={(v) => set({ q10Comments: v })}
               />
-              {isYes(
-                draft.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
-              ) ? (
-                <TextAreaField
-                  id="chr-q10-comments"
-                  labelText={requiredLabel('Q10 description', true)}
-                  value={draft.q10Comments}
-                  maxLength={2000}
-                  invalid={Boolean(fieldErrors.q10Comments)}
-                  invalidText={fieldErrors.q10Comments}
-                  onChange={(v) => set({ q10Comments: v })}
-                />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
             </div>
           </fieldset>
 
@@ -324,47 +352,30 @@ const BlockSummary: FC<{
           <fieldset className="rip-form__group">
             <legend>Operational review</legend>
             <div className="chr-block-qa">
-              <RoField
+              <ReadOnlyQaRow
                 label={Q8_LABEL}
-                value={yesNo(
-                  value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
-                )}
+                value={
+                  value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock
+                }
+                commentLabel="Q8 description"
+                comment={value.q8Comments}
               />
-              {isYes(
-                value.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock,
-              ) ? (
-                <RoField label="Q8 description" value={value.q8Comments} />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
-
-              <RoField
+              <ReadOnlyQaRow
                 label={Q9_LABEL}
-                value={yesNo(
-                  value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
-                )}
+                value={
+                  value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues
+                }
+                commentLabel="Q9 description"
+                comment={value.q9Comments}
               />
-              {isYes(
-                value.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
-              ) ? (
-                <RoField label="Q9 description" value={value.q9Comments} />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
-
-              <RoField
+              <ReadOnlyQaRow
                 label={Q10_LABEL}
-                value={yesNo(
-                  value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
-                )}
+                value={
+                  value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock
+                }
+                commentLabel="Q10 description"
+                comment={value.q10Comments}
               />
-              {isYes(
-                value.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
-              ) ? (
-                <RoField label="Q10 description" value={value.q10Comments} />
-              ) : (
-                <div className="chr-block-qa__spacer" aria-hidden="true" />
-              )}
             </div>
           </fieldset>
 

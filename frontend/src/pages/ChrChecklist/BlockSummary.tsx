@@ -97,7 +97,12 @@ const BlockSummary: FC<{
 }> = ({ value, onSave, readOnly, busy }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
-  const mrva = calculateMrvaRatingCode(value.rating, value.features);
+  // While editing, preview the MRVA off the edited rating so it updates live with the Rating select
+  // (features aren't editable here); otherwise show the saved value.
+  const mrva = calculateMrvaRatingCode(
+    editing ? (draft.rating ?? value.rating) : value.rating,
+    value.features,
+  );
 
   const beginEdit = () => {
     setDraft({

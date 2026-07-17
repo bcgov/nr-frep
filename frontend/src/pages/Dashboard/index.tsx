@@ -48,10 +48,10 @@ const SCREENS: ScreenTile[] = [
     Icon: Search,
   },
   {
-    title: 'Reports',
+    title: 'Exports',
     description:
       'Browse the catalog of legacy FREP Jasper reports. Generation is read-only for now.',
-    to: '/reports',
+    to: '/exports',
     Icon: Document,
   },
   {
@@ -88,7 +88,7 @@ const DashboardPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid dashboard-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="dashboard__title">FREP Dashboard</h1>
+        <h1 className="dashboard__title">FREP IMS</h1>
         <p className="dashboard__subtitle">Select a screen to begin.</p>
       </Column>
 

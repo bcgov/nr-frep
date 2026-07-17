@@ -267,10 +267,12 @@ export type CheckList = {
   orgUnitName?: string;
   district?: string;
   openingID?: string;
+  openingNumber?: string;
   licensee?: string;
   cuttingPermit?: string;
   block?: string;
   client?: string;
+  clientName?: string;
   yearOfHarvest?: string;
 
   // Editable opening info

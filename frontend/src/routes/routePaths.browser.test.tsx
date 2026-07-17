@@ -13,7 +13,7 @@ describe('routePaths', () => {
     // Client search is a sub-search launched from Checklist Search (matching legacy FREP410), not a
     // standalone menu entry.
     expect(entries.some((e) => e.id === 'Client Search')).toBe(false);
-    expect(entries.some((e) => e.id === 'Reports')).toBe(true);
+    expect(entries.some((e) => e.id === 'Exports')).toBe(true);
     expect(entries.some((e) => e.id === 'Site Details')).toBe(false);
     expect(entries.some((e) => e.id === 'Protocol Checklist')).toBe(false);
     expect(entries.some((e) => e.id === 'Generate Master List')).toBe(false);

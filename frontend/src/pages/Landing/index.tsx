@@ -81,7 +81,7 @@ const LandingPage: FC = () => {
                   </Button>
                 </>
               ) : (
-                // Offline: IDIR login can't run, so enter the offline FREP Dashboard.
+                // Offline: IDIR login can't run, so enter the offline FREP IMS.
                 <Button
                   type="button"
                   onClick={() => navigate('/dashboard')}

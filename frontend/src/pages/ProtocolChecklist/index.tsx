@@ -283,9 +283,9 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Master list year', checklist.effectiveYear, true)}
                 {headerCell('Org unit', headerExtras['Org unit'])}
                 {headerCell('Checklist', checklist.checklistId, true)}
-                {headerCell('Client', headerExtras['Client'])}
+                {headerCell('Client number', headerExtras['Client'])}
                 {headerCell('Client name', headerExtras['Client name'])}
-                {headerCell('Opening', checklist.openingNumber, true)}
+                {headerCell('Opening number', checklist.openingNumber, true)}
                 {headerCell('Opening ID', headerExtras['Opening ID'])}
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}

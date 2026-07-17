@@ -225,8 +225,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: true,
   },
   {
-    path: '/reports',
-    id: 'Reports',
+    path: '/exports',
+    id: 'Exports',
     icon: Document,
     element: (
       <Layout>
@@ -283,7 +283,7 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
 
 /**
  * Offline route set — served to unauthenticated users while the device is offline. The landing
- * page becomes the FREP Dashboard (which shows only the Offline Checklist option when logged out),
+ * page becomes the FREP IMS (which shows only the Offline Checklist option when logged out),
  * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
  * These carry no role restriction, so they render as-is (Layout-wrapped).
  */
@@ -297,7 +297,7 @@ export const getOfflineRoutes = (): RouteDescription[] => [
   },
   {
     path: '/dashboard',
-    id: 'FREP Dashboard',
+    id: 'FREP IMS',
     element: (
       <Layout>
         <DashboardPage />

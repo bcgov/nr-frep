@@ -74,8 +74,8 @@ const ReportsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid reports-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="reports__title">Reports</h1>
-        <p className="reports__subtitle">Generate FREP reports below.</p>
+        <h1 className="reports__title">Exports</h1>
+        <p className="reports__subtitle">Generate FREP exports below.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

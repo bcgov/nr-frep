@@ -11,7 +11,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import './index.scss';
 
 export const LayoutSideNav: FC = () => {
-  const { isSideNavExpanded, closeSideNav } = useLayout();
+  const { isSideNavExpanded } = useLayout();
   const location = useLocation();
   const { user, isLoggedIn } = useAuth();
   const online = useOnlineStatus();
@@ -39,7 +39,6 @@ export const LayoutSideNav: FC = () => {
       to={route.path}
       isActive={route.path === location.pathname}
       renderIcon={route.icon}
-      onClick={closeSideNav}
     >
       {route.id}
     </SideNavLink>
@@ -64,7 +63,6 @@ export const LayoutSideNav: FC = () => {
             as={Link}
             to={childPath(route.path, childRoute)}
             isActive={childPath(route.path, childRoute) === location.pathname}
-            onClick={closeSideNav}
           >
             {renderIcon(childRoute)}
           </SideNavMenuItem>
@@ -78,7 +76,6 @@ export const LayoutSideNav: FC = () => {
       expanded
       isPersistent={false}
       isChildOfHeader
-      onOverlayClick={closeSideNav}
       className={`side-nav-drawer${isSideNavExpanded ? ' side-nav-drawer--open' : ''}`}
     >
       <SideNavItems>

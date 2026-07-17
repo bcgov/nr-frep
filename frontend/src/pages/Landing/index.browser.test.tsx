@@ -62,6 +62,6 @@ describe('LandingPage', () => {
     expect(screen.queryByTestId('landing-button__bceid')).toBeNull();
 
     fireEvent.click(screen.getByTestId('landing-button__offline'));
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    expect(mockNavigate).toHaveBeenCalledWith('/home');
   });
 });

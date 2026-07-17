@@ -49,14 +49,18 @@
         }
       }
 
-      .single-row {
-        flex-direction: row;
-        gap: 1rem;
-      }
-
+      // Login buttons stack vertically (like the BC Gov reference login pages). Two 20rem buttons
+      // can't sit side-by-side in the split-column layout without overflowing/clipping on phones
+      // and tablets, so they stack; on phones they go full-width to match the reference screens.
       .two-rows {
         flex-direction: column;
         gap: 1rem;
+
+        @include breakpoint-down(md) {
+          .login-btn {
+            width: 100%;
+          }
+        }
       }
     }
 

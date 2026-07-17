@@ -48,14 +48,14 @@ const LandingPage: FC = () => {
             </div>
 
             <h1 data-testid="landing-title" className="landing-title">
-              FREP
+              FREP IMS
             </h1>
 
             <h2 data-testid="landing-subtitle" className="landing-subtitle">
               Natural Resources Application
             </h2>
 
-            <div className="buttons-container single-row">
+            <div className="buttons-container two-rows">
               {online ? (
                 <>
                   <Button
@@ -84,7 +84,7 @@ const LandingPage: FC = () => {
                 // Offline: IDIR login can't run, so enter the offline FREP IMS.
                 <Button
                   type="button"
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/home')}
                   renderIcon={ArrowRight}
                   size="md"
                   data-testid="landing-button__offline"

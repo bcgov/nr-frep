@@ -46,7 +46,7 @@ parameters:
     description: Browser-facing API base path; usually '/api'
     value: /api
   - name: VITE_APP_NAME
-    value: Real Estate Project Tracking
+    value: FREP IMS
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).

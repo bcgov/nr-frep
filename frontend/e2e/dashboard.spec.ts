@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test';
 
 import { expectNoGlobalError, gotoProtected } from './utils';
 
-test.describe('Dashboard', () => {
-  test('renders the dashboard with screen tiles', async ({ page }) => {
-    await gotoProtected(page, '/dashboard');
+test.describe('Home', () => {
+  test('renders the home page with screen tiles', async ({ page }) => {
+    await gotoProtected(page, '/home');
 
     await expect(page.getByRole('heading', { name: 'FREP IMS', level: 1 })).toBeVisible();
     // Each screen tile shows its name as an <h2>.
@@ -14,7 +14,7 @@ test.describe('Dashboard', () => {
   });
 
   test('a tile navigates to its screen', async ({ page }) => {
-    await gotoProtected(page, '/dashboard');
+    await gotoProtected(page, '/home');
 
     // ClickableTile carries an aria-label of the screen name; clicking it routes there.
     await page.locator('.dashboard__tile[aria-label="Accepted Sites"]').click();

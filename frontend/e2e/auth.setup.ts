@@ -50,8 +50,8 @@ setup('authenticate via IDIR', async ({ page }) => {
   }
 
   // Whether interactive or programmatic, we wait for the redirect back to
-  // /dashboard. Interactive flow gets 5 min for a human; programmatic gets 2.
-  await page.waitForURL((url) => url.pathname.startsWith('/dashboard'), {
+  // /home. Interactive flow gets 5 min for a human; programmatic gets 2.
+  await page.waitForURL((url) => url.pathname.startsWith('/home'), {
     timeout: programmatic ? 2 * 60_000 : 5 * 60_000,
   });
 

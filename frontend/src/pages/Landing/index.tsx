@@ -55,7 +55,7 @@ const LandingPage: FC = () => {
               Natural Resources Application
             </h2>
 
-            <div className="buttons-container two-rows">
+            <div className="buttons-container single-row">
               {online ? (
                 <>
                   <Button

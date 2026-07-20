@@ -49,14 +49,16 @@
         }
       }
 
-      // Login buttons stack vertically (like the BC Gov reference login pages). Two 20rem buttons
-      // can't sit side-by-side in the split-column layout without overflowing/clipping on phones
-      // and tablets, so they stack; on phones they go full-width to match the reference screens.
-      .two-rows {
-        flex-direction: column;
+      // Login buttons sit side-by-side on desktop and stack (full-width) only on mobile. `flex-wrap`
+      // is a safety net so a too-narrow desktop/tablet row wraps instead of clipping a button.
+      .single-row {
+        flex-direction: row;
+        flex-wrap: wrap;
         gap: 1rem;
 
         @include breakpoint-down(md) {
+          flex-direction: column;
+
           .login-btn {
             width: 100%;
           }

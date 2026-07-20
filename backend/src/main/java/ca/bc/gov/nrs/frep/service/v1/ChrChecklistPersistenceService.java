@@ -107,6 +107,22 @@ public class ChrChecklistPersistenceService {
     return entityManager.find(ChrChecklist.class, checklistId);
   }
 
+  /**
+   * The formatted mapsheet opening designator (e.g. "93A 026 0.0 110") for a selected site. Uses the
+   * same {@code THE.frep_formatted_mapsheet} function the Accepted Sites list and the Biodiversity
+   * header use, so the CHR header shows the identical value — not the raw {@code OPENING_NUMBER}
+   * fragment. Returns null when the site has no mapsheet/opening data.
+   */
+  public String getFormattedOpeningNumber(long frepSelectedSiteId) {
+    List<?> rows = entityManager.createNativeQuery(
+            "SELECT THE.frep_formatted_mapsheet(fss.mapsheet_grid, fss.mapsheet_letter, "
+                + "fss.mapsheet_square, fss.mapsheet_quad, fss.mapsheet_sub_quad, fss.opening_number) "
+                + "FROM THE.frep_selected_site fss WHERE fss.frep_selected_site_id = :selectedSiteId")
+        .setParameter("selectedSiteId", frepSelectedSiteId)
+        .getResultList();
+    return rows.isEmpty() || rows.get(0) == null ? null : rows.get(0).toString();
+  }
+
   public ChrChecklist updateChecklistOffline(Long checklistId, String userId) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
     FrepChecklistStatusCode status = entityManager.find(

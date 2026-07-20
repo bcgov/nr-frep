@@ -214,11 +214,11 @@ const RandomListPage: FC = () => {
         <TableCell key={cell.id}>
           {cell.value ? (
             <Tag type="green" size="sm">
-              In review
+              Accepted
             </Tag>
           ) : (
             <Tag type="gray" size="sm">
-              Pending
+              Not accepted
             </Tag>
           )}
         </TableCell>
@@ -248,7 +248,7 @@ const RandomListPage: FC = () => {
   const printColumns = TABLE_HEADERS.filter((header) => header.key !== 'mapView');
   const printRows = tableRows.map((row) => ({
     ...row,
-    underReview: row.underReview ? 'In review' : 'Pending',
+    underReview: row.underReview ? 'Accepted' : 'Not accepted',
   }));
   const printMeta = [
     summary?.orgUnitDescription,

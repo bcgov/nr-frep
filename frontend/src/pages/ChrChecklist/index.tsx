@@ -666,12 +666,13 @@ const ChrChecklistPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile className="protocol-checklist__summary">
           <div className="protocol-checklist__summary-grid">
-            {/* Tombstone header laid out like the Biodiversity checklist. Fields the CHR record
-                doesn't carry (client name, opening number) are simply omitted. */}
+            {/* Tombstone header laid out like the Biodiversity checklist (same fields, same order). */}
             {headerCell('Master list year', checkList.effectiveYear)}
             {headerCell('Org unit', orgUnit)}
             {headerCell('Checklist', checkList.checklistID)}
-            {headerCell('Client', checkList.client)}
+            {headerCell('Client number', checkList.client)}
+            {headerCell('Client name', checkList.clientName)}
+            {headerCell('Opening number', checkList.openingNumber)}
             {headerCell('Opening ID', checkList.openingID)}
             {headerCell('Licence', checkList.licensee)}
             {headerCell('Cutting permit', checkList.cuttingPermit)}

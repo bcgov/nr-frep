@@ -253,6 +253,11 @@ public class ChrChecklistService {
           objectStorageProperties.accessKey(),
           objectStorageProperties.secretKey()
       );
+      // Opening number is the formatted mapsheet designator (e.g. "93A 026 0.0 110"), fetched via
+      // THE.frep_formatted_mapsheet so it matches the Biodiversity header and Accepted Sites list —
+      // the raw OPENING_NUMBER column is only the last fragment.
+      checkList.setOpeningNumber(persistenceService.getFormattedOpeningNumber(
+          chrChecklist.getFrepResourceValue().getFrepSelectedSite().getFrepSelectedSiteId()));
       populatePhotoBytes(checkList);
       return checkList;
     } catch (Exception ex) {

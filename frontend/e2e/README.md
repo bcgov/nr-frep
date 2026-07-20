@@ -39,7 +39,7 @@ they're safe against the shared DEV backend.
 
 - **`smoke.spec.ts`** — the app root returns HTTP 200.
 - **`navigation.spec.ts`** — each top-level protected screen (Dashboard, Accepted Sites, Checklist
-  Search, District Random List, Reports) boots past the auth/loading overlay and renders its `<h1>`,
+  Search, District Random List, Exports) boots past the auth/loading overlay and renders its `<h1>`,
   without tripping the global error boundary.
 - **`dashboard.spec.ts`** — the Dashboard renders its screen tiles; clicking a tile routes there.
 - **`accepted-sites.spec.ts`** — filters + Refresh render, changing the Protocol filter re-loads.
@@ -48,7 +48,7 @@ they're safe against the shared DEV backend.
 - **`checklist-search.spec.ts`** — filters render; Search settles; Clear resets; client lookup
   opens/closes.
 - **`random-list.spec.ts`** — filters render and the list settles.
-- **`reports.spec.ts`** — the Reports page renders.
+- **`reports.spec.ts`** — the Exports page renders.
 - **`admin-and-offline.spec.ts`** — the CHR offline list renders; the (role-gated) Generate Master
   List route loads without the error boundary (Generate is never clicked — it mutates data).
 - **`detail-resilience.spec.ts`** — site-detail / protocol-checklist / CHR-checklist with a bogus id

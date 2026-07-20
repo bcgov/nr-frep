@@ -75,6 +75,10 @@ const ChecklistSearchPage: FC = () => {
   const [configLoading, setConfigLoading] = useState(true);
 
   const [filters, setFilters] = useState<ChecklistSearchQuery>({});
+  // The filters that produced the currently-displayed results. Export uses this (not the live
+  // `filters`) so a CSV always matches the visible table even if the user edited a filter without
+  // re-searching.
+  const [searchedFilters, setSearchedFilters] = useState<ChecklistSearchQuery>({});
   const [results, setResults] = useState<ChecklistSearchResult[]>([]);
   // Server-side paging: page is 0-based (matches the backend); totalElements is the true match count
   // (no 5000 VARRAY cap), so every page is reachable.
@@ -154,6 +158,7 @@ const ChecklistSearchPage: FC = () => {
         pageSize: targetSize,
       });
       setResults(data.content);
+      setSearchedFilters(queryFilters);
       setTotalElements(data.totalElements);
       setPage(data.pageNumber);
       setPageSize(data.pageSize);
@@ -174,7 +179,7 @@ const ChecklistSearchPage: FC = () => {
 
   const exportCsv = async () => {
     try {
-      const { blob, filename } = await requestChecklistSearchCsv(filters);
+      const { blob, filename } = await requestChecklistSearchCsv(searchedFilters);
       triggerBrowserDownload(blob, filename);
     } catch (err) {
       display({

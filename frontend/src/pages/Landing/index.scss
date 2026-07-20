@@ -49,14 +49,20 @@
         }
       }
 
+      // Login buttons sit side-by-side on desktop and stack (full-width) only on mobile. `flex-wrap`
+      // is a safety net so a too-narrow desktop/tablet row wraps instead of clipping a button.
       .single-row {
         flex-direction: row;
+        flex-wrap: wrap;
         gap: 1rem;
-      }
 
-      .two-rows {
-        flex-direction: column;
-        gap: 1rem;
+        @include breakpoint-down(md) {
+          flex-direction: column;
+
+          .login-btn {
+            width: 100%;
+          }
+        }
       }
     }
 

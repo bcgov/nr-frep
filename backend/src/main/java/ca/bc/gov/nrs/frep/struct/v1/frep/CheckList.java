@@ -15,8 +15,8 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({ "checklistID", "downloadedBy", "downloadedDate", "FREPAssessment", "evaluationYear",
 		"evaluationDate", "assessedBy", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
-		"LandscapeUnit", "FirstNation", "openingID", "licensee", "cp", "block", "Proponent",
-		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "yearofHarvest", "firstNationsName",
+		"LandscapeUnit", "FirstNation", "openingID", "openingNumber", "licensee", "cuttingPermit", "block", "Proponent",
+		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "clientName", "yearOfHarvest", "firstNationsName",
 		"generalLocation", "targeted", "Contact1Name", "Contact1Date", "Contact1Contacted", "Contact2Name",
 		"Contact2Date", "Contact2Contacted", "Contact3Name", "Contact3Date", "Contact3Contacted",
 		"FeatureID1Description", "FeatureID1Source", "FeatureID2Description", "FeatureID2Source", "FeatureID2Comments",
@@ -80,9 +80,11 @@ public class CheckList {
 	private String firstNation;
 	@JsonProperty("openingID")
 	private String openingID;
+	@JsonProperty("openingNumber")
+	private String openingNumber;
 	@JsonProperty("licensee")
 	private String licensee;
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	private String cuttingPermit;
 	@JsonProperty("block")
 	private String block;
@@ -94,7 +96,9 @@ public class CheckList {
 	private String openingCategory;
 	@JsonProperty("client")
 	private String client;
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("clientName")
+	private String clientName;
+	@JsonProperty("yearOfHarvest")
 	private String yearOfHarvest;
 	@JsonProperty("firstNationsName")
 	private String firstNationName;
@@ -356,6 +360,16 @@ public class CheckList {
 		this.openingID = openingID;
 	}
 
+	@JsonProperty("openingNumber")
+	public String getOpeningNumber() {
+		return openingNumber;
+	}
+
+	@JsonProperty("openingNumber")
+	public void setOpeningNumber(String openingNumber) {
+		this.openingNumber = openingNumber;
+	}
+
 	@JsonProperty("licensee")
 	public String getLicensee() {
 		return licensee;
@@ -371,12 +385,12 @@ public class CheckList {
 		return block;
 	}
 
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	public String getCuttingPermit() {
 		return cuttingPermit;
 	}
 
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	public void setCuttingPermit(String cuttingPermit) {
 		this.cuttingPermit = cuttingPermit;
 	}
@@ -426,12 +440,22 @@ public class CheckList {
 		this.client = client;
 	}
 
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("clientName")
+	public String getClientName() {
+		return clientName;
+	}
+
+	@JsonProperty("clientName")
+	public void setClientName(String clientName) {
+		this.clientName = clientName;
+	}
+
+	@JsonProperty("yearOfHarvest")
 	public String getYearOfHarvest() {
 		return yearOfHarvest;
 	}
 
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("yearOfHarvest")
 	public void setYearOfHarvest(String yearOfHarvest) {
 		this.yearOfHarvest = yearOfHarvest;
 	}

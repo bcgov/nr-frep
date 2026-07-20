@@ -18,6 +18,7 @@ import type { AdministrationData } from '@/types/protocolChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import { mergeTeamUpdate } from '@/pages/ProtocolChecklist/administrationTeamMerge';
 import {
   teamMemberAddBlocked,
   todayIso,
@@ -159,7 +160,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
         evaluatorUserid,
         asTeamLead,
       );
-      setData(updated);
+      setData((prev) => mergeTeamUpdate(updated, prev));
       display({ kind: 'success', title: 'Evaluator added', timeout: 4000 });
     } catch (err) {
       // Friendly text for the legacy "already on the team" message keys.
@@ -203,7 +204,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
         evaluatorUserid,
         revisionCount,
       );
-      setData(updated);
+      setData((prev) => mergeTeamUpdate(updated, prev));
       display({ kind: 'success', title: 'Evaluator removed', timeout: 4000 });
     } catch (err) {
       reportError('Could not remove evaluator', err);

@@ -102,19 +102,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
     id: 'RedirectWhileLoggedIn',
-    element: <Navigate to="/home" replace />,
+    element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
   },
   {
     // OAuth redirect target (redirectSignIn) — once logged in, bounce off the callback URL to home.
     path: '/auth/callback',
     id: 'Auth callback',
-    element: <Navigate to="/home" replace />,
+    element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
   },
   {
-    path: '/home',
-    id: 'Home',
+    path: '/dashboard',
+    id: 'Dashboard',
     icon: DashboardReference,
     element: (
       <Layout>
@@ -296,7 +296,7 @@ export const getOfflineRoutes = (): RouteDescription[] => [
     isSideMenu: false,
   },
   {
-    path: '/home',
+    path: '/dashboard',
     id: 'FREP IMS',
     element: (
       <Layout>

@@ -84,7 +84,7 @@ const LandingPage: FC = () => {
                 // Offline: IDIR login can't run, so enter the offline FREP IMS.
                 <Button
                   type="button"
-                  onClick={() => navigate('/home')}
+                  onClick={() => navigate('/dashboard')}
                   renderIcon={ArrowRight}
                   size="md"
                   data-testid="landing-button__offline"

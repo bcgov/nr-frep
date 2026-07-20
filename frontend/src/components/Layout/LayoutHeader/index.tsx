@@ -33,7 +33,7 @@ export const LayoutHeader: FC = () => {
         isActive={isSideNavExpanded}
         onClick={handleMenuButtonClick}
       />
-      <HeaderName as={Link} to={'/home'} prefix="">
+      <HeaderName as={Link} to={'/dashboard'} prefix="">
         {appName}
       </HeaderName>
 

@@ -14,7 +14,7 @@ npm run e2e:login
 
 A Chromium window opens, navigates to the landing page, and clicks **Log in
 with IDIR**. Finish the IDIR sign-in (and any MFA) by hand. Once the app
-lands on `/home`, the session is saved to `e2e/.auth/user.json` (gitignored).
+lands on `/dashboard`, the session is saved to `e2e/.auth/user.json` (gitignored).
 
 Re-run `npm run e2e:login` whenever the saved session expires — you'll know
 because tests start bouncing back to the IDIR domain or seeing 401s.
@@ -38,10 +38,10 @@ All **read-only** — they navigate, assert rendered UI, and exercise only non-d
 they're safe against the shared DEV backend.
 
 - **`smoke.spec.ts`** — the app root returns HTTP 200.
-- **`navigation.spec.ts`** — each top-level protected screen (Home, Accepted Sites, Checklist
+- **`navigation.spec.ts`** — each top-level protected screen (Dashboard, Accepted Sites, Checklist
   Search, District Random List, Exports) boots past the auth/loading overlay and renders its `<h1>`,
   without tripping the global error boundary.
-- **`dashboard.spec.ts`** — the Home page renders its screen tiles; clicking a tile routes there.
+- **`dashboard.spec.ts`** — the Dashboard renders its screen tiles; clicking a tile routes there.
 - **`accepted-sites.spec.ts`** — filters + Refresh render, changing the Protocol filter re-loads.
 - **`add-target-site.spec.ts`** — the opening-search form renders every filter; Clear resets a field;
   the client-lookup modal opens/closes; Back navigates away.

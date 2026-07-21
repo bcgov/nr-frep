@@ -25,14 +25,6 @@ export class MasterListAdminService extends HttpClient {
     });
   }
 
-  regenerateDistrict(effectiveYear: string, orgUnitNo: string): CancelablePromise<MasterListAdmin> {
-    return this.doRequest<MasterListAdmin>(this.config, {
-      method: 'POST',
-      url: '/v1/admin/master-list/regenerate',
-      query: { effectiveYear, orgUnitNo },
-    });
-  }
-
   saveComments(effectiveYear: string, comments: string): CancelablePromise<MasterListAdmin> {
     return this.doRequest<MasterListAdmin>(this.config, {
       method: 'POST',

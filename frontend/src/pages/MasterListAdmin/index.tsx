@@ -245,12 +245,6 @@ const MasterListAdminPage: FC = () => {
     }
   };
 
-  const handleRegenerateDistrict = (orgUnitNo: string) =>
-    runMutation(
-      () => API.masterListAdmin.regenerateDistrict(effectiveYear, orgUnitNo),
-      `District ${orgUnitNo} regenerated`,
-    );
-
   const handleSaveComments = () =>
     runMutation(
       () => API.masterListAdmin.saveComments(effectiveYear, form.comments ?? ''),
@@ -295,7 +289,7 @@ const MasterListAdminPage: FC = () => {
               className="master-list-admin__lock-note"
               kind="info"
               title="Year locked"
-              subtitle="Resource evaluations are under way for this year — the list is locked, so it can't be (re-)generated or deleted. Use per-district Regenerate where allowed."
+              subtitle="Resource evaluations are under way for this year — the list is locked, so it can't be (re-)generated or deleted."
               hideCloseButton
               lowContrast
             />
@@ -451,7 +445,6 @@ const MasterListAdminPage: FC = () => {
                       <TableHeader>Name</TableHeader>
                       <TableHeader>Eligible</TableHeader>
                       <TableHeader>Selected</TableHeader>
-                      <TableHeader>Action</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -461,18 +454,6 @@ const MasterListAdminPage: FC = () => {
                         <TableCell>{stat.orgUnitName}</TableCell>
                         <TableCell>{stat.eligibleSites}</TableCell>
                         <TableCell>{stat.selectedSites}</TableCell>
-                        <TableCell>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            disabled={
-                              generating || !stat.orgUnitNo || stat.resourceValueInd === 'Y'
-                            }
-                            onClick={() => void handleRegenerateDistrict(stat.orgUnitNo)}
-                          >
-                            Regenerate
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

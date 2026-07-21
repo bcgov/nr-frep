@@ -87,14 +87,6 @@ class MasterListAdminApiControllerTest {
   }
 
   @Test
-  void regenerateRejectsBlankOrgUnit() throws Exception {
-    mockMvc.perform(post("/api/v1/admin/master-list/regenerate")
-            .param("effectiveYear", "2025")
-            .param("orgUnitNo", ""))
-        .andExpect(status().isBadRequest());
-  }
-
-  @Test
   void deleteRejectsBlankYear() throws Exception {
     mockMvc.perform(delete("/api/v1/admin/master-list").param("effectiveYear", ""))
         .andExpect(status().isBadRequest());

@@ -12,7 +12,6 @@ vi.mock('@/services/APIs', () => ({
     masterListAdmin: {
       getMasterList: vi.fn(),
       generate: vi.fn(),
-      regenerateDistrict: vi.fn(),
       saveComments: vi.fn(),
       deleteMasterList: vi.fn(),
     },
@@ -45,7 +44,6 @@ const criteria = (generated: boolean) => ({
           orgUnitName: 'Chilliwack',
           eligibleSites: 12,
           selectedSites: 8,
-          resourceValueInd: 'N',
         },
       ]
     : [],
@@ -53,37 +51,6 @@ const criteria = (generated: boolean) => ({
 
 describe('MasterListAdminPage actions', () => {
   afterEach(() => vi.clearAllMocks());
-
-  it('regenerates a single district', async () => {
-    config.getMasterListYears.mockResolvedValue([
-      { effectiveYear: '2024', label: '2024/2025', current: true },
-    ]);
-    api.getMasterList.mockResolvedValue(criteria(true));
-    api.regenerateDistrict.mockResolvedValue(criteria(true));
-
-    render(<MasterListAdminPage />);
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }));
-
-    expect(api.regenerateDistrict).toHaveBeenCalledWith('2024', '43');
-  });
-
-  it('disables per-district Regenerate when the district has evaluations (ind = Y)', async () => {
-    config.getMasterListYears.mockResolvedValue([
-      { effectiveYear: '2024', label: '2024/2025', current: true },
-    ]);
-    const evaluated = criteria(true);
-    evaluated.generationStats[0].resourceValueInd = 'Y';
-    api.getMasterList.mockResolvedValue(evaluated);
-
-    render(<MasterListAdminPage />);
-
-    expect(await screen.findByRole('button', { name: 'Regenerate' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(api.regenerateDistrict).not.toHaveBeenCalled();
-  });
 
   it('saves generation comments without regenerating', async () => {
     config.getMasterListYears.mockResolvedValue([

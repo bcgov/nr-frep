@@ -162,29 +162,6 @@ class MasterListAdminServiceTest {
   }
 
   @Test
-  void regenerateDistrictDelegatesAndReloads() {
-    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ADMIN");
-    when(masterListRepository.getCriteria("2025")).thenReturn(new MasterListCriteriaData(
-        "2025-03-31", "2024-04-01", 5.0, 12, "", "N", List.of()));
-
-    service.regenerateDistrict("2025", "43");
-
-    verify(masterListRepository).regenerateDistrict("2025", "43", "IDIR\\ADMIN");
-  }
-
-  @Test
-  void regenerateDistrictMapsExistingResourceToConflict() {
-    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ADMIN");
-    doThrow(new StoredProcedureException(
-            "FREP_700_GEN_MASTER", "regenerate", "ca.bc.gov.mof.frep.regenerate.existingResource"))
-        .when(masterListRepository).regenerateDistrict("2025", "43", "IDIR\\ADMIN");
-
-    ConflictFoundException ex = assertThrows(
-        ConflictFoundException.class, () -> service.regenerateDistrict("2025", "43"));
-    assertTrue(ex.getMessage().toLowerCase().contains("regenerat"));
-  }
-
-  @Test
   void deleteListMapsResourcesAssociatedToConflict() {
     doThrow(new StoredProcedureException(
             "FREP_700_GEN_MASTER", "delete_list",

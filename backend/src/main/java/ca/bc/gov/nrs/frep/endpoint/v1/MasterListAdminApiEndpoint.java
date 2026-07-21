@@ -31,12 +31,6 @@ public interface MasterListAdminApiEndpoint {
       @RequestBody GenerateMasterListRequest request);
 
   @PreAuthorize(FrepAuthorities.ADMIN)
-  @PostMapping("/regenerate")
-  ResponseEntity<MasterListAdminResponse> regenerateDistrict(
-      @RequestParam String effectiveYear,
-      @RequestParam String orgUnitNo);
-
-  @PreAuthorize(FrepAuthorities.ADMIN)
   @PostMapping("/comments")
   ResponseEntity<MasterListAdminResponse> saveComments(
       @RequestBody GenerateMasterListRequest request);

@@ -90,24 +90,6 @@ public class MasterListRepositoryImpl extends AbstractFrepRepository implements 
   }
 
   /**
-   * Regenerate the master list for a single district. Legacy equivalent:
-   * {@code Frep700MasterListDataManager.regenerate} ({@code regenerate(year, org_unit_no,
-   * error OUT, user_id)}).
-   */
-  public void regenerateDistrict(String effectiveYear, String orgUnitNo, String userId) {
-    String call = "{call " + PACKAGE_NAME + ".regenerate (?,?,?,?)}";
-    executeCall(call, cs -> {
-      cs.setString(1, effectiveYear);
-      cs.setString(2, orgUnitNo);
-      cs.registerOutParameter(3, Types.VARCHAR);
-      cs.setString(4, userId);
-    }, cs -> {
-      throwIfError(PACKAGE_NAME, "regenerate", cs.getString(3));
-      return null;
-    });
-  }
-
-  /**
    * Save the generation comments for a year without regenerating. Legacy equivalent:
    * {@code Frep700MasterListDataManager.save_comments} ({@code save_comments(year, comments,
    * user_id, error OUT)}).

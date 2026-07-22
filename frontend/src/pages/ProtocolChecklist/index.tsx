@@ -6,7 +6,6 @@ import {
   Layers,
   Location,
   Notebook,
-  Settings,
   type CarbonIconType,
 } from '@carbon/icons-react';
 import {
@@ -29,9 +28,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BioOpeningView from './BioOpeningView';
 import BioPlotsView from './BioPlotsView';
 import BioStratumView from './BioStratumView';
-// Administration / Notes / Attachments are shared (named Rip* for legacy reasons) and used by
-// Biodiversity. Riparian + Water are out of scope, so their dedicated editors are removed.
-import RipAdministrationView from './RipAdministrationView';
+// Notes / Attachments are shared (named Rip* for legacy reasons) and used by Biodiversity. Riparian
+// + Water are out of scope, so their dedicated editors are removed.
 import RipAttachmentsView from './RipAttachmentsView';
 import RipNotesView from './RipNotesView';
 import { formatSubmitValidation } from './submitValidation';
@@ -51,7 +49,6 @@ import './protocolChecklist.scss';
 // Per-section tab icons (keyed by the backend section id), mirroring the contained-tab style with
 // an icon beside each label. Unknown sections fall back to a generic document icon.
 const SECTION_ICONS: Record<string, CarbonIconType> = {
-  administration: Settings,
   opening: Information,
   stratum: Layers,
   plots: Location,
@@ -359,14 +356,7 @@ const ProtocolChecklistPage: FC = () => {
                 {/* All Biodiversity sections edit inline (their own Edit/Save). */}
                 {checklist.sections.map((section, i) => (
                   <TabPanel key={section.id}>
-                    {section.id === 'administration' ? (
-                      <RipAdministrationView
-                        protocol={backendCode ?? ''}
-                        checklistId={id}
-                        canEdit={canEdit}
-                        submitted={submitted}
-                      />
-                    ) : section.id === 'notes' ? (
+                    {section.id === 'notes' ? (
                       <RipNotesView
                         protocol={backendCode ?? ''}
                         checklistId={id}

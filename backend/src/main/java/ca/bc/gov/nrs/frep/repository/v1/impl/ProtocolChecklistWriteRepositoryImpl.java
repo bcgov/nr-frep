@@ -11,10 +11,8 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioWindthrowTreatment;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
-import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
@@ -48,13 +46,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   private static final String TOMBSTONE = "FREP_TOMBSTONE";
   private static final String BIO_OPENING_PACKAGE = "frep_210_bio_opening";
 
+  // Left-joins the evaluation-team lead (biodiversity_evaluator_name, team_lead_ind='Y') so the
+  // Opening carries the evaluator + its own revision token. Columns are bc.-qualified because both
+  // tables have a revision_count.
   private static final String BIO_OPENING_SELECT =
-      "SELECT frep_resource_value_id, frep_checklist_status_code, frep_wtp_override, "
-          + "location_description, patch_reserves_on_block, patch_reserves_sampled, "
-          + "innovtv_practice_answer_code, innovative_practices_comment, invasive_plant_answer_code, "
-          + "invasive_plant_comment, frep_site_evaluation_code, evaluator_opinion_comment, "
-          + "revision_count "
-          + "FROM the.biodiversity_checklist WHERE biodiversity_checklist_id = ?";
+      "SELECT bc.frep_resource_value_id, bc.frep_checklist_status_code, bc.frep_wtp_override, "
+          + "bc.location_description, bc.patch_reserves_on_block, bc.patch_reserves_sampled, "
+          + "bc.innovtv_practice_answer_code, bc.innovative_practices_comment, "
+          + "bc.invasive_plant_answer_code, bc.invasive_plant_comment, bc.frep_site_evaluation_code, "
+          + "bc.evaluator_opinion_comment, TO_CHAR(bc.evaluation_date, 'YYYY-MM-DD') AS evaluation_date, "
+          + "bc.revision_count, ben.evaluator_userid AS team_lead_userid, "
+          + "ben.revision_count AS team_lead_revision_count "
+          + "FROM the.biodiversity_checklist bc "
+          + "LEFT JOIN the.biodiversity_evaluator_name ben "
+          + "ON ben.biodiversity_checklist_id = bc.biodiversity_checklist_id "
+          + "AND ben.evaluator_team_lead_ind = 'Y' "
+          + "WHERE bc.biodiversity_checklist_id = ?";
 
   private final ObjectStorageService objectStorage;
 
@@ -122,8 +129,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
               rs.getString("invasive_plant_comment"),
               rs.getString("frep_site_evaluation_code"),
               rs.getString("evaluator_opinion_comment"),
+              rs.getString("evaluation_date"),
               rs.getString("revision_count"),
-              null, null, null
+              null, null, null,
+              rs.getString("team_lead_userid"),
+              null, // teamLeadName — resolved via FAM in the service
+              rs.getString("team_lead_revision_count")
           );
         },
         checklistId
@@ -177,8 +188,9 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   }
 
   /**
-   * Persist the Opening via {@code FREP_210_BIO_OPENING.SAVE} (16 positional params; checklist id,
-   * resource id and revision_count are IN OUT; error_message is OUT). Returns the opening with the
+   * Persist the Opening via {@code FREP_210_BIO_OPENING.SAVE} (17 positional params; checklist id,
+   * resource id and revision_count are IN OUT; error_message is OUT; evaluation_date is the optional
+   * trailing param — a null leaves the stored value untouched). Returns the opening with the
    * id + revision the proc echoes back. Throws {@code StoredProcedureException} on a proc error
    * (includes the optimistic-lock conflict the proc raises on a stale revision_count).
    */
@@ -196,7 +208,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           o.checklistId(), o.revisionCount(), dbRevision);
     }
     return executeCall(
-        callSql(BIO_OPENING_PACKAGE, "SAVE", 16),
+        callSql(BIO_OPENING_PACKAGE, "SAVE", 17),
         cs -> {
           setInOutString(cs, 1, o.checklistId());
           setInOutString(cs, 2, o.resourceValueId());
@@ -214,6 +226,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           setInOutString(cs, 14, o.revisionCount());
           cs.setString(15, userId);
           cs.registerOutParameter(16, Types.VARCHAR);
+          cs.setString(17, o.evaluationDate());
         },
         cs -> {
           throwIfError(BIO_OPENING_PACKAGE, "SAVE", cs.getString(16));
@@ -758,153 +771,40 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return ids.isEmpty() ? "" : ids.get(0);
   }
 
-  /**
-   * Cost-resource scalars read directly from {@code biodiversity_checklist}, bypassing the drifted
-   * {@code FREP_CHECKLIST_COST_RESOURCES.GET} out-params (@25-@28, @33). {@code revisionCountAccess}
-   * is the table's {@code revision_count} — the optimistic-lock token the SAVE proc rewrites.
-   */
-  private record BiodiversityAdminScalars(String siteAccessCode, String blockAccessTime,
-      String hoursOnBlock, String peopleOnBlock, String revisionCountAccess) {
-  }
-
-  private BiodiversityAdminScalars readBiodiversityAdminScalars(String checklistId) {
-    List<BiodiversityAdminScalars> rows = jdbcTemplate.query(
-        "SELECT frep_site_access_code, block_access_time, hours_on_block, people_on_block,"
-            + " revision_count FROM the.biodiversity_checklist WHERE biodiversity_checklist_id = ?",
-        (rs, n) -> new BiodiversityAdminScalars(
-            rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)),
-        checklistId);
-    return rows.isEmpty() ? null : rows.get(0);
-  }
-
-  /**
-   * Read the Administration (cost/resource) data via {@code FREP_CHECKLIST_COST_RESOURCES.GET} (35
-   * params per the legacy FrepCostResourceDataManager: tombstone 1-16, selectedSiteId @17,
-   * resourceValueId IN @18, type @19, status @20, checklistId IN @21, ... siteAccessCode @25,
-   * blockAccessTime @26, hoursOnBlock @27, peopleOnBlock @28, additionalComments @29, teamLeadNameId
-   * @30, revisionCount @32, revisionCountAccess @33, error @34, team-member cursor @35).
-   */
-  public AdministrationData getAdministration(String checklistId, String resourceType) {
-    String resourceValueId = resolveResourceValueId(checklistId, resourceType);
-    // The deployed FREP_CHECKLIST_COST_RESOURCES.GET out-param layout has drifted from the legacy
-    // source for the cost-resource scalars (the same GET-proc drift proven for FREP210/211): the
-    // tombstone, status, team-lead and team-member-cursor params still line up, but @25-@28 (site
-    // access / block-access time / hours / people on block) read blank even when the row holds
-    // values, and SAVE persists fine. Read those four scalars plus the biodiversity_checklist
-    // revision token straight from the table so the screen shows what SAVE actually wrote and the
-    // save round-trips the true optimistic-lock token.
-    BiodiversityAdminScalars direct =
-        "SLB".equals(resourceType) ? readBiodiversityAdminScalars(checklistId) : null;
-    return executeCall(
-        callSql(COST_RESOURCE_PKG, "GET", 35),
-        cs -> {
-          for (int i = 1; i <= 17; i++) {
-            cs.registerOutParameter(i, Types.VARCHAR);
-          }
-          cs.setString(18, resourceValueId);
-          cs.registerOutParameter(19, Types.VARCHAR);
-          cs.registerOutParameter(20, Types.VARCHAR);
-          cs.setString(21, checklistId);
-          for (int i = 22; i <= 34; i++) {
-            cs.registerOutParameter(i, Types.VARCHAR);
-          }
-          registerOutCursor(cs, 35);
-        },
-        cs -> {
-          throwIfError(COST_RESOURCE_PKG, "GET", cs.getString(34));
-          // The cost-resource team-member cursor only returns EVALUATOR_USERID,
-          // EVALUATOR_TEAM_LEAD_IND and REVISION_COUNT (FREP_RESOURCE_VALUE_ID and
-          // EVALUATOR_DESCRIPTION are absent for this proc). Read each column only if present,
-          // mirroring the legacy FrepCostResourceDataManager.populateFrepTeamMemeberBean, so an
-          // absent column doesn't blow up with ORA-17006.
-          List<EvaluatorRow> team = readCursor(cs, 35, rs -> new EvaluatorRow(
-              getStringIfPresent(rs, "EVALUATOR_USERID"),
-              getStringIfPresent(rs, "FREP_RESOURCE_VALUE_ID"),
-              getStringIfPresent(rs, "EVALUATOR_TEAM_LEAD_IND"),
-              getStringIfPresent(rs, "EVALUATOR_DESCRIPTION"),
-              getStringIfPresent(rs, "REVISION_COUNT")));
-          return new AdministrationData(
-              checklistId,
-              cs.getString(17),
-              resourceValueId,
-              cs.getString(19),
-              cs.getString(20),
-              cs.getString(11),
-              direct != null ? direct.siteAccessCode() : cs.getString(25),
-              direct != null ? direct.blockAccessTime() : cs.getString(26),
-              direct != null ? direct.hoursOnBlock() : cs.getString(27),
-              direct != null ? direct.peopleOnBlock() : cs.getString(28),
-              cs.getString(29),
-              cs.getString(30),
-              null, // teamLeadName — resolved from FAM in ProtocolChecklistService
-              cs.getString(31),
-              cs.getString(32),
-              direct != null ? direct.revisionCountAccess() : cs.getString(33),
-              team);
-        });
-  }
-
-  /**
-   * Save the Administration scalar fields via {@code FREP_CHECKLIST_COST_RESOURCES.SAVE} (14 params:
-   * selectedSiteId, resourceValueId, type, checklistId, statusCode, evaluationDate, siteAccessCode,
-   * blockAccessTime, hoursOnBlock, peopleOnBlock, revisionCount, revisionCountAccess, userid, error).
-   * Team membership is read-only here.
-   */
-  public AdministrationData saveAdministration(AdministrationData o, String userId) {
-    executeCall(
-        callSql(COST_RESOURCE_PKG, "SAVE", 14),
-        cs -> {
-          cs.setString(1, o.selectedSiteId());
-          cs.setString(2, o.resourceValueId());
-          cs.setString(3, o.resourceValueType());
-          cs.setString(4, o.checklistId());
-          cs.setString(5, o.statusCode());
-          cs.setString(6, nullIfBlank(o.evaluationDate()));
-          cs.setString(7, nullIfBlank(o.siteAccessCode()));
-          cs.setString(8, nullIfBlank(o.blockAccessTime()));
-          cs.setString(9, nullIfBlank(o.hoursOnBlock()));
-          cs.setString(10, nullIfBlank(o.peopleOnBlock()));
-          cs.setString(11, nullIfBlank(o.revisionCount()));
-          cs.setString(12, nullIfBlank(o.revisionCountAccess()));
-          cs.setString(13, userId);
-          cs.registerOutParameter(14, Types.VARCHAR);
-        },
-        cs -> {
-          throwIfError(COST_RESOURCE_PKG, "SAVE", cs.getString(14));
-          return null;
-        });
-    return getAdministration(o.checklistId(), o.resourceValueType());
-  }
-
   private static String nullIfBlank(String value) {
     return (value == null || value.isBlank()) ? null : value;
   }
 
   /**
-   * Returns the column's value, or {@code null} when the column is absent from the result set —
-   * mirrors the legacy {@code FrepCostResourceDataManager} which guards each read with a
-   * column-name presence check (some cursors omit columns the bean can carry).
+   * Make {@code newLead} the sole team lead ("Assign it to me" takeover). Removes the current lead
+   * first (single-lead invariant, like the legacy UI) when it's someone else, then re-flags/adds the
+   * caller as lead. No {@code getAdministration} re-read — the Opening flow re-reads itself. The
+   * evaluator table has its own revision token, independent of the checklist's.
    */
-  private static String getStringIfPresent(ResultSet rs, String column) throws SQLException {
-    ResultSetMetaData metaData = rs.getMetaData();
-    for (int i = 1; i <= metaData.getColumnCount(); i++) {
-      if (metaData.getColumnName(i).equalsIgnoreCase(column)) {
-        return rs.getString(column);
-      }
+  public void assignBiodiversityLead(String checklistId, String resourceType, String newLead,
+      String oldLead, String oldRevision, String userId) {
+    if (StringUtils.isNotBlank(oldLead) && !oldLead.equalsIgnoreCase(newLead)) {
+      executeCall(
+          callSql(COST_RESOURCE_PKG, "delete_team_member", 5),
+          cs -> {
+            cs.setString(1, oldLead);
+            cs.setString(2, checklistId);
+            cs.setString(3, resourceType);
+            cs.setString(4, nullIfBlank(oldRevision));
+            cs.registerOutParameter(5, Types.VARCHAR);
+          },
+          cs -> {
+            throwIfError(COST_RESOURCE_PKG, "delete_team_member", cs.getString(5));
+            return null;
+          });
     }
-    return null;
-  }
-
-  /** Add (or re-flag) an evaluator on the team via {@code save_team_member} (6 params). */
-  public AdministrationData addTeamMember(
-      String checklistId, String resourceType, String evaluator, boolean teamLead, String userId) {
     executeCall(
         callSql(COST_RESOURCE_PKG, "save_team_member", 6),
         cs -> {
           cs.setString(1, checklistId);
           cs.setString(2, resourceType);
-          cs.setString(3, evaluator);
-          cs.setString(4, teamLead ? "Y" : "N");
+          cs.setString(3, newLead);
+          cs.setString(4, "Y");
           cs.setString(5, userId);
           cs.registerOutParameter(6, Types.VARCHAR);
         },
@@ -912,26 +812,6 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           throwIfError(COST_RESOURCE_PKG, "save_team_member", cs.getString(6));
           return null;
         });
-    return getAdministration(checklistId, resourceType);
-  }
-
-  /** Remove an evaluator from the team via {@code delete_team_member} (5 params). */
-  public AdministrationData deleteTeamMember(
-      String checklistId, String resourceType, String evaluatorUserid, String revisionCount) {
-    executeCall(
-        callSql(COST_RESOURCE_PKG, "delete_team_member", 5),
-        cs -> {
-          cs.setString(1, evaluatorUserid);
-          cs.setString(2, checklistId);
-          cs.setString(3, resourceType);
-          cs.setString(4, nullIfBlank(revisionCount));
-          cs.registerOutParameter(5, Types.VARCHAR);
-        },
-        cs -> {
-          throwIfError(COST_RESOURCE_PKG, "delete_team_member", cs.getString(5));
-          return null;
-        });
-    return getAdministration(checklistId, resourceType);
   }
 
   // --- Notes (FREP checklistNote / FREP_CHECKLIST_NOTES) ---

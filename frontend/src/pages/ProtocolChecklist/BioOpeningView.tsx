@@ -1,5 +1,14 @@
 import { Edit } from '@carbon/icons-react';
-import { Button, Select, SelectItem, SkeletonText, TextArea, TextInput } from '@carbon/react';
+import {
+  Button,
+  DatePicker,
+  DatePickerInput,
+  Select,
+  SelectItem,
+  SkeletonText,
+  TextArea,
+  TextInput,
+} from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
 import { requiredLabel } from '@/utils/requiredLabel';
@@ -7,6 +16,7 @@ import { requiredLabel } from '@/utils/requiredLabel';
 import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
 import API from '@/services/APIs';
@@ -26,8 +36,19 @@ type Props = {
   submitted: boolean;
 };
 
+// The evaluator id comes from the legacy `biodiversity_evaluator_name` table (written by the FREP301
+// proc), so it may be stored bare/differently-cased (e.g. `AVSODHI`) while `providerUsername` is the
+// full `IDIR\AVSODHI`. Compare the way the backend does — strip the directory prefix, ignore case —
+// so "Assign it to me" hides once the current user already is the evaluator.
+const sameEvaluator = (a?: string, b?: string): boolean => {
+  const norm = (v?: string) => v?.split('\\').pop()?.trim().toUpperCase() ?? '';
+  return norm(a) !== '' && norm(a) === norm(b);
+};
+
 const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
+  const { user } = useAuth();
+  const me = user?.providerUsername;
   const [data, setData] = useState<BiodiversityOpening | null>(null);
   const [answers, setAnswers] = useState<CodeOption[]>([]);
   const [ratings, setRatings] = useState<CodeOption[]>([]);
@@ -97,6 +118,20 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     ((data as Record<string, unknown>)?.[key] as string | undefined) ?? '';
   const set = (key: keyof BiodiversityOpening, value: string) =>
     setData((prev) => (prev ? ({ ...prev, [key]: value } as BiodiversityOpening) : prev));
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  // "Assign it to me" (mirrors CHR): claim the evaluator (team lead) for the current user. Takes
+  // effect on Save — the backend replaces any existing lead. Clear the resolved name so the userid
+  // shows until the save round-trips the FAM-resolved name.
+  const assignToMe = () => {
+    if (!me) return;
+    setData((prev) =>
+      prev
+        ? ({ ...prev, teamLeadNameId: me, teamLeadName: undefined } as BiodiversityOpening)
+        : prev,
+    );
+  };
 
   const handleSave = async () => {
     if (!data) return;
@@ -183,6 +218,62 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       cell(label, get(key), true)
     );
 
+  // Evaluation date — a single-date picker writing back the YYYY-MM-DD the SAVE proc expects (mirrors
+  // the CHR Opening tab). Future dates are blocked at the picker (maxDate) and in validateOpening.
+  const dateField = (key: keyof BiodiversityOpening, label: string, required = false): ReactNode =>
+    editing ? (
+      <DatePicker
+        key={key}
+        className="frep-date-picker bio-opening__date-field"
+        datePickerType="single"
+        dateFormat="Y-m-d"
+        maxDate={todayIso}
+        value={get(key) ? [get(key)] : []}
+        onChange={(dates: Date[]) => set(key, dates[0] ? dates[0].toISOString().slice(0, 10) : '')}
+      >
+        <DatePickerInput
+          id={`bio-${key}`}
+          labelText={requiredLabel(label, required)}
+          placeholder="YYYY-MM-DD"
+          invalid={Boolean(fieldErrors[key])}
+          invalidText={fieldErrors[key]}
+        />
+      </DatePicker>
+    ) : (
+      cell(label, formatShortDate(get(key)))
+    );
+
+  // Evaluator — read-only, claimed via "Assign it to me" (mirrors the CHR Assessed-by widget). The
+  // button shows for any editor who isn't already the evaluator, so takeover is allowed.
+  const evaluatorField = (): ReactNode => {
+    const currentId = get('teamLeadNameId');
+    const displayName = get('teamLeadName') || currentId;
+    if (!editing) {
+      return cell('Evaluator', displayName);
+    }
+    return (
+      <div className="protocol-checklist__field" key="evaluator">
+        <span className="protocol-checklist__label">{requiredLabel('Evaluator', true)}</span>
+        <span
+          className="protocol-checklist__value"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <span>{displayName || '—'}</span>
+          {me && !sameEvaluator(currentId, me) && (
+            <Button kind="ghost" size="sm" disabled={busy} onClick={assignToMe}>
+              Assign it to me
+            </Button>
+          )}
+        </span>
+        {fieldErrors.teamLeadNameId && (
+          <span style={{ color: 'var(--cds-text-error)', fontSize: '0.75rem' }}>
+            {fieldErrors.teamLeadNameId}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const optionText = (code: string, options: CodeOption[]): string =>
     options.find((o) => o.code === code)?.description ?? code;
 
@@ -241,6 +332,14 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           </>
         )}
       </div>
+
+      <fieldset className="rip-form__group">
+        <legend>Evaluation</legend>
+        <div className="rip-form__grid bio-opening__evaluation-grid">
+          {dateField('evaluationDate', 'Evaluation date', true)}
+          {evaluatorField()}
+        </div>
+      </fieldset>
 
       <fieldset className="rip-form__group">
         <legend>Opening identification</legend>

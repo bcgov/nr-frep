@@ -11,6 +11,8 @@ const OVERRIDE_MAX = 99999.99;
 
 const isBlank = (value?: string): boolean => value == null || value.trim() === '';
 
+const todayIso = (): string => new Date().toISOString().slice(0, 10);
+
 const validateOverride = (value: string | undefined): string | null => {
   if (isBlank(value)) return null;
   const text = value!.trim();
@@ -29,8 +31,9 @@ const validateOverride = (value: string | undefined): string | null => {
 
 /**
  * Field-level errors for the Biodiversity Opening, keyed by {@link BiodiversityOpening} key. An empty
- * object means the form is valid to save. Legacy parity: Location, Invasive plant?, Innovative
- * practice? and Rating are all required to save, plus the conditional comments and length/number limits.
+ * object means the form is valid to save. Location, Evaluation date, Invasive plant?, Innovative
+ * practice? and Rating are all required to save (Evaluation date moved here from the Administration
+ * tab), plus the conditional comments and length/number limits.
  */
 export const validateOpening = (data: BiodiversityOpening): Record<string, string> => {
   const errors: Record<string, string> = {};
@@ -40,6 +43,19 @@ export const validateOpening = (data: BiodiversityOpening): Record<string, strin
     errors.locationDescription = 'Location description is required.';
   } else if (data.locationDescription!.length > LOCATION_MAX) {
     errors.locationDescription = `Location description must be ${LOCATION_MAX} characters or fewer.`;
+  }
+
+  // Required: Evaluation date (submit needs it; blocked here like the other required fields, matching
+  // the CHR Opening tab). Must not be in the future.
+  if (isBlank(data.evaluationDate)) {
+    errors.evaluationDate = 'Evaluation date is required.';
+  } else if (data.evaluationDate!.trim() > todayIso()) {
+    errors.evaluationDate = 'Evaluation date cannot be in the future.';
+  }
+
+  // Required: Evaluator (submit needs a team lead; blocked here like CHR's Assessed by).
+  if (isBlank(data.teamLeadNameId)) {
+    errors.teamLeadNameId = 'An evaluator is required — use “Assign it to me”.';
   }
 
   // Required dropdowns.

@@ -14,7 +14,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({ "checklistID", "downloadedBy", "downloadedDate", "FREPAssessment", "evaluationYear",
-		"evaluationDate", "assessedBy", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
+		"evaluationDate", "assessedBy", "assessedByName", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
 		"LandscapeUnit", "FirstNation", "openingID", "openingNumber", "licensee", "cuttingPermit", "block", "Proponent",
 		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "clientName", "yearOfHarvest", "firstNationsName",
 		"generalLocation", "targeted", "Contact1Name", "Contact1Date", "Contact1Contacted", "Contact2Name",
@@ -64,6 +64,13 @@ public class CheckList {
 	private String evaluationDate;
 	@JsonProperty("assessedBy")
 	private String assessedBy;
+	/**
+	 * FAM-resolved display name for {@link #assessedBy} ("Name (USERID)"), read-only. Mirrors the
+	 * Biodiversity evaluator display; never posted back — {@link #assessedBy} carries the raw userid
+	 * that the save/round-trip and "Assign it to me" comparison use.
+	 */
+	@JsonProperty("assessedByName")
+	private String assessedByName;
 	@JsonProperty("NewDistrict")
 	private String newDistrict;
 	@JsonProperty("district")
@@ -278,6 +285,16 @@ public class CheckList {
 	@JsonProperty("assessedBy")
 	public void setAssessedBy(String assessedBy) {
 		this.assessedBy = assessedBy;
+	}
+
+	@JsonProperty("assessedByName")
+	public String getAssessedByName() {
+		return assessedByName;
+	}
+
+	@JsonProperty("assessedByName")
+	public void setAssessedByName(String assessedByName) {
+		this.assessedByName = assessedByName;
 	}
 
 	@JsonProperty("NewDistrict")

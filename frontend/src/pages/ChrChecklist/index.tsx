@@ -684,7 +684,7 @@ const ChrChecklistPage: FC = () => {
                 {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
               </Tag>
             </div>
-            {headerCell('Evaluator', checkList.assessedBy)}
+            {headerCell('Evaluator', checkList.assessedByName || checkList.assessedBy)}
             {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
           </div>
         </Tile>

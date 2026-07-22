@@ -7,15 +7,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStandRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
-import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorRow;
-import java.time.LocalDate;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistHeaderData;
 import ca.bc.gov.nrs.frep.repository.v1.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
@@ -135,9 +132,8 @@ class ProtocolChecklistServiceTest {
     assertEquals("Biodiversity", response.get().protocolName());
     assertEquals("RDY", response.get().statusCode());
     assertEquals("RDY", response.get().statusLabel());
-    // Administration (FREP301) leads, mirroring the legacy tab bar; opening follows.
-    assertEquals("administration", response.get().sections().get(0).id());
-    assertEquals("opening", response.get().sections().get(1).id());
+    // Opening info leads now that the Administration tab is retired.
+    assertEquals("opening", response.get().sections().get(0).id());
   }
 
   @Test
@@ -160,10 +156,10 @@ class ProtocolChecklistServiceTest {
     var response = service.findChecklist("bio", "9001");
 
     assertTrue(response.isPresent());
-    // administration, opening, stratum, plots, notes, attachments
-    assertEquals(6, response.get().sections().size());
-    assertEquals("stratum", response.get().sections().get(2).id());
-    assertTrue(response.get().sections().get(2).fields().isEmpty());
+    // opening, stratum, plots, notes, attachments
+    assertEquals(5, response.get().sections().size());
+    assertEquals("stratum", response.get().sections().get(1).id());
+    assertTrue(response.get().sections().get(1).fields().isEmpty());
   }
 
   @Test
@@ -203,48 +199,6 @@ class ProtocolChecklistServiceTest {
     verify(writeRepository).unsubmit("SLB", "9001", "u");
   }
 
-  // --- Administration save validation (legacy FREP301 FrepCostResourceValidatingManager) ---
-
-  private static AdministrationData admin(String evaluationDate, String blockAccessTime,
-      String hoursOnBlock, String peopleOnBlock, String teamLeadNameId, List<EvaluatorRow> members) {
-    return new AdministrationData("9001", "500", "rv1", "SLB", "ACT", evaluationDate, null,
-        blockAccessTime, hoursOnBlock, peopleOnBlock, null, teamLeadNameId, null, null, null, null,
-        members);
-  }
-
-  @Test
-  void saveAdministrationRejectsFutureEvaluationDate() {
-    AdministrationData future = admin(LocalDate.now().plusDays(1).toString(), null, null, null,
-        null, null);
-    assertThrows(InvalidPayloadException.class, () -> service.saveAdministration("bio", future));
-  }
-
-  @Test
-  void saveAdministrationRejectsOutOfRangeOrImpreciseHours() {
-    AdministrationData bad = admin("2024-01-15", "12345.999", "8", "0", null, null);
-    assertThrows(InvalidPayloadException.class, () -> service.saveAdministration("bio", bad));
-  }
-
-  @Test
-  void saveAdministrationRejectsPeopleOnBlockBelowTeamSize() {
-    // team = lead + 1 member = 2, but people on block = 1
-    AdministrationData bad = admin("2024-01-15", "2.5", "8", "1", "LEAD",
-        List.of(new EvaluatorRow("M1", null, "N", null, null)));
-    assertThrows(InvalidPayloadException.class, () -> service.saveAdministration("bio", bad));
-  }
-
-  @Test
-  void saveAdministrationAcceptsValidDataAndDelegates() {
-    AdministrationData valid = admin("2024-01-15", "2.5", "8", "0", null, null);
-    when(loggedUserHelper.getLoggedUserId()).thenReturn("tester");
-    when(writeRepository.saveAdministration(valid, "tester")).thenReturn(valid);
-
-    AdministrationData saved = service.saveAdministration("bio", valid);
-
-    assertEquals("2024-01-15", saved.evaluationDate());
-    verify(writeRepository).saveAdministration(valid, "tester");
-  }
-
   @Test
   void getBiodiversityOpeningThrowsNotFoundWhenMissing() {
     when(writeRepository.getBiodiversityOpening("9001")).thenReturn(null);
@@ -254,13 +208,15 @@ class ProtocolChecklistServiceTest {
   // checklistId, resourceValueId, statusCode, frepWtpOverride, locationDescription,
   // patchReservesOnBlock, patchReservesSampled, innovativePracticeInd, innovativePracticesComment,
   // invasivePlantIndicator, invasivePlantComment, frepSiteEvaluationCode, evaluatorOpinionComment,
-  // revisionCount, grossArea, netArea, harvestDate
+  // evaluationDate, revisionCount, grossArea, netArea, harvestDate,
+  // teamLeadNameId, teamLeadName, teamLeadRevisionCount
   private static BiodiversityOpening opening(String frepWtpOverride, String locationDescription,
       String innovativePracticeInd, String innovativePracticesComment, String invasivePlantIndicator,
       String invasivePlantComment, String frepSiteEvaluationCode) {
     return new BiodiversityOpening("9001", "500", "ACT", frepWtpOverride, locationDescription, "N",
         "N", innovativePracticeInd, innovativePracticesComment, invasivePlantIndicator,
-        invasivePlantComment, frepSiteEvaluationCode, "ok", "3", null, null, null);
+        invasivePlantComment, frepSiteEvaluationCode, "ok", null, "3", null, null, null, null, null,
+        null);
   }
 
   @Test
@@ -268,11 +224,30 @@ class ProtocolChecklistServiceTest {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     BiodiversityOpening opening = opening(null, "loc", "N", null, "N", null, "W");
     when(writeRepository.saveBiodiversityOpening(opening, "u")).thenReturn(opening);
+    // Save re-reads the opening (to return the evaluator + fresh revision).
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(opening);
 
     BiodiversityOpening saved = service.saveBiodiversityOpening("9001", opening);
 
     assertEquals("9001", saved.checklistId());
     verify(writeRepository).saveBiodiversityOpening(opening, "u");
+  }
+
+  @Test
+  void saveBiodiversityOpeningAssignsCallerAsLeadWhenClaimed() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ME");
+    // The payload claims the caller as the evaluator; the current lead is someone else.
+    BiodiversityOpening claimed = opening(null, "loc", "N", null, "N", null, "W").withTeamLead(
+        "IDIR\\ME", null, null);
+    BiodiversityOpening current = opening(null, "loc", "N", null, "N", null, "W").withTeamLead(
+        "IDIR\\OTHER", "Other", "7");
+    when(writeRepository.saveBiodiversityOpening(claimed, "IDIR\\ME")).thenReturn(claimed);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(current);
+
+    service.saveBiodiversityOpening("9001", claimed);
+
+    verify(writeRepository).assignBiodiversityLead("9001", "SLB", "IDIR\\ME", "IDIR\\OTHER", "7",
+        "IDIR\\ME");
   }
 
   @Test

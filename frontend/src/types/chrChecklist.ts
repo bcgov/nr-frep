@@ -278,6 +278,8 @@ export type CheckList = {
   // Editable opening info
   evaluationDate?: string;
   assessedBy?: string;
+  // FAM-resolved "Name (USERID)" display for assessedBy (read-only; assessedBy keeps the raw userid).
+  assessedByName?: string;
   firstNationName?: string;
   generalLocation?: string;
   targeted?: Indicator;

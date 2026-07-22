@@ -108,23 +108,24 @@ class ProtocolChecklistWriteRepositoryImplTest {
   }
 
   @Test
-  void saveBiodiversityOpeningWiresSixteenParamsAndEchoesIdentity() throws Exception {
+  void saveBiodiversityOpeningWiresSeventeenParamsAndEchoesIdentity() throws Exception {
     when(cs.getString(16)).thenReturn(null); // no error
     when(cs.getString(1)).thenReturn("1001"); // checklist id echoed
     when(cs.getString(14)).thenReturn("6"); // revision incremented
 
     BiodiversityOpening in = new BiodiversityOpening(
-        "1001", "500", "ACT", "N", "loc", "Y", "N", "Y", "innov", "N", "inv", "W", "opinion", "5",
-        null, null, null);
+        "1001", "500", "ACT", "N", "loc", "Y", "N", "Y", "innov", "N", "inv", "W", "opinion",
+        "2024-08-12", "5", null, null, null, null, null, null);
 
     BiodiversityOpening out = repository.saveBiodiversityOpening(in, "idir");
 
-    verify(connection).prepareCall("{call frep_210_bio_opening.SAVE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}");
+    verify(connection).prepareCall("{call frep_210_bio_opening.SAVE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}");
     verify(cs).setString(3, "ACT"); // status
     verify(cs).setString(5, "loc"); // location description
     verify(cs).setString(12, "W"); // site evaluation code
     verify(cs).setString(15, "idir"); // update userid
     verify(cs).registerOutParameter(16, Types.VARCHAR); // error message
+    verify(cs).setString(17, "2024-08-12"); // evaluation date (optional trailing param)
     assertEquals("1001", out.checklistId());
     assertEquals("6", out.revisionCount());
   }

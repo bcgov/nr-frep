@@ -32,10 +32,11 @@ test.describe('CHR Features — Age is single-select', () => {
       const addFeature = page.getByRole('button', { name: 'Add feature' });
       if (await addFeature.isVisible().catch(() => false)) {
         // 3. Add a throwaway feature to reach the editor, then open the Age accordion.
+        //    `exact` is required: substring name matching also hits the "Damage" accordion (…d-am-AGE).
         await addFeature.click();
-        await page.getByRole('button', { name: 'Age' }).click();
+        await page.getByRole('button', { name: 'Age', exact: true }).click();
 
-        const ageBox = (name: string) => page.getByRole('checkbox', { name });
+        const ageBox = (name: string) => page.getByRole('checkbox', { name, exact: true });
 
         // All four start enabled (no age selected yet).
         for (const label of AGE_LABELS) {
@@ -56,7 +57,7 @@ test.describe('CHR Features — Age is single-select', () => {
         }
 
         // 6. Discard the throwaway feature — no save, so DEV data is untouched.
-        await page.getByRole('button', { name: 'Cancel' }).click();
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
       }
     }
 

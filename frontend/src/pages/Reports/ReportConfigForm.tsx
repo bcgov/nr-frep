@@ -173,7 +173,7 @@ const ReportConfigForm: FC<Props> = ({
         return null;
       })();
       const filename = buildExportFilename({
-        base: `FREP_${definition.id.replace(/-/g, '_')}`,
+        base: `FREP_${definition.id.replaceAll('-', '_')}`,
         orgUnitCode: form.orgUnitCode,
         effectiveYear: form.masterListYear,
         extension: format,

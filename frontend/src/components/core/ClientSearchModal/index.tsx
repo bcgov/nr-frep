@@ -33,6 +33,12 @@ const TABLE_HEADERS = [
   { key: 'clientStatus', header: 'Status' },
 ] as const;
 
+/** Reads a Carbon DataTable row cell's value by its column key (extracted to avoid deep nesting). */
+const cellValue = (
+  cells: { value: unknown; info: { header: string } }[],
+  columnKey: string,
+): string => String(cells.find((cell) => cell.info.header === columnKey)?.value ?? '');
+
 type ClientSearchModalProps = {
   open: boolean;
   onClose: () => void;
@@ -220,15 +226,9 @@ const ClientSearchModal: FC<ClientSearchModalProps> = ({ open, onClose, onSelect
                           kind="ghost"
                           size="sm"
                           onClick={() => {
-                            const clientNumberCell = row.cells.find(
-                              (c) => c.info.header === 'clientNumber',
-                            );
-                            const clientNameCell = row.cells.find(
-                              (c) => c.info.header === 'clientName',
-                            );
                             onSelect(
-                              String(clientNumberCell?.value ?? ''),
-                              String(clientNameCell?.value ?? ''),
+                              cellValue(row.cells, 'clientNumber'),
+                              cellValue(row.cells, 'clientName'),
                             );
                             onClose();
                           }}

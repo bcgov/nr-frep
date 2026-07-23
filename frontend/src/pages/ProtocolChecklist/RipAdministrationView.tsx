@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 
 import EvaluatorSearch from '@/pages/ProtocolChecklist/EvaluatorSearch';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CodeOption } from '@/types/configuration';
 import type { AdministrationData } from '@/types/protocolChecklist';
@@ -335,7 +336,7 @@ const RipAdministrationView: FC<Props> = ({ protocol, checklistId, canEdit, subm
       >
         <DatePickerInput
           id="admin-evaluationDate"
-          labelText="Evaluation date"
+          labelText={requiredLabel('Evaluation date', true)}
           placeholder="YYYY-MM-DD"
           invalid={Boolean(fieldErrors.evaluationDate)}
           invalidText={fieldErrors.evaluationDate}

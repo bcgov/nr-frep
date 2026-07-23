@@ -17,7 +17,7 @@ import {
   Tag,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 
 import PrintableTable from '@/components/core/PrintableTable';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
@@ -85,9 +85,15 @@ const AcceptedSitesPage: FC = () => {
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
 
-  const [effectiveYear, setEffectiveYear] = useState<string>('');
-  const [orgUnit, setOrgUnit] = useState<string>('');
-  const [protocolType, setProtocolType] = useState<string>(ALL_PROTOCOLS_VALUE);
+  // Filters are seeded from the URL query string so the browser Back button (e.g. returning from a
+  // BIO/CHR checklist) restores the district/year/protocol the user was working in, instead of
+  // re-defaulting to the current master list. They're kept in sync with the URL below.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [effectiveYear, setEffectiveYear] = useState<string>(() => searchParams.get('year') ?? '');
+  const [orgUnit, setOrgUnit] = useState<string>(() => searchParams.get('orgUnit') ?? '');
+  const [protocolType, setProtocolType] = useState<string>(
+    () => searchParams.get('protocol') ?? ALL_PROTOCOLS_VALUE,
+  );
 
   // Opening whose polygon map is shown in the modal (null = closed).
   const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
@@ -121,9 +127,11 @@ const AcceptedSitesPage: FC = () => {
         const IN_SCOPE = new Set(['SLB', 'SLR', 'CHR']);
         setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
 
+        // Default only when the filter wasn't already seeded from the URL (a fresh visit), so a Back
+        // navigation that carries year/orgUnit in the query string keeps the user's selection.
         const defaultYear = years.find((year) => year.current) ?? years[0];
-        if (defaultYear) setEffectiveYear(defaultYear.effectiveYear);
-        if (units[0]) setOrgUnit(units[0].orgUnitNo);
+        if (defaultYear) setEffectiveYear((prev) => prev || defaultYear.effectiveYear);
+        if (units[0]) setOrgUnit((prev) => prev || units[0].orgUnitNo);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -143,6 +151,17 @@ const AcceptedSitesPage: FC = () => {
       cancelled = true;
     };
   }, [display]);
+
+  // Mirror the active filters into the URL query string (replace, so we don't stack history entries).
+  // This is what makes the selection survive a Back navigation from a checklist detail page.
+  useEffect(() => {
+    if (!effectiveYear && !orgUnit) return; // pre-config: nothing to persist yet
+    const next = new URLSearchParams();
+    if (effectiveYear) next.set('year', effectiveYear);
+    if (orgUnit) next.set('orgUnit', orgUnit);
+    if (protocolType) next.set('protocol', protocolType);
+    setSearchParams(next, { replace: true });
+  }, [effectiveYear, orgUnit, protocolType, setSearchParams]);
 
   const loadAcceptedSites = useCallback(async () => {
     if (!effectiveYear || !orgUnit) return;

@@ -17,7 +17,7 @@ interface TableHeaderBarProps {
  * {@code TableContainer} title/description block.
  */
 export const TableHeaderBar: FC<TableHeaderBarProps> = ({ title, actions, className }) => (
-  <div className={`table-header-bar${className ? ` ${className}` : ''}`}>
+  <div className={['table-header-bar', className].filter(Boolean).join(' ')}>
     <div className="table-header-bar__title">{title}</div>
     {actions != null && <div className="table-header-bar__actions">{actions}</div>}
   </div>

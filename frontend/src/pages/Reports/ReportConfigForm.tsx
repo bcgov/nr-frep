@@ -17,12 +17,13 @@ import {
   type ReportRequestPayload,
 } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
+import { buildExportFilename } from '@/utils/exportFilename';
 
 /**
  * Per-report parameter form, modelled on the nr-fspts `ReportConfigForm`. Renders
  * only the inputs the {@link GeneratableReport} declares, validates required
- * fields client-side, then POSTs to `/api/v1/reports/{id}` and opens (PDF) or
- * downloads (CSV) the result.
+ * fields client-side, then POSTs to `/api/v1/reports/{id}`. A CSV downloads with a descriptive
+ * filename; a PDF opens in a new tab for preview and also downloads a descriptively-named copy.
  *
  * <p>The biodiversity data-extract filters mirror the legacy JCRS input controls:
  * org unit / master-list year / resource-value status each carry an "— All —"
@@ -161,11 +162,38 @@ const ReportConfigForm: FC<Props> = ({
         format === 'csv'
           ? await requestCsvReport(definition.id, payload)
           : await requestReport(definition.id, payload);
+      // Descriptive name from the report + its selected filters, not the generic backend default.
+      // Org unit → prefix and master-list year → range; every other selected filter (date range,
+      // status, client, licence, opening) is appended so the name reflects what produced the file.
+      // "— All —" ('*') is spelled out so an all/all export is still distinguishable by filename.
+      const dateRange = (() => {
+        if (form.startDate && form.endDate) return `${form.startDate}_to_${form.endDate}`;
+        if (form.startDate) return `from_${form.startDate}`;
+        if (form.endDate) return `to_${form.endDate}`;
+        return null;
+      })();
+      const filename = buildExportFilename({
+        base: `FREP_${definition.id.replaceAll('-', '_')}`,
+        orgUnitCode: form.orgUnitCode,
+        effectiveYear: form.masterListYear,
+        extension: format,
+        allDistrictsLabel: 'All_Districts',
+        allYearsLabel: 'All_Years',
+        parts: [
+          dateRange,
+          form.resourceValueStatus,
+          form.checklistStatus,
+          form.clientNumber,
+          form.licenceNumber,
+          form.openingId,
+        ],
+      });
+      // A PDF also opens in a new tab for a quick preview; a blob previewed in a tab can't carry a
+      // filename, so the parallel download is what gives the user a descriptively-named file.
       if (format === 'pdf') {
         openBlobInNewTab(response.blob);
-      } else {
-        triggerBrowserDownload(response.blob, response.filename);
       }
+      triggerBrowserDownload(response.blob, filename);
       display({ kind: 'success', title: `${definition.title} ready`, timeout: 4000 });
     } catch (err) {
       display({

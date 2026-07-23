@@ -33,6 +33,7 @@ import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/re
 import { apiErrorMessage } from '@/utils/apiError';
 import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { buildExportFilename } from '@/utils/exportFilename';
 
 import './checklistSearch.scss';
 
@@ -179,8 +180,20 @@ const ChecklistSearchPage: FC = () => {
 
   const exportCsv = async () => {
     try {
-      const { blob, filename } = await requestChecklistSearchCsv(searchedFilters);
-      triggerBrowserDownload(blob, filename);
+      const { blob } = await requestChecklistSearchCsv(searchedFilters);
+      // Descriptive name derived from the filters that produced the results (district code + year),
+      // replacing the generic backend default.
+      const orgUnitCode = orgUnits.find(
+        (unit) => unit.orgUnitNo === searchedFilters.orgUnit,
+      )?.orgUnitCode;
+      triggerBrowserDownload(
+        blob,
+        buildExportFilename({
+          base: 'FREP_Checklist_Search',
+          orgUnitCode,
+          effectiveYear: searchedFilters.effectiveYear,
+        }),
+      );
     } catch (err) {
       display({
         kind: 'error',

@@ -28,6 +28,7 @@ import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { randomListCsvFilename } from '@/pages/RandomList/randomListCsvFilename';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -169,8 +170,9 @@ const RandomListPage: FC = () => {
   const exportCsv = useCallback(async () => {
     if (!effectiveYear) return;
     try {
-      const { blob, filename } = await requestRandomListCsv(effectiveYear, orgUnit || undefined);
-      triggerBrowserDownload(blob, filename);
+      const { blob } = await requestRandomListCsv(effectiveYear, orgUnit || undefined);
+      // Prefer a descriptive name derived from the selected filters over the backend default.
+      triggerBrowserDownload(blob, randomListCsvFilename(effectiveYear, orgUnits, orgUnit));
     } catch (err) {
       display({
         kind: 'error',
@@ -179,7 +181,7 @@ const RandomListPage: FC = () => {
         timeout: 9000,
       });
     }
-  }, [display, effectiveYear, orgUnit]);
+  }, [display, effectiveYear, orgUnit, orgUnits]);
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 

@@ -37,7 +37,12 @@ const TABLE_HEADERS = [
 const cellValue = (
   cells: { value: unknown; info: { header: string } }[],
   columnKey: string,
-): string => String(cells.find((cell) => cell.info.header === columnKey)?.value ?? '');
+): string => {
+  // Every client-search column holds a string; narrow rather than String()-ing an unknown (which
+  // would render an object as '[object Object]').
+  const value = cells.find((cell) => cell.info.header === columnKey)?.value;
+  return typeof value === 'string' ? value : '';
+};
 
 type ClientSearchModalProps = {
   open: boolean;

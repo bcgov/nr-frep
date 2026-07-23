@@ -28,10 +28,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class SearchRepositoryImpl extends AbstractFrepRepository implements SearchRepository {
 
-  static final String CHECKLIST_SEARCH_PROC = "FREP_400_CHECKLIST_SEARCH";
   static final String CLIENT_SEARCH_PROC = "FREP_410_CLIENT_SEARCH";
-  static final String CHECKLIST_SEARCH_TYPE = "THE.FREP_CHKLST_SEARCH_VW_OBJECT";
-  static final String CHECKLIST_SEARCH_ARRAY = "THE.FREP_CHKLST_SEARCH_VW_VARRAY";
   static final String CLIENT_SEARCH_TYPE = "THE.FREP_CLIENT_SEARCH_VW_OBJECT";
   static final String CLIENT_SEARCH_ARRAY = "THE.FREP_CLIENT_SEARCH_VW_VARRAY";
 
@@ -232,19 +229,6 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
   }
 
   /**
-   * Runs a checklist search.
-   *
-   * <p>Legacy equivalent: {@code Frep400DataManager.getSearchChecklists}.
-   */
-  public List<ChecklistSearchRow> searchChecklists(ChecklistSearchCriteria criteria) {
-    String call = "{call " + CHECKLIST_SEARCH_PROC + "(?,?)}";
-    return executeCall(call, cs -> {
-      cs.setObject(1, createChecklistSearchStruct(cs, criteria));
-      cs.registerOutParameter(2, Types.ARRAY, CHECKLIST_SEARCH_ARRAY);
-    }, cs -> readChecklistSearchArray(cs.getArray(2)));
-  }
-
-  /**
    * Runs a client search.
    *
    * <p>Legacy equivalent: {@code Frep410DataManager.getSearchClients}.
@@ -261,27 +245,6 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
           criteria.legalMiddleName()));
       cs.registerOutParameter(2, Types.ARRAY, CLIENT_SEARCH_ARRAY);
     }, cs -> readClientSearchArray(cs.getArray(2)));
-  }
-
-  private static Struct createChecklistSearchStruct(
-      CallableStatement cs,
-      ChecklistSearchCriteria criteria
-  ) throws SQLException {
-    OracleConnection connection = cs.getConnection().unwrap(OracleConnection.class);
-    Object[] attrs = new Object[18];
-    attrs[0] = structValue(criteria.checklistId());
-    attrs[3] = structValue(criteria.protocolTypeCode());
-    attrs[5] = structValue(criteria.effectiveYear());
-    attrs[6] = structValue(criteria.openingId());
-    attrs[7] = structValue(criteria.orgUnitNo());
-    attrs[9] = structValue(criteria.checklistStatusCode());
-    attrs[10] = structValue(criteria.licenceId());
-    attrs[11] = structValue(criteria.cutBlockId());
-    attrs[12] = structValue(criteria.cuttingPermitId());
-    attrs[13] = structValue(criteria.clientNumber());
-    attrs[14] = dateStructValue(criteria.evaluationDateFrom());
-    attrs[15] = dateStructValue(criteria.evaluationDateTo());
-    return connection.createStruct(CHECKLIST_SEARCH_TYPE, attrs);
   }
 
   private static Struct createClientSearchStruct(
@@ -302,20 +265,6 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
     return connection.createStruct(CLIENT_SEARCH_TYPE, attrs);
   }
 
-  private static List<ChecklistSearchRow> readChecklistSearchArray(Array array) throws SQLException {
-    if (array == null) {
-      return List.of();
-    }
-    Object[] elements = (Object[]) array.getArray();
-    List<ChecklistSearchRow> rows = new ArrayList<>(elements.length);
-    for (Object element : elements) {
-      if (element instanceof Struct struct) {
-        rows.add(fromChecklistSearchStruct(struct));
-      }
-    }
-    return rows;
-  }
-
   private static List<ClientSearchRow> readClientSearchArray(Array array) throws SQLException {
     if (array == null) {
       return List.of();
@@ -328,25 +277,6 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
       }
     }
     return rows;
-  }
-
-  static ChecklistSearchRow fromChecklistSearchStruct(Struct struct) throws SQLException {
-    Object[] attrs = struct.getAttributes();
-    return new ChecklistSearchRow(
-        stringAttr(attrs, 0),
-        stringAttr(attrs, 3),
-        stringAttr(attrs, 4),
-        stringAttr(attrs, 5),
-        stringAttr(attrs, 8),
-        stringAttr(attrs, 10),
-        stringAttr(attrs, 12),
-        stringAttr(attrs, 11),
-        stringAttr(attrs, 6),
-        stringAttr(attrs, 13),
-        formatEvaluationDate(stringAttr(attrs, 16)),
-        stringAttr(attrs, 17),
-        stringAttr(attrs, 9)
-    );
   }
 
   static ClientSearchRow fromClientSearchStruct(Struct struct) throws SQLException {
@@ -363,30 +293,11 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
     );
   }
 
-  static String formatEvaluationDate(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return "";
-    }
-    return raw.length() >= 11 ? raw.substring(0, 11).trim() : raw.trim();
-  }
-
   private static Object structValue(String value) {
     if (value == null || value.isBlank()) {
       return null;
     }
     return value.trim();
-  }
-
-  /**
-   * Marshals a {@code yyyy-MM-dd} criteria string into the DATE attribute format the
-   * legacy struct uses ({@code Frep400DataManager} appends {@code " 00:00:00.0"} so
-   * Oracle parses the value as a timestamp at midnight).
-   */
-  private static Object dateStructValue(String value) {
-    if (value == null || value.isBlank()) {
-      return null;
-    }
-    return value.trim() + " 00:00:00.0";
   }
 
   private static String stringAttr(Object[] attrs, int index) {

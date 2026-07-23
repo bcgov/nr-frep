@@ -10,6 +10,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.RejectionReasonResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,6 +46,7 @@ public class ConfigurationService {
   }
 
 
+  @Cacheable("orgUnits")
   public List<OrgUnitResponse> getOrgUnits() {
     return codeListRepository.getDistrictOrgUnitCode().stream()
         .map(ConfigurationService::toOrgUnitResponse)
@@ -60,6 +62,7 @@ public class ConfigurationService {
         .toList();
   }
 
+  @Cacheable("rejectionReasons")
   public List<RejectionReasonResponse> getRejectionReasons() {
     return codeListRepository.getSiteResourceReasonCode().stream()
         .map(ConfigurationService::toRejectionReasonResponse)
@@ -68,6 +71,7 @@ public class ConfigurationService {
   }
 
   /** Riparian stream RMA class options for the FREP230 stream-class dropdowns. */
+  @Cacheable("streamClasses")
   public List<CodeOptionResponse> getStreamClasses() {
     return codeListRepository.getStreamClassCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -76,6 +80,7 @@ public class ConfigurationService {
   }
 
   /** Site-access options for the FREP301 Administration "Access type" dropdown. */
+  @Cacheable("siteAccessCodes")
   public List<CodeOptionResponse> getSiteAccessCodes() {
     return codeListRepository.getSiteAccessCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -84,6 +89,7 @@ public class ConfigurationService {
   }
 
   /** Block-status options for the "Add Target Site" opening-search dropdown (SIL_CODE_LISTS). */
+  @Cacheable("blockStatusCodes")
   public List<CodeOptionResponse> getBlockStatusCodes() {
     return codeListRepository.getBlockStatusCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -92,6 +98,7 @@ public class ConfigurationService {
   }
 
   /** Open-category options for the opening-search dropdown. */
+  @Cacheable("openCategoryCodes")
   public List<CodeOptionResponse> getOpenCategoryCodes() {
     return codeListRepository.getOpenCategoryCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -100,6 +107,7 @@ public class ConfigurationService {
   }
 
   /** Opening-status options for the opening-search dropdown. */
+  @Cacheable("openingStatusCodes")
   public List<CodeOptionResponse> getOpeningStatusCodes() {
     return codeListRepository.getOpeningStatusCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -108,6 +116,7 @@ public class ConfigurationService {
   }
 
   /** Site-evaluation (rating) options for the FREP210 Opening "Rating" dropdown. */
+  @Cacheable("siteEvaluationCodes")
   public List<CodeOptionResponse> getSiteEvaluationCodes() {
     return codeListRepository.getEvaluationCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -116,6 +125,7 @@ public class ConfigurationService {
   }
 
   /** Biodiversity stratum-type options for the FREP211 "Stratum type" dropdown. */
+  @Cacheable("strataTypes")
   public List<CodeOptionResponse> getStrataTypes() {
     return codeListRepository.getStratumTypeCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -124,6 +134,7 @@ public class ConfigurationService {
   }
 
   /** Resource-value status options for the biodiversity data-extract report filter. */
+  @Cacheable("resourceValueStatusCodes")
   public List<CodeOptionResponse> getResourceValueStatusCodes() {
     return codeListRepository.getResourceValueStatusCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -132,6 +143,7 @@ public class ConfigurationService {
   }
 
   /** Checklist-status options for the CHR data-extract report filter (FREPRPT022). */
+  @Cacheable("checklistStatusCodes")
   public List<CodeOptionResponse> getChecklistStatusCodes() {
     return codeListRepository.getChecklistStatusCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -140,6 +152,7 @@ public class ConfigurationService {
   }
 
   /** Tree-species options for the FREP212 Stand / CWD "Spp." dropdowns. */
+  @Cacheable("speciesCodes")
   public List<CodeOptionResponse> getSpeciesCodes() {
     return codeListRepository.getFrepSpeciesCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -148,6 +161,7 @@ public class ConfigurationService {
   }
 
   /** Wildlife-tree decay-class options for the FREP212 Stand "WT Class" dropdown. */
+  @Cacheable("wildlifeTreeDecayCodes")
   public List<CodeOptionResponse> getWildlifeTreeDecayCodes() {
     return codeListRepository.getWildlifeTreeDecayCode().stream()
         .map(ConfigurationService::toCodeOption)
@@ -156,6 +170,7 @@ public class ConfigurationService {
   }
 
   /** CWD decay-class options for the FREP212 Coarse Woody Debris "Decay Class" dropdown. */
+  @Cacheable("cwdDecayCodes")
   public List<CodeOptionResponse> getCwdDecayCodes() {
     return codeListRepository.getCwdDecayClassCode().stream()
         .map(ConfigurationService::toCodeOption)

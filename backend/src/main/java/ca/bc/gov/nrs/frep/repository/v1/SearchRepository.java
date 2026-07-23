@@ -9,7 +9,6 @@ import java.util.function.Consumer;
 
 /** Contract for FREP400 (checklist search) and FREP410 (client search). */
 public interface SearchRepository {
-  List<ChecklistSearchRow> searchChecklists(ChecklistSearchCriteria criteria);
   List<ClientSearchRow> searchClients(ClientSearchCriteria criteria);
 
   /**

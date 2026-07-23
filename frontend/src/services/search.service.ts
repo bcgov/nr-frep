@@ -1,6 +1,5 @@
 import type {
   ChecklistSearchPageQuery,
-  ChecklistSearchQuery,
   ChecklistSearchResult,
   ClientSearchQuery,
   ClientSearchResult,
@@ -21,17 +20,9 @@ export class SearchService extends HttpClient {
     super(config);
   }
 
-  searchChecklists(query: ChecklistSearchQuery): CancelablePromise<ChecklistSearchResult[]> {
-    return this.doRequest<ChecklistSearchResult[]>(this.config, {
-      method: 'GET',
-      url: '/v1/search/checklists',
-      query: stripBlank(query),
-    });
-  }
-
   /**
-   * Server-side paginated checklist search. Unlike {@link searchChecklists} (capped at 5000 rows by
-   * the legacy VARRAY proc), this returns one page plus the true total, so every page is reachable.
+   * Server-side paginated checklist search — returns one page plus the true total, so every page is
+   * reachable.
    */
   searchChecklistsPaged(
     query: ChecklistSearchPageQuery,

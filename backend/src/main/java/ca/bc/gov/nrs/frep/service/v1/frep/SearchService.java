@@ -35,45 +35,6 @@ public class SearchService {
     this.famUserDirectoryService = famUserDirectoryService;
   }
 
-  /**
-   * Run a checklist search. Any blank parameter means "any".
-   */
-  public List<ChecklistSearchResult> searchChecklists(
-      String effectiveYear,
-      String orgUnit,
-      String protocolType,
-      String licenceId,
-      String cuttingPermitId,
-      String cutBlockId,
-      String openingId,
-      String clientNumber,
-      String checklistStatusCode,
-      String checklistId,
-      String evaluationDateFrom,
-      String evaluationDateTo
-  ) {
-    try {
-      return searchRepository.searchChecklists(new ChecklistSearchCriteria(
-          trimToNull(effectiveYear),
-          trimToNull(orgUnit),
-          normalizeProtocolType(protocolType).orElse(null),
-          trimToNull(licenceId),
-          trimToNull(cuttingPermitId),
-          trimToNull(cutBlockId),
-          trimToNull(openingId),
-          trimToNull(clientNumber),
-          trimToNull(checklistStatusCode),
-          trimToNull(checklistId),
-          trimToNull(evaluationDateFrom),
-          trimToNull(evaluationDateTo)
-      )).stream()
-          .map(SearchService::toChecklistSearchResult)
-          .toList();
-    } catch (DataAccessException ex) {
-      throw translateTooManyResults(ex);
-    }
-  }
-
   /** Default page size + cap, and the sortable result columns (public key -> result-set alias). */
   private static final int DEFAULT_PAGE_SIZE = 20;
   private static final int MAX_PAGE_SIZE = 100;
@@ -92,7 +53,7 @@ public class SearchService {
       Map.entry("checklistStatusCode", "checklist_status_code"));
 
   /**
-   * Server-side paginated checklist search. Unlike {@link #searchChecklists} (the legacy VARRAY proc,
+   * Server-side paginated checklist search. Unlike (the legacy VARRAY proc,
    * capped at 5000 and unable to page), this runs a native paginated query and returns the true total,
    * so every page — and counts beyond 5000 — are reachable. {@code sort} is {@code "field"} or
    * {@code "field,(asc|desc)"} where {@code field} is one of the whitelisted keys (unknown fields fall

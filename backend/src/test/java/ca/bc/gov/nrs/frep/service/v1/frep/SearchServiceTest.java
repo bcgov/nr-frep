@@ -118,27 +118,6 @@ class SearchServiceTest {
   }
 
   @Test
-  void searchChecklistsBuildsCriteriaForRepository() {
-    when(searchRepository.searchChecklists(any())).thenReturn(List.of());
-
-    service.searchChecklists(
-        "2024", "56", "slb", "L1234", null, null, null, null, "RDY",
-        "9001", "2024-01-01", "2024-12-31");
-
-    ArgumentCaptor<ChecklistSearchCriteria> captor = ArgumentCaptor.forClass(ChecklistSearchCriteria.class);
-    verify(searchRepository).searchChecklists(captor.capture());
-    ChecklistSearchCriteria criteria = captor.getValue();
-    assertEquals("2024", criteria.effectiveYear());
-    assertEquals("56", criteria.orgUnitNo());
-    assertEquals("SLB", criteria.protocolTypeCode());
-    assertEquals("L1234", criteria.licenceId());
-    assertEquals("RDY", criteria.checklistStatusCode());
-    assertEquals("9001", criteria.checklistId());
-    assertEquals("2024-01-01", criteria.evaluationDateFrom());
-    assertEquals("2024-12-31", criteria.evaluationDateTo());
-  }
-
-  @Test
   void searchChecklistsPagedComputesPageMathAndOffset() {
     when(searchRepository.countChecklists(any())).thenReturn(53L);
     when(searchRepository.searchChecklistsPage(any(), eq(40), eq(20), eq("opening_id"), eq(true)))

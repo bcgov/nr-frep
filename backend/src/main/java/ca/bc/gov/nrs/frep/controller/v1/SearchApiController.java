@@ -23,27 +23,6 @@ public class SearchApiController implements SearchApiEndpoint {
   }
 
   @Override
-  public ResponseEntity<List<ChecklistSearchResult>> searchChecklists(
-      String effectiveYear,
-      String orgUnit,
-      String protocolType,
-      String licenceId,
-      String cuttingPermitId,
-      String cutBlockId,
-      String openingId,
-      String clientNumber,
-      String checklistStatusCode,
-      String checklistId,
-      String evaluationDateFrom,
-      String evaluationDateTo
-  ) {
-    return ResponseEntity.ok(searchService.searchChecklists(
-        effectiveYear, orgUnit, protocolType, licenceId,
-        cuttingPermitId, cutBlockId, openingId, clientNumber, checklistStatusCode,
-        checklistId, evaluationDateFrom, evaluationDateTo));
-  }
-
-  @Override
   public ResponseEntity<PagedResponse<ChecklistSearchResult>> searchChecklistsPaginated(
       String effectiveYear,
       String orgUnit,
@@ -78,6 +57,4 @@ public class SearchApiController implements SearchApiEndpoint {
     return ResponseEntity.ok(searchService.searchClients(
         clientNumber, clientAcronym, clientName, legalFirstName, legalMiddleName));
   }
-
-  // CSV export moved to ReportApiController (GET /api/v1/reports/checklist-search/csv).
 }

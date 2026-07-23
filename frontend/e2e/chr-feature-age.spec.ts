@@ -43,15 +43,17 @@ test.describe('CHR Features — Age is single-select', () => {
           await expect(ageBox(label)).toBeEnabled();
         }
 
-        // 4. Select the first age — the other three must become disabled.
-        await ageBox('Pre-1846').check();
+        // 4. Select the first age — the other three must become disabled. `force` is required: Carbon
+        //    renders the real <input> visually hidden/offscreen, so Playwright can't scroll it into
+        //    the viewport to click — but it's still the checkbox and the change handler still fires.
+        await ageBox('Pre-1846').check({ force: true });
         await expect(ageBox('Pre-1846')).toBeChecked();
         for (const label of ['Post-1846', 'Age unknown', 'Historical use']) {
           await expect(ageBox(label)).toBeDisabled();
         }
 
         // 5. Unchecking the active age re-enables the whole group.
-        await ageBox('Pre-1846').uncheck();
+        await ageBox('Pre-1846').uncheck({ force: true });
         for (const label of AGE_LABELS) {
           await expect(ageBox(label)).toBeEnabled();
         }

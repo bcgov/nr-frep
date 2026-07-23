@@ -22,27 +22,27 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 	    "individualMonumentalCedar", "other",
 	    "otherdescription", "widthofFeature", "lengthofFeature", "areaofFeature", "chrRegisteredSite", "borden",
 	    // Feature 5
-	    "inharvestedarea", "adjacenttoblock", "adjacenttowater", "locationother", "locationotherdescription", "entirecutblock", "Inreserve", "Reservetype",
+	    "inharvestedarea", "adjacenttoblock", "adjacenttowater", "locationOther", "locationOtherDescription", "entirecutblock", "inReserve", "Reservetype",
 	    // Feature 6
 
 	    // Feature 7
-	    "managementStrategyFN", "sitepermitIssued", "managementStrategySP", "permit",
-	    "bufferLengthFN","bufferLengthAIA","bufferLengthSP", "retaininharvestareaFN", "retaininharvestareaAIA", "retaininharvestareaSP",
-	    "permanentReserveSP", "stubnonCMtsaIA", "stubCMtsabovescarFN", "stubCMtsabovescarAIA", "stubCMtsabovescarSP",
-	    "leavestandingFN", "leavestandingAIA", "leavestandingSP",
+	    "managementStrategyFN", "sitePermitIssued", "managementStrategySP", "permit",
+	    "bufferLengthFN","bufferLengthAIA","bufferLengthSP", "retaininHarvestAreaFN", "retaininHarvestAreaAIA", "retaininHarvestAreaSP",
+	    "permanentReserveSP", "stubnonCMTsAIA", "stubCMTsabovescarFN", "stubCMTsabovescarAIA", "stubCMTsabovescarSP",
+	    "leaveStandingFN", "leaveStandingAIA", "leaveStandingSP",
 
 	    // Feature 8
-	    "unabletoLocate", "Modifiedblockboundary", "partiallyconservedinpermanentreserve", "partiallyconservedinpermanentreserveType", "forCompositeFeaturesInd",
+	    "unabletoLocate", "modifiedblockboundary", "partiallyconservedinpermanentreserve", "partiallyconservedinpermanentreserveType", "forCompositeFeaturesInd",
 	    "individualCMT",
 	    "CommentsFeature", "checklistID", "FREPAssessment", "District", "tsa",
 		"openingID", "siteorFeatureDescription",
 		"post1846", "AdditionalCommentsonFormC",
-		"noManagement", "q1isthereevidenceofdamagetothesiteorfeature",
+		"noManagement", "q1Isthereevidenceofdamagetothesiteorfeature",
 		"q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse", "windthrow", "trailfeatures",
 		"Q4Werethereoperationalfactorthatlimitedchrmanagementoptionsforthisfeature",
 		"q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective",
 		"q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature",
-		"q6description",
+		"q6Description",
 		"Q7TowhatextentdidpracticesforthisfeaturemaintainCHRvaluegiventherecommendationsandopportunitiesthatwereavailable",
 		"Q7Description", "Description", "Source", "Pictures", "Status", "AssoFeatures", "OtherMP",
 		"fullyconservedinpermanentreserveType", "partiallytemporaryreserve", "partiallytemporaryreservetype",
@@ -64,27 +64,27 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 		"altersilvicultureAIA", "altersilvicultureFN",
 		"stubnonCMTsFN", "datetheFeatureFN",
 		"fullyconservedintemporaryreserve", "Permanentreservetype",
-		"retainedinharvestareanobuffer", "compledcrownorstandmodification", "datedthefeature", "leftStanding",
+		"retainedinharvestareanobuffer", "compledCrownorstandmodification", "datedthefeature", "leftStanding",
 		"otherActivities", "stubbed", "stubbedNon", "retainabuffer", "alteredsilviculture",
-		"q1isthereevidenceofdamagetothesiteorfeature", "Harvestingq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"silvicultureq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"fireq2Wheredamagehasoccurredwhatisthemostlikelycause", "roadq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"windthrowq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"otherq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"livestockq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"IndustrialUseq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"recreationq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"safetyq2Wheredamagehasoccurredwhatisthemostlikelycause", "descriptionofdamage",
+		"q1Isthereevidenceofdamagetothesiteorfeature", "harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"fireQ2Wheredamagehasoccurredwhatisthemostlikelycause", "roadQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"otherQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause", "descriptionofdamage",
 		"windthrowManagement", "estwindthrow",
-		"windthrowTechniquenone", "otherTechnique", "windthrowTechniqueFeathering", "windthrowTechniqueRetentionBuffer",
+		"windthrowTechniqueNone", "otherTechnique", "windthrowTechniqueFeathering", "windthrowTechniqueRetentionBuffer",
 		"windthrowTechniquePruning", "windthrowTechniqueTopping", "ifotherpleasedescribe", "canthetrailstillbelocated",
-		"hasthetrailbeenmadelesspassble", "isthereevidenceofdamage", "traillength",
+		"hasthetrailbeenmadelesspassble", "isthereevidenceofdamage", "trailLength",
 		"q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature",
-		"q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective", "q5description",
+		"q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective", "q5Description",
 		"featureRating",
 		"featureRatingRationale",
-		"SFDESCRIPTION", "Ifotherpleasedescribeotherq2Wheredamagehasoccurredwhatisthemostlikelycause",
-		"q4description" })
+		"SFDESCRIPTION", "ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause",
+		"q4Description" })
 public class Feature{
 
 	@JsonProperty("compositeFeatureInd")
@@ -106,7 +106,7 @@ public class Feature{
 	@JsonProperty("forCompositeFeaturesInd")
 	private String forCompositeFeaturesInd;
 
-	@JsonProperty("locationotherdescription")
+	@JsonProperty("locationOtherDescription")
 	private String locationOtherDescription;
 	@JsonProperty("checklistID")
 	private String checklistID;
@@ -142,7 +142,7 @@ public class Feature{
 	private String additionalCommentsonFormC;
 	@JsonProperty("noManagement")
 	private String noManagement;
-	@JsonProperty("q1isthereevidenceofdamagetothesiteorfeature")
+	@JsonProperty("q1Isthereevidenceofdamagetothesiteorfeature")
 	private String q1Isthereevidenceofdamagetothesiteorfeature;
 	@JsonProperty("q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse")
 	private String q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse;
@@ -253,9 +253,9 @@ public class Feature{
 	private String adjacenttoblock;
 	@JsonProperty("adjacenttowater")
 	private String adjacenttowater;
-	@JsonProperty("locationother")
+	@JsonProperty("locationOther")
 	private String locationOther;
-	@JsonProperty("Inreserve")
+	@JsonProperty("inReserve")
 	private String inReserve;
 	@JsonProperty("pre1846")
 	private String pre1846;
@@ -265,7 +265,7 @@ public class Feature{
 	private String historicalUse;
 	@JsonProperty("permit")
 	private String permit;
-	@JsonProperty("sitepermitIssued")
+	@JsonProperty("sitePermitIssued")
 	private String sitePermitIssued;
 	@JsonProperty("managementStrategySP")
 	private String managementStrategySP;
@@ -291,7 +291,7 @@ public class Feature{
 	private String bufferLengthAIA;
 	@JsonProperty("bufferLengthSP")
 	private String bufferLengthSP;
-	@JsonProperty("retaininharvestareaFN")
+	@JsonProperty("retaininHarvestAreaFN")
 	private String retaininHarvestAreaFN;
 	@JsonProperty("crownorstandmodificationFN")
 	private String crownorstandmodificationFN;
@@ -305,9 +305,9 @@ public class Feature{
 	private String conserveinRotationalReserveAIA;
 	@JsonProperty("crownorstandmodificationAIA")
 	private String crownorstandmodificationAIA;
-	@JsonProperty("retaininharvestareaAIA")
+	@JsonProperty("retaininHarvestAreaAIA")
 	private String retaininHarvestAreaAIA;
-	@JsonProperty("retaininharvestareaSP")
+	@JsonProperty("retaininHarvestAreaSP")
 	private String retaininHarvestAreaSP;
 	@JsonProperty("crownorstandmodificationSP")
 	private String crownorstandmodificationSP;
@@ -317,21 +317,21 @@ public class Feature{
 	private String permanentReserveSP;
 	@JsonProperty("altersilvicultureSP")
 	private String altersilvicultureSP;
-	@JsonProperty("leavestandingSP")
+	@JsonProperty("leaveStandingSP")
 	private String leaveStandingSP;
 	@JsonProperty("stubnonCMTsSP")
 	private String stubnonCMTsSP;
-	@JsonProperty("stubCMtsabovescarSP")
+	@JsonProperty("stubCMTsabovescarSP")
 	private String stubCMTsabovescarSP;
 	@JsonProperty("datetheFeatureSP")
 	private String datetheFeatureSP;
 	@JsonProperty("datetheFeatureAIA")
 	private String datetheFeatureAIA;
-	@JsonProperty("stubCMtsabovescarAIA")
+	@JsonProperty("stubCMTsabovescarAIA")
 	private String stubCMTsabovescarAIA;
-	@JsonProperty("stubnonCMtsaIA")
+	@JsonProperty("stubnonCMTsAIA")
 	private String stubnonCMTsAIA;
-	@JsonProperty("leavestandingAIA")
+	@JsonProperty("leaveStandingAIA")
 	private String leaveStandingAIA;
 	@JsonProperty("altersilvicultureAIA")
 	private String altersilvicultureAIA;
@@ -380,13 +380,13 @@ public class Feature{
 	@JsonProperty("winterHarvestFrozenGround")
 	private String winterHarvestFrozenGround;
 
-	@JsonProperty("leavestandingFN")
+	@JsonProperty("leaveStandingFN")
 	private String leaveStandingFN;
 	@JsonProperty("stubnonCMTsFN")
 	private String stubnonCMTsFN;
 	@JsonProperty("datetheFeatureFN")
 	private String datetheFeatureFN;
-	@JsonProperty("stubCMtsabovescarFN")
+	@JsonProperty("stubCMTsabovescarFN")
 	private String stubCMTsabovescarFN;
 	@JsonProperty("unabletoLocate")
 	private String unabletoLocate;
@@ -394,11 +394,11 @@ public class Feature{
 	private String fullyconservedintemporaryreserve;
 	@JsonProperty("Permanentreservetype")
 	private String permanentreservetype;
-	@JsonProperty("Modifiedblockboundary")
+	@JsonProperty("modifiedblockboundary")
 	private String modifiedblockboundary;
 	@JsonProperty("retainedinharvestareanobuffer")
 	private String retainedinharvestareanobuffer;
-	@JsonProperty("compledcrownorstandmodification")
+	@JsonProperty("compledCrownorstandmodification")
 	private String compledCrownorstandmodification;
 	@JsonProperty("datedthefeature")
 	private String datedthefeature;
@@ -416,25 +416,25 @@ public class Feature{
 	private String bufferLengthManageEffectiveness;
 	@JsonProperty("alteredsilviculture")
 	private String alteredsilviculture;
-	@JsonProperty("Harvestingq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("silvicultureq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("fireq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("fireQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String fireQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("roadq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("roadQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String roadQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("windthrowq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("otherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("otherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String otherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("livestockq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("IndustrialUseq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("recreationq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("safetyq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	@JsonProperty("descriptionofdamage")
 	private String descriptionofdamage;
@@ -442,7 +442,7 @@ public class Feature{
 	private String windthrowManagement;
 	@JsonProperty("estwindthrow")
 	private String estwindthrow;
-	@JsonProperty("windthrowTechniquenone")
+	@JsonProperty("windthrowTechniqueNone")
 	private String windthrowTechniqueNone;
 	@JsonProperty("otherTechnique")
 	private String otherTechnique;
@@ -462,7 +462,7 @@ public class Feature{
 	private String hasthetrailbeenmadelesspassble;
 	@JsonProperty("isthereevidenceofdamage")
 	private String isthereevidenceofdamage;
-	@JsonProperty("traillength")
+	@JsonProperty("trailLength")
 	private String trailLength;
 
 	@JsonProperty("Q4Werethereoperationalfactorthatlimitedchrmanagementoptionsforthisfeature")
@@ -472,7 +472,7 @@ public class Feature{
 	private String q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective;
 	@JsonProperty("q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature")
 	private String q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature;
-	@JsonProperty("q6description")
+	@JsonProperty("q6Description")
 	private String q6Description;
 	@JsonProperty("Q7TowhatextentdidpracticesforthisfeaturemaintainCHRvaluegiventherecommendationsandopportunitiesthatwereavailable")
 	@Deprecated
@@ -485,7 +485,7 @@ public class Feature{
 	@JsonProperty("q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective")
 	@Deprecated
 	private String q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective;
-	@JsonProperty("q5description")
+	@JsonProperty("q5Description")
 	private String q5Description;
 	@JsonProperty("featureRating")
 	private String featureRating;
@@ -495,9 +495,9 @@ public class Feature{
 	private String id;
 	@JsonProperty("SFDESCRIPTION")
 	private String sFDESCRIPTION;
-	@JsonProperty("Ifotherpleasedescribeotherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	private String ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
-	@JsonProperty("q4description")
+	@JsonProperty("q4Description")
 	private String q4Description;
 
 	@JsonProperty("isOtherPlannedManagedStrategyFN")
@@ -684,22 +684,22 @@ public class Feature{
 		this.associatedFeatures = associatedFeatures;
 	}
 
-	@JsonProperty("locationother")
+	@JsonProperty("locationOther")
 	public String getLocationOther() {
 		return locationOther;
 	}
 
-	@JsonProperty("locationother")
+	@JsonProperty("locationOther")
 	public void setLocationOther(String locationOther) {
 		this.locationOther = locationOther;
 	}
 
-	@JsonProperty("locationotherdescription")
+	@JsonProperty("locationOtherDescription")
 	public String getLocationOtherDescription() {
 		return locationOtherDescription;
 	}
 
-	@JsonProperty("locationotherdescription")
+	@JsonProperty("locationOtherDescription")
 	public void setLocationOtherDescription(String locationOtherDescription) {
 		this.locationOtherDescription = locationOtherDescription;
 	}
@@ -854,12 +854,12 @@ public class Feature{
 		this.noManagement = noManagement;
 	}
 
-	@JsonProperty("q1isthereevidenceofdamagetothesiteorfeature")
+	@JsonProperty("q1Isthereevidenceofdamagetothesiteorfeature")
 	public String getQ1Isthereevidenceofdamagetothesiteorfeature() {
 		return q1Isthereevidenceofdamagetothesiteorfeature;
 	}
 
-	@JsonProperty("q1isthereevidenceofdamagetothesiteorfeature")
+	@JsonProperty("q1Isthereevidenceofdamagetothesiteorfeature")
 	public void setQ1Isthereevidenceofdamagetothesiteorfeature(String q1Isthereevidenceofdamagetothesiteorfeature) {
 		this.q1Isthereevidenceofdamagetothesiteorfeature = q1Isthereevidenceofdamagetothesiteorfeature;
 	}
@@ -930,12 +930,12 @@ public class Feature{
 		this.q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature = q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature;
 	}
 
-	@JsonProperty("q6description")
+	@JsonProperty("q6Description")
 	public String getQ6Description() {
 		return q6Description;
 	}
 
-	@JsonProperty("q6description")
+	@JsonProperty("q6Description")
 	public void setQ6Description(String q6Description) {
 		this.q6Description = q6Description;
 	}
@@ -1463,12 +1463,12 @@ public class Feature{
 		this.adjacenttowater = adjacenttowater;
 	}
 
-	@JsonProperty("Inreserve")
+	@JsonProperty("inReserve")
 	public String getInReserve() {
 		return inReserve;
 	}
 
-	@JsonProperty("Inreserve")
+	@JsonProperty("inReserve")
 	public void setInReserve(String inReserve) {
 		this.inReserve = inReserve;
 	}
@@ -1513,12 +1513,12 @@ public class Feature{
 		this.permit = permit;
 	}
 
-	@JsonProperty("sitepermitIssued")
+	@JsonProperty("sitePermitIssued")
 	public String getSitePermitIssued() {
 		return sitePermitIssued;
 	}
 
-	@JsonProperty("sitepermitIssued")
+	@JsonProperty("sitePermitIssued")
 	public void setSitePermitIssued(String sitePermitIssued) {
 		this.sitePermitIssued = sitePermitIssued;
 	}
@@ -1643,12 +1643,12 @@ public class Feature{
 		this.bufferLengthSP = bufferLengthSP;
 	}
 
-	@JsonProperty("retaininharvestareaFN")
+	@JsonProperty("retaininHarvestAreaFN")
 	public String getRetaininHarvestAreaFN() {
 		return retaininHarvestAreaFN;
 	}
 
-	@JsonProperty("retaininharvestareaFN")
+	@JsonProperty("retaininHarvestAreaFN")
 	public void setRetaininHarvestAreaFN(String retaininHarvestAreaFN) {
 		this.retaininHarvestAreaFN = retaininHarvestAreaFN;
 	}
@@ -1713,22 +1713,22 @@ public class Feature{
 		this.crownorstandmodificationAIA = crownorstandmodificationAIA;
 	}
 
-	@JsonProperty("retaininharvestareaAIA")
+	@JsonProperty("retaininHarvestAreaAIA")
 	public String getRetaininHarvestAreaAIA() {
 		return retaininHarvestAreaAIA;
 	}
 
-	@JsonProperty("retaininharvestareaAIA")
+	@JsonProperty("retaininHarvestAreaAIA")
 	public void setRetaininHarvestAreaAIA(String retaininHarvestAreaAIA) {
 		this.retaininHarvestAreaAIA = retaininHarvestAreaAIA;
 	}
 
-	@JsonProperty("retaininharvestareaSP")
+	@JsonProperty("retaininHarvestAreaSP")
 	public String getRetaininHarvestAreaSP() {
 		return retaininHarvestAreaSP;
 	}
 
-	@JsonProperty("retaininharvestareaSP")
+	@JsonProperty("retaininHarvestAreaSP")
 	public void setRetaininHarvestAreaSP(String retaininHarvestAreaSP) {
 		this.retaininHarvestAreaSP = retaininHarvestAreaSP;
 	}
@@ -1773,12 +1773,12 @@ public class Feature{
 		this.altersilvicultureSP = altersilvicultureSP;
 	}
 
-	@JsonProperty("leavestandingSP")
+	@JsonProperty("leaveStandingSP")
 	public String getLeaveStandingSP() {
 		return leaveStandingSP;
 	}
 
-	@JsonProperty("leavestandingSP")
+	@JsonProperty("leaveStandingSP")
 	public void setLeaveStandingSP(String leaveStandingSP) {
 		this.leaveStandingSP = leaveStandingSP;
 	}
@@ -1793,12 +1793,12 @@ public class Feature{
 		this.stubnonCMTsSP = stubnonCMTsSP;
 	}
 
-	@JsonProperty("stubCMtsabovescarSP")
+	@JsonProperty("stubCMTsabovescarSP")
 	public String getStubCMTsabovescarSP() {
 		return stubCMTsabovescarSP;
 	}
 
-	@JsonProperty("stubCMtsabovescarSP")
+	@JsonProperty("stubCMTsabovescarSP")
 	public void setStubCMTsabovescarSP(String stubCMTsabovescarSP) {
 		this.stubCMTsabovescarSP = stubCMTsabovescarSP;
 	}
@@ -1823,32 +1823,32 @@ public class Feature{
 		this.datetheFeatureAIA = datetheFeatureAIA;
 	}
 
-	@JsonProperty("stubCMtsabovescarAIA")
+	@JsonProperty("stubCMTsabovescarAIA")
 	public String getStubCMTsabovescarAIA() {
 		return stubCMTsabovescarAIA;
 	}
 
-	@JsonProperty("stubCMtsabovescarAIA")
+	@JsonProperty("stubCMTsabovescarAIA")
 	public void setStubCMTsabovescarAIA(String stubCMTsabovescarAIA) {
 		this.stubCMTsabovescarAIA = stubCMTsabovescarAIA;
 	}
 
-	@JsonProperty("stubnonCMtsaIA")
+	@JsonProperty("stubnonCMTsAIA")
 	public String getStubnonCMTsAIA() {
 		return stubnonCMTsAIA;
 	}
 
-	@JsonProperty("stubnonCMtsaIA")
+	@JsonProperty("stubnonCMTsAIA")
 	public void setStubnonCMTsAIA(String stubnonCMTsAIA) {
 		this.stubnonCMTsAIA = stubnonCMTsAIA;
 	}
 
-	@JsonProperty("leavestandingAIA")
+	@JsonProperty("leaveStandingAIA")
 	public String getLeaveStandingAIA() {
 		return leaveStandingAIA;
 	}
 
-	@JsonProperty("leavestandingAIA")
+	@JsonProperty("leaveStandingAIA")
 	public void setLeaveStandingAIA(String leaveStandingAIA) {
 		this.leaveStandingAIA = leaveStandingAIA;
 	}
@@ -1873,12 +1873,12 @@ public class Feature{
 		this.altersilvicultureFN = altersilvicultureFN;
 	}
 
-	@JsonProperty("leavestandingFN")
+	@JsonProperty("leaveStandingFN")
 	public String getLeaveStandingFN() {
 		return leaveStandingFN;
 	}
 
-	@JsonProperty("leavestandingFN")
+	@JsonProperty("leaveStandingFN")
 	public void setLeaveStandingFN(String leaveStandingFN) {
 		this.leaveStandingFN = leaveStandingFN;
 	}
@@ -1903,12 +1903,12 @@ public class Feature{
 		this.datetheFeatureFN = datetheFeatureFN;
 	}
 
-	@JsonProperty("stubCMtsabovescarFN")
+	@JsonProperty("stubCMTsabovescarFN")
 	public String getStubCMTsabovescarFN() {
 		return stubCMTsabovescarFN;
 	}
 
-	@JsonProperty("stubCMtsabovescarFN")
+	@JsonProperty("stubCMTsabovescarFN")
 	public void setStubCMTsabovescarFN(String stubCMTsabovescarFN) {
 		this.stubCMTsabovescarFN = stubCMTsabovescarFN;
 	}
@@ -1943,12 +1943,12 @@ public class Feature{
 		this.permanentreservetype = permanentreservetype;
 	}
 
-	@JsonProperty("Modifiedblockboundary")
+	@JsonProperty("modifiedblockboundary")
 	public String getModifiedblockboundary() {
 		return modifiedblockboundary;
 	}
 
-	@JsonProperty("Modifiedblockboundary")
+	@JsonProperty("modifiedblockboundary")
 	public void setModifiedblockboundary(String modifiedblockboundary) {
 		this.modifiedblockboundary = modifiedblockboundary;
 	}
@@ -1963,12 +1963,12 @@ public class Feature{
 		this.retainedinharvestareanobuffer = retainedinharvestareanobuffer;
 	}
 
-	@JsonProperty("compledcrownorstandmodification")
+	@JsonProperty("compledCrownorstandmodification")
 	public String getCompledCrownorstandmodification() {
 		return compledCrownorstandmodification;
 	}
 
-	@JsonProperty("compledcrownorstandmodification")
+	@JsonProperty("compledCrownorstandmodification")
 	public void setCompledCrownorstandmodification(String compledCrownorstandmodification) {
 		this.compledCrownorstandmodification = compledCrownorstandmodification;
 	}
@@ -2053,111 +2053,111 @@ public class Feature{
 		this.alteredsilviculture = alteredsilviculture;
 	}
 
-	@JsonProperty("Harvestingq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getHarvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("Harvestingq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setHarvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause = harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("silvicultureq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getSilvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("silvicultureq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setSilvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause = silvicultureQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("fireq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("fireQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getFireQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return fireQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("fireq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("fireQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setFireQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String fireQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.fireQ2Wheredamagehasoccurredwhatisthemostlikelycause = fireQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("roadq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("roadQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getRoadQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return roadQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("roadq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("roadQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setRoadQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String roadQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.roadQ2Wheredamagehasoccurredwhatisthemostlikelycause = roadQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("windthrowq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getWindthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("windthrowq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setWindthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause = windthrowQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("otherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("otherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return otherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("otherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("otherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String otherQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.otherQ2Wheredamagehasoccurredwhatisthemostlikelycause = otherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("livestockq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getLivestockQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("livestockq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setLivestockQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause = livestockQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("IndustrialUseq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getIndustrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("IndustrialUseq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setIndustrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause = industrialUseQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("recreationq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getRecreationQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("recreationq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setRecreationQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause = recreationQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("safetyq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getSafetyQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("safetyq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setSafetyQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause = safetyQ2Wheredamagehasoccurredwhatisthemostlikelycause;
@@ -2193,12 +2193,12 @@ public class Feature{
 		this.estwindthrow = estwindthrow;
 	}
 
-	@JsonProperty("windthrowTechniquenone")
+	@JsonProperty("windthrowTechniqueNone")
 	public String getWindthrowTechniqueNone() {
 		return windthrowTechniqueNone;
 	}
 
-	@JsonProperty("windthrowTechniquenone")
+	@JsonProperty("windthrowTechniqueNone")
 	public void setWindthrowTechniqueNone(String windthrowTechniqueNone) {
 		this.windthrowTechniqueNone = windthrowTechniqueNone;
 	}
@@ -2293,12 +2293,12 @@ public class Feature{
 		this.isthereevidenceofdamage = isthereevidenceofdamage;
 	}
 
-	@JsonProperty("traillength")
+	@JsonProperty("trailLength")
 	public String getTrailLength() {
 		return trailLength;
 	}
 
-	@JsonProperty("traillength")
+	@JsonProperty("trailLength")
 	public void setTrailLength(String trailLength) {
 		this.trailLength = trailLength;
 	}
@@ -2327,12 +2327,12 @@ public class Feature{
 		this.q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective = q5weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective;
 	}
 
-	@JsonProperty("q5description")
+	@JsonProperty("q5Description")
 	public String getQ5Description() {
 		return q5Description;
 	}
 
-	@JsonProperty("q5description")
+	@JsonProperty("q5Description")
 	public void setQ5Description(String q5Description) {
 		this.q5Description = q5Description;
 	}
@@ -2377,23 +2377,23 @@ public class Feature{
 		this.sFDESCRIPTION = sFDESCRIPTION;
 	}
 
-	@JsonProperty("Ifotherpleasedescribeotherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public String getIfotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause() {
 		return ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("Ifotherpleasedescribeotherq2Wheredamagehasoccurredwhatisthemostlikelycause")
+	@JsonProperty("ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause")
 	public void setIfotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause(
 			String ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause) {
 		this.ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause = ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause;
 	}
 
-	@JsonProperty("q4description")
+	@JsonProperty("q4Description")
 	public String getQ4Description() {
 		return q4Description;
 	}
 
-	@JsonProperty("q4description")
+	@JsonProperty("q4Description")
 	public void setQ4Description(String q4Description) {
 		this.q4Description = q4Description;
 	}

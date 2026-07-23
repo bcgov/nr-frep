@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react';
-import { useState, type FC, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
 import {
   CodeSelect,
@@ -200,6 +200,9 @@ const WINDTHROW_TECHNIQUES: Array<{ label: string; field: string }> = [
   { label: 'Topping', field: 'windthrowTechniqueTopping' },
 ];
 
+// Age is a single-select group (one age per feature); mirrors the backend AGE_FIELDS set.
+const AGE_FIELDS = ['pre1846', 'post1846', 'ageUnknown', 'historicalUse'] as const;
+
 // Monotonic key generator for the id-less, editable "other strategy" rows. A stable React key
 // (never reused, never the array index) keeps row inputs from remounting/losing focus on edit.
 let otherStrategyKeySeq = 0;
@@ -210,8 +213,18 @@ const FeatureEditor: FC<{
   onPatch: PatchFn;
   readOnly: boolean;
   siblingLabels?: string[];
+  // Other features eligible to be this feature's composite anchor (excludes siblings already in a
+  // composite). Defaults to all siblings when not supplied.
+  compositeCandidateLabels?: string[];
   onToggleAssociated?: (siblingLabel: string) => void;
-}> = ({ feature, onPatch, readOnly, siblingLabels = [], onToggleAssociated }) => {
+}> = ({
+  feature,
+  onPatch,
+  readOnly,
+  siblingLabels = [],
+  compositeCandidateLabels = siblingLabels,
+  onToggleAssociated,
+}) => {
   const ind = (field: string): Indicator | undefined => feature[field] as Indicator | undefined;
   const str = (field: string): string | undefined => feature[field] as string | undefined;
   const on = (field: string): boolean => ind(field) === 'true';
@@ -221,6 +234,19 @@ const FeatureEditor: FC<{
       labelText={label}
       value={ind(field)}
       disabled={readOnly}
+      onToggle={(v) => onPatch({ [field]: v })}
+    />
+  );
+
+  // Age is single-select: a feature has one age. Once a box is checked, the other three are disabled
+  // — to switch, uncheck the active one first. Submit still requires at least one to be selected.
+  const selectedAge = AGE_FIELDS.find((f) => on(f));
+  const ageChk = (field: string, label: string) => (
+    <IndicatorCheckbox
+      id={`feat-${field}`}
+      labelText={label}
+      value={ind(field)}
+      disabled={readOnly || (selectedAge !== undefined && selectedAge !== field)}
       onToggle={(v) => onPatch({ [field]: v })}
     />
   );
@@ -238,17 +264,36 @@ const FeatureEditor: FC<{
   };
 
   // Live inline validation (lightweight high-value subset; the full rule set runs server-side at
-  // submit). Empty when read-only. Save is blocked in FeatureList while any error remains.
-  const fieldErrors: Record<string, string> = readOnly ? {} : featureErrors(feature);
+  // submit). Empty when read-only. Save is blocked in FeatureList while any error remains. Memoised
+  // on the feature so the auto-open effect below only re-runs when the data actually changes.
+  const fieldErrors: Record<string, string> = useMemo(
+    () => (readOnly ? {} : featureErrors(feature)),
+    [readOnly, feature],
+  );
   const err = (key: string): string | undefined => fieldErrors[key];
 
-  // Accordion sections track their own open state; a section also stays open (and shows a badge)
-  // while it holds an error, so a blocked Save never hides the reason inside a collapsed section.
+  // Accordion sections track their own open state; a section also shows an error-count badge.
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ Description: true });
   const sectionErrorCount = (section: string): number =>
     (SECTION_ERROR_FIELDS[section] ?? []).filter((key) => Boolean(fieldErrors[key])).length;
-  const isOpen = (section: string): boolean =>
-    Boolean(openSections[section]) || sectionErrorCount(section) > 0;
+  // A section that holds an error is auto-opened so a blocked Save never hides the reason — but the
+  // open state is made STICKY (persisted into openSections) rather than derived live from the error
+  // count. Otherwise filling the field clears the error and the section would collapse mid-edit
+  // (the reported bug: adding a Feature rating / description snapped the Summary section shut).
+  useEffect(() => {
+    setOpenSections((prev) => {
+      let next = prev;
+      for (const section of Object.keys(SECTION_ERROR_FIELDS)) {
+        const hasError = SECTION_ERROR_FIELDS[section].some((key) => Boolean(fieldErrors[key]));
+        if (hasError && !prev[section]) {
+          if (next === prev) next = { ...prev };
+          next[section] = true;
+        }
+      }
+      return next;
+    });
+  }, [fieldErrors]);
+  const isOpen = (section: string): boolean => Boolean(openSections[section]);
   const toggleSection = (section: string) =>
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   const sectionTitle = (section: string): ReactNode => {
@@ -371,15 +416,30 @@ const FeatureEditor: FC<{
               disabled={readOnly}
               onChange={(v) => onPatch({ featureInfoSourceCode: v })}
             />
-            {chk('compositeFeatureInd', 'Composite feature')}
-            {isComposite && (
-              <TextField
-                id="feat-composite"
-                labelText="Composite of (feature label)"
-                value={str('compositeFeature')}
-                disabled={readOnly}
-                onChange={(v) => onPatch({ compositeFeature: v })}
-              />
+            {/* A composite groups this feature with another; you can only create one when another
+                feature exists to group with (mirrors the legacy "Composite of" dropdown of sibling
+                features). Still shown for an already-composite feature so a stale one can be undone
+                even after its siblings were removed. */}
+            {siblingLabels.length === 0 && !isComposite ? (
+              <p className="rip-form__hint">Add another feature to create a composite.</p>
+            ) : (
+              <>
+                {chk('compositeFeatureInd', 'Composite feature')}
+                {isComposite && (
+                  <CodeSelect
+                    id="feat-composite"
+                    labelText="Composite of (feature label)"
+                    value={str('compositeFeature')}
+                    options={compositeCandidateLabels.map((label) => ({
+                      code: label,
+                      label: `Feature ${label}`,
+                    }))}
+                    includeBlank
+                    disabled={readOnly}
+                    onChange={(v) => onPatch({ compositeFeature: v })}
+                  />
+                )}
+              </>
             )}
             {chk('chrRegisteredSite', 'Registered archaeological site')}
             {on('chrRegisteredSite') && (
@@ -548,10 +608,10 @@ const FeatureEditor: FC<{
       <AccordionItem title="Age">
         {/* Age */}
         <div className="rip-form__grid chr-checklist__check-grid">
-          {chk('pre1846', 'Pre-1846')}
-          {chk('post1846', 'Post-1846')}
-          {chk('ageUnknown', 'Age unknown')}
-          {chk('historicalUse', 'Historical use')}
+          {ageChk('pre1846', 'Pre-1846')}
+          {ageChk('post1846', 'Post-1846')}
+          {ageChk('ageUnknown', 'Age unknown')}
+          {ageChk('historicalUse', 'Historical use')}
         </div>
       </AccordionItem>
 

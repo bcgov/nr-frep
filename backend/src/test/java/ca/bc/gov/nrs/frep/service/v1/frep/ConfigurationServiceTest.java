@@ -72,6 +72,34 @@ class ConfigurationServiceTest {
   }
 
   @Test
+  void getNewMasterListYearsOffersNextYearButKeepsCurrentOnLatestExisting() {
+    Map<String, Object> existingCurrent = new LinkedHashMap<>();
+    existingCurrent.put("CODE", "2026");
+    existingCurrent.put("DESCRIPTION", "2026/2027");
+    Map<String, Object> existingPrior = new LinkedHashMap<>();
+    existingPrior.put("CODE", "2025");
+    existingPrior.put("DESCRIPTION", "2025/2026");
+    when(codeListRepository.getMasterListYearCode())
+        .thenReturn(List.of(existingCurrent, existingPrior));
+
+    // get_new_masterlist_code = existing years UNION MAX+1 (the synthetic "next" year), ordered DESC.
+    Map<String, Object> nextYear = new LinkedHashMap<>();
+    nextYear.put("CODE", "2027");
+    nextYear.put("DESCRIPTION", "2027/2028");
+    when(codeListRepository.getNewMasterListYearCode())
+        .thenReturn(List.of(nextYear, existingCurrent, existingPrior));
+
+    var years = service.getNewMasterListYears();
+
+    assertEquals(3, years.size());
+    assertEquals("2027", years.get(0).effectiveYear()); // the next year is offered for generation
+    assertFalse(years.get(0).current()); // ...but the synthetic next year is never "current"
+    assertEquals("2026", years.get(1).effectiveYear());
+    assertTrue(years.get(1).current()); // current = latest EXISTING year (default selection)
+    assertFalse(years.get(2).current());
+  }
+
+  @Test
   void getOrgUnitsLoadsFromCodeListsDao() {
     Map<String, Object> row = new LinkedHashMap<>();
     row.put("CODE", "58");

@@ -29,6 +29,17 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
+  /**
+   * Existing years plus the next not-yet-created year — for the FREP700 Generate Master List screen,
+   * so a sys-admin can select and generate the upcoming year.
+   */
+  getNewMasterListYears(): CancelablePromise<MasterListYear[]> {
+    return this.doRequest<MasterListYear[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/master-list-years/new',
+    });
+  }
+
   getOrgUnits(): CancelablePromise<OrgUnit[]> {
     return this.doRequest<OrgUnit[]>(this.config, {
       method: 'GET',

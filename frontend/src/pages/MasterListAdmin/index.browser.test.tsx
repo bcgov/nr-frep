@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,7 +8,7 @@ import API from '@/services/APIs';
 
 vi.mock('@/services/APIs', () => ({
   default: {
-    configuration: { getMasterListYears: vi.fn() },
+    configuration: { getMasterListYears: vi.fn(), getNewMasterListYears: vi.fn() },
     masterListAdmin: {
       getMasterList: vi.fn(),
       generate: vi.fn(),
@@ -53,7 +53,7 @@ describe('MasterListAdminPage actions', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('saves generation comments without regenerating', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     api.getMasterList.mockResolvedValue(criteria(true));
@@ -67,7 +67,7 @@ describe('MasterListAdminPage actions', () => {
   });
 
   it('locks generate and delete once evaluations are under way (ind = Y)', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     api.getMasterList.mockResolvedValue({ ...criteria(true), resourceEvaluationInd: 'Y' });
@@ -84,7 +84,7 @@ describe('MasterListAdminPage actions', () => {
   });
 
   it('with no list (ind = empty), only generate is enabled', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     api.getMasterList.mockResolvedValue({ ...criteria(false), resourceEvaluationInd: '' });
@@ -100,25 +100,33 @@ describe('MasterListAdminPage actions', () => {
   });
 
   it('criteria inputs are editable with no list (ind = empty)', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     api.getMasterList.mockResolvedValue({ ...criteria(false), resourceEvaluationInd: '' });
 
     render(<MasterListAdminPage />);
 
-    expect(await screen.findByLabelText('Min harvest-complete date')).toHaveProperty(
+    expect(
+      await screen.findByLabelText('Min harvest-complete date', { exact: false }),
+    ).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Max harvest-complete date', { exact: false })).toHaveProperty(
       'disabled',
       false,
     );
-    expect(screen.getByLabelText('Max harvest-complete date')).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Min opening gross area (ha)')).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Max sites per district')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Min opening gross area (ha)', { exact: false })).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(screen.getByLabelText('Max sites per district', { exact: false })).toHaveProperty(
+      'disabled',
+      false,
+    );
     expect(screen.getByLabelText('Generation comments')).toHaveProperty('disabled', false);
   });
 
   it('blocks generate and shows inline errors when criteria are invalid', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     // No list yet (inputs editable), but min date is after max and out of the allowed window.
@@ -143,7 +151,7 @@ describe('MasterListAdminPage actions', () => {
   });
 
   it('disables criteria inputs once a list exists but keeps comments editable (legacy parity)', async () => {
-    config.getMasterListYears.mockResolvedValue([
+    config.getNewMasterListYears.mockResolvedValue([
       { effectiveYear: '2024', label: '2024/2025', current: true },
     ]);
     api.getMasterList.mockResolvedValue({ ...criteria(true), resourceEvaluationInd: 'N' });
@@ -152,13 +160,63 @@ describe('MasterListAdminPage actions', () => {
 
     // Legacy frep700GenerateMasterList.jsp disables the criteria fields whenever
     // resourceEvaluationInd != '' (a list exists), but leaves Generation Comments editable.
-    expect(await screen.findByLabelText('Min harvest-complete date')).toHaveProperty(
+    expect(
+      await screen.findByLabelText('Min harvest-complete date', { exact: false }),
+    ).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Max harvest-complete date', { exact: false })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByLabelText('Max harvest-complete date')).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Min opening gross area (ha)')).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Max sites per district')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Min opening gross area (ha)', { exact: false })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByLabelText('Max sites per district', { exact: false })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByLabelText('Generation comments')).toHaveProperty('disabled', false);
+  });
+
+  it('clears a field error once the field is fixed (no re-submit needed)', async () => {
+    config.getNewMasterListYears.mockResolvedValue([
+      { effectiveYear: '2024', label: '2024/2025', current: true },
+    ]);
+    // Editable year (no list yet) with an empty min gross area → "required" on Generate.
+    api.getMasterList.mockResolvedValue({
+      ...criteria(false),
+      resourceEvaluationInd: '',
+      minOpeningGrossAreaHa: undefined,
+    });
+
+    render(<MasterListAdminPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate master list' }));
+    expect(await screen.findByText('Min opening gross area is required.')).toBeTruthy();
+
+    // Fixing the field clears its error immediately — without pressing Generate again.
+    fireEvent.change(screen.getByLabelText('Min opening gross area (ha)', { exact: false }), {
+      target: { value: '10' },
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText('Min opening gross area is required.')).toBeNull(),
+    );
+  });
+
+  it('offers the next not-yet-created year and defaults to the current year', async () => {
+    config.getNewMasterListYears.mockResolvedValue([
+      { effectiveYear: '2027', label: '2027/2028', current: false }, // synthetic next year (MAX+1)
+      { effectiveYear: '2026', label: '2026/2027', current: true }, // latest existing → default
+      { effectiveYear: '2025', label: '2025/2026', current: false },
+    ]);
+    api.getMasterList.mockResolvedValue(criteria(true));
+
+    render(<MasterListAdminPage />);
+
+    // The next year is selectable for generation…
+    expect(await screen.findByRole('option', { name: '2027/2028' })).toBeTruthy();
+    // …but the screen still defaults to the current active year.
+    expect((screen.getByLabelText('Master list year') as HTMLSelectElement).value).toBe('2026');
   });
 });

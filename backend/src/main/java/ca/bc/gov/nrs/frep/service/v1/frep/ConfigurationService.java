@@ -45,6 +45,35 @@ public class ConfigurationService {
     return years;
   }
 
+  /**
+   * Master-list years for the FREP700 <em>Generate</em> screen: every existing year PLUS the next
+   * not-yet-created year ({@code MAX(effective_year) + 1}), via {@code get_new_masterlist_code} —
+   * so a sys-admin can select and generate the upcoming year (legacy
+   * {@code frep.lookup.newMasterListCodes}; generating inserts the {@code frep_evaluation_year} row).
+   *
+   * <p>{@code current} marks the latest <em>existing</em> year — the synthetic next year is never
+   * current — so the screen still defaults to the active year and offers the new one as a choice.
+   */
+  public List<MasterListYearResponse> getNewMasterListYears() {
+    List<Map<String, Object>> existing = codeListRepository.getMasterListYearCode();
+    String currentYear = existing.isEmpty()
+        ? null
+        : toMasterListYearResponse(existing.get(0), false).effectiveYear();
+
+    List<Map<String, Object>> rows = codeListRepository.getNewMasterListYearCode();
+    List<MasterListYearResponse> years = new ArrayList<>(rows.size());
+    for (Map<String, Object> row : rows) {
+      MasterListYearResponse year = toMasterListYearResponse(row, false);
+      if (year.effectiveYear() == null) {
+        continue;
+      }
+      years.add(year.effectiveYear().equals(currentYear)
+          ? toMasterListYearResponse(row, true)
+          : year);
+    }
+    return years;
+  }
+
 
   @Cacheable("orgUnits")
   public List<OrgUnitResponse> getOrgUnits() {

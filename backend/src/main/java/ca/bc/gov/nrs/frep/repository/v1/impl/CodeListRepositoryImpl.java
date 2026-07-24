@@ -83,6 +83,21 @@ public class CodeListRepositoryImpl extends AbstractFrepRepository implements Co
   }
 
   /**
+   * Master list (evaluation) years for the FREP700 Generate screen: existing years plus the next
+   * not-yet-created year ({@code MAX(effective_year) + 1}).
+   *
+   * <p>Legacy procedure {@code get_new_masterlist_code} returns the same columns as
+   * {@code get_masterlist_year_code}, UNION-ed with the synthetic next year, ordered by
+   * {@code code} descending.
+   */
+  public List<Map<String, Object>> getNewMasterListYearCode() {
+    String call = "{call " + PACKAGE_NAME + ".get_new_masterlist_code(?)}";
+    return executeCall(call,
+        cs -> registerOutCursor(cs, 1),
+        cs -> readCursor(cs, 1, CodeListRepositoryImpl::rowToMap));
+  }
+
+  /**
    * FREP protocol (resource value type) codes for dropdowns and filters.
    *
    * <p>Legacy procedure {@code get_resource_value} returns

@@ -39,6 +39,11 @@ public class ConfigurationApiController implements ConfigurationApiEndpoint {
   }
 
   @Override
+  public ResponseEntity<List<MasterListYearResponse>> getNewMasterListYears() {
+    return ResponseEntity.ok(configurationService.getNewMasterListYears());
+  }
+
+  @Override
   public ResponseEntity<List<OrgUnitResponse>> getOrgUnits() {
     return ResponseEntity.ok(configurationService.getOrgUnits());
   }

@@ -548,7 +548,7 @@ public class ProtocolChecklistService {
         String prefix = "Stand row " + (i + 1) + ": ";
         requireField(r.speciesCode(), prefix + "Species", errors);
         requireField(r.decayClassCode(), prefix + "WT class", errors);
-        requireFloat(r.dbh(), prefix + "DBH", 12.6, 400, 1, false, errors);
+        requireFloat(r.dbh(), prefix + "DBH", 12.5, 400, 1, true, errors);
         requireFloat(r.height(), prefix + "Height", 1.4, 99.9, 1, false, errors);
       }
     }
@@ -601,7 +601,9 @@ public class ProtocolChecklistService {
     }
     double n = Double.parseDouble(text);
     if ((exclusiveMin ? n <= min : n < min) || n > max) {
-      errors.add(label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+      errors.add(exclusiveMin
+          ? label + " must be greater than " + fmt(min) + " and no more than " + fmt(max) + "."
+          : label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
     }
   }
 

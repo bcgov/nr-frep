@@ -22,6 +22,8 @@ import {
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
 
+import { requiredLabel } from '@/utils/requiredLabel';
+
 import type { MasterListYear } from '@/types/configuration';
 import type { GenerateMasterListRequest, MasterListAdmin } from '@/types/masterListAdmin';
 
@@ -127,8 +129,11 @@ const MasterListAdminPage: FC = () => {
     let cancelled = false;
     setLoading(true);
 
+    // Generate screen offers every existing year PLUS the next not-yet-created year (MAX+1), so a
+    // sys-admin can generate the upcoming year. `current` still marks the latest existing year, so
+    // the screen defaults to the active year.
     API.configuration
-      .getMasterListYears()
+      .getNewMasterListYears()
       .then((data) => {
         if (cancelled) return;
         setYears(data);
@@ -193,6 +198,13 @@ const MasterListAdminPage: FC = () => {
       cancelled = true;
     };
   }, [display, effectiveYear]);
+
+  // Once the user has attempted Generate (errors are showing), re-validate as they edit so a field's
+  // error clears the moment it's fixed. Skipped before the first submit (empty errors) so we never
+  // flag fields the user hasn't tried to submit yet.
+  useEffect(() => {
+    setErrors((prev) => (Object.keys(prev).length === 0 ? prev : validateGenerateForm(form)));
+  }, [form]);
 
   const handleGenerate = async () => {
     const validationErrors = validateGenerateForm(form);
@@ -339,7 +351,7 @@ const MasterListAdminPage: FC = () => {
                 >
                   <DatePickerInput
                     id="mla-min-date"
-                    labelText="Min harvest-complete date"
+                    labelText={requiredLabel('Min harvest-complete date', true)}
                     placeholder="YYYY-MM-DD"
                     disabled={generating || hasList}
                     invalid={!!errors.minDate}
@@ -357,7 +369,7 @@ const MasterListAdminPage: FC = () => {
                 >
                   <DatePickerInput
                     id="mla-max-date"
-                    labelText="Max harvest-complete date"
+                    labelText={requiredLabel('Max harvest-complete date', true)}
                     placeholder="YYYY-MM-DD"
                     disabled={generating || hasList}
                     invalid={!!errors.maxDate}
@@ -366,7 +378,7 @@ const MasterListAdminPage: FC = () => {
                 </DatePicker>
                 <NumberInput
                   id="mla-min-area"
-                  label="Min opening gross area (ha)"
+                  label={requiredLabel('Min opening gross area (ha)', true)}
                   value={form.minOpeningGrossAreaHa ?? 0}
                   onChange={(_e, { value }) =>
                     setForm({
@@ -381,7 +393,7 @@ const MasterListAdminPage: FC = () => {
                 />
                 <NumberInput
                   id="mla-max-sites"
-                  label="Max sites per district"
+                  label={requiredLabel('Max sites per district', true)}
                   value={form.maxSitesPerDistrict ?? 0}
                   onChange={(_e, { value }) =>
                     setForm({

@@ -16,9 +16,11 @@ vi.mock('@/services/APIs', () => ({
       deleteBioPlot: vi.fn(),
     },
     configuration: {
-      getSpecies: vi.fn().mockResolvedValue([{ code: 'FD', description: 'FD - Douglas-fir' }]),
-      getWildlifeTreeDecay: vi.fn().mockResolvedValue([{ code: '1', description: '1 - Live' }]),
-      getCwdDecay: vi.fn().mockResolvedValue([{ code: '1', description: '1 - Sound' }]),
+      // Backend returns the name only in `description`; the plot sub-table dropdowns render it as
+      // "<code> - <description>".
+      getSpecies: vi.fn().mockResolvedValue([{ code: 'FD', description: 'Douglas-fir' }]),
+      getWildlifeTreeDecay: vi.fn().mockResolvedValue([{ code: '1', description: 'Live' }]),
+      getCwdDecay: vi.fn().mockResolvedValue([{ code: '1', description: 'Sound' }]),
       getStrataTypes: vi
         .fn()
         .mockResolvedValue([{ code: 'DO', description: 'DO - Dispersed Other' }]),
@@ -188,19 +190,33 @@ describe('BioPlotsView', () => {
     expect(await screen.findByText('Stand table (trees)')).toBeTruthy();
   });
 
-  it('blocks Add and shows a notice when the checklist has no evaluator', async () => {
+  it('renders sub-table species options as "<code> - <description>"', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.listBioPlots.mockResolvedValue([]);
-    config.getEvaluators.mockResolvedValueOnce([]); // no team members saved
 
     render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
 
-    expect(
-      await screen.findByText(
-        'Plots cannot be added until an Evaluator has been saved on the Administration tab.',
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add plot' })).toBeDisabled();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add new row' }));
+
+    // The "Spp." dropdown shows the code prefixed — not just the description.
+    expect(screen.getByRole('option', { name: 'FD - Douglas-fir' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Douglas-fir' })).toBeNull();
+  });
+
+  it('allows Add and shows no evaluator notice even when the checklist has no evaluator', async () => {
+    // The evaluator-gating (and its "…saved on the Administration tab" notice) was removed — the
+    // evaluator is handled elsewhere, so plots are no longer blocked on it.
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+    config.getEvaluators.mockResolvedValueOnce([]); // no evaluators
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+
+    const addButton = await screen.findByRole('button', { name: 'Add plot' });
+    expect(addButton).toBeEnabled();
+    expect(screen.queryByText(/Plots cannot be added until an Evaluator/)).toBeNull();
   });
 
   it('is read-only when submitted (Edit only, no Add or Delete)', async () => {

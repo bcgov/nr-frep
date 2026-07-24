@@ -7,6 +7,7 @@ import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.TOO_MANY_REQUESTS;
+import static org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
@@ -121,6 +122,16 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   protected ResponseEntity<Object> handleInvalidPayload(InvalidPayloadException ex) {
     log.warn("{}", ex.getMessage());
     return buildResponseEntity(ex.getError());
+  }
+
+  /**
+   * The virus scanner rejected an upload — either a signature was detected or (fail-closed) the
+   * scanner could not verify the file. The rejection message is user-facing; surface it at 422.
+   */
+  @ExceptionHandler(VirusDetectedException.class)
+  protected ResponseEntity<Object> handleVirusDetected(VirusDetectedException ex) {
+    log.warn("Upload rejected by virus scanner ({}): {}", ex.getRejection().code(), ex.getMessage());
+    return buildResponseEntity(new ApiError(UNPROCESSABLE_ENTITY, ex.getMessage()));
   }
 
   /** Honour the status + reason carried by a {@link ResponseStatusException} (e.g. search "narrow"). */

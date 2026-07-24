@@ -22,6 +22,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.sql.SQLException;
@@ -65,19 +66,22 @@ public class ProtocolChecklistService {
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
+  private final VirusScanner virusScanner;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService
+      FamUserDirectoryService famUserDirectoryService,
+      VirusScanner virusScanner
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
+    this.virusScanner = virusScanner;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -822,6 +826,8 @@ public class ProtocolChecklistService {
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
     validateAttachmentType(fileName);
+    // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
+    virusScanner.scanOrThrow(bytes, fileName);
     String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());

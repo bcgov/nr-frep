@@ -75,9 +75,12 @@ public class ChrChecklistPersistenceService {
   private EntityManager entityManager;
 
   private final ObjectStorageService objectStorageService;
+  private final VirusScanner virusScanner;
 
-  public ChrChecklistPersistenceService(ObjectStorageService objectStorageService) {
+  public ChrChecklistPersistenceService(
+      ObjectStorageService objectStorageService, VirusScanner virusScanner) {
     this.objectStorageService = objectStorageService;
+    this.virusScanner = virusScanner;
   }
 
   public ChrChecklist getAcceptedSiteForChr(long checklistId) {
@@ -489,6 +492,8 @@ public class ChrChecklistPersistenceService {
 
       if (ChrStringUtils.hasAValue(picture.getCode())) {
         byte[] decoded = Base64.getDecoder().decode(picture.getCode());
+        // Scan the decoded photo bytes before upload — a hit throws VirusDetectedException (→ 422).
+        virusScanner.scanOrThrow(decoded, attachment.getFileName());
         uploads.add(new PhotoUpload(
             picture.getId() + "." + deriveMimeType(picture.getMimeTypeCode()),
             picture.getMimeTypeCode(),

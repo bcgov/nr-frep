@@ -53,7 +53,8 @@ class ChrChecklistPersistenceServiceTest {
   void setUp() {
     entityManager = mock(EntityManager.class);
     ObjectStorageService objectStorage = mock(ObjectStorageService.class);
-    service = new ChrChecklistPersistenceService(objectStorage);
+    VirusScanner virusScanner = mock(VirusScanner.class);
+    service = new ChrChecklistPersistenceService(objectStorage, virusScanner);
     ReflectionTestUtils.setField(service, "entityManager", entityManager);
 
     // Managed checklist returned by find(...).

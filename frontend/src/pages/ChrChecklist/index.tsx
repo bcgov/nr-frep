@@ -127,7 +127,7 @@ const ChrChecklistPage: FC = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { display } = useNotification();
-  const { canEdit, isViewOnly, canPerformSysAdminActions } = useAuthorization();
+  const { canPerformSysAdminActions, canChr } = useAuthorization();
   const online = useOnlineStatus();
 
   const [checkList, setCheckList] = useState<CheckList | null>(null);
@@ -240,9 +240,12 @@ const ChrChecklistPage: FC = () => {
   // editability depends only on its status, not the online role check (which requires a session
   // that doesn't exist offline; the backend re-checks permission on upload). Online (server) copies
   // keep the role + status gating.
+  // CHR editing is district-scoped: sys-admin or the FREP_CHR_EDITOR_DISTRICT_<code> role matching
+  // this checklist's org unit. (Replaces the old global canEdit, which excluded district editors.)
+  const canEditThisChr = canChr(checkList?.orgUnitCode);
   const readOnly = isOfflineCopy
     ? checkList?.status === CHR_STATUS.SUBMITTED
-    : isViewOnly || !canEdit || statusLocked;
+    : !canEditThisChr || statusLocked;
 
   // A stale offline copy can't be uploaded (the server checkout was reset/submitted/removed), so both
   // Submit and Sync changes — which upload — are dead ends and are hidden; the banner explains why and
@@ -633,19 +636,19 @@ const ChrChecklistPage: FC = () => {
           );
         })()}
 
-      {!canEdit && (
+      {!canEditThisChr && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
             title="View only"
-            subtitle="You do not have permission to edit CHR checklists."
+            subtitle="You do not have permission to edit CHR checklists for this district."
             hideCloseButton
             lowContrast
           />
         </Column>
       )}
 
-      {canEdit && !isViewOnly && statusLocked && (
+      {canEditThisChr && statusLocked && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
@@ -706,8 +709,7 @@ const ChrChecklistPage: FC = () => {
               FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
           {!isOfflineCopy &&
             online &&
-            canEdit &&
-            !isViewOnly &&
+            canEditThisChr &&
             checkList.status === CHR_STATUS.SUBMITTED && (
               <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
                 Unsubmit

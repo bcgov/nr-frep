@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseToken } from './authUtils';
+import { parsePrivileges, parseToken } from './authUtils';
 
 import type { JWT } from './types';
 
@@ -57,5 +57,39 @@ describe('parseToken', () => {
       }),
     );
     expect(user?.idpProvider).toBeUndefined();
+  });
+
+  it('collapses per-district CHR groups into a scoped FREP_CHR_EDITOR role', () => {
+    const user = parseToken(
+      jwt({
+        'custom:idp_name': 'idir',
+        'custom:idp_username': 'JSMITH',
+        'cognito:groups': ['FREP_CHR_EDITOR_DISTRICT_DCK', 'FREP_CHR_EDITOR_DISTRICT_DCC'],
+      }),
+    );
+
+    // Surfaces as the synthetic FREP_CHR_EDITOR role (so hasAnyRole works) with the district codes.
+    expect(user?.roles).toEqual(['FREP_CHR_EDITOR']);
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC', 'DCK']); // de-duped + sorted
+  });
+});
+
+describe('parsePrivileges', () => {
+  it('maps global groups to null and district groups to sorted codes', () => {
+    const privileges = parsePrivileges([
+      'FREP_ADMIN',
+      'FREP_CHR_EDITOR_DISTRICT_DSE',
+      'FREP_CHR_EDITOR_DISTRICT_DCK',
+      'FREP_CHR_EDITOR_DISTRICT_DCK', // duplicate
+      'SOME_UNRELATED_GROUP',
+    ]);
+
+    expect(privileges.FREP_ADMIN).toBeNull();
+    expect(privileges.FREP_CHR_EDITOR).toEqual(['DCK', 'DSE']);
+    expect('SOME_UNRELATED_GROUP' in privileges).toBe(false);
+  });
+
+  it('omits FREP_CHR_EDITOR when the user holds no district groups', () => {
+    expect('FREP_CHR_EDITOR' in parsePrivileges(['FREP_EDITOR'])).toBe(false);
   });
 });

@@ -66,7 +66,6 @@ public class ChrChecklistService {
   }
 
   public CheckList getChecklist(long checklistId) {
-    assertCanReadChecklist();
     ChrChecklist chrChecklist = persistenceService.getAcceptedSiteForChr(checklistId);
     if (chrChecklist == null) {
       throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
@@ -353,11 +352,6 @@ public class ChrChecklistService {
               + " has been modified by another user (" + lastUpdateUser
               + ") since you've retreived it. Any changes made have been lost and the latest version has been retrieved.");
     }
-  }
-
-  private void assertCanReadChecklist() {
-    // Reads are open to any authenticated user; write/activate authorization is enforced by
-    // @PreAuthorize on ChrChecklistApiEndpoint (see FrepAuthorities).
   }
 
   private String deriveMimeType(String mimeType) {

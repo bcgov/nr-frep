@@ -29,6 +29,12 @@ export type AuthorizationInfo = {
   canDelete: boolean;
   /** `true` for admin-only actions (legacy {@code ACTIVATECHECKLIST} parity). */
   canPerformSysAdminActions: boolean;
+  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT_*`). */
+  chrDistricts: string[];
+  /** `true` when the user may access CHR for any district (sys-admin, or holds ≥1 district role). */
+  canAnyChr: boolean;
+  /** `true` when the user may access CHR for the given 3-letter district `org_unit_code`. */
+  canChr: (orgUnitCode: string | undefined | null) => boolean;
   /** Checks if the user holds a specific role. */
   hasRole: (role: ROLE_TYPE) => boolean;
   /** The full user object for advanced checks (may be `undefined` before login). */
@@ -60,7 +66,16 @@ export const useAuthorization = (): AuthorizationInfo => {
     const isUpdate = roles.includes('FREP_EDITOR');
     const hasViewOnlyRole = roles.includes('FREP_VIEW_ONLY');
     const isViewOnly = hasViewOnlyRole && !isSysAdmin && !isUpdate;
-    const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole;
+
+    // Per-district CHR access: the FREP_CHR_EDITOR privilege value is the list of district codes.
+    const chrDistricts = user?.privileges?.FREP_CHR_EDITOR ?? [];
+    const canAnyChr = isSysAdmin || chrDistricts.length > 0;
+    const canChr = (orgUnitCode: string | undefined | null) =>
+      isSysAdmin || (!!orgUnitCode && chrDistricts.includes(orgUnitCode.toUpperCase()));
+
+    // A CHR-district-only user holds no base role, so include CHR access here — otherwise they'd be
+    // treated as having no role and routed away from the app.
+    const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole || canAnyChr;
 
     const canEdit = isSysAdmin || isUpdate;
     const canCreate = canEdit;
@@ -78,6 +93,9 @@ export const useAuthorization = (): AuthorizationInfo => {
       canCreate,
       canDelete,
       canPerformSysAdminActions,
+      chrDistricts,
+      canAnyChr,
+      canChr,
       hasRole,
       user,
     };

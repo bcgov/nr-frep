@@ -1,5 +1,6 @@
 import {
   AVAILABLE_ROLES,
+  CHR_DISTRICT_EDITOR_PREFIX,
   validIdpProviders,
   type FamLoginUser,
   type IdpProviderType,
@@ -104,20 +105,31 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
 /**
  * Parses Cognito group strings into a user privilege object.
  *
- * Recognizes groups that exactly match {@link AVAILABLE_ROLES}
- * (e.g. "FREP_ADMIN", "FREP_EDITOR", "FREP_VIEW_ONLY").
- * Unrecognized groups are silently ignored.
+ * - Global roles that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMIN", "FREP_EDITOR",
+ *   "FREP_VIEW_ONLY") map to a `null` value (null = global, non-scoped role).
+ * - Per-district CHR groups ({@link CHR_DISTRICT_EDITOR_PREFIX}`<code>`, e.g.
+ *   "FREP_CHR_EDITOR_DISTRICT_DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
+ *   value is the `string[]` of district codes the user may edit CHR for (a scoped role).
+ * - Any other group is ignored.
  *
  * @param {string[]} input - Array of group strings from Cognito.
  * @returns {USER_PRIVILEGE_TYPE} The parsed privilege object.
  */
 export function parsePrivileges(input: string[]): USER_PRIVILEGE_TYPE {
   const result: USER_PRIVILEGE_TYPE = {};
+  const chrDistricts: string[] = [];
   for (const item of input) {
-    // Direct match against known Cognito groups (legacy WebADE role names)
-    if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
+    if (item.startsWith(CHR_DISTRICT_EDITOR_PREFIX)) {
+      const code = item.slice(CHR_DISTRICT_EDITOR_PREFIX.length).trim().toUpperCase();
+      if (code) chrDistricts.push(code);
+    } else if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
+      // Direct match against known global Cognito groups (legacy WebADE role names).
       result[item as ROLE_TYPE] = null; // null = global (non-scoped) role
     }
+  }
+  if (chrDistricts.length > 0) {
+    // Scoped role: the value carries the district codes (sorted, de-duplicated).
+    result.FREP_CHR_EDITOR = [...new Set(chrDistricts)].sort();
   }
   return result;
 }

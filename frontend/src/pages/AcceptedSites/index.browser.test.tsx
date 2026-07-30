@@ -24,6 +24,16 @@ vi.mock('@/context/notification/useNotification', () => ({
   useNotification: () => ({ display: displayMock }),
 }));
 
+// Admin-like access so the district/protocol dropdowns aren't scoped in these (filter-persistence)
+// tests. The object is hoisted + stable (the real hook memoizes it), so the config-load effect —
+// which depends on canEdit/chrDistricts — doesn't re-fire every render.
+const { authMock } = vi.hoisted(() => ({
+  authMock: { canEdit: true, canAnyChr: true, chrDistricts: [] as string[] },
+}));
+vi.mock('@/hooks/useAuthorization', () => ({
+  useAuthorization: () => authMock,
+}));
+
 const config = API.configuration as unknown as {
   getMasterListYears: ReturnType<typeof vi.fn>;
   getOrgUnits: ReturnType<typeof vi.fn>;

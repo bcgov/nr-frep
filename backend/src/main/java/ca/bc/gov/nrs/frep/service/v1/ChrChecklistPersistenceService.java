@@ -83,6 +83,24 @@ public class ChrChecklistPersistenceService {
     this.virusScanner = virusScanner;
   }
 
+  /**
+   * The 3-letter Natural Resource District {@code org_unit_code} for a CHR checklist (via
+   * checklist → resource value → selected site → org unit), used for district-scoped authorization.
+   * Returns {@code null} if the checklist doesn't exist. Lightweight scalar projection — no entity
+   * graph or photo bytes loaded.
+   */
+  public String getChecklistOrgUnitCode(long checklistId) {
+    return entityManager.createQuery(
+            "SELECT ou.orgUnitCode FROM ChrChecklist c "
+                + "JOIN c.frepResourceValue rv JOIN rv.frepSelectedSite s JOIN s.orgUnit ou "
+                + "WHERE c.chrChecklistId = :id",
+            String.class)
+        .setParameter("id", checklistId)
+        .getResultStream()
+        .findFirst()
+        .orElse(null);
+  }
+
   public ChrChecklist getAcceptedSiteForChr(long checklistId) {
     return getAcceptedSiteForChr(checklistId, ChrConstants.CHR_PROTOCOL_TYPE);
   }

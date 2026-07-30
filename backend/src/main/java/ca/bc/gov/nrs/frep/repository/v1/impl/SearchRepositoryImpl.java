@@ -149,6 +149,14 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
          AND (checklist_tbls.evaluation_date >= TO_DATE(:evalFrom, 'YYYY-MM-DD') OR :evalFrom IS NULL)
          AND (checklist_tbls.evaluation_date <= TO_DATE(:evalTo, 'YYYY-MM-DD') OR :evalTo IS NULL)
          AND (frv.frep_resource_value_type_code = :protocolType OR :protocolType IS NULL)
+         -- Protocol/district visibility (server-derived from the caller's roles): CHR rows only for
+         -- the caller's districts (or every district for a sys-admin); non-CHR (Biodiversity/etc.)
+         -- rows only when the caller has Biodiversity access.
+         AND (
+               (frv.frep_resource_value_type_code = 'CHR'
+                  AND (:chrSeeAll = 1 OR ou.org_unit_code IN (:allowedChrCodes)))
+            OR (frv.frep_resource_value_type_code <> 'CHR' AND :nonChrVisible = 1)
+             )
       """;
 
   @Override
@@ -208,7 +216,15 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
         .addValue("clientNumber", c.clientNumber())
         .addValue("evalFrom", c.evaluationDateFrom())
         .addValue("evalTo", c.evaluationDateTo())
-        .addValue("protocolType", c.protocolTypeCode());
+        .addValue("protocolType", c.protocolTypeCode())
+        .addValue("chrSeeAll", c.chrSeeAll() ? 1 : 0)
+        // An empty IN (…) list is invalid SQL; a sentinel that no 3-letter org_unit_code equals means
+        // "no CHR districts" (so a Bio-only user matches no CHR rows).
+        .addValue("allowedChrCodes",
+            c.allowedChrDistrictCodes() == null || c.allowedChrDistrictCodes().isEmpty()
+                ? List.of("__NONE__")
+                : c.allowedChrDistrictCodes())
+        .addValue("nonChrVisible", c.nonChrVisible() ? 1 : 0);
   }
 
   /** Trims and strips a trailing {@code .0} that Oracle JDBC can append to NUMBER columns. */

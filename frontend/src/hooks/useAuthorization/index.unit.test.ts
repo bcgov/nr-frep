@@ -13,9 +13,9 @@ import { useAuth } from '@/context/auth/useAuth';
 
 const mockUseAuth = vi.mocked(useAuth);
 
-function withRoles(roles: FamLoginUser['roles']) {
+function withUser(user: Partial<FamLoginUser>) {
   mockUseAuth.mockReturnValue({
-    user: { roles, privileges: {} },
+    user: { roles: [], privileges: {}, ...user } as FamLoginUser,
     isLoggedIn: true,
     isLoading: false,
     login: vi.fn(),
@@ -23,6 +23,10 @@ function withRoles(roles: FamLoginUser['roles']) {
     userToken: vi.fn(),
     ensureFreshToken: vi.fn(),
   });
+}
+
+function withRoles(roles: FamLoginUser['roles']) {
+  withUser({ roles });
 }
 
 describe('useAuthorization (legacy WebADE role parity)', () => {
@@ -122,5 +126,42 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     expect(renderHook(() => useAuthorization()).result.current.canPerformSysAdminActions).toBe(
       true,
     );
+  });
+});
+
+describe('useAuthorization — protocol + district scope', () => {
+  it('a CHR-district-only user sees CHR (their districts) but not Bio', () => {
+    withUser({ roles: ['FREP_CHR_EDITOR'], privileges: { FREP_CHR_EDITOR: ['DCK', 'DCC'] } });
+
+    const { result } = renderHook(() => useAuthorization());
+
+    expect(result.current.hasAnyRole).toBe(true); // not treated as "no role"
+    expect(result.current.canEdit).toBe(false); // no Bio access
+    expect(result.current.canAnyChr).toBe(true);
+    expect(result.current.chrDistricts).toEqual(['DCK', 'DCC']);
+    expect(result.current.canChr('DCK')).toBe(true);
+    expect(result.current.canChr('dcc')).toBe(true); // case-insensitive
+    expect(result.current.canChr('DSE')).toBe(false); // other district
+  });
+
+  it('a FREP_EDITOR (Bio) user sees Bio but no CHR', () => {
+    withRoles(['FREP_EDITOR']);
+
+    const { result } = renderHook(() => useAuthorization());
+
+    expect(result.current.canEdit).toBe(true);
+    expect(result.current.canAnyChr).toBe(false);
+    expect(result.current.canChr('DCK')).toBe(false);
+  });
+
+  it('sys-admin sees Bio and every CHR district', () => {
+    withRoles(['FREP_ADMIN']);
+
+    const { result } = renderHook(() => useAuthorization());
+
+    expect(result.current.canEdit).toBe(true);
+    expect(result.current.canAnyChr).toBe(true);
+    expect(result.current.canChr('DCK')).toBe(true);
+    expect(result.current.canChr('ANYTHING')).toBe(true);
   });
 });

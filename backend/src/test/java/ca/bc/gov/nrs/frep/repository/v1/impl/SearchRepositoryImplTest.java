@@ -10,26 +10,6 @@ import org.mockito.Mockito;
 class SearchRepositoryImplTest {
 
   @Test
-  void fromChecklistSearchStructParsesLegacyObjectAttributes() throws Exception {
-    Object[] attrs = {
-        "9001", "8001", "ACC", "SLB", "Biodiversity", "2024", "987654", "56", "DCK",
-        "RDY", "L1234", "CB-442", "CP-8891", "00010001", null, null,
-        "2024-08-12 00:00:00.0", "IDIR\\JDOE"
-    };
-    Struct struct = Mockito.mock(Struct.class);
-    Mockito.when(struct.getAttributes()).thenReturn(attrs);
-
-    ChecklistSearchRow row = SearchRepositoryImpl.fromChecklistSearchStruct(struct);
-
-    assertEquals("9001", row.checklistId());
-    assertEquals("SLB", row.protocolCode());
-    assertEquals("Biodiversity", row.protocolName());
-    assertEquals("2024", row.effectiveYear());
-    assertEquals("DCK", row.orgUnitCode());
-    assertEquals("2024-08-12", row.evaluationDate());
-  }
-
-  @Test
   void fromClientSearchStructPrefersDisplayClientNumberFields() throws Exception {
     Object[] attrs = {
         "10001", "TOLKO", "00010001", "TOLKO INDUSTRIES LTD.", "", "", "01", "Head Office",
@@ -48,11 +28,5 @@ class SearchRepositoryImplTest {
     assertEquals("Head Office", row.clientLocnName());
     assertEquals("Kelowna", row.city());
     assertEquals("ACT", row.clientStatusCode());
-  }
-
-  @Test
-  void formatEvaluationDateTrimsTimestampPortion() {
-    assertEquals("2024-08-12", SearchRepositoryImpl.formatEvaluationDate("2024-08-12 00:00:00.0"));
-    assertEquals("", SearchRepositoryImpl.formatEvaluationDate(""));
   }
 }

@@ -292,13 +292,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   // moment it's invalid and clears when fixed. plotFieldError is a lookup into the header-error map;
   // standError / cwdError look up a sub-table cell. The Save handler blocks while any remain — no toast.
   const stratumType = selectedStratum?.strataTypeCode ?? '';
-  const stratumNumber = selectedStratum?.stratumNumber ?? '';
-  // "Trees exist" is disallowed on a clear-cut (CC) stratum except NAR — mirror the backend
-  // FREP_BIODIVERSITY_STRATUM.VALIDATE block so the user can't create the stratum-save trap. A blank
-  // stratum type (summary not filled in) is not 'CC', so this relaxes automatically.
-  const blockTrees = stratumType === 'CC' && stratumNumber.trim().toUpperCase() !== 'NAR';
   const headerErrors: Record<string, string> =
-    current && !readOnly ? plotHeaderErrors(current, stratumType, stratumNumber) : {};
+    current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
   const plotFieldError = (key: string): string => headerErrors[key] ?? '';
   const standError = (index: number, colKey: string): string =>
     standRowErrors(
@@ -425,6 +420,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           ? cwdDecay
           : [];
 
+  // Sub-table coded dropdowns (species / WT class / decay) display as "<code> - <description>".
+  const codeOptionText = (o: CodeOption): string => `${o.code} - ${o.description}`;
+
   // --- field render helpers ---
   const roField = (label: string, value: string): ReactNode => (
     <div className="protocol-checklist__field">
@@ -524,7 +522,10 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     const error = cellError(index, col.key);
     if (col.kind) {
       const options = colOptions(col.kind);
-      if (readOnly) return options.find((o) => o.code === value)?.description ?? value ?? '—';
+      if (readOnly) {
+        const match = options.find((o) => o.code === value);
+        return match ? codeOptionText(match) : value || '—';
+      }
       return withError(
         <Select
           id={`${caption}-${index}-${col.key}`}
@@ -537,7 +538,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
         >
           <SelectItem value="" text="—" />
           {options.map((o) => (
-            <SelectItem key={o.code} value={o.code} text={o.description} />
+            <SelectItem key={o.code} value={o.code} text={codeOptionText(o)} />
           ))}
         </Select>,
         error,
@@ -635,24 +636,12 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     return <p>Add a stratum on the Stratum summary tab before adding plots.</p>;
   }
 
-  const noEvaluators = evaluators !== null && evaluators.length === 0;
-
   return (
     <div className="rip-form">
       {/* The plots table and the plot form are mutually exclusive — the table is hidden
           while a plot form is open (mirrors the Stratum summary tab). */}
       {!current && (
         <>
-          {noEvaluators && (
-            <InlineNotification
-              kind="info"
-              lowContrast
-              hideCloseButton
-              title="No evaluator saved"
-              subtitle="Plots cannot be added until an Evaluator has been saved on the Administration tab."
-            />
-          )}
-
           {/* Two aligned columns: Stratum / Stratum type on the left, Add plot / # of plots
               completed on the right. */}
           <div className="bio-plot__header">
@@ -675,7 +664,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
                 kind="tertiary"
                 size="lg"
                 className="bio-strata__add"
-                disabled={busy || noEvaluators}
+                disabled={busy}
                 onClick={addPlot}
               >
                 <Add size={16} className="bio-strata__add-icon" />
@@ -776,23 +765,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           <fieldset className="rip-form__group">
             <legend>Plot information</legend>
             <div className="rip-form__grid">
-              {checkField(
-                'treeIndicator',
-                'Trees exist',
-                blockTrees && get('treeIndicator') !== 'Y',
-              )}
+              {/* "Trees exist" is allowed on every stratum type (including clear-cut) — no gating. */}
+              {checkField('treeIndicator', 'Trees exist')}
             </div>
-            {/* Already-checked-on-a-CC-stratum case (e.g. type changed after entry): the checkbox
-               can't be disabled away without stranding data, so flag it and block the save. */}
-            {plotFieldError('treeIndicator') && (
-              <InlineNotification
-                kind="error"
-                title="Trees exist not allowed"
-                subtitle={plotFieldError('treeIndicator')}
-                hideCloseButton
-                lowContrast
-              />
-            )}
             <p className="rip-form__hint">Fill in one of:</p>
             <div className="rip-form__grid">
               {textField('basalAreaFactor', 'BAF', 2)}

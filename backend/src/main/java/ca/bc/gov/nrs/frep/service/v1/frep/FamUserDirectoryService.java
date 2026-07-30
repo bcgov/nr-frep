@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.exception.FamServiceException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CodeOptionResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorSearchResponse;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -16,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.core.Authentication;
@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Searches IDIR users who hold the FREP editor role via the FAM external user-search API
@@ -56,17 +55,10 @@ public class FamUserDirectoryService {
   private static final int MIN_PAGE_SIZE = 10;
   private static final int MAX_PAGE_SIZE = 100;
   private static final int DEFAULT_PAGE_SIZE = 25;
-
-  // FAM's idpType is a strict single enum ('IDIR'/'BCEID'/'BCSC') and role takes one value per call,
-  // so multiple IdP types / roles are covered by separate calls that we merge. Gov staff are IDIR;
-  // BCEID is included for completeness.
   private static final List<String> IDP_TYPES = List.of("IDIR", "BCEID");
-  // Any FREP-app role counts as "has access to FREP" for the checklist-search name lookup.
   private static final List<String> FREP_ACCESS_ROLES =
       List.of("FREP_EDITOR", "FREP_ADMIN", "FREP_VIEW_ONLY");
-  // Soft cap so the userid→name cache can't grow unbounded; cleared wholesale when exceeded.
   private static final int MAX_CACHE_ENTRIES = 5000;
-  // User-facing message for any FAM failure — the raw upstream body is logged, never returned.
   private static final String EVALUATOR_SEARCH_UNAVAILABLE =
       "The evaluator directory is unavailable right now. Please try again later.";
 
@@ -141,10 +133,10 @@ public class FamUserDirectoryService {
       // message so the raw FAM body never reaches the UI.
       LOG.error("FAM evaluator search failed: {} {} — body: {}",
           ex.getStatusCode().value(), ex.getStatusText(), ex.getResponseBodyAsString());
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, EVALUATOR_SEARCH_UNAVAILABLE);
+      throw new FamServiceException(EVALUATOR_SEARCH_UNAVAILABLE);
     } catch (RuntimeException ex) {
       LOG.error("FAM evaluator search failed", ex);
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, EVALUATOR_SEARCH_UNAVAILABLE);
+      throw new FamServiceException(EVALUATOR_SEARCH_UNAVAILABLE);
     }
   }
 

@@ -48,22 +48,6 @@ public class MasterListAdminApiController implements MasterListAdminApiEndpoint 
   }
 
   @Override
-  public ResponseEntity<MasterListAdminResponse> regenerateDistrict(
-      String effectiveYear, String orgUnitNo) {
-    if (StringUtils.isBlank(effectiveYear)) {
-      ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message("Effective year cannot be blank").status(BAD_REQUEST).build();
-      throw new InvalidPayloadException(error);
-    }
-
-    if (StringUtils.isBlank(orgUnitNo)) {
-      ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message("Org unit cannot be blank").status(BAD_REQUEST).build();
-      throw new InvalidPayloadException(error);
-    }
-    return ResponseEntity.ok(
-        masterListAdminService.regenerateDistrict(effectiveYear, orgUnitNo));
-  }
-
-  @Override
   public ResponseEntity<MasterListAdminResponse> saveComments(GenerateMasterListRequest request) {
     if (StringUtils.isBlank(request.effectiveYear())) {
       ApiError error = ApiError.builder().timestamp(LocalDateTime.now()).message("Effective year cannot be blank").status(BAD_REQUEST).build();

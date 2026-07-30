@@ -72,6 +72,17 @@ parameters:
     required: true
   - name: OBJECT_STORAGE_SECRET_KEY
     required: true
+  - name: CLAMAV_ENABLED
+    description: Toggle virus scanning of uploaded attachments/photos
+    value: "true"
+  - name: CLAMAV_HOST
+    description: clamd host (shared in-cluster ClamAV service in the tools namespace)
+    required: true
+  - name: CLAMAV_PORT
+    value: "3310"
+  - name: CLAMAV_FAIL_OPEN
+    description: When the scanner is unreachable, true=allow uploads, false=reject (fail-closed)
+    value: "false"
 
 objects:
   # ── Deployment ────────────────────────────────────────────
@@ -207,6 +218,18 @@ objects:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: OBJECT_STORAGE_SECRET_KEY
+                # ClamAV virus scanning (clamd in the shared tools namespace). CLAMAV_HOST is
+                # threaded from the GitHub `CLAMAV_HOST` secret via reusable-deploy.yml. Egress to
+                # clamd is allowed by the -egress NetworkPolicy below; the tools-side ingress policy
+                # is applied manually (see the ClamAV setup notes).
+                - name: CLAMAV_ENABLED
+                  value: ${CLAMAV_ENABLED}
+                - name: CLAMAV_HOST
+                  value: ${CLAMAV_HOST}
+                - name: CLAMAV_PORT
+                  value: ${CLAMAV_PORT}
+                - name: CLAMAV_FAIL_OPEN
+                  value: ${CLAMAV_FAIL_OPEN}
               resources:
                 requests:
                   cpu: ${MIN_CPU}
@@ -364,3 +387,23 @@ objects:
                   network.openshift.io/policy-group: monitoring
       policyTypes:
         - Ingress
+
+  # ── NetworkPolicy: permit-all egress (DB, object storage, Cognito, and the shared ClamAV
+  #    service in the tools namespace). Explicit permit-all — nr-frep relies on default-allow
+  #    egress today; this documents intent without restricting existing traffic. The tools-side
+  #    ingress policy that lets this pod reach clamd:3310 is applied MANUALLY (out of band). ──
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${NAME}-backend-${ZONE}-egress
+      labels:
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      podSelector:
+        matchLabels:
+          app: ${NAME}-backend-${ZONE}
+      egress:
+        - {}
+      policyTypes:
+        - Egress

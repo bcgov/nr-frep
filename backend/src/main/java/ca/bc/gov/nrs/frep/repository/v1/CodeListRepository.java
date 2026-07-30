@@ -8,6 +8,7 @@ import java.util.Map;
 public interface CodeListRepository {
   List<Map<String, Object>> getDistrictOrgUnitCode();
   List<Map<String, Object>> getMasterListYearCode();
+  List<Map<String, Object>> getNewMasterListYearCode();
   List<Map<String, Object>> getResourceValue();
   List<Map<String, Object>> getSiteResourceReasonCode();
   List<Map<String, Object>> getStreamClassCode();

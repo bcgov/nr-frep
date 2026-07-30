@@ -75,9 +75,12 @@ public class ChrChecklistPersistenceService {
   private EntityManager entityManager;
 
   private final ObjectStorageService objectStorageService;
+  private final VirusScanner virusScanner;
 
-  public ChrChecklistPersistenceService(ObjectStorageService objectStorageService) {
+  public ChrChecklistPersistenceService(
+      ObjectStorageService objectStorageService, VirusScanner virusScanner) {
     this.objectStorageService = objectStorageService;
+    this.virusScanner = virusScanner;
   }
 
   public ChrChecklist getAcceptedSiteForChr(long checklistId) {
@@ -489,6 +492,8 @@ public class ChrChecklistPersistenceService {
 
       if (ChrStringUtils.hasAValue(picture.getCode())) {
         byte[] decoded = Base64.getDecoder().decode(picture.getCode());
+        // Scan the decoded photo bytes before upload — a hit throws VirusDetectedException (→ 422).
+        virusScanner.scanOrThrow(decoded, attachment.getFileName());
         uploads.add(new PhotoUpload(
             picture.getId() + "." + deriveMimeType(picture.getMimeTypeCode()),
             picture.getMimeTypeCode(),
@@ -1039,9 +1044,33 @@ public class ChrChecklistPersistenceService {
         .setParameter("fid", featureId)
         .getResultList();
     for (ChrAssociatedFeatureXref row : rows) {
+      // Evict the row from BOTH endpoint features' EAGER xref collections before removing it. The
+      // *retained* sibling (the endpoint that isn't being deleted) is still managed, and would
+      // otherwise reference a removed row at flush time -> TransientObjectException. Mirrors the same
+      // eager-inverse-set clearing already done for chrFeatureIdentities / participations /
+      // attachments. (The deleted feature's own collections were already emptied by
+      // clearIdentityChildren, so those removals are no-ops.)
+      evictAssociatedXrefFromIdentities(row);
       entityManager.remove(row);
     }
     entityManager.flush();
+  }
+
+  /**
+   * Drops an associated-feature xref from the eager collections of its {@code from} and {@code to}
+   * feature identities, keeping the managed graph consistent with the row's removal before flush.
+   */
+  private void evictAssociatedXrefFromIdentities(ChrAssociatedFeatureXref row) {
+    ChrFeatureIdentity fromIdentity =
+        entityManager.find(ChrFeatureIdentity.class, row.getId().getFromChrFeatureId());
+    if (fromIdentity != null) {
+      fromIdentity.getChrAssociatedFeatureXrefsForFromChrFeatureId().remove(row);
+    }
+    ChrFeatureIdentity toIdentity =
+        entityManager.find(ChrFeatureIdentity.class, row.getId().getToChrFeatureId());
+    if (toIdentity != null) {
+      toIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().remove(row);
+    }
   }
 
   /** Removes all composite-id xrefs for a feature (keyed by {@code id.chrFeatureId}) and flushes. */

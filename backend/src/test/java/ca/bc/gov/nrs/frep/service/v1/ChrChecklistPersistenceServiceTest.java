@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.service.v1;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,6 +16,8 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
+import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
+import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXrefId;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureAgeXref;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureDetail;
@@ -50,7 +53,8 @@ class ChrChecklistPersistenceServiceTest {
   void setUp() {
     entityManager = mock(EntityManager.class);
     ObjectStorageService objectStorage = mock(ObjectStorageService.class);
-    service = new ChrChecklistPersistenceService(objectStorage);
+    VirusScanner virusScanner = mock(VirusScanner.class);
+    service = new ChrChecklistPersistenceService(objectStorage, virusScanner);
     ReflectionTestUtils.setField(service, "entityManager", entityManager);
 
     // Managed checklist returned by find(...).
@@ -164,6 +168,47 @@ class ChrChecklistPersistenceServiceTest {
   }
 
   /**
+   * Regression for the associated-feature {@code TransientObjectException}: deleting a feature that is
+   * linked to a *retained* sibling must evict the shared {@code CHR_ASSOCIATED_FEATURE_XREF} row from
+   * the sibling's EAGER collection before the row is removed + flushed — otherwise the managed sibling
+   * still references a removed row at flush time and Hibernate raises the exception.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void deletingAnAssociatedFeatureEvictsTheSharedXrefFromTheRetainedSibling() {
+    // Feature being deleted (absent from the payload below).
+    ChrFeatureIdentity deleted = new ChrFeatureIdentity();
+    deleted.setChrFeatureId(8000L);
+    // Retained sibling associated with the deleted feature.
+    ChrFeatureIdentity retained = new ChrFeatureIdentity();
+    retained.setChrFeatureId(9000L);
+
+    // Shared association row (from = retained, to = deleted), held by the retained sibling's eager
+    // "from" collection.
+    ChrAssociatedFeatureXref xref = new ChrAssociatedFeatureXref();
+    xref.setId(new ChrAssociatedFeatureXrefId(9000L, 8000L));
+    retained.getChrAssociatedFeatureXrefsForFromChrFeatureId().add(xref);
+
+    stubFeatureIdentityQuery("fi.chrChecklist.chrChecklistId", List.of(deleted));
+    stubFeatureIdentityQuery("fi.compositeChrFeatureIdentity", List.of());
+    stubAssociatedXrefQuery(List.of(xref));
+    when(entityManager.find(ChrFeatureIdentity.class, 9000L)).thenReturn(retained);
+    when(entityManager.find(ChrFeatureIdentity.class, 8000L)).thenReturn(deleted);
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>()); // deleted feature removed, nothing re-added
+
+    service.saveChecklist(resource, "IDIR\\tester");
+
+    assertFalse(retained.getChrAssociatedFeatureXrefsForFromChrFeatureId().contains(xref),
+        "the shared xref must be evicted from the retained sibling's eager collection before flush");
+    verify(entityManager).remove(xref);
+  }
+
+  /**
    * Regression for the "uncombine doesn't detach" gap: saving a feature with no composite must clear
    * its {@code COMPOSITE_CHR_FEATURE_ID} (the legacy port only ever *set* it, leaving a stale link).
    */
@@ -195,6 +240,14 @@ class ChrChecklistPersistenceServiceTest {
   private void stubFeatureIdentityQuery(String jpqlFragment, List<ChrFeatureIdentity> result) {
     TypedQuery<ChrFeatureIdentity> q = mock(TypedQuery.class);
     when(entityManager.createQuery(contains(jpqlFragment), eq(ChrFeatureIdentity.class))).thenReturn(q);
+    lenient().when(q.setParameter(anyString(), any())).thenReturn(q);
+    when(q.getResultList()).thenReturn(result);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void stubAssociatedXrefQuery(List<ChrAssociatedFeatureXref> result) {
+    TypedQuery<ChrAssociatedFeatureXref> q = mock(TypedQuery.class);
+    when(entityManager.createQuery(anyString(), eq(ChrAssociatedFeatureXref.class))).thenReturn(q);
     lenient().when(q.setParameter(anyString(), any())).thenReturn(q);
     when(q.getResultList()).thenReturn(result);
   }

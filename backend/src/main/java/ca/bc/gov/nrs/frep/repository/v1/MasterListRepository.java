@@ -15,7 +15,6 @@ public interface MasterListRepository {
       String generationComments,
       String entryUserId);
 
-  void regenerateDistrict(String effectiveYear, String orgUnitNo, String userId);
   void saveComments(String effectiveYear, String generationComments, String userId);
   void deleteList(String effectiveYear);
 }

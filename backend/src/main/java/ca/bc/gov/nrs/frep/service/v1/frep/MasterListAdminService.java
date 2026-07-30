@@ -77,23 +77,6 @@ public class MasterListAdminService {
     return getMasterListCriteria(effectiveYear);
   }
 
-  /** Regenerate the master list for a single district (FREP_700_GEN_MASTER.regenerate). */
-  public MasterListAdminResponse regenerateDistrict(String effectiveYear, String orgUnitNo) {
-    try {
-      masterListRepository.regenerateDistrict(
-          effectiveYear.trim(), orgUnitNo.trim(), loggedUserHelper.getLoggedUserId());
-    } catch (StoredProcedureException ex) {
-      // Proc backstop: the district already has evaluated resources (the UI also disables Regenerate
-      // for these). Surface it as a clean 409 instead of a raw 500.
-      if (StringUtils.containsIgnoreCase(ex.getOracleErrorMessage(), "regenerate.existingResource")) {
-        throw new ConflictFoundException(
-            "This district already has evaluated resources, so its list can't be regenerated.");
-      }
-      throw ex;
-    }
-    return getMasterListCriteria(effectiveYear.trim());
-  }
-
   /** Save generation comments without regenerating (FREP_700_GEN_MASTER.save_comments). */
   public MasterListAdminResponse saveComments(String effectiveYear, String comments) {
     List<String> errors = new ArrayList<>();

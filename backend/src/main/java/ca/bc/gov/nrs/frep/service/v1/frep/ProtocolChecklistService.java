@@ -20,6 +20,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.sql.SQLException;
@@ -63,19 +64,22 @@ public class ProtocolChecklistService {
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
+  private final VirusScanner virusScanner;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService
+      FamUserDirectoryService famUserDirectoryService,
+      VirusScanner virusScanner
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
+    this.virusScanner = virusScanner;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -575,7 +579,7 @@ public class ProtocolChecklistService {
         String prefix = "Stand row " + (i + 1) + ": ";
         requireField(r.speciesCode(), prefix + "Species", errors);
         requireField(r.decayClassCode(), prefix + "WT class", errors);
-        requireFloat(r.dbh(), prefix + "DBH", 12.6, 400, 1, false, errors);
+        requireFloat(r.dbh(), prefix + "DBH", 12.5, 400, 1, true, errors);
         requireFloat(r.height(), prefix + "Height", 1.4, 99.9, 1, false, errors);
       }
     }
@@ -628,7 +632,9 @@ public class ProtocolChecklistService {
     }
     double n = Double.parseDouble(text);
     if ((exclusiveMin ? n <= min : n < min) || n > max) {
-      errors.add(label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+      errors.add(exclusiveMin
+          ? label + " must be greater than " + fmt(min) + " and no more than " + fmt(max) + "."
+          : label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
     }
   }
 
@@ -673,6 +679,8 @@ public class ProtocolChecklistService {
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
     validateAttachmentType(fileName);
+    // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
+    virusScanner.scanOrThrow(bytes, fileName);
     String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());

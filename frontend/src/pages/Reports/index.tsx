@@ -1,5 +1,5 @@
 import { Accordion, AccordionItem, Column, Grid, InlineNotification } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 
 import ReportConfigForm from './ReportConfigForm';
 import { GENERATABLE_REPORTS, type GeneratableReport } from './reportDefinitions';
@@ -7,6 +7,7 @@ import { GENERATABLE_REPORTS, type GeneratableReport } from './reportDefinitions
 import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 
 import './reports.scss';
@@ -22,6 +23,19 @@ const ReportAccordionTitle: FC<{ definition: GeneratableReport }> = ({ definitio
 
 const ReportsPage: FC = () => {
   const { display } = useNotification();
+  const { canEdit, canAnyChr } = useAuthorization();
+
+  // Only show reports the user may run: the CHR extract needs CHR access; the Biodiversity extracts
+  // need Bio access. Other (checklist) reports are unrestricted here. The backend also enforces this.
+  const visibleReports = useMemo(
+    () =>
+      GENERATABLE_REPORTS.filter((report) => {
+        if (report.id === 'chr-data-extract') return canAnyChr;
+        if (report.id.startsWith('biodiversity-extract')) return canEdit;
+        return true;
+      }),
+    [canEdit, canAnyChr],
+  );
 
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -79,7 +93,7 @@ const ReportsPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        {GENERATABLE_REPORTS.length === 0 ? (
+        {visibleReports.length === 0 ? (
           <InlineNotification
             kind="info"
             title="No reports available to generate yet"
@@ -94,7 +108,7 @@ const ReportsPage: FC = () => {
               <div className="reports-row__cell reports-row__cell--description">Description</div>
             </div>
             <Accordion className="reports-accordion" align="start">
-              {GENERATABLE_REPORTS.map((report) => (
+              {visibleReports.map((report) => (
                 <AccordionItem
                   key={report.id}
                   open={openId === report.id}

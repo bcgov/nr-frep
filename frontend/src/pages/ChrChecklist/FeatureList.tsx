@@ -104,7 +104,7 @@ const FeatureList: FC<{
       const set = new Set(list ?? []);
       if (wasAssociated) set.delete(label);
       else set.add(label);
-      return [...set].sort();
+      return [...set].sort((a, b) => a.localeCompare(b));
     };
     onChange(
       features.map((f, i) => {

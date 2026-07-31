@@ -206,7 +206,10 @@ const AGE_FIELDS = ['pre1846', 'post1846', 'ageUnknown', 'historicalUse'] as con
 // Monotonic key generator for the id-less, editable "other strategy" rows. A stable React key
 // (never reused, never the array index) keeps row inputs from remounting/losing focus on edit.
 let otherStrategyKeySeq = 0;
-const nextOtherStrategyKey = () => `other-strat-${(otherStrategyKeySeq += 1)}`;
+const nextOtherStrategyKey = () => {
+  otherStrategyKeySeq += 1;
+  return `other-strat-${otherStrategyKeySeq}`;
+};
 
 const FeatureEditor: FC<{
   feature: Feature;
@@ -416,6 +419,21 @@ const FeatureEditor: FC<{
               disabled={readOnly}
               onChange={(v) => onPatch({ featureInfoSourceCode: v })}
             />
+            {/* Inline help explaining the composite-feature concept, shown just above the composite
+                control (mirrors the "How is the MRVA rating determined?" disclosure). */}
+            <details className="chr-feature-help">
+              <summary>What is a composite feature?</summary>
+              <p>
+                A composite feature is a group of two or more associated cultural heritage features
+                that are assessed together because they are culturally, spatially, or functionally
+                connected.
+              </p>
+              <p>
+                <strong>Example:</strong> A cultural trail and an adjacent berry harvesting area
+                that occur together and are protected within the same area could be assessed as one
+                composite feature rather than as two separate features.
+              </p>
+            </details>
             {/* A composite groups this feature with another; you can only create one when another
                 feature exists to group with (mirrors the legacy "Composite of" dropdown of sibling
                 features). Still shown for an already-composite feature so a stale one can be undone

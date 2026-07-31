@@ -60,6 +60,20 @@ describe('parseToken', () => {
     );
     expect(user?.idpProvider).toBeUndefined();
   });
+
+  it('collapses per-district CHR groups into a scoped FREP_CHR_EDITOR role', () => {
+    const user = parseToken(
+      jwt({
+        'custom:idp_name': 'idir',
+        'custom:idp_username': 'JSMITH',
+        'cognito:groups': ['FREP_CHR_EDITOR_DISTRICT_DCK', 'FREP_CHR_EDITOR_DISTRICT_DCC'],
+      }),
+    );
+
+    // Surfaces as the synthetic FREP_CHR_EDITOR role (so hasAnyRole works) with the district codes.
+    expect(user?.roles).toEqual(['FREP_CHR_EDITOR']);
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC', 'DCK']); // de-duped + sorted
+  });
 });
 
 describe('clearStoredTokens', () => {

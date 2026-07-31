@@ -283,6 +283,25 @@
   }
 }
 
+// Inline disclosure help inside a feature form grid (e.g. "What is a composite feature?"). Spans the
+// full grid width so it reads as its own row, and mirrors the .chr-mrva-help disclosure styling.
+.chr-feature-help {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--cds-link-primary, #0f62fe);
+  }
+
+  p {
+    margin: 0.5rem 0;
+    max-width: 48rem;
+    color: var(--cds-text-secondary, #525252);
+  }
+}
+
 // Feature accordion section header with an error badge: name + warning icon + count, shown when a
 // section holds a live validation error (the section also stays expanded — see FeatureEditor).
 .feature-accordion__title {

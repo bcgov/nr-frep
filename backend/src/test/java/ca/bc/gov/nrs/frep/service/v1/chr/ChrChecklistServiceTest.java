@@ -181,6 +181,7 @@ class ChrChecklistServiceTest {
     assertFalse(ex.getMessage().contains("missing mandatory descriptions"));
   }
 
-  // Authorization (write/admin) is now enforced by @PreAuthorize on ChrChecklistApiEndpoint, not the
-  // service — see ApiAuthorizationSecurityTest for the 403 coverage.
+  // Authorization is enforced entirely by @PreAuthorize on ChrChecklistApiEndpoint: reads via the
+  // coarse CHR_EDIT, writes via the per-district @chrAuth.canEditChecklist(...) — see
+  // ApiAuthorizationSecurityTest / ChrChecklistAuthorizerTest.
 }

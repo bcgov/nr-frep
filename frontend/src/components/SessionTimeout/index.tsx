@@ -1,13 +1,6 @@
 import { WarningFilled } from '@carbon/icons-react';
 import { Button } from '@carbon/react';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useAuth } from '@/context/auth/useAuth';
@@ -225,29 +218,39 @@ export default function SessionTimeout() {
     dialogRef.current?.focus();
   }, [open]);
 
-  // Focus trap + swallow ESC. Tab/Shift+Tab cycle only between the two
-  // buttons (and the dialog container as the wrap point).
-  const onDialogKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const first = logoutBtnRef.current;
-    const last = stayBtnRef.current;
-    if (!first || !last) return;
-    const active = document.activeElement;
-    if (e.shiftKey) {
-      if (active === first || active === dialogRef.current) {
+  // Focus trap + swallow ESC. Tab/Shift+Tab cycle only between the two buttons
+  // (and the dialog container as the wrap point). Attached imperatively to the
+  // dialog node — not via an onKeyDown prop — so the listener exists only while
+  // the dialog is open, and the container stays a plain role="alertdialog" host.
+  useEffect(() => {
+    const node = dialogRef.current;
+    if (!open || !node) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
         e.preventDefault();
-        last.focus();
+        e.stopPropagation();
+        return;
       }
-    } else if (active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+      if (e.key !== 'Tab') return;
+      const first = logoutBtnRef.current;
+      const last = stayBtnRef.current;
+      if (!first || !last) return;
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || active === node) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    node.addEventListener('keydown', onKeyDown);
+    return () => node.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   if (!open) return null;
 
@@ -261,7 +264,6 @@ export default function SessionTimeout() {
         aria-labelledby="session-timeout-title"
         aria-describedby="session-timeout-desc"
         tabIndex={-1}
-        onKeyDown={onDialogKeyDown}
       >
         <h2 id="session-timeout-title" className="session-timeout__title">
           You&rsquo;re about to be logged out

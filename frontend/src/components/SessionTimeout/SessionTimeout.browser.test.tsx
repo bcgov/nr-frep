@@ -50,9 +50,10 @@ describe('SessionTimeout', () => {
     render(<SessionTimeout />);
     advance(25 * MINUTE);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }));
+    // handleStay() awaits forceRefreshSession (resolved) then closes the dialog;
+    // flush that pending microtask + resulting state update.
+    await act(async () => {});
 
     expect(forceRefreshSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alertdialog')).toBeNull();

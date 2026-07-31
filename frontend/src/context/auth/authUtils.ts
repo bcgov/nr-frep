@@ -48,7 +48,7 @@ export const clearStoredTokens = (): void => {
     const keys: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(prefix)) keys.push(key);
+      if (key?.startsWith(prefix)) keys.push(key);
     }
     keys.forEach((key) => window.localStorage.removeItem(key));
   } catch {

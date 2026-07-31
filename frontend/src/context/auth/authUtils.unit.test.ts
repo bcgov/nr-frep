@@ -81,7 +81,7 @@ describe('clearStoredTokens', () => {
     expect(remaining).toEqual([]);
   });
 
-  it('leaves unrelated keys (and another client\'s tokens) untouched', () => {
+  it("leaves unrelated keys (and another client's tokens) untouched", () => {
     window.localStorage.setItem(`${prefix}.LastAuthUser`, 'idir\\jsmith');
     window.localStorage.setItem('theme', 'dark');
     window.localStorage.setItem('CognitoIdentityServiceProvider.other-client.LastAuthUser', 'x');
@@ -97,6 +97,6 @@ describe('clearStoredTokens', () => {
 
   it('is a no-op when there is nothing to clear', () => {
     expect(() => clearStoredTokens()).not.toThrow();
-    expect(window.localStorage.length).toBe(0);
+    expect(window.localStorage).toHaveLength(0);
   });
 });

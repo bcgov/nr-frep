@@ -113,6 +113,23 @@ describe('ChrChecklistPage', () => {
     expect(api.saveOpening.mock.calls[0][1]).toMatchObject({ checklistID: '1001' });
   });
 
+  it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist,
+      assessedByName: 'Test Tester (TESTER)',
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+    // The resolved name shows in both the header "Evaluator" cell and the Opening-tab "Evaluator"
+    // read-only field; the raw IDIR\TESTER userid is never shown.
+    expect(screen.getAllByText('Test Tester (TESTER)').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(String.raw`IDIR\TESTER`)).toBeNull();
+  });
+
   it('hides write actions for view-only users', async () => {
     useAuthorization.mockReturnValue({ canEdit: false, isViewOnly: true, canChr: () => false });
     repo.load.mockResolvedValue(undefined);

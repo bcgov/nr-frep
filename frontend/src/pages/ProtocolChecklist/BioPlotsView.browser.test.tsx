@@ -14,6 +14,10 @@ vi.mock('@/services/APIs', () => ({
       getBioPlot: vi.fn(),
       saveBioPlot: vi.fn(),
       deleteBioPlot: vi.fn(),
+      // The checklist Evaluator (team lead) that "Evaluated by" defaults to.
+      getBiodiversityOpening: vi
+        .fn()
+        .mockResolvedValue({ teamLeadNameId: 'JDOE', teamLeadName: 'John Doe (JDOE)' }),
     },
     configuration: {
       // Backend returns the name only in `description`; the plot sub-table dropdowns render it as
@@ -24,7 +28,6 @@ vi.mock('@/services/APIs', () => ({
       getStrataTypes: vi
         .fn()
         .mockResolvedValue([{ code: 'DO', description: 'DO - Dispersed Other' }]),
-      getEvaluators: vi.fn().mockResolvedValue([{ code: 'IDIR\\JDOE', description: 'JDOE' }]),
     },
   },
 }));
@@ -33,16 +36,16 @@ vi.mock('@/context/notification/useNotification', () => ({
   useNotification: () => ({ display: vi.fn() }),
 }));
 
+vi.mock('@/context/auth/useAuth', () => ({
+  useAuth: () => ({ user: { providerUsername: 'IDIR\\ME' } }),
+}));
+
 const api = API.protocolChecklist as unknown as {
   listBioStrata: ReturnType<typeof vi.fn>;
   listBioPlots: ReturnType<typeof vi.fn>;
   getBioPlot: ReturnType<typeof vi.fn>;
   saveBioPlot: ReturnType<typeof vi.fn>;
   deleteBioPlot: ReturnType<typeof vi.fn>;
-};
-
-const config = API.configuration as unknown as {
-  getEvaluators: ReturnType<typeof vi.fn>;
 };
 
 describe('BioPlotsView', () => {
@@ -63,6 +66,7 @@ describe('BioPlotsView', () => {
     api.listBioPlots.mockResolvedValue([]);
     api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '1' });
 
+    // The checklist Evaluator (from getBiodiversityOpening) is what "Evaluated by" defaults to.
     render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
@@ -70,11 +74,8 @@ describe('BioPlotsView', () => {
     await userEvent.click(await screen.findByRole('checkbox', { name: 'No UTM signal available' }));
     await userEvent.type(await screen.findByLabelText('Bearing 1st leg', { exact: false }), '120');
     await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
-    // Evaluated by is required, and exactly one measurement method (BAF) must be entered.
-    await userEvent.selectOptions(
-      screen.getByLabelText('Evaluated by', { exact: false }),
-      'IDIR\\JDOE',
-    );
+    // Exactly one measurement method (BAF) must be entered. Evaluated by is pre-filled from the
+    // checklist Evaluator, so no dropdown selection is needed.
     await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
     // Plot # is required (mirrors FREP_212_BIOPLOT.save_plot).
     await userEvent.type(screen.getByLabelText('Plot #', { exact: false }), '1');
@@ -82,6 +83,8 @@ describe('BioPlotsView', () => {
 
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
     expect(api.saveBioPlot.mock.calls[0][0]).toBe('S1');
+    // assessorName defaulted to the checklist Evaluator, stored as a bare userid.
+    expect(api.saveBioPlot.mock.calls[0][1]).toMatchObject({ assessorName: 'JDOE' });
     // On save success the form closes and we return to the table.
     expect(await screen.findByRole('button', { name: 'Add plot' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
@@ -102,13 +105,9 @@ describe('BioPlotsView', () => {
     expect(screen.getByText('Bearing 1st leg is required.')).toBeTruthy();
     expect(screen.getByText('2nd leg is required.')).toBeTruthy();
 
-    // Fill both legs, Evaluated by, and one measurement method → save proceeds.
+    // Fill both legs and one measurement method → save proceeds (Evaluated by is pre-filled).
     await userEvent.type(screen.getByLabelText('Bearing 1st leg', { exact: false }), '120');
     await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
-    await userEvent.selectOptions(
-      screen.getByLabelText('Evaluated by', { exact: false }),
-      'IDIR\\JDOE',
-    );
     await userEvent.type(screen.getByLabelText('BAF', { exact: false }), '10');
     // Plot # is required (mirrors FREP_212_BIOPLOT.save_plot).
     await userEvent.type(screen.getByLabelText('Plot #', { exact: false }), '1');
@@ -205,18 +204,23 @@ describe('BioPlotsView', () => {
     expect(screen.queryByRole('option', { name: 'Douglas-fir' })).toBeNull();
   });
 
-  it('allows Add and shows no evaluator notice even when the checklist has no evaluator', async () => {
-    // The evaluator-gating (and its "…saved on the Administration tab" notice) was removed — the
-    // evaluator is handled elsewhere, so plots are no longer blocked on it.
+  it('defaults "Evaluated by" to the checklist Evaluator and claims it via "Assign it to me"', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.listBioPlots.mockResolvedValue([]);
-    config.getEvaluators.mockResolvedValueOnce([]); // no evaluators
 
     render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
 
-    const addButton = await screen.findByRole('button', { name: 'Add plot' });
-    expect(addButton).toBeEnabled();
-    expect(screen.queryByText(/Plots cannot be added until an Evaluator/)).toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+
+    // Defaults to the checklist Evaluator, shown with its FAM-resolved name (no dropdown).
+    expect(screen.getByText('John Doe (JDOE)')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Evaluated by/ })).toBeNull();
+
+    // The current user (ME) isn't the evaluator, so they can claim the plot.
+    await userEvent.click(screen.getByRole('button', { name: 'Assign it to me' }));
+    expect(screen.getByText('ME')).toBeTruthy();
+    // Once claimed, the button is gone (current user is now the assessor).
+    expect(screen.queryByRole('button', { name: 'Assign it to me' })).toBeNull();
   });
 
   it('is read-only when submitted (Edit only, no Add or Delete)', async () => {

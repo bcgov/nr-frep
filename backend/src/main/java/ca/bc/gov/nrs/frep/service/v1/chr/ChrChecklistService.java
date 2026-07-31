@@ -22,6 +22,7 @@ import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +49,7 @@ public class ChrChecklistService {
   private final ObjectStorageService objectStorageService;
   private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
+  private final FamUserDirectoryService famUserDirectoryService;
 
   public ChrChecklistService(
       ChrChecklistPersistenceService persistenceService,
@@ -55,7 +57,8 @@ public class ChrChecklistService {
       ChrSubmitValidationService submitValidationService,
       ObjectStorageService objectStorageService,
       ObjectStorageProperties objectStorageProperties,
-      LoggedUserHelper loggedUserHelper
+      LoggedUserHelper loggedUserHelper,
+      FamUserDirectoryService famUserDirectoryService
   ) {
     this.persistenceService = persistenceService;
     this.checklistRepository = checklistRepository;
@@ -63,6 +66,7 @@ public class ChrChecklistService {
     this.objectStorageService = objectStorageService;
     this.objectStorageProperties = objectStorageProperties;
     this.loggedUserHelper = loggedUserHelper;
+    this.famUserDirectoryService = famUserDirectoryService;
   }
 
   public CheckList getChecklist(long checklistId) {
@@ -257,6 +261,13 @@ public class ChrChecklistService {
       // the raw OPENING_NUMBER column is only the last fragment.
       checkList.setOpeningNumber(persistenceService.getFormattedOpeningNumber(
           chrChecklist.getFrepResourceValue().getFrepSelectedSite().getFrepSelectedSiteId()));
+      // Resolve the evaluator (assessed-by) userid to a "Name (USERID)" display via FAM, matching the
+      // Biodiversity evaluator field. The raw userid stays in assessedBy for the save round-trip and
+      // the "Assign it to me" comparison; assessedByName is display-only.
+      if (ChrStringUtils.hasAValue(checkList.getAssessedBy())) {
+        checkList.setAssessedByName(famUserDirectoryService.resolveName(checkList.getAssessedBy())
+            .orElse(checkList.getAssessedBy()));
+      }
       populatePhotoBytes(checkList);
       return checkList;
     } catch (Exception ex) {

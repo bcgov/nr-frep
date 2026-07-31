@@ -1,6 +1,5 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentUploadRequest;
@@ -110,34 +109,6 @@ public interface ProtocolChecklistApiEndpoint {
   ResponseEntity<Void> deleteBioPlot(
       @PathVariable String plotId,
       @RequestParam String revisionCount);
-
-  @PreAuthorize(FrepAuthorities.FREP_EDIT)
-  @GetMapping("/protocol-checklists/{protocol}/{checklistId}/administration")
-  ResponseEntity<AdministrationData> getAdministration(
-      @PathVariable String protocol, @PathVariable String checklistId);
-
-  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
-  @PutMapping("/protocol-checklists/{protocol}/{checklistId}/administration")
-  ResponseEntity<AdministrationData> saveAdministration(
-      @PathVariable String protocol,
-      @PathVariable String checklistId,
-      @RequestBody AdministrationData admin);
-
-  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
-  @PostMapping("/protocol-checklists/{protocol}/{checklistId}/administration/team")
-  ResponseEntity<AdministrationData> addTeamMember(
-      @PathVariable String protocol,
-      @PathVariable String checklistId,
-      @RequestParam String evaluator,
-      @RequestParam(defaultValue = "false") boolean teamLead);
-
-  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
-  @DeleteMapping("/protocol-checklists/{protocol}/{checklistId}/administration/team/{evaluatorUserid}")
-  ResponseEntity<AdministrationData> removeTeamMember(
-      @PathVariable String protocol,
-      @PathVariable String checklistId,
-      @PathVariable String evaluatorUserid,
-      @RequestParam(required = false) String revisionCount);
 
   @PreAuthorize(FrepAuthorities.FREP_EDIT)
   @GetMapping("/protocol-checklists/{protocol}/{checklistId}/notes")

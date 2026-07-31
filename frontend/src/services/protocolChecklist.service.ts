@@ -1,5 +1,4 @@
 import type {
-  AdministrationData,
   AttachmentContent,
   AttachmentRow,
   AttachmentUploadRequest,
@@ -157,56 +156,6 @@ export class ProtocolChecklistService extends HttpClient {
       url: '/v1/protocol-checklists/bio/plots/{plotId}',
       path: { plotId },
       query: { revisionCount },
-    });
-  }
-
-  getAdministration(protocol: string, checklistId: string): CancelablePromise<AdministrationData> {
-    return this.doRequest<AdministrationData>(this.config, {
-      method: 'GET',
-      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration',
-      path: { protocol, checklistId },
-    });
-  }
-
-  saveAdministration(
-    protocol: string,
-    checklistId: string,
-    admin: AdministrationData,
-  ): CancelablePromise<AdministrationData> {
-    return this.doRequest<AdministrationData>(this.config, {
-      method: 'PUT',
-      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration',
-      path: { protocol, checklistId },
-      body: admin,
-      mediaType: 'application/json',
-    });
-  }
-
-  addTeamMember(
-    protocol: string,
-    checklistId: string,
-    evaluator: string,
-    teamLead: boolean,
-  ): CancelablePromise<AdministrationData> {
-    return this.doRequest<AdministrationData>(this.config, {
-      method: 'POST',
-      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration/team',
-      path: { protocol, checklistId },
-      query: { evaluator, teamLead },
-    });
-  }
-
-  removeTeamMember(
-    protocol: string,
-    checklistId: string,
-    evaluatorUserid: string,
-    revisionCount?: string,
-  ): CancelablePromise<AdministrationData> {
-    return this.doRequest<AdministrationData>(this.config, {
-      method: 'DELETE',
-      url: '/v1/protocol-checklists/{protocol}/{checklistId}/administration/team/{evaluatorUserid}',
-      path: { protocol, checklistId, evaluatorUserid },
-      query: revisionCount ? { revisionCount } : undefined,
     });
   }
 

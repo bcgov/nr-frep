@@ -317,6 +317,20 @@
   margin-bottom: 1rem;
 }
 
+// The Bio Evaluation grid holds only two cells, so the shared 1fr column would stretch the date
+// input to half the row. Cap it at the Carbon default single-date width so it matches the CHR
+// Opening tab, where the fuller grid keeps the same input narrow.
+.bio-opening__date-field.#{vars.$bcgov-prefix}--form-item {
+  max-inline-size: 18rem;
+}
+
+// Pack the two Evaluation cells next to each other (date then evaluator) instead of letting the
+// shared auto-fit 1fr columns push them to opposite ends of the row.
+.bio-opening__evaluation-grid {
+  grid-template-columns: 18rem max-content;
+  justify-content: start;
+}
+
 // Survey question prompt shown above a grouped control (e.g. the CHR block rating).
 .rip-form__question {
   @include type.type-style('body-compact-01');

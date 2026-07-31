@@ -37,7 +37,7 @@ const openingErrors = (d: Draft): Record<string, string> => {
   const e: Record<string, string> = {};
   if (!d.evaluationDate?.trim()) e.evaluationDate = 'Evaluation date is required.';
   if (!d.generalLocation?.trim()) e.generalLocation = 'General location is required.';
-  if (!d.assessedBy?.trim()) e.assessedBy = 'Assessed by is required — choose “Assign it to me”.';
+  if (!d.assessedBy?.trim()) e.assessedBy = 'Evaluator is required — choose “Assign it to me”.';
   return e;
 };
 
@@ -62,6 +62,10 @@ const OpeningInformation: FC<{
   const me = user?.providerUsername;
   const assessedBy = value.assessedBy;
   const editAssessedBy = draft.assessedBy;
+  // Show the FAM-resolved "Name (USERID)" for the persisted evaluator; after a self-assign the draft
+  // holds the raw userid (no resolved name yet) so fall back to it until the save round-trips.
+  const editAssessedByDisplay =
+    editAssessedBy === assessedBy ? value.assessedByName || editAssessedBy : editAssessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
   const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
@@ -115,7 +119,7 @@ const OpeningInformation: FC<{
                 lowContrast
                 hideCloseButton
                 title="Save required"
-                subtitle="You must save the form to update the Assessed By value."
+                subtitle="You must save the form to update the Evaluator value."
                 className="chr-checklist__assessed-by__notice"
               />
             )}
@@ -130,10 +134,10 @@ const OpeningInformation: FC<{
               />
               <div className="protocol-checklist__field chr-checklist__assessed-by__field">
                 <span className="protocol-checklist__label">
-                  {requiredLabel('Assessed by', true)}
+                  {requiredLabel('Evaluator', true)}
                 </span>
                 <span className="protocol-checklist__value chr-checklist__assessed-by__row">
-                  {editAssessedBy && <span>{editAssessedBy}</span>}
+                  {editAssessedBy && <span>{editAssessedByDisplay}</span>}
                   {canAssignToMe && (
                     <button
                       type="button"
@@ -178,7 +182,7 @@ const OpeningInformation: FC<{
         ) : (
           <div className="rip-form__grid">
             <RoField label="Evaluation date" value={formatShortDate(value.evaluationDate)} />
-            <RoField label="Assessed by" value={assessedBy} />
+            <RoField label="Evaluator" value={value.assessedByName || assessedBy} />
             <RoField
               label="First Nations' Place Name or Block Name"
               value={value.firstNationName}

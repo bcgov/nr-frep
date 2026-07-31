@@ -29,10 +29,17 @@ public record BiodiversityOpening(
     String invasivePlantComment,
     String frepSiteEvaluationCode,
     String evaluatorOpinionComment,
+    String evaluationDate,
     String revisionCount,
     String grossArea,
     String netArea,
-    String harvestDate
+    String harvestDate,
+    // Evaluator = the evaluation-team lead (biodiversity_evaluator_name where team_lead_ind='Y'), the
+    // Biodiversity analogue of CHR's "Assessed by". teamLeadNameId is the IDIR userid; teamLeadName is
+    // the FAM-resolved display name; teamLeadRevisionCount is the evaluator row's own lock token.
+    String teamLeadNameId,
+    String teamLeadName,
+    String teamLeadRevisionCount
 ) {
 
   /** Returns a copy with the id/revision the SAVE proc echoes back. */
@@ -41,7 +48,8 @@ public record BiodiversityOpening(
         newChecklistId, resourceValueId, statusCode, frepWtpOverride, locationDescription,
         patchReservesOnBlock, patchReservesSampled, innovativePracticeInd, innovativePracticesComment,
         invasivePlantIndicator, invasivePlantComment, frepSiteEvaluationCode, evaluatorOpinionComment,
-        newRevisionCount, grossArea, netArea, harvestDate
+        evaluationDate, newRevisionCount, grossArea, netArea, harvestDate,
+        teamLeadNameId, teamLeadName, teamLeadRevisionCount
     );
   }
 
@@ -52,7 +60,18 @@ public record BiodiversityOpening(
         checklistId, resourceValueId, statusCode, frepWtpOverride, locationDescription,
         patchReservesOnBlock, patchReservesSampled, innovativePracticeInd, innovativePracticesComment,
         invasivePlantIndicator, invasivePlantComment, frepSiteEvaluationCode, evaluatorOpinionComment,
-        revisionCount, newGrossArea, newNetArea, newHarvestDate
+        evaluationDate, revisionCount, newGrossArea, newNetArea, newHarvestDate,
+        teamLeadNameId, teamLeadName, teamLeadRevisionCount
+    );
+  }
+
+  /** Returns a copy with the evaluator (team lead) userid + resolved name + revision populated. */
+  public BiodiversityOpening withTeamLead(String userId, String name, String revision) {
+    return new BiodiversityOpening(
+        checklistId, resourceValueId, statusCode, frepWtpOverride, locationDescription,
+        patchReservesOnBlock, patchReservesSampled, innovativePracticeInd, innovativePracticesComment,
+        invasivePlantIndicator, invasivePlantComment, frepSiteEvaluationCode, evaluatorOpinionComment,
+        evaluationDate, revisionCount, grossArea, netArea, harvestDate, userId, name, revision
     );
   }
 }

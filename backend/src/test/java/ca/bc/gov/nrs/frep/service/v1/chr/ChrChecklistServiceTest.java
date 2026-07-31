@@ -45,6 +45,8 @@ class ChrChecklistServiceTest {
   private ObjectStorageService objectStorageService;
   @Mock
   private LoggedUserHelper loggedUserHelper;
+  @Mock
+  private ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService famUserDirectoryService;
 
   private ChrChecklistService service;
 
@@ -56,7 +58,8 @@ class ChrChecklistServiceTest {
         submitValidationService,
         objectStorageService,
         new ObjectStorageProperties("http://s3", "bucket", "key", "secret"),
-        loggedUserHelper
+        loggedUserHelper,
+        famUserDirectoryService
     );
   }
 

@@ -109,7 +109,7 @@ public class ChrSubmitValidationService {
     req(errors, ref, "generalLocation", c.getGeneralLocation(),
         "Please provide a general location name.");
     req(errors, ref, "assessedBy", c.getAssessedBy(),
-        "Please save the opening info so the Assessed By field is populated.");
+        "Please save the opening info so the Evaluator field is populated.");
     req(errors, ref, "rating", c.getRating(), "Please provide a Rating in Block summary.");
 
     conditional(errors, ref, "q8Comments",

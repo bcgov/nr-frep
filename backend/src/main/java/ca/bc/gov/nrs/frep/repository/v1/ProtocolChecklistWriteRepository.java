@@ -1,6 +1,5 @@
 package ca.bc.gov.nrs.frep.repository.v1;
 
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
@@ -22,6 +21,8 @@ public interface ProtocolChecklistWriteRepository {
   String unsubmit(String resourceValueType, String checklistId, String userId);
   BiodiversityOpening getBiodiversityOpening(String checklistId);
   BiodiversityOpening saveBiodiversityOpening(BiodiversityOpening o, String userId);
+  void assignBiodiversityLead(String checklistId, String resourceType, String newLead,
+      String oldLead, String oldRevision, String userId);
   List<BioStratumRow> listBioStrata(String checklistId);
   BioStratum getBioStratum(String stratumId);
   BioStratum saveBioStratum(BioStratum s, String userId);
@@ -32,12 +33,6 @@ public interface ProtocolChecklistWriteRepository {
   BioPlot getBioPlot(String plotId);
   BioPlot saveBioPlot(BioPlot p, String userId);
   String deleteBioPlot(String plotId, String revisionCount);
-  AdministrationData getAdministration(String checklistId, String resourceType);
-  AdministrationData saveAdministration(AdministrationData o, String userId);
-  AdministrationData addTeamMember(
-      String checklistId, String resourceType, String evaluator, boolean teamLead, String userId);
-  AdministrationData deleteTeamMember(
-      String checklistId, String resourceType, String evaluatorUserid, String revisionCount);
   RiparianNotes getNotes(String checklistId, String resourceType);
   RiparianNotes saveNotes(RiparianNotes o, String resourceType, String userId);
   List<AttachmentRow> getAttachments(String checklistId, String resourceType);

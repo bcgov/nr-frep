@@ -35,14 +35,14 @@ describe('formatSubmitValidation', () => {
     });
   });
 
-  it('maps the Administration-tab team lead and evaluation date submit checks', () => {
+  it('maps the Opening-info team lead and evaluation date submit checks', () => {
     expect(formatSubmitValidation('frep.submit.common.teamlead')).toEqual({
-      title: 'Administration tab',
-      detail: 'Team Lead is mandatory for submit.',
+      title: 'Opening info tab',
+      detail: 'an evaluator is required.',
     });
     expect(formatSubmitValidation('frep.submit.common.evaluation')).toEqual({
-      title: 'Administration tab',
-      detail: 'Evaluation Date is mandatory for submission.',
+      title: 'Opening info tab',
+      detail: 'an evaluation date is required.',
     });
   });
 

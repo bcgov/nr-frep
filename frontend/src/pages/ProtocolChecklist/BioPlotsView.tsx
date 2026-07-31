@@ -27,6 +27,7 @@ import type {
   BioStratumRow,
 } from '@/types/protocolChecklist';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import {
@@ -52,6 +53,15 @@ type Props = {
   submitted: boolean;
   /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
   active?: boolean;
+};
+
+// Plot assessor userids are stored bare (no `IDIR\` prefix) — e.g. `ASODHI` — while the logged-in
+// user's providerUsername is the full `IDIR\ASODHI`. Strip the directory prefix so both compare and
+// store consistently with the existing bare-userid plot data.
+const bareUserid = (value?: string): string => value?.split('\\').pop()?.trim() ?? '';
+const sameEvaluator = (a?: string, b?: string): boolean => {
+  const norm = (v?: string) => bareUserid(v).toUpperCase();
+  return norm(a) !== '' && norm(a) === norm(b);
 };
 
 // Sub-table columns. `kind` picks the cell control: index = read-only row number,
@@ -118,6 +128,8 @@ const plotHasBlockingErrors = (
 
 const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
   const { display } = useNotification();
+  const { user } = useAuth();
+  const me = user?.providerUsername;
   const confirm = useConfirm();
   const [strata, setStrata] = useState<BioStratumRow[]>([]);
   const [stratumId, setStratumId] = useState('');
@@ -126,13 +138,14 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Reference data for the coded dropdowns. `evaluators` is null until loaded so we can show the
-  // "no evaluator yet" notice only after the lookup resolves.
+  // Reference data for the coded dropdowns.
   const [species, setSpecies] = useState<CodeOption[]>([]);
   const [wtDecay, setWtDecay] = useState<CodeOption[]>([]);
   const [cwdDecay, setCwdDecay] = useState<CodeOption[]>([]);
   const [strataTypes, setStrataTypes] = useState<CodeOption[]>([]);
-  const [evaluators, setEvaluators] = useState<CodeOption[] | null>(null);
+  // The checklist's Evaluator (team lead) from the Opening tab — the default "Evaluated by" for new
+  // plots. `name` is the FAM-resolved display; `userid` is the bare IDIR userid stored on the plot.
+  const [evaluator, setEvaluator] = useState<{ userid?: string; name?: string }>({});
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -193,7 +206,10 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, checklistId]);
 
-  // Reference data (coded dropdowns + the checklist's evaluator list).
+  // Reference data for the coded dropdowns, plus the checklist Evaluator (team lead) that new plots
+  // default their "Evaluated by" to. The evaluator comes from the Opening tab's source
+  // (biodiversity_evaluator_name, FAM-resolved) — the same person shown as "Evaluator" there — not the
+  // checklist tombstone's last-updater userid.
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -201,19 +217,18 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       API.configuration.getWildlifeTreeDecay(),
       API.configuration.getCwdDecay(),
       API.configuration.getStrataTypes(),
-      API.configuration.getEvaluators(checklistId),
+      API.protocolChecklist.getBiodiversityOpening(checklistId),
     ])
-      .then(([sp, wt, cwd, st, ev]) => {
+      .then(([sp, wt, cwd, st, opening]) => {
         if (cancelled) return;
         setSpecies(sp);
         setWtDecay(wt);
         setCwdDecay(cwd);
         setStrataTypes(st);
-        setEvaluators(ev);
+        setEvaluator({ userid: opening.teamLeadNameId, name: opening.teamLeadName });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setEvaluators([]);
         reportError("We couldn't load the plot reference data", err);
       });
     return () => {
@@ -281,11 +296,20 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const addPlot = () => {
     setCurrent({
       stratumId,
+      // Default "Evaluated by" to the checklist's Evaluator; claimable via "Assign it to me".
+      assessorName: bareUserid(evaluator.userid),
       treeIndicator: 'N',
       cwdTransectIndicator: 'N',
       standTable: [],
       cwdTable: [],
     });
+  };
+
+  // "Assign it to me" — claim this plot's assessor for the current user (mirrors the Opening
+  // Evaluator widget). Stored as a bare userid to match the existing plot data.
+  const assignToMe = () => {
+    if (!me) return;
+    setCurrent((prev) => (prev ? ({ ...prev, assessorName: bareUserid(me) } as BioPlot) : prev));
   };
 
   // Inline validation runs live off the edited plot (like SiteDetail): a field's error shows the
@@ -480,6 +504,38 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           <SelectItem key={o.code} value={o.code} text={o.description} />
         ))}
       </Select>
+    );
+  };
+
+  // "Evaluated by" — the plot's assessor. Defaults to the checklist Evaluator (see addPlot) and is
+  // claimed via "Assign it to me" (mirrors the Opening Evaluator widget) rather than a team dropdown,
+  // since team management was removed. Shows the FAM-resolved name when the assessor is the checklist
+  // Evaluator, otherwise the bare userid.
+  const evaluatedByField = (): ReactNode => {
+    const currentId = get('assessorName');
+    const displayName = sameEvaluator(currentId, evaluator.userid)
+      ? evaluator.name || currentId
+      : currentId;
+    const error = plotFieldError('assessorName');
+    if (readOnly) {
+      return roField('Evaluated by', displayName);
+    }
+    return (
+      <div className="protocol-checklist__field" key="evaluatedBy">
+        <span className="protocol-checklist__label">{requiredLabel('Evaluated by', true)}</span>
+        <span
+          className="protocol-checklist__value"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <span>{displayName || '—'}</span>
+          {me && !sameEvaluator(currentId, me) && (
+            <Button kind="ghost" size="sm" disabled={busy} onClick={assignToMe}>
+              Assign it to me
+            </Button>
+          )}
+        </span>
+        {error !== '' && <div className="rip-field-grid__cell-error">{error}</div>}
+      </div>
     );
   };
 
@@ -755,7 +811,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
             </div>
             <div className="rip-form__grid">
               {textField('plotNumber', 'Plot #', 3, false, true)}
-              {selectField('assessorName', 'Evaluated by', evaluators ?? [], false, true)}
+              {evaluatedByField()}
               {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
               {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
               {textField('utmNorthing', 'Northing', 7, noUtmSignal, !noUtmSignal)}

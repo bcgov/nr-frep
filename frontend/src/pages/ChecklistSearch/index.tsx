@@ -28,6 +28,7 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
@@ -67,8 +68,20 @@ const PROTOCOL_TO_PATH: Record<string, 'slr' | undefined> = {
   SLR: 'slr',
 };
 
+/**
+ * The row's checklist link: CHR opens its own screen, SLB/SLR open the protocol checklist (see
+ * {@link PROTOCOL_TO_PATH}); any other (or unknown) protocol has no link.
+ */
+const checklistLinkFor = (protocolCode: string | undefined, id: string): string | undefined => {
+  if (!protocolCode) return undefined;
+  if (protocolCode === 'CHR') return `/protocol-checklists/chr/${id}`;
+  const protoPath = PROTOCOL_TO_PATH[protocolCode];
+  return protoPath ? `/protocol-checklists/${protoPath}/${id}` : undefined;
+};
+
 const ChecklistSearchPage: FC = () => {
   const { display } = useNotification();
+  const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -237,6 +250,20 @@ const ChecklistSearchPage: FC = () => {
     [orgUnits],
   );
 
+  // Scope the filter dropdowns to what the user can see (results are also filtered server-side): a
+  // CHR-only user (no Bio) only gets their districts; the protocol list drops protocols they can't see.
+  const districtOptions = useMemo(
+    () =>
+      canEdit
+        ? orgUnits
+        : orgUnits.filter((u) => chrDistricts.includes(u.orgUnitCode.toUpperCase())),
+    [orgUnits, canEdit, chrDistricts],
+  );
+  const protocolOptions = useMemo(
+    () => protocols.filter((p) => (p.code === 'CHR' ? canAnyChr : canEdit)),
+    [protocols, canAnyChr, canEdit],
+  );
+
   return (
     <Grid fullWidth className="default-grid checklist-search-grid">
       <Column sm={4} md={8} lg={16}>
@@ -268,7 +295,7 @@ const ChecklistSearchPage: FC = () => {
             disabled={configLoading}
           >
             <SelectItem value="" text="Any district" />
-            {orgUnits.map((unit) => (
+            {districtOptions.map((unit) => (
               <SelectItem
                 key={unit.orgUnitNo}
                 value={unit.orgUnitNo}
@@ -284,7 +311,7 @@ const ChecklistSearchPage: FC = () => {
             disabled={configLoading}
           >
             <SelectItem value="" text="Any protocol" />
-            {protocols.map((protocol) => (
+            {protocolOptions.map((protocol) => (
               <SelectItem
                 key={protocol.code}
                 value={protocol.code}
@@ -406,13 +433,7 @@ const ChecklistSearchPage: FC = () => {
                   <TableBody>
                     {rows.map((row) => {
                       const data = results.find((r) => r.checklistId === row.id);
-                      const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
-                      const isChr = data?.protocolCode === 'CHR';
-                      const checklistLink = isChr
-                        ? `/protocol-checklists/chr/${row.id}`
-                        : protoPath
-                          ? `/protocol-checklists/${protoPath}/${row.id}`
-                          : undefined;
+                      const checklistLink = checklistLinkFor(data?.protocolCode, row.id);
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
                           {row.cells.map((cell) => {

@@ -9,6 +9,18 @@ import type { Feature } from '@/types/chrChecklist';
 const baseFeature = (over: Partial<Feature> = {}): Feature =>
   ({ featureLabel: 'Feature 1', ...over }) as Feature;
 
+describe('FeatureEditor — composite-feature help', () => {
+  it('renders the "What is a composite feature?" disclosure with its explanation', () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    expect(screen.getByText('What is a composite feature?')).toBeTruthy();
+    expect(
+      screen.getByText(/group of two or more associated cultural heritage features/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/cultural trail and an adjacent berry harvesting area/i)).toBeTruthy();
+  });
+});
+
 describe('FeatureEditor — Age single-select', () => {
   it('disables the other ages once one is selected', async () => {
     const onPatch = vi.fn();

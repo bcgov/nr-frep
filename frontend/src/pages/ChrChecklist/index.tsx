@@ -106,14 +106,27 @@ const errorTitle = (e: ValidationError): string => {
   return label ? `Features — Feature ${label}` : tab;
 };
 
+// Stable React key for a submit-validation error, built from its identifying fields (no array index).
+const errorKey = (e: ValidationError): string =>
+  [e.field, e.entityLabel, e.referenceId, e.message].filter(Boolean).join('|');
+
+// The "Read only" banner copy, by why the checklist is locked.
+const readOnlyReason = (status: CheckList['status']): string => {
+  if (status === CHR_STATUS.READ_ONLY_OFFLINE) {
+    return 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.';
+  }
+  if (status === CHR_STATUS.SUBMITTED) {
+    return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
+  }
+  return 'This checklist is not active, so it is read-only.';
+};
+
 /** Strip browser data-URL prefixes from new photos and recompute the MRVA before sending. */
 const prepareForSave = (checkList: CheckList): CheckList => ({
   ...checkList,
   mrvaRatingCode: calculateMrvaRatingCode(checkList.rating, checkList.features),
   pictures: (checkList.pictures ?? []).map((p) =>
-    p.code && p.code.startsWith('data:')
-      ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') }
-      : p,
+    p.code?.startsWith('data:') ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') } : p,
   ),
 });
 
@@ -127,7 +140,7 @@ const ChrChecklistPage: FC = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { display } = useNotification();
-  const { canEdit, isViewOnly, canPerformSysAdminActions } = useAuthorization();
+  const { canPerformSysAdminActions, canChr } = useAuthorization();
   const online = useOnlineStatus();
 
   const [checkList, setCheckList] = useState<CheckList | null>(null);
@@ -240,9 +253,12 @@ const ChrChecklistPage: FC = () => {
   // editability depends only on its status, not the online role check (which requires a session
   // that doesn't exist offline; the backend re-checks permission on upload). Online (server) copies
   // keep the role + status gating.
+  // CHR editing is district-scoped: sys-admin or the FREP_CHR_EDITOR_DISTRICT_<code> role matching
+  // this checklist's org unit. (Replaces the old global canEdit, which excluded district editors.)
+  const canEditThisChr = canChr(checkList?.orgUnitCode);
   const readOnly = isOfflineCopy
     ? checkList?.status === CHR_STATUS.SUBMITTED
-    : isViewOnly || !canEdit || statusLocked;
+    : !canEditThisChr || statusLocked;
 
   // A stale offline copy can't be uploaded (the server checkout was reset/submitted/removed), so both
   // Submit and Sync changes — which upload — are dead ends and are hidden; the banner explains why and
@@ -633,30 +649,24 @@ const ChrChecklistPage: FC = () => {
           );
         })()}
 
-      {!canEdit && (
+      {!canEditThisChr && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
             title="View only"
-            subtitle="You do not have permission to edit CHR checklists."
+            subtitle="You do not have permission to edit CHR checklists for this district."
             hideCloseButton
             lowContrast
           />
         </Column>
       )}
 
-      {canEdit && !isViewOnly && statusLocked && (
+      {canEditThisChr && statusLocked && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
             title="Read only"
-            subtitle={
-              checkList.status === CHR_STATUS.READ_ONLY_OFFLINE
-                ? 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.'
-                : checkList.status === CHR_STATUS.SUBMITTED
-                  ? 'This checklist has been submitted and is read-only. Unsubmit it to make changes.'
-                  : 'This checklist is not active, so it is read-only.'
-            }
+            subtitle={readOnlyReason(checkList.status)}
             hideCloseButton
             lowContrast
           />
@@ -706,8 +716,7 @@ const ChrChecklistPage: FC = () => {
               FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
           {!isOfflineCopy &&
             online &&
-            canEdit &&
-            !isViewOnly &&
+            canEditThisChr &&
             checkList.status === CHR_STATUS.SUBMITTED && (
               <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
                 Unsubmit
@@ -746,9 +755,9 @@ const ChrChecklistPage: FC = () => {
             This checklist isn&apos;t ready to submit. Fix the following, then submit again:
           </p>
           <div className="chr-checklist__errors">
-            {errors.map((e, i) => (
+            {errors.map((e) => (
               <InlineNotification
-                key={`err-${i}`}
+                key={errorKey(e)}
                 kind="error"
                 title={errorTitle(e)}
                 subtitle={e.message}

@@ -94,7 +94,7 @@ const ReportConfigForm: FC<Props> = ({
   loading,
 }) => {
   const { display } = useNotification();
-  const { canEdit } = useAuthorization();
+  const { canEdit, canAnyChr, isSysAdmin, chrDistricts } = useAuthorization();
   const [form, setForm] = useState<FormState>(BLANK);
   const [errors, setErrors] = useState<FormErrors>({});
   const [generating, setGenerating] = useState(false);
@@ -248,7 +248,13 @@ const ReportConfigForm: FC<Props> = ({
           </Fragment>
         );
       }
-      case 'orgUnit':
+      case 'orgUnit': {
+        // For the CHR Data Extract, a district-scoped user (holds district roles but not admin) may
+        // only pick one of their own districts — "All districts" is not offered.
+        const districtScopedChr = definition.id === 'chr-data-extract' && canAnyChr && !isSysAdmin;
+        const orgUnitOptions = districtScopedChr
+          ? orgUnits.filter((o) => chrDistricts.includes(o.orgUnitCode.toUpperCase()))
+          : orgUnits;
         return (
           <Select
             key="orgUnit"
@@ -261,8 +267,8 @@ const ReportConfigForm: FC<Props> = ({
             onChange={(e) => set('orgUnitCode', e.target.value)}
           >
             <SelectItem value="" text="Select…" />
-            <SelectItem value={ALL} text="— All —" />
-            {orgUnits.map((o) => (
+            {!districtScopedChr && <SelectItem value={ALL} text="— All —" />}
+            {orgUnitOptions.map((o) => (
               <SelectItem
                 key={o.orgUnitCode}
                 value={o.orgUnitCode}
@@ -271,6 +277,7 @@ const ReportConfigForm: FC<Props> = ({
             ))}
           </Select>
         );
+      }
       case 'masterListYear':
         return (
           <Select

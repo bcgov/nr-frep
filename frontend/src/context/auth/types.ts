@@ -3,13 +3,25 @@ import type { JWT as AmplifyJWT } from '@aws-amplify/core';
 export type JWT = AmplifyJWT;
 
 /**
- * Recognized Cognito groups that map to application roles.
- * FREP_VIEW_ONLY matches legacy WebADE verbatim; admin and editor roles were
- * renamed in Cognito from FREP_SYS_ADMIN → FREP_ADMIN and FREP_UPDATE → FREP_EDITOR.
+ * Application roles derived from Cognito groups.
+ *
+ * FREP_ADMIN / FREP_EDITOR / FREP_VIEW_ONLY are raw Cognito groups (FREP_VIEW_ONLY matches legacy
+ * WebADE; admin/editor were renamed from FREP_SYS_ADMIN / FREP_UPDATE). FREP_CHR_EDITOR is a
+ * **synthetic aggregate** — there is no raw group of that name; it is derived when the user holds one
+ * or more per-district {@link CHR_DISTRICT_EDITOR_PREFIX} groups, and its privilege value carries the
+ * district codes (a scoped role: `string[]` rather than `null`).
  */
-export const AVAILABLE_ROLES = ['FREP_ADMIN', 'FREP_EDITOR', 'FREP_VIEW_ONLY'] as const;
+export const AVAILABLE_ROLES = [
+  'FREP_ADMIN',
+  'FREP_EDITOR',
+  'FREP_VIEW_ONLY',
+  'FREP_CHR_EDITOR',
+] as const;
 
 export type ROLE_TYPE = (typeof AVAILABLE_ROLES)[number];
+
+/** Prefix of the per-district CHR editor Cognito groups (FAM V92): `FREP_CHR_EDITOR_DISTRICT_<code>`. */
+export const CHR_DISTRICT_EDITOR_PREFIX = 'FREP_CHR_EDITOR_DISTRICT_';
 
 type RoleValue = string[] | null;
 

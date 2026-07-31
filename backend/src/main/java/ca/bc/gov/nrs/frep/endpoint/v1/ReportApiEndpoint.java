@@ -23,8 +23,12 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RequestMapping("/api/v1/reports")
 public interface ReportApiEndpoint {
 
-  /** CSV data-extract reports (Commons CSV, no Jasper). Always returns {@code text/csv}. */
-  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  /**
+   * CSV data-extract reports (Commons CSV, no Jasper). Always returns {@code text/csv}. Access is
+   * protocol + district scoped: CHR needs CHR access (and, for a district editor, a district they
+   * hold — no "all"), biodiversity needs FREP edit — see {@link ca.bc.gov.nrs.frep.security.ReportAuthorizer}.
+   */
+  @PreAuthorize("@reportAuth.canGenerate(#reportName, #request)")
   @PostMapping("/csv/{reportName}")
   ResponseEntity<byte[]> generateCsvReport(
       @PathVariable("reportName") String reportName,

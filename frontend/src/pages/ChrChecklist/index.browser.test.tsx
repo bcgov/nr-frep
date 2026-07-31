@@ -96,7 +96,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('loads a checklist from the API and saves edits back', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false });
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
     api.saveOpening.mockResolvedValue({ ...sampleChecklist });
@@ -131,7 +131,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('hides write actions for view-only users', async () => {
-    useAuthorization.mockReturnValue({ canEdit: false, isViewOnly: true });
+    useAuthorization.mockReturnValue({ canEdit: false, isViewOnly: true, canChr: () => false });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
 
@@ -142,7 +142,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('on an offline copy, Submit checks it in (upload) then submits', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false });
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -172,7 +172,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('warns when an offline copy has been superseded on the server', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false });
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -204,6 +204,7 @@ describe('ChrChecklistPage', () => {
       canEdit: true,
       isViewOnly: false,
       canPerformSysAdminActions: true,
+      canChr: () => true,
     });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });

@@ -7,6 +7,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -90,6 +91,47 @@ public class LoggedUserHelper {
    */
   public boolean canWrite() {
     return isSysAdmin() || isUpdate();
+  }
+
+  // ─── Protocol / district capability helpers (CHR district-scoped access) ──
+
+  /**
+   * The set of Natural Resource District codes (e.g. {@code "DCK"}) the user may access CHR checklists
+   * for, parsed from the {@code FREP_CHR_EDITOR_DISTRICT_<code>} authorities. Empty when the user holds
+   * none. Codes are upper-cased so comparisons against {@code org_unit_code} are case-insensitive.
+   */
+  public Set<String> chrDistrictCodes() {
+    return getAuthorities().stream()
+        .filter(authority -> authority.startsWith(RoleConstants.CHR_DISTRICT_EDITOR_PREFIX))
+        .map(authority -> authority.substring(RoleConstants.CHR_DISTRICT_EDITOR_PREFIX.length()))
+        .filter(code -> !code.isBlank())
+        .map(code -> code.toUpperCase(Locale.ROOT))
+        .collect(Collectors.toSet());
+  }
+
+  /**
+   * FREP editor access — sys-admin or {@code FREP_EDITOR}. Governs the non-CHR (protocol-checklist /
+   * Biodiversity) surfaces, whose visibility is not district-scoped. (CHR uses {@link #canChr}.)
+   */
+  public boolean canEdit() {
+    return isSysAdmin() || isUpdate();
+  }
+
+  /** True if the user may access CHR for <em>any</em> district (sys-admin, or holds ≥1 district role). */
+  public boolean canAnyChr() {
+    return isSysAdmin() || !chrDistrictCodes().isEmpty();
+  }
+
+  /**
+   * True if the user may access CHR for the given 3-letter district {@code org_unit_code}. Sys-admins
+   * see every district; a district editor sees only the codes they hold a role for.
+   */
+  public boolean canChr(String orgUnitCode) {
+    if (isSysAdmin()) {
+      return true;
+    }
+    return orgUnitCode != null
+        && chrDistrictCodes().contains(orgUnitCode.toUpperCase(Locale.ROOT));
   }
 
   // ─── Internal helpers ─────────────────────────────────────────────

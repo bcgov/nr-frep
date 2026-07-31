@@ -14,7 +14,13 @@ vi.mock('@/services/reports', () => ({
   triggerBrowserDownload: vi.fn(),
 }));
 
-vi.mock('@/hooks/useAuthorization', () => ({ useAuthorization: () => ({ canEdit: true }) }));
+// Mutable so a test can switch the persona; default = admin-like (sees everything, no CHR scoping).
+const { auth } = vi.hoisted(() => ({
+  auth: {
+    value: { canEdit: true, canAnyChr: true, isSysAdmin: true, chrDistricts: [] as string[] },
+  },
+}));
+vi.mock('@/hooks/useAuthorization', () => ({ useAuthorization: () => auth.value }));
 
 const { display } = vi.hoisted(() => ({ display: vi.fn() }));
 vi.mock('@/context/notification/useNotification', () => ({
@@ -33,6 +39,11 @@ const ORG_UNITS = [
     orgUnitNo: '5',
     orgUnitCode: 'DCC',
     orgUnitName: 'Cariboo-Chilcotin Natural Resource District',
+  },
+  {
+    orgUnitNo: '7',
+    orgUnitCode: 'DKM',
+    orgUnitName: 'Coast Mountains Natural Resource District',
   },
 ];
 const YEARS = [{ effectiveYear: '2026', label: '26/27', current: true }];
@@ -112,5 +123,35 @@ describe('ReportConfigForm — export filenames', () => {
       '(DCC)_FREP_chr_data_extract_(2026_2027).csv',
     );
     expect(svc.openBlobInNewTab).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReportConfigForm — CHR Data Extract district scoping', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    auth.value = { canEdit: true, canAnyChr: true, isSysAdmin: true, chrDistricts: [] };
+  });
+
+  const orgUnitOptionTexts = () =>
+    Array.from((screen.getByLabelText(/Organization unit/) as HTMLSelectElement).options).map(
+      (o) => o.textContent,
+    );
+
+  it('a district-scoped CHR user sees only their districts and no "All districts"', () => {
+    auth.value = { canEdit: true, canAnyChr: true, isSysAdmin: false, chrDistricts: ['DCC'] };
+    renderForm(csvDefinition); // chr-data-extract
+
+    const texts = orgUnitOptionTexts();
+    expect(texts).not.toContain('— All —');
+    expect(texts.some((t) => t?.includes('DCC'))).toBe(true);
+    expect(texts.some((t) => t?.includes('DKM'))).toBe(false); // a district they lack
+  });
+
+  it('an admin gets the "All districts" option and every district', () => {
+    renderForm(csvDefinition); // default auth = admin-like
+
+    const texts = orgUnitOptionTexts();
+    expect(texts).toContain('— All —');
+    expect(texts.some((t) => t?.includes('DKM'))).toBe(true);
   });
 });

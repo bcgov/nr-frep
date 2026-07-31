@@ -444,36 +444,34 @@ const MasterListAdminPage: FC = () => {
       </Column>
 
       {!loading && criteria && (
-        <>
-          <Column sm={4} md={8} lg={16}>
-            {criteria.generationStats.length === 0 ? (
-              <p>No generation stats yet — generate the list to see per-district counts.</p>
-            ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>District</TableHeader>
-                      <TableHeader>Name</TableHeader>
-                      <TableHeader>Eligible</TableHeader>
-                      <TableHeader>Selected</TableHeader>
+        <Column sm={4} md={8} lg={16}>
+          {criteria.generationStats.length === 0 ? (
+            <p>No generation stats yet — generate the list to see per-district counts.</p>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>District</TableHeader>
+                    <TableHeader>Name</TableHeader>
+                    <TableHeader>Eligible</TableHeader>
+                    <TableHeader>Selected</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {criteria.generationStats.map((stat) => (
+                    <TableRow key={stat.orgUnitNo || stat.orgUnitCode}>
+                      <TableCell>{stat.orgUnitCode}</TableCell>
+                      <TableCell>{stat.orgUnitName}</TableCell>
+                      <TableCell>{stat.eligibleSites}</TableCell>
+                      <TableCell>{stat.selectedSites}</TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {criteria.generationStats.map((stat) => (
-                      <TableRow key={stat.orgUnitNo || stat.orgUnitCode}>
-                        <TableCell>{stat.orgUnitCode}</TableCell>
-                        <TableCell>{stat.orgUnitName}</TableCell>
-                        <TableCell>{stat.eligibleSites}</TableCell>
-                        <TableCell>{stat.selectedSites}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Column>
-        </>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Column>
       )}
     </Grid>
   );

@@ -106,6 +106,21 @@ const errorTitle = (e: ValidationError): string => {
   return label ? `Features — Feature ${label}` : tab;
 };
 
+// Stable React key for a submit-validation error, built from its identifying fields (no array index).
+const errorKey = (e: ValidationError): string =>
+  [e.field, e.entityLabel, e.referenceId, e.message].filter(Boolean).join('|');
+
+// The "Read only" banner copy, by why the checklist is locked.
+const readOnlyReason = (status: CheckList['status']): string => {
+  if (status === CHR_STATUS.READ_ONLY_OFFLINE) {
+    return 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.';
+  }
+  if (status === CHR_STATUS.SUBMITTED) {
+    return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
+  }
+  return 'This checklist is not active, so it is read-only.';
+};
+
 /** Strip browser data-URL prefixes from new photos and recompute the MRVA before sending. */
 const prepareForSave = (checkList: CheckList): CheckList => ({
   ...checkList,
@@ -651,13 +666,7 @@ const ChrChecklistPage: FC = () => {
           <InlineNotification
             kind="info"
             title="Read only"
-            subtitle={
-              checkList.status === CHR_STATUS.READ_ONLY_OFFLINE
-                ? 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.'
-                : checkList.status === CHR_STATUS.SUBMITTED
-                  ? 'This checklist has been submitted and is read-only. Unsubmit it to make changes.'
-                  : 'This checklist is not active, so it is read-only.'
-            }
+            subtitle={readOnlyReason(checkList.status)}
             hideCloseButton
             lowContrast
           />
@@ -746,9 +755,9 @@ const ChrChecklistPage: FC = () => {
             This checklist isn&apos;t ready to submit. Fix the following, then submit again:
           </p>
           <div className="chr-checklist__errors">
-            {errors.map((e, i) => (
+            {errors.map((e) => (
               <InlineNotification
-                key={`err-${i}`}
+                key={errorKey(e)}
                 kind="error"
                 title={errorTitle(e)}
                 subtitle={e.message}

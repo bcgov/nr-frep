@@ -127,7 +127,7 @@ export function parsePrivileges(input: string[]): USER_PRIVILEGE_TYPE {
   }
   if (chrDistricts.length > 0) {
     // Scoped role: the value carries the district codes (sorted, de-duplicated).
-    result.FREP_CHR_EDITOR = [...new Set(chrDistricts)].sort();
+    result.FREP_CHR_EDITOR = [...new Set(chrDistricts)].sort((a, b) => a.localeCompare(b));
   }
   return result;
 }

@@ -6,12 +6,12 @@ import { NotificationContext, type NotificationContent } from './NotificationCon
 // Minimum on-screen time for info/warning toasts so users have time to read them. A `timeout` of 0
 // means "never auto-dismiss" (Carbon + the slide-out effect below both treat it that way).
 const INFO_WARNING_MIN_TIMEOUT = 12000;
-const INFO_WARNING_KINDS: ReadonlyArray<NotificationContent['kind']> = [
+const INFO_WARNING_KINDS: ReadonlySet<NotificationContent['kind']> = new Set([
   'info',
   'info-square',
   'warning',
   'warning-alt',
-];
+]);
 
 /**
  * Normalizes the auto-dismiss timeout by severity, centrally (so individual call sites don't have to):
@@ -22,7 +22,7 @@ const resolveTimeout = (content: NotificationContent): number => {
   if (content.kind === 'error') {
     return 0;
   }
-  if (INFO_WARNING_KINDS.includes(content.kind)) {
+  if (INFO_WARNING_KINDS.has(content.kind)) {
     return Math.max(content.timeout, INFO_WARNING_MIN_TIMEOUT);
   }
   return content.timeout;

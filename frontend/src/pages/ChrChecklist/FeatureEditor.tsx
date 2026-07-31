@@ -206,7 +206,10 @@ const AGE_FIELDS = ['pre1846', 'post1846', 'ageUnknown', 'historicalUse'] as con
 // Monotonic key generator for the id-less, editable "other strategy" rows. A stable React key
 // (never reused, never the array index) keeps row inputs from remounting/losing focus on edit.
 let otherStrategyKeySeq = 0;
-const nextOtherStrategyKey = () => `other-strat-${(otherStrategyKeySeq += 1)}`;
+const nextOtherStrategyKey = () => {
+  otherStrategyKeySeq += 1;
+  return `other-strat-${otherStrategyKeySeq}`;
+};
 
 const FeatureEditor: FC<{
   feature: Feature;

@@ -68,6 +68,17 @@ const PROTOCOL_TO_PATH: Record<string, 'slr' | undefined> = {
   SLR: 'slr',
 };
 
+/**
+ * The row's checklist link: CHR opens its own screen, SLB/SLR open the protocol checklist (see
+ * {@link PROTOCOL_TO_PATH}); any other (or unknown) protocol has no link.
+ */
+const checklistLinkFor = (protocolCode: string | undefined, id: string): string | undefined => {
+  if (!protocolCode) return undefined;
+  if (protocolCode === 'CHR') return `/protocol-checklists/chr/${id}`;
+  const protoPath = PROTOCOL_TO_PATH[protocolCode];
+  return protoPath ? `/protocol-checklists/${protoPath}/${id}` : undefined;
+};
+
 const ChecklistSearchPage: FC = () => {
   const { display } = useNotification();
   const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
@@ -422,13 +433,7 @@ const ChecklistSearchPage: FC = () => {
                   <TableBody>
                     {rows.map((row) => {
                       const data = results.find((r) => r.checklistId === row.id);
-                      const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
-                      const isChr = data?.protocolCode === 'CHR';
-                      const checklistLink = isChr
-                        ? `/protocol-checklists/chr/${row.id}`
-                        : protoPath
-                          ? `/protocol-checklists/${protoPath}/${row.id}`
-                          : undefined;
+                      const checklistLink = checklistLinkFor(data?.protocolCode, row.id);
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
                           {row.cells.map((cell) => {

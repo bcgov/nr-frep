@@ -77,6 +77,19 @@ function toTableRows(sites: AcceptedSite[]) {
   }));
 }
 
+type AcceptedSiteRow = ReturnType<typeof toTableRows>[number];
+
+/**
+ * The row's checklist link (legacy FREP200 "Checklist" link): CHR opens its own screen, SLB/SLR
+ * open the protocol checklist (see {@link PROTOCOL_TO_PATH}); any other protocol has no link.
+ */
+const checklistLinkFor = (rowMeta: AcceptedSiteRow | undefined): string | undefined => {
+  if (!rowMeta) return undefined;
+  if (rowMeta.protocolCode === 'CHR') return `/protocol-checklists/chr/${rowMeta.id}`;
+  const protoPath = PROTOCOL_TO_PATH[rowMeta.protocolCode];
+  return protoPath ? `/protocol-checklists/${protoPath}/${rowMeta.id}` : undefined;
+};
+
 const AcceptedSitesPage: FC = () => {
   const { display } = useNotification();
   const navigate = useNavigate();
@@ -403,17 +416,7 @@ const AcceptedSitesPage: FC = () => {
                     <TableBody>
                       {rows.map((row) => {
                         const rowMeta = tableRows.find((item) => item.id === row.id);
-                        // Open the row's checklist (legacy FREP200 "Checklist" link): CHR → its own
-                        // screen, BIO/RIP/WAT → the protocol checklist; otherwise no link.
-                        const protoPath = rowMeta
-                          ? PROTOCOL_TO_PATH[rowMeta.protocolCode]
-                          : undefined;
-                        const checklistLink =
-                          rowMeta && rowMeta.protocolCode === 'CHR'
-                            ? `/protocol-checklists/chr/${rowMeta.id}`
-                            : protoPath
-                              ? `/protocol-checklists/${protoPath}/${rowMeta?.id}`
-                              : undefined;
+                        const checklistLink = checklistLinkFor(rowMeta);
 
                         return (
                           <TableRow {...getRowProps({ row })} key={row.id}>

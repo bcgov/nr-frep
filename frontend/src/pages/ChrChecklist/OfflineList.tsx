@@ -12,7 +12,7 @@ import {
   TableRow,
   Tag,
 } from '@carbon/react';
-import { useEffect, useMemo, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import type { OfflineChecklist } from '@/services/offline/chrDb';
@@ -48,6 +48,58 @@ const TABLE_HEADERS = [
   { key: 'status', header: 'Status' },
   { key: 'actions', header: '' },
 ] as const;
+
+type OfflineDataTableCell = { id: string; value: ReactNode; info: { header: string } };
+
+/**
+ * Renders a single DataTable cell for the offline list. Extracted to module scope (rather than
+ * inlined in the nested row/cell maps) so the "Remove" click handler doesn't sit five closures deep,
+ * and so `remove` can be passed by reference instead of a fresh arrow at each cell.
+ */
+const OfflineChecklistCell: FC<{
+  cell: OfflineDataTableCell;
+  rowId: string;
+  statusTag: StatusDisplay['tag'];
+  online: boolean;
+  onRemove: (id: string) => void | Promise<void>;
+}> = ({ cell, rowId, statusTag, online, onRemove }) => {
+  if (cell.info.header === 'checklist') {
+    return (
+      <TableCell>
+        <RouterLink to={`/protocol-checklists/chr/${rowId}`}>{cell.value}</RouterLink>
+      </TableCell>
+    );
+  }
+  if (cell.info.header === 'status') {
+    return (
+      <TableCell>
+        <Tag type={statusTag} size="sm">
+          {cell.value}
+        </Tag>
+      </TableCell>
+    );
+  }
+  if (cell.info.header === 'actions') {
+    return (
+      <TableCell>
+        <Button
+          size="sm"
+          kind="danger--tertiary"
+          disabled={!online}
+          title={
+            online
+              ? undefined
+              : 'Connect to the internet to remove — this releases the checkout so the checklist can be edited online.'
+          }
+          onClick={() => void onRemove(rowId)}
+        >
+          Remove from device
+        </Button>
+      </TableCell>
+    );
+  }
+  return <TableCell>{cell.value}</TableCell>;
+};
 
 /** Lists CHR checklists currently stored offline in this browser, with quick links to open them. */
 const ChrOfflineListPage: FC = () => {
@@ -174,46 +226,16 @@ const ChrOfflineListPage: FC = () => {
                       const meta = rows.find((item) => item.id === row.id);
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
-                          {row.cells.map((cell) => {
-                            if (cell.info.header === 'checklist') {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <RouterLink to={`/protocol-checklists/chr/${row.id}`}>
-                                    {cell.value}
-                                  </RouterLink>
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'status') {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <Tag type={meta?.statusTag ?? 'green'} size="sm">
-                                    {cell.value}
-                                  </Tag>
-                                </TableCell>
-                              );
-                            }
-                            if (cell.info.header === 'actions') {
-                              return (
-                                <TableCell key={cell.id}>
-                                  <Button
-                                    size="sm"
-                                    kind="danger--tertiary"
-                                    disabled={!online}
-                                    title={
-                                      online
-                                        ? undefined
-                                        : 'Connect to the internet to remove — this releases the checkout so the checklist can be edited online.'
-                                    }
-                                    onClick={() => void remove(row.id)}
-                                  >
-                                    Remove from device
-                                  </Button>
-                                </TableCell>
-                              );
-                            }
-                            return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                          })}
+                          {row.cells.map((cell) => (
+                            <OfflineChecklistCell
+                              key={cell.id}
+                              cell={cell}
+                              rowId={row.id}
+                              statusTag={meta?.statusTag ?? 'green'}
+                              online={online}
+                              onRemove={remove}
+                            />
+                          ))}
                         </TableRow>
                       );
                     })}

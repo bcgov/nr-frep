@@ -20,8 +20,8 @@ function withUser(user: Partial<FamLoginUser>) {
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-    userToken: vi.fn(),
     ensureFreshToken: vi.fn(),
+    forceRefreshSession: vi.fn(),
   });
 }
 

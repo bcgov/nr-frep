@@ -111,9 +111,7 @@ const prepareForSave = (checkList: CheckList): CheckList => ({
   ...checkList,
   mrvaRatingCode: calculateMrvaRatingCode(checkList.rating, checkList.features),
   pictures: (checkList.pictures ?? []).map((p) =>
-    p.code && p.code.startsWith('data:')
-      ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') }
-      : p,
+    p.code?.startsWith('data:') ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') } : p,
   ),
 });
 

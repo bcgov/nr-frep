@@ -13,6 +13,21 @@ const isBlank = (value?: string): boolean => value == null || value.trim() === '
 
 const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
+/**
+ * A comment that is required when its Yes/No indicator is 'Y', and is otherwise capped at
+ * {@link COMMENT_MAX}. Returns the matching error message, or null when valid.
+ */
+const validateConditionalComment = (
+  indicator: string | undefined,
+  comment: string | undefined,
+  requiredMessage: string,
+  lengthMessage: string,
+): string | null => {
+  if (indicator === 'Y' && isBlank(comment)) return requiredMessage;
+  if ((comment?.length ?? 0) > COMMENT_MAX) return lengthMessage;
+  return null;
+};
+
 const validateOverride = (value: string | undefined): string | null => {
   if (isBlank(value)) return null;
   const text = value!.trim();
@@ -70,18 +85,22 @@ export const validateOpening = (data: BiodiversityOpening): Record<string, strin
   }
 
   // Innovative practices comment — required when innovative practices = Yes (+ length).
-  if (data.innovativePracticeInd === 'Y' && isBlank(data.innovativePracticesComment)) {
-    errors.innovativePracticesComment = 'Describe the innovative practice.';
-  } else if ((data.innovativePracticesComment?.length ?? 0) > COMMENT_MAX) {
-    errors.innovativePracticesComment = `Description must be ${COMMENT_MAX} characters or fewer.`;
-  }
+  const innovativeComment = validateConditionalComment(
+    data.innovativePracticeInd,
+    data.innovativePracticesComment,
+    'Describe the innovative practice.',
+    `Description must be ${COMMENT_MAX} characters or fewer.`,
+  );
+  if (innovativeComment) errors.innovativePracticesComment = innovativeComment;
 
   // Invasive plant comment — required when invasive plants = Yes (+ length).
-  if (data.invasivePlantIndicator === 'Y' && isBlank(data.invasivePlantComment)) {
-    errors.invasivePlantComment = 'Enter a comment about the invasive plants.';
-  } else if ((data.invasivePlantComment?.length ?? 0) > COMMENT_MAX) {
-    errors.invasivePlantComment = `Comments must be ${COMMENT_MAX} characters or fewer.`;
-  }
+  const invasiveComment = validateConditionalComment(
+    data.invasivePlantIndicator,
+    data.invasivePlantComment,
+    'Enter a comment about the invasive plants.',
+    `Comments must be ${COMMENT_MAX} characters or fewer.`,
+  );
+  if (invasiveComment) errors.invasivePlantComment = invasiveComment;
 
   // Rationale length.
   if ((data.evaluatorOpinionComment?.length ?? 0) > RATIONALE_MAX) {

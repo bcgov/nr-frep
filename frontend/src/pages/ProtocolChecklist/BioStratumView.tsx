@@ -473,28 +473,36 @@ const checkConstrainedTotal = (e: StratumErrors, v: ValueReader) => {
   }
 };
 
+const checkHarvestArea = (e: StratumErrors, v: ValueReader) => {
+  const type = v('strataTypeCode');
+  if (!type || e.harvestAreaCode) return;
+  const harvestVal = v('harvestAreaCode');
+  const isPatch = type.startsWith('P');
+  if (isPatch && harvestVal && harvestVal !== 'PCH') {
+    e.harvestAreaCode = 'A patch stratum type requires harvest area "Patch reserve".';
+  } else if (!isPatch && harvestVal === 'PCH') {
+    e.harvestAreaCode = 'Harvest area "Patch reserve" is only valid for a patch stratum type.';
+  }
+};
+
+const checkPatchLocation = (e: StratumErrors, v: ValueReader) => {
+  if (e.patchLocationCode) return;
+  const harvestVal = v('harvestAreaCode');
+  const loc = v('patchLocationCode');
+  if (harvestVal === 'PCH' && loc === 'NA') {
+    e.patchLocationCode = 'Patch location cannot be N/A for a patch reserve.';
+  } else if (harvestVal === 'HDR' && loc && loc !== 'NA') {
+    e.patchLocationCode = 'Patch location must be N/A for dispersed retention.';
+  }
+};
+
 const checkCrossField = (
   e: StratumErrors,
   v: ValueReader,
   treatmentChecked: (code: string) => boolean,
 ) => {
-  const type = v('strataTypeCode');
-  const harvestVal = v('harvestAreaCode');
-  if (type && !e.harvestAreaCode) {
-    const isPatch = type.startsWith('P');
-    if (isPatch && harvestVal && harvestVal !== 'PCH') {
-      e.harvestAreaCode = 'A patch stratum type requires harvest area "Patch reserve".';
-    } else if (!isPatch && harvestVal === 'PCH') {
-      e.harvestAreaCode = 'Harvest area "Patch reserve" is only valid for a patch stratum type.';
-    }
-  }
-  if (!e.patchLocationCode) {
-    if (harvestVal === 'PCH' && v('patchLocationCode') === 'NA') {
-      e.patchLocationCode = 'Patch location cannot be N/A for a patch reserve.';
-    } else if (harvestVal === 'HDR' && v('patchLocationCode') && v('patchLocationCode') !== 'NA') {
-      e.patchLocationCode = 'Patch location must be N/A for dispersed retention.';
-    }
-  }
+  checkHarvestArea(e, v);
+  checkPatchLocation(e, v);
   if (
     treatmentChecked('N') &&
     (treatmentChecked('F') || treatmentChecked('T') || v('otherWindthrowTreatment'))
@@ -794,16 +802,22 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const strataTypeLabel = (code?: string): string =>
     (code && strataTypes.find((t) => t.code === code)?.description) || code || '';
 
+  // The change handler for a field: strata-type and harvest-area cascade to other fields; everything
+  // else is a plain set().
+  const onChangeFor = (key: string): ((val: string) => void) => {
+    if (key === 'strataTypeCode') return applyStratumType;
+    if (key === 'harvestAreaCode') return applyHarvest;
+    return (val: string) => set(key, val);
+  };
+
+  // Read-only display of a Yes/No indicator field.
+  const yesNo = (key: string): string => (get(key) === 'Y' ? 'Yes' : 'No');
+
   const field = (key: string, label: string): ReactNode => {
     const lbl = requiredLabel(label, REQUIRED_KEYS.has(key));
     const opts = optionsFor(key);
     const disabled = disabledKey(key);
-    const onChange =
-      key === 'strataTypeCode'
-        ? applyStratumType
-        : key === 'harvestAreaCode'
-          ? applyHarvest
-          : (val: string) => set(key, val);
+    const onChange = onChangeFor(key);
 
     if (opts) {
       if (readOnly) {
@@ -907,11 +921,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // Bare eco-anchor checkbox cell (label supplied for the hidden a11y name).
   const checkCell = (key: string, label: string): ReactNode =>
     readOnly ? (
-      get(key) === 'Y' ? (
-        'Yes'
-      ) : (
-        'No'
-      )
+      yesNo(key)
     ) : (
       <Checkbox
         id={`stratum-${key}`}
@@ -926,11 +936,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // The constraints/eco "present?" toggle cells (legacy "None" column position).
   const toggleCell = (key: 'constraintIndicator' | 'ecoIndicator'): ReactNode =>
     readOnly ? (
-      get(key) === 'Y' ? (
-        'Yes'
-      ) : (
-        'No'
-      )
+      yesNo(key)
     ) : (
       <Checkbox
         id={`stratum-${key}`}

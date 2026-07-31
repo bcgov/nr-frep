@@ -114,7 +114,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false });
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({
       ...sampleChecklist,

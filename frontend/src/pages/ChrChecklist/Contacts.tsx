@@ -100,7 +100,7 @@ const Contacts: FC<{
         </div>
         <fieldset className="rip-form__group">
           <legend>{form.index === null ? 'New contact' : 'Edit contact'}</legend>
-          <div className="rip-form__grid">
+          <div className="rip-form__grid chr-checklist__contacts-grid">
             <TextField
               id="contact-first"
               labelText="First name"

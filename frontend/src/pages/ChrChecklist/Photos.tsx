@@ -30,10 +30,9 @@ const photoSrc = (picture: Picture): string | undefined => {
   const code = picture.code;
   if (!code) return undefined;
   if (code.startsWith('data:')) return code;
-  const mime =
-    picture.mimeTypeCode && picture.mimeTypeCode.includes('image/')
-      ? picture.mimeTypeCode
-      : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`;
+  const mime = picture.mimeTypeCode?.includes('image/')
+    ? picture.mimeTypeCode
+    : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`;
   return `data:${mime};base64,${code}`;
 };
 

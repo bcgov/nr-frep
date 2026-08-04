@@ -10,6 +10,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.RejectionReasonResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,17 @@ public class ConfigurationService {
       "DESCRIPTION", "description",
       "EXT_DESCRIPTION", "ext_description"
   };
+
+  /**
+   * CWD decay classes the legacy code list carries but FREP does not sample. Class 5 appears on
+   * the field cards for reference only — a FREP transect records classes 1-4 — so it is dropped
+   * here rather than in the UI, keeping one source of truth for every consumer of the list.
+   *
+   * <p>Filtered as an exclusion rather than a 1-4 allow-list on purpose: if the procedure ever
+   * returns codes in an unexpected format, an exclusion degrades to "shows everything" instead of
+   * an empty dropdown.
+   */
+  private static final Set<String> UNSAMPLED_CWD_DECAY_CODES = Set.of("5");
 
   private final CodeListRepository codeListRepository;
 
@@ -198,12 +210,16 @@ public class ConfigurationService {
         .toList();
   }
 
-  /** CWD decay-class options for the FREP212 Coarse Woody Debris "Decay Class" dropdown. */
+  /**
+   * CWD decay-class options for the FREP212 Coarse Woody Debris "Decay Class" dropdown, limited
+   * to the classes FREP samples — see {@link #UNSAMPLED_CWD_DECAY_CODES}.
+   */
   @Cacheable("cwdDecayCodes")
   public List<CodeOptionResponse> getCwdDecayCodes() {
     return codeListRepository.getCwdDecayClassCode().stream()
         .map(ConfigurationService::toCodeOption)
         .filter(o -> o.code() != null)
+        .filter(o -> !UNSAMPLED_CWD_DECAY_CODES.contains(o.code()))
         .toList();
   }
 

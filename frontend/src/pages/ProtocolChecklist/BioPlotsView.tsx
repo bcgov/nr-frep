@@ -444,8 +444,14 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           ? cwdDecay
           : [];
 
-  // Sub-table coded dropdowns (species / WT class / decay) display as "<code> - <description>".
-  const codeOptionText = (o: CodeOption): string => `${o.code} - ${o.description}`;
+  // Sub-table coded dropdowns (species / WT class / decay) display as "<code> - <description>",
+  // except WT Class, which shows the bare code. The wildlife-tree decay descriptions returned by
+  // get_wildlife_tree_decay_code describe SOFTWOODS (codes 1-8); hardwoods use only 1-5 and give
+  // some of those codes a different meaning, so pairing one description list with every row
+  // mislabels hardwood entries. Legacy rendered this dropdown code-only for the same reason
+  // (frep212BIOPlots.jsp: `labelProperty="code"`).
+  const codeOptionText = (o: CodeOption, kind: Col['kind']): string =>
+    kind === 'select-wt' ? o.code : `${o.code} - ${o.description}`;
 
   // --- field render helpers ---
   const roField = (label: string, value: string): ReactNode => (
@@ -580,7 +586,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       const options = colOptions(col.kind);
       if (readOnly) {
         const match = options.find((o) => o.code === value);
-        return match ? codeOptionText(match) : value || '—';
+        return match ? codeOptionText(match, col.kind) : value || '—';
       }
       return withError(
         <Select
@@ -593,8 +599,16 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           onChange={(e) => onChange(index, col.key, e.target.value)}
         >
           <SelectItem value="" text="—" />
+          {/* A saved code the list no longer offers (e.g. a retired code, or CWD decay class 5,
+              which the API now filters out as unsampled) would otherwise leave the Select with
+              no matching option — the browser falls back to the "—" placeholder and the next
+              save silently rewrites the cell to blank. Keep the stored value selectable so it
+              survives an edit the evaluator didn't intend to make. */}
+          {value !== '' && !options.some((o) => o.code === value) && (
+            <SelectItem value={value} text={value} />
+          )}
           {options.map((o) => (
-            <SelectItem key={o.code} value={o.code} text={codeOptionText(o)} />
+            <SelectItem key={o.code} value={o.code} text={codeOptionText(o, col.kind)} />
           ))}
         </Select>,
         error,

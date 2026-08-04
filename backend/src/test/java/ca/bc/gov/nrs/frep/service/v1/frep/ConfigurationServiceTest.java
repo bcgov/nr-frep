@@ -136,4 +136,25 @@ class ConfigurationServiceTest {
     assertEquals(1, protocols.size());
     assertEquals("RIP", protocols.get(0).code());
   }
+
+  @Test
+  void getCwdDecayCodesDropsTheUnsampledClassFive() {
+    when(codeListRepository.getCwdDecayClassCode()).thenReturn(List.of(
+        decayRow("1", "Sound"),
+        decayRow("2", "Some decay"),
+        decayRow("3", "Advanced decay"),
+        decayRow("4", "Well decayed"),
+        decayRow("5", "Reference only — not sampled by FREP")));
+
+    var codes = service.getCwdDecayCodes();
+
+    assertEquals(List.of("1", "2", "3", "4"), codes.stream().map(o -> o.code()).toList());
+  }
+
+  private static Map<String, Object> decayRow(String code, String description) {
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("CODE", code);
+    row.put("DESCRIPTION", description);
+    return row;
+  }
 }

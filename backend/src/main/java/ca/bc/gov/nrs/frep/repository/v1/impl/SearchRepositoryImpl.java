@@ -70,6 +70,17 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
       clean(rs.getString("checklist_status_code")));
 
   /**
+   * Protocol-type filter for the checklist search. An {@code SLR} search also returns historical
+   * {@code SLB} records: the rename retired the SLB code without migrating existing data, so legacy
+   * rows keep {@code SLB} and must stay visible (view-only) in Search. Package-private so
+   * {@link SearchRepositoryImplTest} can execute this exact predicate rather than a copy of it.
+   */
+  static final String PROTOCOL_TYPE_PREDICATE = """
+      (:protocolType IS NULL
+            OR frv.frep_resource_value_type_code = :protocolType
+            OR (:protocolType = 'SLR' AND frv.frep_resource_value_type_code = 'SLB'))""";
+
+  /**
    * Inner checklist-search query, ported verbatim from {@code FREP_CHECKLIST_SEARCH.search} (the
    * {@code checklist_tbls} UNION across water/riparian/biodiversity/CHR, the {@code for_cli_audit}
    * join, the legacy {@code (+)} outer joins, region rollup, {@code LPAD} client, IDIR-prefix strip)
@@ -81,11 +92,31 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
    * explicitly schema-qualified. {@code for_cli_audit} is left UNQUALIFIED: it is a PUBLIC SYNONYM (not a
    * THE table), so {@code THE.for_cli_audit} would raise ORA-00942 — the bare name hits the synonym.
    *
-   * <p>NOTE: the app user must hold SELECT on the {@code FOR_CLI_AUDIT} synonym's target table. Without
-   * that grant this query raises ORA-00942 on {@code for_cli_audit} (the legacy proc only reached it via
-   * THE's definer rights). If the grant cannot be added, the {@code for_cli_audit} join and its two
-   * {@code org_unit_no = add_org_unit / = update_org_unit} predicates can be removed — they contribute no
-   * output columns and act only as an org-unit filter — but that may change which checklists return.
+   * <p>The {@code for_cli_audit} join is carried over from the legacy proc and is <b>kept
+   * deliberately, for legacy parity</b> (decision 2026-08). It needs the app user to hold SELECT on
+   * the synonym's target table — that grant is in place; without it the query raises ORA-00942, since
+   * the proc only reached the table through THE's definer rights.
+   *
+   * <p>Two things about it were measured on DEV (2026-08) and are worth knowing before anyone
+   * "simplifies" it away — or reinstates it after a revert:
+   *
+   * <ul>
+   *   <li><b>Performance is unaffected.</b> The join has no key of its own — only the two
+   *       {@code ou.org_unit_no = fca.add_org_unit / = fca.update_org_unit} predicates — so the SQL
+   *       implies a ~2,959x product (90,612 rows becoming 268,139,918). Search timings were unchanged
+   *       with it enabled, so Oracle evidently treats it as a semi-join rather than materialising
+   *       that product. Do not assume the naive row count is what executes.</li>
+   *   <li><b>It filters.</b> Counting distinct sites rather than rows: 90,612 without the join,
+   *       82,924 with it — <b>7,688 sites (8.5%) are excluded</b>. {@code for_cli_audit} is a CLIENT
+   *       audit table, so the predicate means "only show this checklist if some client record was both
+   *       created and last updated by the checklist's own org unit" — a condition with no bearing on
+   *       checklists. An org unit whose client rows were added by one office and updated by another
+   *       loses every checklist it has.</li>
+   * </ul>
+   *
+   * <p>The join is kept so this search matches what the legacy app returns. Removing it (the join
+   * line plus its two predicates) would surface those 7,688 sites; that is a business call, not a
+   * technical one, and should be made explicitly rather than as a side effect of tidying the query.
    */
   private static final String CHECKLIST_SEARCH_INNER = """
       SELECT DISTINCT
@@ -105,7 +136,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
         FROM THE.frep_evaluation_year fey
            , THE.frep_selected_site fss
            , THE.org_unit ou
-           --, for_cli_audit fca
+           , for_cli_audit fca
            , THE.frep_resource_value frv
            , ( SELECT DISTINCT wc.water_checklist_id checklist_id, wc.frep_checklist_status_code,
                       wc.evaluation_date evaluation_date, wen.evaluator_userid, wc.frep_resource_value_id
@@ -132,8 +163,8 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
            , THE.frep_resource_value_type_code frvtc
        WHERE fey.effective_year = fss.effective_year
          AND ou.org_unit_no = fss.org_unit_no
-         --AND ou.org_unit_no = fca.add_org_unit
-         --AND ou.org_unit_no = fca.update_org_unit
+         AND ou.org_unit_no = fca.add_org_unit
+         AND ou.org_unit_no = fca.update_org_unit
          AND fss.frep_selected_site_id = frv.frep_selected_site_id
          AND frv.frep_resource_value_id = checklist_tbls.frep_resource_value_id
          AND frvtc.frep_resource_value_type_code = frv.frep_resource_value_type_code
@@ -148,7 +179,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
          AND (fss.client_number = LPAD(:clientNumber, 8, '0') OR :clientNumber IS NULL)
          AND (checklist_tbls.evaluation_date >= TO_DATE(:evalFrom, 'YYYY-MM-DD') OR :evalFrom IS NULL)
          AND (checklist_tbls.evaluation_date <= TO_DATE(:evalTo, 'YYYY-MM-DD') OR :evalTo IS NULL)
-         AND (frv.frep_resource_value_type_code = :protocolType OR :protocolType IS NULL)
+         AND %s
          -- Protocol/district visibility (server-derived from the caller's roles): CHR rows only for
          -- the caller's districts (or every district for a sys-admin); non-CHR (Biodiversity/etc.)
          -- rows only when the caller has Biodiversity access.
@@ -157,7 +188,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
                   AND (:chrSeeAll = 1 OR ou.org_unit_code IN (:allowedChrCodes)))
             OR (frv.frep_resource_value_type_code <> 'CHR' AND :nonChrVisible = 1)
              )
-      """;
+      """.formatted(PROTOCOL_TYPE_PREDICATE);
 
   @Override
   public long countChecklists(ChecklistSearchCriteria criteria) {

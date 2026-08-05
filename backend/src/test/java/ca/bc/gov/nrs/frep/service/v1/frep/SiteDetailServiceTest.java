@@ -20,6 +20,7 @@ import ca.bc.gov.nrs.frep.repository.v1.SiteDetailRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.SiteResourceRow;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,8 +41,13 @@ class SiteDetailServiceTest {
   private SiteDetailService service;
 
   private static SiteDetailData siteDetailData(List<SiteResourceRow> resources) {
+    return siteDetailData("201920", resources);
+  }
+
+  /** {@code masterList} drives the site's evaluation year (its first four characters). */
+  private static SiteDetailData siteDetailData(String masterList, List<SiteResourceRow> resources) {
     return new SiteDetailData(
-        "1001", "201920", "DCK - Chilliwack Forest District", "43",
+        "1001", masterList, "DCK - Chilliwack Forest District", "43",
         "00010001", "GORMAN BROS. LUMBER LTD.", "A12345", "987654", "987654",
         "L1234", "L1234", "CP-8891", "CB-442", "FSP-101", "2024", resources);
   }
@@ -67,11 +73,62 @@ class SiteDetailServiceTest {
         new SiteResourceRow("3", "R", "WTR", "Water", "", "", "", "", "", "0"),
         new SiteResourceRow("4", "R", "CHR", "Cultural Heritage", "", "", "", "", "", "0")));
 
-    List<SiteResourceRow> kept = SiteDetailService.supportedProtocolsOnly(data).resources();
+    when(siteDetailRepository.retiredResourceTypes()).thenReturn(Set.of());
+
+    List<SiteResourceRow> kept = service.supportedProtocolsOnly(data).resources();
 
     assertEquals(2, kept.size());
     assertEquals("SLB", kept.get(0).resourceType());
     assertEquals("CHR", kept.get(1).resourceType());
+  }
+
+  @Test
+  void unevaluatedRowForARetiredCodeIsNotOffered() {
+    // FREP110's GET seeds a blank row for every code in the code table — it never reads EXPIRY_DATE.
+    // The blank SLB row is noise (STAT_CODE is NOT NULL, so no id means nothing was ever evaluated)
+    // and must not appear; the SLB row that holds data stays.
+    when(siteDetailRepository.retiredResourceTypes()).thenReturn(Set.of("SLB"));
+    SiteDetailData data = siteDetailData(List.of(
+        new SiteResourceRow("", "R", "SLB", "Biodiversity", "", "", "", "", "", "0"),
+        new SiteResourceRow("", "R", "SLR", "Stand Level Retention", "", "", "", "", "", "0"),
+        new SiteResourceRow("9", "R", "SLB", "Biodiversity", "ACC", "SUB", "", "", "", "3")));
+
+    List<SiteResourceRow> kept = service.withRetiredCodesHidden(data).resources();
+
+    assertEquals(2, kept.size());
+    assertEquals("SLR", kept.get(0).resourceType());
+    assertEquals("SLB", kept.get(1).resourceType());
+    assertEquals("9", kept.get(1).resourceValueId());
+  }
+
+  @Test
+  void evaluatedRowForARetiredCodeIsAlwaysKept() {
+    // However old the site, a Biodiversity resource it was actually evaluated against still shows.
+    when(siteDetailRepository.retiredResourceTypes()).thenReturn(Set.of("SLB"));
+    SiteDetailData data = siteDetailData("201920", List.of(
+        new SiteResourceRow("7", "R", "SLB", "Biodiversity", "REJ", "", "", "", "", "2")));
+
+    List<SiteResourceRow> kept = service.withRetiredCodesHidden(data).resources();
+
+    assertEquals(1, kept.size());
+    assertEquals("7", kept.get(0).resourceValueId());
+  }
+
+  @Test
+  void retiredCodeFilterLeavesRiparianAlone() {
+    // The Site Details page shows every protocol the site was evaluated against; only the create
+    // flow narrows to the app's supported set, so this filter must not touch active codes.
+    when(siteDetailRepository.retiredResourceTypes()).thenReturn(Set.of("SLB"));
+    SiteDetailData data = siteDetailData(List.of(
+        new SiteResourceRow("", "R", "RIP", "Riparian", "", "", "", "", "", "0"),
+        new SiteResourceRow("", "R", "WTR", "Water", "", "", "", "", "", "0"),
+        new SiteResourceRow("", "R", "SLB", "Biodiversity", "", "", "", "", "", "0")));
+
+    List<SiteResourceRow> kept = service.withRetiredCodesHidden(data).resources();
+
+    assertEquals(2, kept.size());
+    assertEquals("RIP", kept.get(0).resourceType());
+    assertEquals("WTR", kept.get(1).resourceType());
   }
 
   @Test

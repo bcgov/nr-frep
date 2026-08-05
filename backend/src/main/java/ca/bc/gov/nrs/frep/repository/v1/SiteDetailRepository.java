@@ -25,4 +25,14 @@ public interface SiteDetailRepository {
       String userId);
 
   String resolveChecklistId(String resourceValueId, String resourceType);
+
+  /**
+   * Resource-value type codes that have passed their {@code EXPIRY_DATE}.
+   *
+   * <p>The FREP110 GET drives its row list <em>from</em> {@code FREP_RESOURCE_VALUE_TYPE_CODE}
+   * (the outer join is on the data side), so it emits a blank row for every code that exists —
+   * expired or not; nothing in the proc reads {@code EXPIRY_DATE}. The service uses this set to stop
+   * offering a retired code as a new, un-evaluated row.
+   */
+  java.util.Set<String> retiredResourceTypes();
 }

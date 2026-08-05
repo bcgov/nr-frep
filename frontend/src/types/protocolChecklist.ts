@@ -256,5 +256,5 @@ export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {
 };
 
 export const PROTOCOL_TYPE_LABEL: Record<ProtocolType, string> = {
-  biodiversity: 'Biodiversity',
+  biodiversity: 'Stand Level Retention',
 };

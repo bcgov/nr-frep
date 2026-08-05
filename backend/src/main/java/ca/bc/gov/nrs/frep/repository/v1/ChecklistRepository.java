@@ -7,4 +7,7 @@ public interface ChecklistRepository {
   ChecklistSectionData getBioOpening(String checklistId);
   ChecklistSectionData getBioStratum(String checklistId);
   ChecklistSectionData getBioPlots(String checklistId);
+
+  /** The record's actual protocol code (SLB legacy / SLR going forward), resolved from the DB. */
+  String resolveResourceType(String checklistId);
 }

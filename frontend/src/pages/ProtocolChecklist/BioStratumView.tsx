@@ -413,9 +413,7 @@ const checkRequiredAndFormat = (e: StratumErrors, v: ValueReader) => {
     if (!v(k)) e[k] = `${LABELS[k] ?? k} is required.`;
   });
   if (!e.stratumNumber && !stratumNumberValid(v('stratumNumber'))) {
-    e.stratumNumber =
-      'Stratum Id must start with a letter, in letters-then-digits order — ' +
-      'up to 3 letters then 2 digits, max 5 characters, no spaces (e.g. AB12).';
+    e.stratumNumber = 'Use 1-3 letters then 0-2 digits, e.g. AB12.';
   }
   // A stratum with 0 plots is only valid for a patch stratum type (legacy numplots.zero).
   const type = v('strataTypeCode');

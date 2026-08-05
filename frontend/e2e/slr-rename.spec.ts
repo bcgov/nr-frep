@@ -5,16 +5,17 @@ import { expectNoGlobalError, gotoProtected, waitForSettled } from './utils';
 /**
  * E2E contract for the Biodiversity → Stand Level Retention (SLB → SLR) rename.
  *
- * These assertions encode the POST-migration state: they pass only once the
- * `nr-mof-db` migrations `V202607031000.1__FREP_ADD_SLR_EXPIRE_SLB.sql` (adds the
- * `SLR` code) and `V202607031430.1__FREP_RELABEL_SLB_DESCRIPTION.sql` (relabels the
- * program to "Stand Level Retention") have been deployed to the target slot. The
- * protocol dropdowns read their options from `getProtocols()`, which is backed by
- * `FREP_RESOURCE_VALUE_TYPE_CODE` — so the "SLR - Stand Level Retention" option
- * does not exist until the DB change lands.
+ * Premise: the `SLR` code exists in `FREP_RESOURCE_VALUE_TYPE_CODE` (added by the
+ * nr-mof-db SLR migration). The protocol dropdowns read their options from
+ * `getProtocols()`, which is backed by that table, so the "SLR - Stand Level
+ * Retention" option does not exist until the DB change is deployed to the target
+ * slot — these tests fail until then.
  *
- * ⇒ The frontend PR carrying this spec stays in DRAFT until the DB PR merges and
- *   deploys; flipping it to ready is the signal the coordinated release is green.
+ * NOTE: historical `SLB` records deliberately keep the label "Biodiversity" — the
+ * relabel migration was dropped (decision 2026-08). "Biodiversity" is therefore a
+ * legitimate string on result rows; the assertions below check the *dropdown
+ * options*, which exclude SLB via each page's IN_SCOPE filter, and must not be
+ * widened into page-wide text assertions.
  */
 
 const SLR_LABEL = 'Stand Level Retention';
@@ -57,14 +58,14 @@ test.describe('SLB → SLR rename', () => {
     await expectNoGlobalError(page);
   });
 
-  test('Reports page shows the Stand Level Retention program name, not Biodiversity', async ({
-    page,
-  }) => {
-    await gotoProtected(page, '/reports');
+  test('Exports page shows the Stand Level Retention program name', async ({ page }) => {
+    // The route is /exports (routePaths.tsx) and its H1 reads "Exports" — the page
+    // component is named ReportsPage, which is why this test used to say /reports.
+    await gotoProtected(page, '/exports');
 
-    await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Exports', level: 1 })).toBeVisible();
+    // The five extract definitions were rebranded; the program name should be present.
     await expect(page.getByText(SLR_LABEL).first()).toBeVisible();
-    await expect(page.getByText(OLD_LABEL)).toHaveCount(0);
     await expectNoGlobalError(page);
   });
 

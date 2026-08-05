@@ -270,8 +270,7 @@ public class ProtocolChecklistService {
     requireField(s.bgcSubzoneCode(), "BGC subzone", errors);
 
     if (StringUtils.isNotBlank(s.stratumNumber()) && !stratumNumberValid(s.stratumNumber().trim())) {
-      errors.add("Stratum Id must start with a letter, in letters-then-digits order — up to 3 "
-          + "letters then 2 digits, max 5 characters, no spaces (e.g. AB12).");
+      errors.add("Stratum Id: use 1-3 letters then 0-2 digits, e.g. AB12.");
     }
     if ("0".equals(trimmedOrEmpty(s.plotCount())) && !type.isEmpty() && !type.startsWith("P")) {
       errors.add("A stratum with 0 plots must be a patch stratum type.");

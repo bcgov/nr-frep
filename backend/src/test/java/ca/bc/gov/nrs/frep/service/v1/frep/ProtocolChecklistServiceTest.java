@@ -3,6 +3,8 @@ package ca.bc.gov.nrs.frep.service.v1.frep;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -220,6 +222,37 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void openingLengthLimitsAreMeasuredInBytesNotCharacters() {
+    // No loggedUserHelper stub: validation runs before the caller is resolved, so the save is
+    // rejected without ever reaching it.
+    // BIODIVERSITY_CHECKLIST.LOCATION_DESCRIPTION is VARCHAR2(50 BYTE). 26 curly quotes are 26
+    // characters but 78 bytes, so a character count would wave this through and the insert would
+    // fail with ORA-12899.
+    String smartQuotes = "\u2019".repeat(26);
+    assertEquals(26, smartQuotes.length());
+
+    InvalidPayloadException thrown = assertThrows(InvalidPayloadException.class,
+        () -> service.saveBiodiversityOpening("9001",
+            opening(null, smartQuotes, "N", null, "N", null, "W")));
+
+    assertTrue(thrown.getError().getMessage().contains("the limit is 50 and this entry uses 78"),
+        thrown.getError().getMessage());
+    verify(writeRepository, never()).saveBiodiversityOpening(any(), any());
+  }
+
+  @Test
+  void openingAcceptsAValueThatFillsTheByteLimitExactly() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening opening = opening(null, "x".repeat(50), "N", null, "N", null, "W");
+    when(writeRepository.saveBiodiversityOpening(opening, "u")).thenReturn(opening);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(opening);
+
+    service.saveBiodiversityOpening("9001", opening);
+
+    verify(writeRepository).saveBiodiversityOpening(opening, "u");
+  }
+
+  @Test
   void saveBiodiversityOpeningDelegatesToRepositoryWhenWritable() {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
     BiodiversityOpening opening = opening(null, "loc", "N", null, "N", null, "W");
@@ -347,9 +380,30 @@ class ProtocolChecklistServiceTest {
   @Test
   void listBioPlotsDelegatesToRepository() {
     when(writeRepository.listBioPlots("900"))
-        .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", "2")));
+        .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
 
     assertEquals(1, service.listBioPlots("900").size());
+  }
+
+  @Test
+  void listBioPlotsResolvesTheAssessorDisplayNameButKeepsTheUserid() {
+    when(writeRepository.listBioPlots("900"))
+        .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
+    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.of("Jane Doe (jdoe)"));
+
+    BioPlotRow row = service.listBioPlots("900").get(0);
+
+    assertEquals("Jane Doe (jdoe)", row.assessorDisplayName());
+    assertEquals("jdoe", row.assessorName()); // the stored userid must not be overwritten
+  }
+
+  @Test
+  void listBioPlotsFallsBackToTheUseridWhenFamHasNoName() {
+    when(writeRepository.listBioPlots("900"))
+        .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
+    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.empty());
+
+    assertEquals("jdoe", service.listBioPlots("900").get(0).assessorDisplayName());
   }
 
   @Test
@@ -361,11 +415,11 @@ class ProtocolChecklistServiceTest {
   // BioPlot order: plotId, stratumId, plotNumber, assessorName, utmSignal, utmZone, utmEasting,
   // utmNorthing, treeIndicator, basalAreaFactor, fixedAreaRadius, fullCountArea,
   // cwdTransectIndicator, firstLegTransect, secondLegTransect, plotComment, revisionCount,
-  // standTable, cwdTable. (No UTM signal → UTM fields exempt.)
+  // standTable, cwdTable, assessorDisplayName. (No UTM signal → UTM fields exempt.)
   private static BioPlot plot(String assessorName, String firstLeg, String secondLeg, String baf,
       String treeIndicator, List<BioStandRow> standTable) {
     return new BioPlot("P1", "S1", "1", assessorName, "N", null, null, null, treeIndicator, baf,
-        null, null, "N", firstLeg, secondLeg, null, "1", standTable, List.of());
+        null, null, "N", firstLeg, secondLeg, null, "1", standTable, List.of(), null);
   }
 
   @Test

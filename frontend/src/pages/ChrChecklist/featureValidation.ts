@@ -1,5 +1,8 @@
 import type { Feature } from '@/types/chrChecklist';
 
+import { FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import { addTextLimitErrors } from '@/utils/textLimits';
+
 // Lightweight, high-value feature validation mirroring the most important CHR submit checks, for live
 // inline feedback. The full rule set (at-least-one groups, FN/AIA/SP planning, windthrow/damage
 // details, composite membership, etc.) stays server-side at submit.
@@ -100,6 +103,10 @@ export const featureErrors = (f: Feature): Record<string, string> => {
     'Buffer size (m)',
     9999,
   );
+
+  // Free-text length. Enforced here rather than left to the database: these columns are byte-limited
+  // and nothing else checks them, so an over-long entry used to surface only as a failed save.
+  addTextLimitErrors(e, f as Record<string, unknown>, FEATURE_TEXT_LIMITS);
 
   return e;
 };

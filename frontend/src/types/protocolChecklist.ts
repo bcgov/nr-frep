@@ -189,6 +189,8 @@ export type BioPlotRow = {
   plotId?: string;
   plotNumber?: string;
   assessorName?: string;
+  /** FAM-resolved "First Last (USERID)" for display; the server falls back to the bare userid. */
+  assessorDisplayName?: string;
   revisionCount?: string;
 };
 
@@ -197,7 +199,10 @@ export type BioPlot = {
   plotId?: string;
   stratumId?: string;
   plotNumber?: string;
+  /** The stored assessor userid (bare, no `IDIR\` prefix) — this is what save_plot writes. */
   assessorName?: string;
+  /** Read-only FAM-resolved display name for `assessorName`; never sent back on save. */
+  assessorDisplayName?: string;
   utmSignal?: string;
   utmZone?: string;
   utmEasting?: string;

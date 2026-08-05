@@ -161,9 +161,43 @@ class SiteDetailServiceTest {
   }
 
   @Test
+  void rationaleLengthIsReportedEvenWhenAnotherRuleAlsoFails() {
+    // Regression: the length check used to sit in the tail of an else-if chain, so a REJ row with
+    // no rejection reason short-circuited on "reason is required" and the over-long rationale went
+    // unreported — the UI showed nothing next to the offending field.
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
+        () -> SiteDetailService.validateResources(
+            List.of(req("REJ", null, "x".repeat(51), null)), siteDetailData(List.of())));
+
+    String message = ex.getError().getMessage();
+    assertTrue(message.contains("rejection reason is required"), message);
+    assertTrue(message.contains("rationale is too long"), message);
+  }
+
+  @Test
   void validateEnforcesLengthCaps() {
     expectInvalid(req("REJ", "OTH", "x".repeat(51), null));
     expectInvalid(req("ACC", null, null, "y".repeat(2001)));
+  }
+
+  @Test
+  void validateMeasuresLengthCapsInBytesNotCharacters() {
+    // REJECTION_REASON is VARCHAR2(50 BYTE) and ADDITIONAL_COMMENTS VARCHAR2(2000 BYTE). A curly
+    // quote is one character but three bytes, so these fit on a character count and overflow the
+    // columns — the case the old `.length()` checks let through.
+    String rationale = "\u2019".repeat(20); // 20 chars, 60 bytes
+    String comments = "\u2019".repeat(700); // 700 chars, 2100 bytes
+    assertEquals(20, rationale.length());
+    assertEquals(700, comments.length());
+
+    expectInvalid(req("REJ", "OTH", rationale, null));
+    expectInvalid(req("ACC", null, null, comments));
+  }
+
+  @Test
+  void validateAcceptsValuesThatFillTheByteLimitExactly() {
+    SiteDetailService.validateResources(
+        List.of(req("REJ", "OTH", "x".repeat(50), "y".repeat(2000))), siteDetailData(List.of()));
   }
 
   @Test

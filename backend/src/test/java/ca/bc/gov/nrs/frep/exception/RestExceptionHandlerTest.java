@@ -1,13 +1,18 @@
 package ca.bc.gov.nrs.frep.exception;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
+import java.sql.SQLException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.TransactionSystemException;
 
 class RestExceptionHandlerTest {
 
@@ -37,5 +42,134 @@ class RestExceptionHandlerTest {
     ApiError body = (ApiError) response.getBody();
     assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, body.getStatus());
     assertTrue(body.getMessage().contains("a virus was detected"));
+  }
+
+  @Test
+  void recognisedProcMessageKeysBecomeAConflictInPlainEnglish() {
+    // What the evaluator-change save actually returns: one key per plot still holding the
+    // evaluator. None of it should reach the UI as a raw key, and it is not a system fault.
+    StoredProcedureException ex = new StoredProcedureException(
+        "frep_checklist_cost_resources", "delete_team_member",
+        "frep.evaluatorinfo.delete.evaluator:1,NAR1;"
+            + "frep.evaluatorinfo.delete.evaluator:3,NAR1;"
+            + "frep.evaluatorinfo.delete.evaluator:2,RES1;");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.CONFLICT.value(), response.getStatusCode().value());
+    ApiError body = (ApiError) response.getBody();
+    assertEquals(
+        "Plots tab: plot 1 in stratum NAR1 is still assigned to this evaluator. "
+            + "Plots tab: plot 3 in stratum NAR1 is still assigned to this evaluator. "
+            + "Plots tab: plot 2 in stratum RES1 is still assigned to this evaluator.",
+        body.getMessage());
+    assertFalse(body.getMessage().contains("frep."));
+    assertFalse(body.getMessage().contains("help desk"));
+  }
+
+  @Test
+  void unrecognisedProcMessageKeepsRawTextAtInternalServerError() {
+    // Fail-safe: an unmapped key must not be swallowed or downgraded to a business rule.
+    StoredProcedureException ex = new StoredProcedureException(
+        "frep_210_bio_opening", "SAVE", "frep.some.unmapped.key:9;");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
+    ApiError body = (ApiError) response.getBody();
+    assertTrue(body.getMessage().contains("frep.some.unmapped.key:9;"));
+    assertTrue(body.getMessage().contains("help desk"));
+  }
+
+  @Test
+  void partiallyRecognisedProcMessageIsNotPartlySwallowed() {
+    // All-or-nothing: one unknown segment means the whole raw string is surfaced.
+    StoredProcedureException ex = new StoredProcedureException(
+        "frep_checklist_cost_resources", "delete_team_member",
+        "frep.evaluatorinfo.delete.evaluator:1,NAR1;frep.brand.new.key;");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
+    assertTrue(((ApiError) response.getBody()).getMessage().contains("frep.brand.new.key"));
+  }
+
+  @Test
+  void commitTimeColumnOverflowNamesTheFieldAndTheLimit() {
+    // The real chain for an over-long CHR feature comment: the CHR services flush at commit, so
+    // JpaTransactionManager wraps the ORA-12899 in a TransactionSystemException — which is NOT a
+    // DataAccessException, so this used to reach the catch-all as "Unexpected system error".
+    TransactionSystemException ex = new TransactionSystemException(
+        "Could not commit JPA transaction",
+        new RuntimeException("could not execute statement",
+            new SQLException("ORA-12899: value too large for column "
+                + "\"THE\".\"CHR_FEATURE_IDENTITY\".\"COMMENTS\" (actual: 1234, maximum: 500)")));
+
+    ResponseEntity<Object> response = handler.handleTransactionSystem(ex);
+
+    assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
+    String message = ((ApiError) response.getBody()).getMessage();
+    assertTrue(message.startsWith("Comments is too long"), message);
+    assertTrue(message.contains("500"));
+    assertTrue(message.contains("1234"));
+    // The raw Oracle text (and with it the schema/table) must not reach the UI.
+    assertFalse(message.contains("ORA-12899"));
+    assertFalse(message.contains("CHR_FEATURE_IDENTITY"));
+    assertFalse(message.contains("THE"));
+  }
+
+  @Test
+  void abbreviatedColumnNamesGetAReadableLabel() {
+    TransactionSystemException ex = new TransactionSystemException(
+        "Could not commit JPA transaction",
+        new SQLException("ORA-12899: value too large for column "
+            + "\"THE\".\"CHR_FEATURE\".\"LIMITING_OPERATNL_FACTORS_DESC\" "
+            + "(actual: 2500, maximum: 2000)"));
+
+    String message = ((ApiError) handler.handleTransactionSystem(ex).getBody()).getMessage();
+
+    assertTrue(message.startsWith("Limiting operational factors is too long"), message);
+  }
+
+  @Test
+  void unmappedColumnNameIsSentenceCased() {
+    DataAccessException ex = new DataIntegrityViolationException(
+        "insert failed",
+        new SQLException("ORA-12899: value too large for column "
+            + "\"THE\".\"CHR_FEATURE\".\"DAMAGE_DESCRIPTION\" (actual: 1200, maximum: 1000)"));
+
+    ResponseEntity<Object> response = handler.handleDataAccess(ex);
+
+    assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
+    assertTrue(((ApiError) response.getBody()).getMessage()
+        .startsWith("Damage description is too long"));
+  }
+
+  @Test
+  void otherCommitFailuresStillReportGenerically() {
+    // Not an overflow — must not be dressed up as a field-length problem, and must not leak detail.
+    TransactionSystemException ex = new TransactionSystemException(
+        "Could not commit JPA transaction",
+        new SQLException("ORA-00001: unique constraint (THE.CHR_PK) violated"));
+
+    ResponseEntity<Object> response = handler.handleTransactionSystem(ex);
+
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
+    String message = ((ApiError) response.getBody()).getMessage();
+    assertTrue(message.contains("could not be saved"));
+    assertFalse(message.contains("ORA-00001"));
+  }
+
+  @Test
+  void optimisticLockKeyResolvesWithoutArguments() {
+    StoredProcedureException ex = new StoredProcedureException(
+        "frep_210_bio_opening", "SAVE", "frep.web.usr.database.record.modified2");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.CONFLICT.value(), response.getStatusCode().value());
+    assertEquals(
+        "Someone else changed this data. Reload the checklist and try again.",
+        ((ApiError) response.getBody()).getMessage());
   }
 }

@@ -1,5 +1,5 @@
 import { Download, TrashCan, Upload } from '@carbon/icons-react';
-import { Button, SkeletonText, TextInput } from '@carbon/react';
+import { Button, SkeletonText, TextArea } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
@@ -11,6 +11,26 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { byteLength, overLimitError } from '@/utils/textLimits';
+
+/**
+ * Byte limit of the attachment description column.
+ *
+ * <p>`frep_checklist_attachments.save` inserts into a different table per protocol — only
+ * Biodiversity reaches this app (`normalizeProtocolType` accepts BIO/SLB only), so the column is
+ * `biodiversity_chklst_attach.description` (FREP_CHECKLIST_ATTACHMENTS.pks:1191-1201). Note the
+ * package's shared cursor record borrows its types from `riparian_checklist_attach` regardless of
+ * protocol — that record is not the target table.
+ *
+ * <p>120 comes from the legacy UI, which capped this input at `maxlength="120"`
+ * (`checklistAttachment.jsp:62`) on the one screen it used for every protocol; its validator only
+ * checked the field was present. So 120 is the widest value the old app is known to have written
+ * successfully, not necessarily the column width — the table DDL is not in this repo. If the column
+ * is wider this can safely be raised:
+ *   SELECT char_used, data_length FROM all_tab_columns
+ *    WHERE table_name = 'BIODIVERSITY_CHKLST_ATTACH' AND column_name = 'DESCRIPTION';
+ */
+const DESCRIPTION_LIMIT = 120;
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
@@ -85,6 +105,9 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [description, setDescription] = useState('');
   const [descInvalid, setDescInvalid] = useState(false);
+  // Checked here rather than left to the database: the column is byte-limited and nothing else
+  // enforces it, so an over-long description used to surface only as a failed upload.
+  const descLimitError = overLimitError(description, DESCRIPTION_LIMIT);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -163,6 +186,9 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       setDescInvalid(true);
       return;
     }
+    // Over-length is reported by the field's own counter; just don't start an upload that the
+    // database would reject at the end of it.
+    if (descLimitError) return;
     const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
       const unsupported = ext ? `".${ext}" is not supported. ` : '';
@@ -329,20 +355,34 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         <div className="attach-card">
           <div className="attach-card__header">Upload file</div>
           <div className="attach-card__body">
-            <TextInput
-              id="attach-description"
-              className="attach-card__desc"
-              labelText={requiredLabel('Description', true)}
-              required
-              invalid={descInvalid}
-              invalidText="The description field must be entered."
-              value={description}
-              disabled={busy}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                if (e.target.value.trim()) setDescInvalid(false);
-              }}
-            />
+            <div className="frep-field attach-card__desc">
+              <TextArea
+                id="attach-description"
+                labelText={requiredLabel('Description', true)}
+                rows={3}
+                required
+                invalid={descInvalid || Boolean(descLimitError)}
+                invalidText={descLimitError || 'The description field must be entered.'}
+                value={description}
+                disabled={busy}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (e.target.value.trim()) setDescInvalid(false);
+                }}
+              />
+              <div className="frep-field__footer">
+                <span
+                  className={
+                    descLimitError
+                      ? 'frep-field__counter frep-field__counter--over'
+                      : 'frep-field__counter'
+                  }
+                  aria-live="polite"
+                >
+                  {byteLength(description)} / {DESCRIPTION_LIMIT}
+                </span>
+              </div>
+            </div>
             <div
               className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
               onDragOver={(e) => {

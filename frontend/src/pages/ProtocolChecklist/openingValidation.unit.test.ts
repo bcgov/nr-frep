@@ -27,10 +27,24 @@ describe('validateOpening', () => {
     expect(errors.frepSiteEvaluationCode).toMatch(/rating/i);
   });
 
-  it('enforces the 50-char location description limit', () => {
+  it('enforces the 50-byte location description limit', () => {
     expect(
       validateOpening(valid({ locationDescription: 'x'.repeat(51) })).locationDescription,
-    ).toMatch(/50 characters/);
+    ).toMatch(/the limit is 50 and this entry uses 51/);
+  });
+
+  it('measures the length limits in bytes, matching the byte-semantic columns', () => {
+    // BIODIVERSITY_CHECKLIST.LOCATION_DESCRIPTION is VARCHAR2(50 BYTE), so 26 curly quotes (26
+    // characters, 78 bytes) overflows it even though a character count would say it fits.
+    const smartQuotes = '\u2019'.repeat(26);
+    expect(smartQuotes.length).toBe(26);
+    expect(
+      validateOpening(valid({ locationDescription: smartQuotes })).locationDescription,
+    ).toMatch(/the limit is 50 and this entry uses 78/);
+    // …and a value that fits in bytes is still accepted.
+    expect(
+      validateOpening(valid({ locationDescription: 'x'.repeat(50) })).locationDescription,
+    ).toBeUndefined();
   });
 
   it('requires the innovative practices comment only when the answer is Yes', () => {
@@ -53,10 +67,10 @@ describe('validateOpening', () => {
   it('enforces comment and rationale length limits', () => {
     expect(
       validateOpening(valid({ invasivePlantComment: 'x'.repeat(4001) })).invasivePlantComment,
-    ).toMatch(/4000 characters/);
+    ).toMatch(/the limit is 4000 and this entry uses 4001/);
     expect(
       validateOpening(valid({ evaluatorOpinionComment: 'x'.repeat(2001) })).evaluatorOpinionComment,
-    ).toMatch(/2000 characters/);
+    ).toMatch(/the limit is 2000 and this entry uses 2001/);
   });
 
   it('validates the FREP gross area override (number, range, decimals)', () => {

@@ -157,8 +157,25 @@ class MasterListAdminServiceTest {
   @Test
   void saveCommentsRejectsTooLongComments() {
     String longComment = "x".repeat(4001);
-    assertThrows(InvalidPayloadException.class,
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
         () -> service.saveComments("2025", longComment));
+
+    assertTrue(ex.getError().getMessage().contains("the limit is 4000 and this entry uses 4001"),
+        ex.getError().getMessage());
+  }
+
+  @Test
+  void saveCommentsMeasuresTheLimitInBytesNotCharacters() {
+    // FREP_EVALUATION_YEAR.GENERATION_COMMENTS is VARCHAR2(4000 BYTE). 1500 curly quotes are 1500
+    // characters but 4500 bytes, so a character count would accept text the update rejects.
+    String smartQuotes = "\u2019".repeat(1500);
+    assertEquals(1500, smartQuotes.length());
+
+    InvalidPayloadException ex = assertThrows(InvalidPayloadException.class,
+        () -> service.saveComments("2025", smartQuotes));
+
+    assertTrue(ex.getError().getMessage().contains("the limit is 4000 and this entry uses 4500"),
+        ex.getError().getMessage());
   }
 
   @Test

@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
   Tag,
+  TextArea,
   TextInput,
   Tooltip,
 } from '@carbon/react';
@@ -29,6 +30,7 @@ import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
+import { byteLength, overLimitError } from '@/utils/textLimits';
 
 import './siteDetail.scss';
 
@@ -54,6 +56,13 @@ const STATUS_TAG_TYPE: Record<string, 'green' | 'red' | 'blue' | 'gray'> = {
 
 const SUBMITTED = 'SUB';
 const OTHER_REASON = 'OTH';
+/**
+ * Byte limits for the resource row's free-text columns:
+ * `FREP_RESOURCE_VALUE.REJECTION_REASON VARCHAR2(50 BYTE)` (rationale) and
+ * `ADDITIONAL_COMMENTS VARCHAR2(2000 BYTE)` (other comments) — nr-mof-db
+ * V2.01261__FREP_RESOURCE_VALUE.sql. Bytes, not characters: a curly quote costs 3, so a
+ * 50-character rationale pasted from Word can still overflow the column.
+ */
 const MAX_RATIONALE_LENGTH = 50;
 const MAX_COMMENTS_LENGTH = 2000;
 
@@ -137,18 +146,57 @@ function renderEditableCell(
       </div>
     );
   }
-  if (key === 'rationale' || key === 'otherComments') {
-    const error = errors?.[key];
+  // Other comments is a 2000-byte field — a multi-line box with a live counter, since a single
+  // line gives no sense of how much room is left. Rationale stays a one-line input: at 50 bytes it
+  // is a short phrase, so validation alone is enough and a counter would just add noise.
+  if (key === 'otherComments') {
+    const error = errors?.otherComments;
+    const value = (resource.otherComments as string | null) ?? '';
+    const used = byteLength(value);
     return (
       <div className="site-detail__editable-cell">
+        <TextArea
+          id={`${key}-${index}`}
+          labelText=""
+          hideLabel
+          rows={3}
+          value={value}
+          invalid={!!error}
+          onChange={(e) => patchRow(index, { otherComments: e.target.value })}
+        />
+        {/* Own markup rather than FieldWithCounter: that wrapper carries the standalone-form
+            bottom margin, which would stretch every row of this table. */}
+        <span
+          className={
+            used > MAX_COMMENTS_LENGTH
+              ? 'site-detail__cell-counter site-detail__cell-counter--over'
+              : 'site-detail__cell-counter'
+          }
+          aria-live="polite"
+        >
+          {used} / {MAX_COMMENTS_LENGTH}
+        </span>
+        {error && <span className="site-detail__cell-error">{error}</span>}
+      </div>
+    );
+  }
+  if (key === 'rationale') {
+    const error = errors?.rationale;
+    return (
+      <div className="site-detail__editable-cell">
+        {/* Deliberately no maxLength. A character cap can't enforce a *byte* limit anyway
+            (REJECTION_REASON is VARCHAR2(50 BYTE) and a curly quote costs 3), and it would make the
+            over-limit state unreachable — the browser just swallows the 51st keystroke, leaving
+            validateResources with nothing to report. Letting the value go over surfaces the error
+            and blocks Save, matching every other length-limited field in the app. */}
         <TextInput
           id={`${key}-${index}`}
           labelText=""
           hideLabel
           size="sm"
-          value={(resource[key as keyof SiteResource] as string | null) ?? ''}
+          value={(resource.rationale as string | null) ?? ''}
           invalid={!!error}
-          onChange={(e) => patchRow(index, { [key]: e.target.value })}
+          onChange={(e) => patchRow(index, { rationale: e.target.value })}
         />
         {error && <span className="site-detail__cell-error">{error}</span>}
       </div>
@@ -176,27 +224,32 @@ function validateResources(rows: SiteResource[]): RowErrors[] {
     const reason = (r.rejectionReasonCode ?? '').trim();
     const rationale = (r.rationale ?? '').trim();
     const comments = (r.otherComments ?? '').trim();
-    const tooLong = `Must be ${MAX_RATIONALE_LENGTH} characters or fewer.`;
+    const tooLong = overLimitError(rationale, MAX_RATIONALE_LENGTH);
 
     if (status === 'TAR') {
       if (reason) errors.rejectionReasonCode = 'Must be blank for targeted resources.';
       if (!rationale) errors.rationale = 'Rationale is required for targeted resources.';
-      else if (rationale.length > MAX_RATIONALE_LENGTH) errors.rationale = tooLong;
     } else if (status === 'REJ') {
       if (!reason) {
         errors.rejectionReasonCode = 'Rejection reason is required.';
       } else if (reason === OTHER_REASON && !rationale) {
         errors.rationale = 'Rationale is required when the reason is Other.';
-      } else if (rationale.length > MAX_RATIONALE_LENGTH) {
-        errors.rationale = tooLong;
       }
     } else {
       if (reason) errors.rejectionReasonCode = 'Must be blank for accepted resources.';
       if (rationale) errors.rationale = 'Must be blank for accepted resources.';
     }
 
-    if (comments.length > MAX_COMMENTS_LENGTH)
-      errors.otherComments = `Must be ${MAX_COMMENTS_LENGTH} characters or fewer.`;
+    // Checked outside the per-status rules, because those are if/else-if chains: a REJ row with no
+    // rejection reason short-circuits on "Rejection reason is required" and would never reach a
+    // nested length check, so an over-long rationale went unreported. ACC is excluded — "Must be
+    // blank for accepted resources" already covers it and is the more useful message.
+    if (!errors.rationale && tooLong && (status === 'TAR' || status === 'REJ')) {
+      errors.rationale = tooLong;
+    }
+
+    const commentsTooLong = overLimitError(comments, MAX_COMMENTS_LENGTH);
+    if (commentsTooLong) errors.otherComments = commentsTooLong;
     return errors;
   });
 }
@@ -453,7 +506,7 @@ const SiteDetailPage: FC = () => {
                     </div>
                   )}
                   <TableContainer>
-                    <Table>
+                    <Table className="site-detail__resource-table">
                       <TableHead>
                         <TableRow>
                           {RESOURCE_HEADERS.map((header) => (

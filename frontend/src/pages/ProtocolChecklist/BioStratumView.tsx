@@ -14,10 +14,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TextArea,
   TextInput,
 } from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { BecRow, CodeOption } from '@/types/configuration';
@@ -28,6 +30,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
+import { byteLength, overLimitError } from '@/utils/textLimits';
 
 /**
  * Biodiversity Stratum Summary section (FREP211) — edited inline in place. Master-detail editor with
@@ -206,6 +209,25 @@ const ECO_CHECKBOX_KEYS = [
   'uncommonTreeSpeciesInd',
 ];
 // Full groups the legacy enable/disable cascade clears when a group is turned off.
+/**
+ * Byte limits for the stratum's free-text fields, keyed by field — the same numbers
+ * checkStratumLengths enforces, shared with the counter so display and validation can't drift
+ * apart. Bytes, not characters: the columns are byte-semantic (`BIODIVERSITY_STRATUM.
+ * OTHER_CONSTRAINT VARCHAR2(50 BYTE)` and friends, nr-mof-db V2.00406__BIODIVERSITY_STRATUM.sql).
+ */
+const STRATUM_TEXT_LIMITS: Record<string, number> = {
+  otherConstraint: 50,
+  otherEcoAnchorDesc: 30,
+  patchGeneralComment: 2000,
+};
+
+/**
+ * Free-text fields rendered as a multi-line box rather than a single-line input. Only the general
+ * comment earns it — the other two limited fields are short labels ("Other constraint" at 50,
+ * "Other eco anchor description" at 30) that read fine on one line.
+ */
+const MULTILINE_KEYS = new Set(['patchGeneralComment']);
+
 const CONSTRAINT_KEYS = [...CONSTRAINT_PCT_KEYS, 'otherConstraint', 'constrainedTotal'];
 const ECO_KEYS = [...ECO_COUNT_KEYS, 'otherEcoAnchorDesc', ...ECO_CHECKBOX_KEYS];
 const PATCH_KEYS = [
@@ -445,14 +467,32 @@ const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
     e.patchWindthrowPct = '% of trees windthrown can have at most 1 decimal place.';
   }
   // Free-text length limits.
-  if (!e.otherConstraint && v('otherConstraint').length > 50) {
-    e.otherConstraint = 'Other constraint must be 50 characters or fewer.';
+  if (
+    !e.otherConstraint &&
+    byteLength(v('otherConstraint')) > STRATUM_TEXT_LIMITS.otherConstraint
+  ) {
+    e.otherConstraint = `Other constraint — ${overLimitError(
+      v('otherConstraint'),
+      STRATUM_TEXT_LIMITS.otherConstraint,
+    )}`;
   }
-  if (!e.otherEcoAnchorDesc && v('otherEcoAnchorDesc').length > 30) {
-    e.otherEcoAnchorDesc = 'Other eco anchor description must be 30 characters or fewer.';
+  if (
+    !e.otherEcoAnchorDesc &&
+    byteLength(v('otherEcoAnchorDesc')) > STRATUM_TEXT_LIMITS.otherEcoAnchorDesc
+  ) {
+    e.otherEcoAnchorDesc = `Other eco anchor description — ${overLimitError(
+      v('otherEcoAnchorDesc'),
+      STRATUM_TEXT_LIMITS.otherEcoAnchorDesc,
+    )}`;
   }
-  if (!e.patchGeneralComment && v('patchGeneralComment').length > 2000) {
-    e.patchGeneralComment = 'Patch general comment must be 2000 characters or fewer.';
+  if (
+    !e.patchGeneralComment &&
+    byteLength(v('patchGeneralComment')) > STRATUM_TEXT_LIMITS.patchGeneralComment
+  ) {
+    e.patchGeneralComment = `Comments — ${overLimitError(
+      v('patchGeneralComment'),
+      STRATUM_TEXT_LIMITS.patchGeneralComment,
+    )}`;
   }
 };
 
@@ -871,24 +911,40 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       );
     }
 
-    return readOnly ? (
-      <div className="protocol-checklist__field" key={key}>
-        <span className="protocol-checklist__label">{lbl}</span>
-        <span className="protocol-checklist__value">
-          {(key === 'summaryDate' ? formatShortDate(get(key)) : get(key)) || '—'}
-        </span>
-      </div>
+    if (readOnly) {
+      return (
+        <div className="protocol-checklist__field" key={key}>
+          <span className="protocol-checklist__label">{lbl}</span>
+          <span className="protocol-checklist__value">
+            {(key === 'summaryDate' ? formatShortDate(get(key)) : get(key)) || '—'}
+          </span>
+        </div>
+      );
+    }
+    const inputProps = {
+      key,
+      id: `stratum-${key}`,
+      labelText: lbl,
+      value: get(key),
+      disabled,
+      invalid: Boolean(fieldErrors[key]),
+      invalidText: fieldErrors[key],
+      onChange: (e: { target: { value: string } }) => set(key, e.target.value),
+    };
+    const input = MULTILINE_KEYS.has(key) ? (
+      <TextArea {...inputProps} rows={4} />
     ) : (
-      <TextInput
-        key={key}
-        id={`stratum-${key}`}
-        labelText={lbl}
-        value={get(key)}
-        disabled={disabled}
-        invalid={Boolean(fieldErrors[key])}
-        invalidText={fieldErrors[key]}
-        onChange={(e) => set(key, e.target.value)}
-      />
+      <TextInput {...inputProps} />
+    );
+    // Length-limited free text carries a live counter; checkStratumLengths already blocks the save
+    // and supplies the error text, so the counter only reports the count.
+    const limit = STRATUM_TEXT_LIMITS[key];
+    return limit === undefined ? (
+      input
+    ) : (
+      <FieldWithCounter key={key} used={byteLength(get(key))} limit={limit}>
+        {input}
+      </FieldWithCounter>
     );
   };
 

@@ -13,7 +13,9 @@ import { requiredLabel } from '@/utils/requiredLabel';
 import type { CheckList } from '@/types/chrChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
+import { OPENING_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
+import { addTextLimitErrors } from '@/utils/textLimits';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -38,6 +40,8 @@ const openingErrors = (d: Draft): Record<string, string> => {
   if (!d.evaluationDate?.trim()) e.evaluationDate = 'Evaluation date is required.';
   if (!d.generalLocation?.trim()) e.generalLocation = 'General location is required.';
   if (!d.assessedBy?.trim()) e.assessedBy = 'Evaluator is required — choose “Assign it to me”.';
+  // Free-text length, same rule as the feature editor — see textLimits.ts.
+  addTextLimitErrors(e, d as Record<string, unknown>, OPENING_TEXT_LIMITS);
   return e;
 };
 
@@ -173,7 +177,7 @@ const OpeningInformation: FC<{
               id="chr-general-location"
               labelText={requiredLabel('General location', true)}
               value={draft.generalLocation}
-              maxLength={200}
+              limit={OPENING_TEXT_LIMITS.generalLocation}
               invalid={Boolean(fieldErrors.generalLocation)}
               invalidText={fieldErrors.generalLocation}
               onChange={(v) => setDraft((d) => ({ ...d, generalLocation: v }))}

@@ -6,6 +6,9 @@ import { TextAreaField } from '@/pages/ChrChecklist/fields';
 
 import type { CheckList } from '@/types/chrChecklist';
 
+import { NOTES_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import { overLimitError } from '@/utils/textLimits';
+
 /**
  * Section — Notes: the block-level free-text note (legacy CHR "Comments" tab → `BLOCK_COMMENTS`,
  * exposed as `commentaires`). Its own tab to mirror the Biodiversity "Notes" tab. Read-only by
@@ -24,7 +27,11 @@ const Notes: FC<{
     setDraft(value.commentaires);
     setEditing(true);
   };
+  // Block the save while the note is over its column limit, the same way the other CHR forms
+  // gate on their field errors — the counter has already said why.
+  const limitError = overLimitError(draft, NOTES_TEXT_LIMITS.commentaires);
   const save = async () => {
+    if (limitError) return;
     if (await onSave({ commentaires: draft })) setEditing(false);
   };
 
@@ -53,7 +60,7 @@ const Notes: FC<{
             <Button kind="ghost" size="lg" disabled={busy} onClick={() => setEditing(false)}>
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
+            <Button size="lg" disabled={busy || Boolean(limitError)} onClick={() => void save()}>
               Save
             </Button>
           </>
@@ -66,6 +73,7 @@ const Notes: FC<{
           labelText="Notes"
           rows={10}
           value={draft}
+          limit={NOTES_TEXT_LIMITS.commentaires}
           onChange={(v) => setDraft(v)}
         />
       ) : (

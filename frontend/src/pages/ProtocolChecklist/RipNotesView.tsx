@@ -7,6 +7,14 @@ import type { RiparianNotes } from '@/types/protocolChecklist';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { byteLength, overLimitError } from '@/utils/textLimits';
+
+/**
+ * Byte limit of `<checklist>.note_description`. 2000 is what the legacy app enforced before the
+ * insert (`FrepNotesValidationManager.java:32`, a StringLengthValidator on noteDescription); the
+ * table DDL is not in this repo, so that validator is the authority.
+ */
+const NOTE_LIMIT = 2000;
 
 /**
  * Checklist Notes tab (legacy {@code checklistNote}) — a single free-text note, read-only with
@@ -65,7 +73,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
   }, [loadData]);
 
   const handleSave = async () => {
-    if (!data) return;
+    if (!data || limitError) return;
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveNotes(protocol, checklistId, data);
@@ -108,6 +116,9 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
 
   const note = data?.noteDescription ?? '';
   const showEditControls = canEdit && !submitted;
+  // Checked here rather than left to the database: note_description is byte-limited, so an
+  // over-long note used to surface only as a failed save.
+  const limitError = overLimitError(note, NOTE_LIMIT);
 
   const readOnlyNote = note ? (
     <div className="protocol-checklist__field">
@@ -132,7 +143,11 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
             <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void handleSave()}>
+            <Button
+              size="lg"
+              disabled={busy || Boolean(limitError)}
+              onClick={() => void handleSave()}
+            >
               Save
             </Button>
           </>
@@ -140,15 +155,31 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
       </div>
 
       {editing ? (
-        <TextArea
-          id="rip-note"
-          labelText="Notes"
-          rows={10}
-          value={note}
-          onChange={(e) =>
-            setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
-          }
-        />
+        // Same counter treatment as the CHR text fields (see utils/textLimits.ts): count bytes,
+        // never truncate, and let the count sit bottom-right under the box.
+        <div className="frep-field">
+          <TextArea
+            id="rip-note"
+            labelText="Notes"
+            rows={10}
+            value={note}
+            invalid={Boolean(limitError)}
+            invalidText={limitError}
+            onChange={(e) =>
+              setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
+            }
+          />
+          <div className="frep-field__footer">
+            <span
+              className={
+                limitError ? 'frep-field__counter frep-field__counter--over' : 'frep-field__counter'
+              }
+              aria-live="polite"
+            >
+              {byteLength(note)} / {NOTE_LIMIT}
+            </span>
+          </div>
+        </div>
       ) : (
         readOnlyNote
       )}

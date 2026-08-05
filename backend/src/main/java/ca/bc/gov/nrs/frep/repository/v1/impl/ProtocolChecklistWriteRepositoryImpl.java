@@ -30,6 +30,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Write path for the classic BIO/RIP/WTR protocol checklists, calling the legacy Oracle packages:
@@ -610,6 +611,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
             rs.getString("biodiversity_plot_id"),
             rs.getString("plot_number"),
             rs.getString("assessor_name"),
+            null, // display name resolved via FAM in the service
             rs.getString("revision_count")),
         stratumId
     );
@@ -675,7 +677,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           rs.getString("plot_comment"),
           rs.getString("revision_count"),
           stand,
-          cwd
+          cwd,
+          null // display name resolved via FAM in the service
       );
     }, plotId);
   }
@@ -805,7 +808,17 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
    * first (single-lead invariant, like the legacy UI) when it's someone else, then re-flags/adds the
    * caller as lead. No {@code getAdministration} re-read — the Opening flow re-reads itself. The
    * evaluator table has its own revision token, independent of the checklist's.
+   *
+   * <p><b>Transactional for a reason.</b> {@code delete_bio_team_member} reports "this evaluator
+   * still has plots" by appending message keys to its OUT parameter, but it does <em>not</em> stop:
+   * it falls through and deletes the evaluator row anyway (there is no guard between the check loop
+   * and {@code frep_biodiversity_eval_name.remove()}). Under autocommit that left the checklist with
+   * no evaluator at all whenever the takeover was refused — the delete committed, the exception
+   * skipped {@code save_team_member}, and the Opening header went blank. Neither proc commits
+   * internally (both do plain DML), so one transaction across both calls makes the takeover atomic:
+   * either the new lead is installed or nothing changes.
    */
+  @Transactional
   public void assignBiodiversityLead(String checklistId, String resourceType, String newLead,
       String oldLead, String oldRevision, String userId) {
     if (StringUtils.isNotBlank(oldLead) && !oldLead.equalsIgnoreCase(newLead)) {

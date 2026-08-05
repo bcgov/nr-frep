@@ -22,6 +22,7 @@ import {
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
 
+import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { MasterListYear } from '@/types/configuration';
@@ -31,6 +32,7 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { byteLength, overLimitError } from '@/utils/textLimits';
 
 import './masterListAdmin.scss';
 
@@ -50,6 +52,11 @@ const toIsoDate = (d?: Date): string => (d ? d.toISOString().slice(0, 10) : '');
 const HARVEST_DATE_MIN = '1997-06-15';
 const HARVEST_DATE_MAX = '2050-12-31';
 const MAX_GROSS_AREA_HA = 99999.9999;
+/**
+ * Byte limit of `FREP_EVALUATION_YEAR.GENERATION_COMMENTS`, which is `VARCHAR2(4000 BYTE)`
+ * (nr-mof-db V2.01258__FREP_EVALUATION_YEAR.sql). Bytes, not characters: a curly quote or
+ * em-dash costs 3, so a 4000-character comment pasted from Word can overflow the column.
+ */
 const MAX_COMMENTS_LENGTH = 4000;
 
 type FormErrors = Partial<
@@ -98,8 +105,9 @@ const validateGenerateForm = (f: GenerateMasterListRequest): FormErrors => {
     errors.maxSites = 'Must be a whole number between 1 and 500.';
   }
 
-  if ((f.comments ?? '').length > MAX_COMMENTS_LENGTH) {
-    errors.comments = 'Must be 4000 characters or fewer.';
+  const commentsError = overLimitError(f.comments, MAX_COMMENTS_LENGTH);
+  if (commentsError) {
+    errors.comments = commentsError;
   }
 
   return errors;
@@ -124,6 +132,10 @@ const MasterListAdminPage: FC = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  // Live, unlike the rest of `errors` (which is only populated on Generate). "Save comments"
+  // posts straight to the API without running validateGenerateForm, so this is what stops an
+  // over-limit comment on that path — the field no longer truncates for us.
+  const commentsLimitError = overLimitError(form.comments, MAX_COMMENTS_LENGTH);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,11 +269,13 @@ const MasterListAdminPage: FC = () => {
     }
   };
 
-  const handleSaveComments = () =>
-    runMutation(
+  const handleSaveComments = () => {
+    if (commentsLimitError) return;
+    return runMutation(
       () => API.masterListAdmin.saveComments(effectiveYear, form.comments ?? ''),
       'Comments saved',
     );
+  };
 
   const handleDelete = async () => {
     if (
@@ -406,25 +420,31 @@ const MasterListAdminPage: FC = () => {
                   invalid={!!errors.maxSites}
                   invalidText={errors.maxSites}
                 />
-                <TextArea
-                  id="mla-comments"
-                  labelText="Generation comments"
-                  rows={3}
-                  value={form.comments ?? ''}
-                  onChange={(e) => setForm({ ...form, comments: e.target.value })}
-                  maxLength={MAX_COMMENTS_LENGTH}
-                  invalid={!!errors.comments}
-                  invalidText={errors.comments}
-                />
+                {/* No maxLength: silently truncating pasted text loses content without telling
+                    the admin. The counter shows the overage and validateGenerateForm blocks. */}
+                <FieldWithCounter used={byteLength(form.comments)} limit={MAX_COMMENTS_LENGTH}>
+                  <TextArea
+                    id="mla-comments"
+                    labelText="Generation comments"
+                    rows={3}
+                    value={form.comments ?? ''}
+                    onChange={(e) => setForm({ ...form, comments: e.target.value })}
+                    invalid={Boolean(commentsLimitError || errors.comments)}
+                    invalidText={commentsLimitError || errors.comments}
+                  />
+                </FieldWithCounter>
               </div>
               <div className="master-list-admin__actions">
-                <Button onClick={() => void handleGenerate()} disabled={generating || hasList}>
+                <Button
+                  onClick={() => void handleGenerate()}
+                  disabled={generating || hasList || Boolean(commentsLimitError)}
+                >
                   Generate master list
                 </Button>
                 <Button
                   kind="tertiary"
                   onClick={() => void handleSaveComments()}
-                  disabled={generating || !hasList}
+                  disabled={generating || !hasList || Boolean(commentsLimitError)}
                 >
                   Save comments
                 </Button>

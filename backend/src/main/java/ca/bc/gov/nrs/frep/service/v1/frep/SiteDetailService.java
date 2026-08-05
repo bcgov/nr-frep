@@ -13,6 +13,7 @@ import ca.bc.gov.nrs.frep.repository.v1.SiteDetailRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.SiteResourceRow;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +42,22 @@ public class SiteDetailService {
   static final Set<String> SUPPORTED_PROTOCOLS = Set.of("SLB", "SLR", "CHR");
   static final int MAX_RATIONALE_LENGTH = 50;
   static final int MAX_COMMENTS_LENGTH = 2000;
-  private static final String RATIONALE_TOO_LONG = "rationale must be 50 characters or fewer";
+  /**
+   * Free-text lengths here are measured in UTF-8 <b>bytes</b>, the unit the columns enforce:
+   * {@code FREP_RESOURCE_VALUE.REJECTION_REASON} is {@code VARCHAR2(50 BYTE)} and
+   * {@code ADDITIONAL_COMMENTS} is {@code VARCHAR2(2000 BYTE)} (nr-mof-db
+   * {@code scripts/THE/TABLES/V2.01261__FREP_RESOURCE_VALUE.sql}). A character count accepts text
+   * the insert rejects — a curly quote costs 3 bytes — and the UI counter measures the same way.
+   */
+  private static int length(String value) {
+    return value == null ? 0 : value.getBytes(StandardCharsets.UTF_8).length;
+  }
+
+  /** Row-scoped over-limit message, phrased without "characters" — the limit is bytes. */
+  private static String tooLong(String label, String value, int max) {
+    return label + " is too long — the limit is " + max + " and this entry uses "
+        + length(value) + "";
+  }
 
   private final SiteDetailRepository siteDetailRepository;
   private final LoggedUserHelper loggedUserHelper;
@@ -184,8 +200,16 @@ public class SiteDetailService {
         // Unknown status — no field-level rules.
       }
     }
-    if (comments.length() > MAX_COMMENTS_LENGTH) {
-      errors.add(rowError(index, "other comments must be 2000 characters or fewer"));
+    // Length is checked here, outside the per-status rules, because those are else-if chains: a
+    // REJ row with no rejection reason short-circuits on "reason is required" and would never reach
+    // a nested length check, letting an over-long rationale through unreported. ACC is excluded
+    // because "rationale must be blank" already covers it and is the more useful message.
+    if (("TAR".equals(status) || "REJ".equals(status))
+        && length(rationale) > MAX_RATIONALE_LENGTH) {
+      errors.add(rowError(index, tooLong("rationale", rationale, MAX_RATIONALE_LENGTH)));
+    }
+    if (length(comments) > MAX_COMMENTS_LENGTH) {
+      errors.add(rowError(index, tooLong("other comments", comments, MAX_COMMENTS_LENGTH)));
     }
   }
 
@@ -195,22 +219,14 @@ public class SiteDetailService {
     }
     if (rationale.isEmpty()) {
       errors.add(rowError(index, "rationale is required for targeted resources"));
-    } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-      errors.add(rowError(index, RATIONALE_TOO_LONG));
     }
   }
 
   private static void validateRejected(int index, String reason, String rationale, List<String> errors) {
     if (reason.isEmpty()) {
       errors.add(rowError(index, "rejection reason is required for rejected resources"));
-    } else if (OTHER_REASON.equalsIgnoreCase(reason)) {
-      if (rationale.isEmpty()) {
-        errors.add(rowError(index, "rationale is required when the rejection reason is Other"));
-      } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-        errors.add(rowError(index, RATIONALE_TOO_LONG));
-      }
-    } else if (rationale.length() > MAX_RATIONALE_LENGTH) {
-      errors.add(rowError(index, RATIONALE_TOO_LONG));
+    } else if (OTHER_REASON.equalsIgnoreCase(reason) && rationale.isEmpty()) {
+      errors.add(rowError(index, "rationale is required when the rejection reason is Other"));
     }
   }
 

@@ -29,7 +29,8 @@ public record BioPlot(
     String plotComment,
     String revisionCount,
     List<BioStandRow> standTable,
-    List<BioCwdRow> cwdTable
+    List<BioCwdRow> cwdTable,
+    String assessorDisplayName
 ) {
 
   /** Returns a copy with the id/revision the save_plot proc echoes back. */
@@ -38,7 +39,7 @@ public record BioPlot(
         newPlotId, newStratumId, plotNumber, assessorName, utmSignal, utmZone, utmEasting,
         utmNorthing, treeIndicator, basalAreaFactor, fixedAreaRadius, fullCountArea,
         cwdTransectIndicator, firstLegTransect, secondLegTransect, plotComment, newRevisionCount,
-        standTable, cwdTable
+        standTable, cwdTable, assessorDisplayName
     );
   }
 
@@ -47,7 +48,22 @@ public record BioPlot(
     return new BioPlot(
         plotId, newStratumId, plotNumber, assessorName, utmSignal, utmZone, utmEasting, utmNorthing,
         treeIndicator, basalAreaFactor, fixedAreaRadius, fullCountArea, cwdTransectIndicator,
-        firstLegTransect, secondLegTransect, plotComment, revisionCount, standTable, cwdTable
+        firstLegTransect, secondLegTransect, plotComment, revisionCount, standTable, cwdTable,
+        assessorDisplayName
+    );
+  }
+
+  /**
+   * Returns a copy carrying the FAM-resolved assessor name for display. Deliberately a separate
+   * field: {@code assessorName} is the bare userid written back to {@code assessor_name} by
+   * save_plot, so it must never be replaced with a label.
+   */
+  public BioPlot withAssessorDisplayName(String displayName) {
+    return new BioPlot(
+        plotId, stratumId, plotNumber, assessorName, utmSignal, utmZone, utmEasting, utmNorthing,
+        treeIndicator, basalAreaFactor, fixedAreaRadius, fullCountArea, cwdTransectIndicator,
+        firstLegTransect, secondLegTransect, plotComment, revisionCount, standTable, cwdTable,
+        displayName
     );
   }
 }

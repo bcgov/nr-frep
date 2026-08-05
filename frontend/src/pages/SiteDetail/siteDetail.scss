@@ -36,6 +36,51 @@
   }
 }
 
+// Resource table. Column widths are pinned because the two free-text columns (Rationale, Other
+// comments) need the room and Rejection reason does not — left to auto layout its select stretched
+// to nearly a third of the table. Cells are top-aligned so the single-line inputs line up with the
+// top of the taller comments box instead of floating mid-row, and the row padding gives the inputs
+// and their counter/error text somewhere to breathe.
+.site-detail__resource-table {
+  table-layout: fixed;
+
+  th,
+  td {
+    &:nth-child(1) {
+      inline-size: 18%;
+    } // Resource value
+    &:nth-child(2) {
+      inline-size: 11%;
+    } // Status
+    &:nth-child(3) {
+      inline-size: 16%;
+    } // Rejection reason
+    &:nth-child(4) {
+      inline-size: 25%;
+    } // Rationale
+    &:nth-child(5) {
+      inline-size: 30%;
+    } // Other comments
+  }
+
+  // Carbon fixes the row height, which crops a cell holding a textarea plus its counter.
+  tbody tr {
+    block-size: auto;
+  }
+
+  tbody td {
+    vertical-align: middle;
+    padding-block: 1rem;
+  }
+
+  // Carbon fills fields with `--cds-field`, a grey that reads as disabled against the white
+  // (non-zebra) rows. Force white so the comments box looks like the editable field it is, on
+  // every row.
+  .#{vars.$bcgov-prefix}--text-area {
+    background-color: var(--#{vars.$bcgov-prefix}-background);
+  }
+}
+
 // Editable cell: the field stacked over its own validation message. We render the message ourselves
 // (rather than Carbon's in-cell invalidText, which gets clipped by the fixed-height table row) so it
 // shows in full below the field. The wrapper grows the cell, so the row expands to fit it.
@@ -44,6 +89,21 @@
   flex-direction: column;
   gap: 0.25rem;
   inline-size: 100%;
+}
+
+// Live byte counter under the Other comments box (see utils/textLimits.ts). Sized like the cell
+// error so the two read as one block of field metadata inside the table row.
+.site-detail__cell-counter {
+  @include type.type-style('label-01');
+  align-self: flex-end;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.34;
+
+  &--over {
+    color: var(--#{vars.$bcgov-prefix}-text-error);
+    font-weight: 600;
+  }
 }
 
 .site-detail__cell-error {

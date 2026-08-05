@@ -27,6 +27,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -164,8 +165,8 @@ public class ProtocolChecklistService {
 
     if (StringUtils.isBlank(opening.locationDescription())) {
       errors.add("Location description is required.");
-    } else if (opening.locationDescription().length() > 50) {
-      errors.add("Location description must be 50 characters or fewer.");
+    } else if (length(opening.locationDescription()) > 50) {
+      errors.add(tooLong("Location description", opening.locationDescription(), 50));
     }
     if (StringUtils.isBlank(opening.invasivePlantIndicator())) {
       errors.add("Select whether invasive plant species are present.");
@@ -181,16 +182,16 @@ public class ProtocolChecklistService {
         && StringUtils.isBlank(opening.innovativePracticesComment())) {
       errors.add("Describe the innovative practice.");
     } else if (length(opening.innovativePracticesComment()) > 4000) {
-      errors.add("Description must be 4000 characters or fewer.");
+      errors.add(tooLong("Description", opening.innovativePracticesComment(), 4000));
     }
     if ("Y".equals(opening.invasivePlantIndicator())
         && StringUtils.isBlank(opening.invasivePlantComment())) {
       errors.add("Enter a comment about the invasive plants.");
     } else if (length(opening.invasivePlantComment()) > 4000) {
-      errors.add("Comments must be 4000 characters or fewer.");
+      errors.add(tooLong("Comments", opening.invasivePlantComment(), 4000));
     }
     if (length(opening.evaluatorOpinionComment()) > 2000) {
-      errors.add("Rationale must be 2000 characters or fewer.");
+      errors.add(tooLong("Rationale", opening.evaluatorOpinionComment(), 2000));
     }
     validateOverride(opening.frepWtpOverride(), errors);
 
@@ -204,8 +205,24 @@ public class ProtocolChecklistService {
     }
   }
 
+  /**
+   * Length in the unit the database enforces: UTF-8 <b>bytes</b>.
+   *
+   * <p>Every free-text column behind these screens is declared byte-semantic —
+   * {@code BIODIVERSITY_CHECKLIST.LOCATION_DESCRIPTION VARCHAR2(50 BYTE)} and the rest (see
+   * nr-mof-db {@code scripts/THE/TABLES/}). A character count therefore accepts values the insert
+   * rejects: 26 curly quotes are 26 characters but 78 bytes, so a "50 character" location
+   * description can overflow a 50-byte column. The frontend counters measure the same way, so the
+   * count an evaluator sees is the count that decides whether the save succeeds.
+   */
   private static int length(String value) {
-    return value == null ? 0 : value.length();
+    return value == null ? 0 : value.getBytes(StandardCharsets.UTF_8).length;
+  }
+
+  /** The over-limit message, phrased without "characters" — the limit is bytes. */
+  private static String tooLong(String label, String value, int max) {
+    return label + " is too long — the limit is " + max + " and this entry uses "
+        + length(value) + ".";
   }
 
   private static void validateOverride(String value, List<String> errors) {
@@ -418,8 +435,8 @@ public class ProtocolChecklistService {
   }
 
   private static void maxLength(String value, String label, int max, List<String> errors) {
-    if (value != null && value.length() > max) {
-      errors.add(label + " must be " + max + " characters or fewer.");
+    if (value != null && length(value) > max) {
+      errors.add(tooLong(label, value, max));
     }
   }
 
@@ -512,7 +529,9 @@ public class ProtocolChecklistService {
   // --- Biodiversity plots (FREP screen 212) ---
 
   public List<BioPlotRow> listBioPlots(String stratumId) {
-    return writeRepository.listBioPlots(stratumId);
+    return writeRepository.listBioPlots(stratumId).stream()
+        .map(row -> row.withAssessorDisplayName(assessorDisplayName(row.assessorName())))
+        .toList();
   }
 
   public BioPlot getBioPlot(String plotId) {
@@ -520,7 +539,22 @@ public class ProtocolChecklistService {
     if (plot == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plot not found: " + plotId);
     }
-    return plot;
+    return plot.withAssessorDisplayName(assessorDisplayName(plot.assessorName()));
+  }
+
+  /**
+   * Display name for a plot assessor userid — the FAM-resolved "First Last (USERID)" the checklist
+   * header shows, falling back to the bare userid when the assessor no longer has FREP access (or
+   * FAM is unavailable). Plot assessors are stored bare, so this is the only place a name exists.
+   *
+   * <p>Cheap for a plot list: {@link FamUserDirectoryService#resolveName} caches by userid, and a
+   * stratum's plots are usually all assessed by the same person, so the list costs one lookup.
+   */
+  private String assessorDisplayName(String userid) {
+    if (StringUtils.isBlank(userid)) {
+      return userid;
+    }
+    return famUserDirectoryService.resolveName(userid).orElse(userid);
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {

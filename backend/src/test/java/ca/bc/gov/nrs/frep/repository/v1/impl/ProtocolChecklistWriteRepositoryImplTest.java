@@ -245,7 +245,8 @@ class ProtocolChecklistWriteRepositoryImplTest {
         List.of(new BioStandRow(null, null, "FD", null, "1", "30", "20", "ok", "1", null, "1",
             null, null)),
         List.of(new BioCwdRow(null, null, "FD", null, "1", "15", "5", "2", null, "log", "1", null,
-            null)));
+            null)),
+        null);
 
     repository.saveBioPlot(in, "idir");
 

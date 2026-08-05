@@ -11,6 +11,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListCriteriaData;
 import ca.bc.gov.nrs.frep.repository.v1.bean.MasterListGenerationRow;
 import ca.bc.gov.nrs.frep.repository.v1.MasterListRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -160,9 +161,21 @@ public class MasterListAdminService {
     return date;
   }
 
+  /**
+   * Comments length, measured in UTF-8 <b>bytes</b> — the unit the column enforces.
+   * {@code FREP_EVALUATION_YEAR.GENERATION_COMMENTS} is {@code VARCHAR2(4000 BYTE)} (nr-mof-db
+   * {@code scripts/THE/TABLES/V2.01258__FREP_EVALUATION_YEAR.sql}), so a character count accepts
+   * text the update rejects: a curly quote or em-dash costs 3 bytes, not 1. The UI counter measures
+   * the same way, so the number an admin sees is the number that decides whether the save succeeds.
+   */
   private static void validateComments(String comments, List<String> errors) {
-    if (comments != null && comments.length() > MAX_COMMENTS_LENGTH) {
-      errors.add("Comments must be 4000 characters or fewer.");
+    if (comments == null) {
+      return;
+    }
+    int used = comments.getBytes(StandardCharsets.UTF_8).length;
+    if (used > MAX_COMMENTS_LENGTH) {
+      errors.add("Comments is too long — the limit is " + MAX_COMMENTS_LENGTH
+          + " and this entry uses " + used + ".");
     }
   }
 

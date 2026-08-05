@@ -8,9 +8,13 @@ import {
   TextInput,
 } from '@carbon/react';
 
+import FieldWithCounter from '@/components/core/FieldWithCounter';
+
 import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
 import type { FC, ReactNode } from 'react';
+
+import { byteLength, overLimitError } from '@/utils/textLimits';
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
 export const IndicatorCheckbox: FC<{
@@ -126,21 +130,52 @@ export const TextAreaField: FC<{
   disabled?: boolean;
   rows?: number;
   maxLength?: number;
+  /**
+   * Byte limit of the backing column. Shows a live "used / limit" counter beside the label and
+   * marks the field invalid once exceeded — it does NOT truncate. Deliberately not Carbon's
+   * `enableCounter`/`maxCount`, which count characters and pair with `maxLength` truncation: the
+   * columns are byte-limited (see textLimits.ts), and silently dropping the tail of pasted text is
+   * how an evaluator loses a paragraph without noticing. Blocking Save is the caller's job.
+   */
+  limit?: number;
   invalid?: boolean;
   invalidText?: string;
-}> = ({ id, labelText, value, onChange, disabled, rows = 3, maxLength, invalid, invalidText }) => (
-  <TextArea
-    id={id}
-    labelText={labelText}
-    value={value ?? ''}
-    rows={rows}
-    disabled={disabled}
-    maxLength={maxLength}
-    invalid={invalid}
-    invalidText={invalidText}
-    onChange={(e) => onChange(e.target.value)}
-  />
-);
+}> = ({
+  id,
+  labelText,
+  value,
+  onChange,
+  disabled,
+  rows = 3,
+  maxLength,
+  limit,
+  invalid,
+  invalidText,
+}) => {
+  const used = limit === undefined ? 0 : byteLength(value);
+  const over = limit !== undefined && used > limit;
+  const field = (
+    <TextArea
+      id={id}
+      labelText={labelText}
+      value={value ?? ''}
+      rows={rows}
+      disabled={disabled}
+      maxLength={maxLength}
+      invalid={invalid || over}
+      invalidText={over ? overLimitError(value, limit) : invalidText}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+  if (limit === undefined) {
+    return field;
+  }
+  return (
+    <FieldWithCounter used={used} limit={limit}>
+      {field}
+    </FieldWithCounter>
+  );
+};
 
 /** Carbon select backed by a CodeOption[] list. */
 export const CodeSelect: FC<{

@@ -181,5 +181,4 @@ export class ConfigurationService extends HttpClient {
       query: { checklistId, protocol },
     });
   }
-
 }

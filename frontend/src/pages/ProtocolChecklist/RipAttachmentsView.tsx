@@ -22,15 +22,12 @@ import { byteLength, overLimitError } from '@/utils/textLimits';
  * package's shared cursor record borrows its types from `riparian_checklist_attach` regardless of
  * protocol — that record is not the target table.
  *
- * <p>120 comes from the legacy UI, which capped this input at `maxlength="120"`
- * (`checklistAttachment.jsp:62`) on the one screen it used for every protocol; its validator only
- * checked the field was present. So 120 is the widest value the old app is known to have written
- * successfully, not necessarily the column width — the table DDL is not in this repo. If the column
- * is wider this can safely be raised:
- *   SELECT char_used, data_length FROM all_tab_columns
- *    WHERE table_name = 'BIODIVERSITY_CHKLST_ATTACH' AND column_name = 'DESCRIPTION';
+ * <p>The column was `VARCHAR2(120 BYTE)` (matching the legacy UI's `maxlength="120"` in
+ * `checklistAttachment.jsp:62`) and is widened to 2000 by migration `V202608051100.3` in nr-mof-db.
+ * **This value is only correct once that migration has been deployed to the target environment** —
+ * shipping it ahead of the DDL lets the UI accept descriptions the insert will reject.
  */
-const DESCRIPTION_LIMIT = 120;
+const DESCRIPTION_LIMIT = 2000;
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —

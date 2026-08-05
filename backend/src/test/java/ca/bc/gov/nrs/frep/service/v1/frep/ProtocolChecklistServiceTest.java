@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,11 +28,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,16 +58,12 @@ class ProtocolChecklistServiceTest {
   @InjectMocks
   private ProtocolChecklistService service;
 
-  @Test
-  void normalizeProtocolTypeMapsBioAndRejectsOutOfScope() {
-    assertEquals(Optional.of("SLB"), ProtocolChecklistService.normalizeProtocolType("bio"));
-    assertEquals(Optional.of("SLB"), ProtocolChecklistService.normalizeProtocolType("SLB"));
-    // Riparian + Water are out of scope — no longer recognised.
-    assertTrue(ProtocolChecklistService.normalizeProtocolType("rip").isEmpty());
-    assertTrue(ProtocolChecklistService.normalizeProtocolType("wat").isEmpty());
-    assertTrue(ProtocolChecklistService.normalizeProtocolType("wtr").isEmpty());
-    assertTrue(ProtocolChecklistService.normalizeProtocolType("CHR").isEmpty());
-    assertTrue(ProtocolChecklistService.normalizeProtocolType("").isEmpty());
+  @BeforeEach
+  void stubRecordType() {
+    // Type is resolved from the record (not the URL). New/editable biodiversity records are SLR;
+    // historical SLB records are view-only (mutations 403). Default the editable path to SLR; the
+    // few view-only/read tests override this stub to SLB explicitly.
+    lenient().when(checklistRepository.resolveResourceType(anyString())).thenReturn("SLR");
   }
 
   @Test
@@ -114,6 +114,7 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void findChecklistBuildsBioResponseFromRepositorySections() {
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB"); // historical view-only record
     Map<String, Object> slb = new LinkedHashMap<>();
     slb.put("CODE", "SLB");
     slb.put("DESCRIPTION", "Biodiversity");
@@ -140,6 +141,7 @@ class ProtocolChecklistServiceTest {
 
   @Test
   void findChecklistDegradesSectionWithNoData() {
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB"); // historical view-only record
     Map<String, Object> slb = new LinkedHashMap<>();
     slb.put("CODE", "SLB");
     slb.put("DESCRIPTION", "Biodiversity");
@@ -170,19 +172,19 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void submitMapsBioToSlbAndSucceedsWhenNoValidationError() {
+  void submitSucceedsForEditableSlrRecordWhenNoValidationError() {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\u");
-    when(writeRepository.submit("SLB", "9001", "IDIR\\u")).thenReturn("");
+    when(writeRepository.submit("SLR", "9001", "IDIR\\u")).thenReturn("");
 
     service.submit("bio", "9001");
 
-    verify(writeRepository).submit("SLB", "9001", "IDIR\\u");
+    verify(writeRepository).submit("SLR", "9001", "IDIR\\u");
   }
 
   @Test
   void submitThrowsValidationExceptionWithSplitMessages() {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
-    when(writeRepository.submit("SLB", "9001", "u"))
+    when(writeRepository.submit("SLR", "9001", "u"))
         .thenReturn("frep.submit.common.evaluation;frep.submit.common.teamlead;");
 
     ProtocolSubmitValidationException ex = assertThrows(
@@ -192,13 +194,34 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void unsubmitMapsBioToSlb() {
+  void unsubmitSucceedsForEditableSlrRecord() {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
-    when(writeRepository.unsubmit("SLB", "9001", "u")).thenReturn("");
+    when(writeRepository.unsubmit("SLR", "9001", "u")).thenReturn("");
 
     service.unsubmit("bio", "9001");
 
-    verify(writeRepository).unsubmit("SLB", "9001", "u");
+    verify(writeRepository).unsubmit("SLR", "9001", "u");
+  }
+
+  @Test
+  void submitOnHistoricalSlbRecordIsForbidden() {
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.submit("bio", "9001"));
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    verify(writeRepository, never()).submit(any(), any(), any());
+  }
+
+  @Test
+  void saveBioStratumOnHistoricalSlbRecordIsForbidden() {
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");
+
+    BioStratum stratum = stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.saveBioStratum(stratum));
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    verify(writeRepository, never()).saveBioStratum(any(), any());
   }
 
   @Test
@@ -276,10 +299,12 @@ class ProtocolChecklistServiceTest {
         "IDIR\\OTHER", "Other", "7");
     when(writeRepository.saveBiodiversityOpening(claimed, "IDIR\\ME")).thenReturn(claimed);
     when(writeRepository.getBiodiversityOpening("9001")).thenReturn(current);
+    // The resource value type comes from the record, not the URL — a new record resolves to SLR.
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLR");
 
     service.saveBiodiversityOpening("9001", claimed);
 
-    verify(writeRepository).assignBiodiversityLead("9001", "SLB", "IDIR\\ME", "IDIR\\OTHER", "7",
+    verify(writeRepository).assignBiodiversityLead("9001", "SLR", "IDIR\\ME", "IDIR\\OTHER", "7",
         "IDIR\\ME");
   }
 

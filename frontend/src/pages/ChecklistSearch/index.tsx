@@ -120,7 +120,11 @@ const ChecklistSearchPage: FC = () => {
         if (cancelled) return;
         setMasterListYears(years);
         setOrgUnits(units);
-        setProtocols(fetchedProtocols);
+        // Selectable search protocols: biodiversity (SLR — the go-forward code, which the backend
+        // expands to also match legacy SLB), plus historical RIP/WTR and CHR. SLB is not a separate
+        // option; searching SLR returns historical SLB checklists too.
+        const IN_SCOPE = new Set(['SLR', 'RIP', 'WTR', 'CHR']);
+        setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
         // Default the year filter to the latest year in the list.
         const latestYear = years.reduce<string | undefined>(
           (latest, year) =>
@@ -239,12 +243,9 @@ const ChecklistSearchPage: FC = () => {
     [results],
   );
 
-  // Code → display-name lookups so the cell renderer can resolve protocol / org-unit names with a
-  // map get() instead of a nested find() (which pushes the cell function past the 4-level nesting cap).
-  const protocolNameByCode = useMemo(
-    () => new Map(protocols.map((p) => [p.code, p.name] as const)),
-    [protocols],
-  );
+  // Code → display-name lookup so the cell renderer can resolve the org-unit name with a map get()
+  // instead of a nested find() (which pushes the cell function past the 4-level nesting cap). The
+  // protocol name needs no such map — the search row carries it.
   const orgUnitNameByCode = useMemo(
     () => new Map(orgUnits.map((u) => [u.orgUnitCode, u.orgUnitName] as const)),
     [orgUnits],
@@ -450,10 +451,15 @@ const ChecklistSearchPage: FC = () => {
                               );
                             }
                             if (cell.info.header === 'protocolCode') {
-                              const name = protocolNameByCode.get(cell.value);
+                              // Name comes from the row itself (frvtc.description in the search
+                              // query), not from the dropdown options: an SLR search also returns
+                              // historical SLB rows, and SLB is not an offered option, so a lookup
+                              // in that list would miss and render a bare code.
                               return (
                                 <TableCell key={cell.id}>
-                                  {cell.value && name ? `${cell.value} - ${name}` : cell.value}
+                                  {cell.value && data?.protocolName
+                                    ? `${cell.value} - ${data.protocolName}`
+                                    : cell.value}
                                 </TableCell>
                               );
                             }

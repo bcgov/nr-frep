@@ -334,7 +334,7 @@ const RandomListPage: FC = () => {
                           <strong># of Sites Accepted</strong>
                           {summary.orgUnitDescription ? ` — ${summary.orgUnitDescription}` : ''}
                           {' — '}
-                          Biodiversity: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
+                          Stand Level Retention: {summary.biodiversity} &nbsp; Cultural Heritage:{' '}
                           {summary.culturalHeritage}
                         </span>
                       ) : null

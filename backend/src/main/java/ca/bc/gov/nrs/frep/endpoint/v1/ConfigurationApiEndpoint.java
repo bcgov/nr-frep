@@ -89,7 +89,7 @@ public interface ConfigurationApiEndpoint {
   @GetMapping("/evaluators")
   ResponseEntity<List<CodeOptionResponse>> getEvaluators(
       @RequestParam(name = "checklistId") String checklistId,
-      @RequestParam(name = "protocol", required = false, defaultValue = "SLB") String protocol);
+      @RequestParam(name = "protocol", required = false, defaultValue = "SLR") String protocol);
 
   @GetMapping("/evaluator-search")
   ResponseEntity<EvaluatorSearchResponse> searchEvaluators(

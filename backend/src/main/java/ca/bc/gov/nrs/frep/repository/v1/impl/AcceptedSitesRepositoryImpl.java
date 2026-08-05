@@ -59,7 +59,7 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
 
   /**
    * BIO + CHR accepted/targeted sites. The BIO branch ports {@code FREP_200_ACCEPTED_SITES.get} (filtered
-   * to SLB, with the {@code cut_block_open_admin} inner join and the optional checklist outer join, so
+   * to SLB and its go-forward code SLR, with the {@code cut_block_open_admin} inner join and the optional checklist outer join, so
    * targeted sites without a checklist still appear). The CHR branch is the new app's own join (inner —
    * CHR rows only exist once a checklist does). Both source the same 11 columns the dashboard reads;
    * {@code sample_number} is always NULL for BIO and CHR (the proc only populates it for RIP).
@@ -91,7 +91,7 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
          AND fss.effective_year = to_number(:effectiveYear)
          AND fss.org_unit_no = to_number(:orgUnit)
          AND frv.frep_resource_value_stat_code <> 'REJ'
-         AND frv.frep_resource_value_type_code = 'SLB'
+         AND frv.frep_resource_value_type_code IN ('SLB', 'SLR')
       UNION ALL
       SELECT cc.chr_checklist_id                       AS checklist_id
            , frvtc.description                         AS checklist_type

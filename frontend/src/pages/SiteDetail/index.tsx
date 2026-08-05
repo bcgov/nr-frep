@@ -68,6 +68,19 @@ const MAX_COMMENTS_LENGTH = 2000;
 
 const isSubmitted = (resource: SiteResource): boolean => resource.checklistStatusCode === SUBMITTED;
 
+/**
+ * Historical Biodiversity (SLB) rows are view-only — SLR is the go-forward code and the backend 403s
+ * any SLB mutation. Such a row only appears on sites from before SLB's expiry year (the API hides
+ * blank SLB rows on later sites), and when it does it renders like a submitted one: read-only, not
+ * validated, not re-sent on save.
+ */
+const isLegacyBio = (resource: SiteResource): boolean =>
+  (resource.resourceType ?? '').trim().toUpperCase() === 'SLB';
+
+/** A row the user can act on: not submitted, and not a historical SLB record. */
+const isEditableRow = (resource: SiteResource): boolean =>
+  !isSubmitted(resource) && !isLegacyBio(resource);
+
 function renderResourceCell(key: string, resource: SiteResource): React.ReactNode {
   const value = resource[key as keyof SiteResource];
 
@@ -218,7 +231,10 @@ type RowErrors = Partial<Record<ResourceFieldKey, string>>;
 function validateResources(rows: SiteResource[]): RowErrors[] {
   return rows.map((r) => {
     const errors: RowErrors = {};
-    if (isSubmitted(r)) return errors;
+    // Skip rows the user can't act on. A read-only SLB row whose stored data breaks a current
+    // rule would otherwise raise an error the user has no way to clear — blocking the save of
+    // every other row on the site.
+    if (!isEditableRow(r)) return errors;
     const status = (r.statusCode ?? '').trim();
     if (!status) return errors; // empty status is allowed — the row simply isn't saved
     const reason = (r.rejectionReasonCode ?? '').trim();
@@ -306,7 +322,7 @@ const SiteDetailPage: FC = () => {
     if (hasErrors) return;
     // Only save rows the user picked a status for; empty-status rows are left untouched,
     // and submitted (locked) rows are not re-sent.
-    const toSave = draft.filter((r) => !isSubmitted(r) && (r.statusCode ?? '').trim() !== '');
+    const toSave = draft.filter((r) => isEditableRow(r) && (r.statusCode ?? '').trim() !== '');
     if (toSave.length === 0) {
       display({
         kind: 'info',
@@ -527,7 +543,7 @@ const SiteDetailPage: FC = () => {
                           >
                             {RESOURCE_HEADERS.map((header) => (
                               <TableCell key={header.key}>
-                                {editing && !isSubmitted(resource)
+                                {editing && isEditableRow(resource)
                                   ? renderEditableCell(
                                       header.key,
                                       resource,

@@ -77,7 +77,7 @@ public class SiteDetailService {
       return Optional.empty();
     }
 
-    return Optional.of(toResponse(data));
+    return Optional.of(toResponse(withRetiredCodesHidden(data)));
   }
 
   /**
@@ -114,7 +114,7 @@ public class SiteDetailService {
             year,
             resourcesToPersist(request.resources(), context),
             loggedUserHelper.getLoggedUserId());
-    return toResponse(siteDetailRepository.findSiteDetail(newSiteId));
+    return toResponse(withRetiredCodesHidden(siteDetailRepository.findSiteDetail(newSiteId)));
   }
 
   /**
@@ -142,7 +142,7 @@ public class SiteDetailService {
         resourcesToPersist(resources, current),
         loggedUserHelper.getLoggedUserId()
     );
-    return toResponse(siteDetailRepository.findSiteDetail(siteId));
+    return toResponse(withRetiredCodesHidden(siteDetailRepository.findSiteDetail(siteId)));
   }
 
   /**
@@ -297,30 +297,67 @@ public class SiteDetailService {
   /**
    * Drop resource rows for protocols the new app doesn't support (Riparian/Water), keeping only
    * biodiversity ({@code SLB} legacy + {@code SLR} go-forward) and Cultural Heritage ({@code CHR}).
-   * Used in the targeted-site create flow so the picker only offers the protocols that have checklist pages.
+   * Used in the targeted-site create flow so the picker only offers the protocols that have checklist
+   * pages. Retired codes are dropped too — see {@link #withRetiredCodesHidden}.
+   *
+   * <p>Deliberately NOT applied to the Site Details page, which shows every protocol the site was
+   * evaluated against (Riparian included) rather than only the ones this app can open.
    */
-  static SiteDetailData supportedProtocolsOnly(SiteDetailData data) {
+  SiteDetailData supportedProtocolsOnly(SiteDetailData data) {
     List<SiteResourceRow> kept = data.resources().stream()
         .filter(r -> SUPPORTED_PROTOCOLS.contains(StringUtils.trimToEmpty(r.resourceType()).toUpperCase()))
-        .filter(SiteDetailService::isNotNewLegacyBio)
         .toList();
+    return withRetiredCodesHidden(withResources(data, kept));
+  }
+
+  /**
+   * Hide blank rows for codes that had already expired by the site's evaluation year. Applied on
+   * every read path — the Site Details page included, where the protocol allowlist deliberately is
+   * not.
+   */
+  SiteDetailData withRetiredCodesHidden(SiteDetailData data) {
+    Set<String> retiredTypes = siteDetailRepository.retiredResourceTypes();
+    if (retiredTypes.isEmpty()) {
+      return data;
+    }
+    List<SiteResourceRow> kept = data.resources().stream()
+        .filter(r -> isOffered(r, retiredTypes))
+        .toList();
+    return withResources(data, kept);
+  }
+
+  private static SiteDetailData withResources(SiteDetailData data, List<SiteResourceRow> resources) {
     return new SiteDetailData(
         data.frepSelectedSiteId(), data.masterList(), data.orgUnit(), data.orgUnitNo(),
         data.client(), data.clientName(), data.opening(), data.openingId(), data.actualOpening(),
         data.licenceNo(), data.actualLicence(), data.cuttingPermitId(), data.cutBlockId(),
-        data.fspLink(), data.harvestYear(), kept);
+        data.fspLink(), data.harvestYear(), resources);
   }
 
   /**
-   * SLB is view-only and not creatable. The FREP110 GET seeds a blank row per protocol type for a new
-   * opening; since SLB and its go-forward code SLR are both active codes, that would offer two
-   * biodiversity rows. Drop the blank (id-less, un-evaluated) SLB row so only SLR is offered for new
-   * biodiversity work. Existing SLB rows (with a resource value id) stay visible for read-only viewing.
+   * Is this row offered on the page?
+   *
+   * <p>{@code FREP_110_SITE_DETAILS.GET} builds its rows <em>from</em> the code table — the outer
+   * join is on the data side — so it emits a blank row for every code that exists, and it never
+   * reads {@code EXPIRY_DATE}. Expiring a code therefore does nothing on its own; without this
+   * filter, retiring SLB in favour of SLR simply offered both biodiversity rows on every site.
+   *
+   * <p>A row is dropped only when <b>both</b> hold:
+   * <ul>
+   *   <li>the code is retired (past its expiry), and</li>
+   *   <li>the row carries no resource-value id — nothing was ever evaluated against it. Because
+   *       {@code FREP_RESOURCE_VALUE.FREP_RESOURCE_VALUE_STAT_CODE} is NOT NULL, an id-less row is
+   *       exactly one with no status: a blank the proc seeded, not a record.</li>
+   * </ul>
+   *
+   * <p>So a historical site still shows the Biodiversity resource it was actually evaluated
+   * against, at any age, while no site offers a fresh SLB row to evaluate.
    */
-  static boolean isNotNewLegacyBio(SiteResourceRow r) {
-    boolean newRow = StringUtils.isBlank(r.resourceValueId());
-    boolean legacyBio = "SLB".equalsIgnoreCase(StringUtils.trimToEmpty(r.resourceType()));
-    return !(newRow && legacyBio);
+  static boolean isOffered(SiteResourceRow r, Set<String> retiredTypes) {
+    if (StringUtils.isNotBlank(r.resourceValueId())) {
+      return true; // a real evaluation — never hidden, however old the code
+    }
+    return !retiredTypes.contains(StringUtils.trimToEmpty(r.resourceType()).toUpperCase());
   }
 
   /** The effective year is the first four characters of the master-list value (legacy parity). */

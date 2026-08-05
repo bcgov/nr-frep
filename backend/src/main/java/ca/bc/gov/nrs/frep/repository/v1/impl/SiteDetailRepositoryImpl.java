@@ -10,7 +10,10 @@ import java.sql.SQLException;
 import java.sql.Struct;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -153,6 +156,29 @@ public class SiteDetailRepositoryImpl extends AbstractFrepRepository implements 
         resourceType.trim()
     );
     return rows.isEmpty() || rows.get(0) == null ? "" : rows.get(0).trim();
+  }
+
+  /**
+   * Codes whose {@code EXPIRY_DATE} has passed. Read directly rather than through a proc — no
+   * code-list procedure exposes the dates, and this table is already queried natively elsewhere
+   * (see {@code AcceptedSitesRepositoryImpl} / {@code SearchRepositoryImpl}), so the SELECT grant is
+   * in place. THE-qualified for the same reason those are: the app connects as an invoker without
+   * the package's definer rights.
+   *
+   * <p>A null {@code EXPIRY_DATE} is treated as never expiring.
+   */
+  public Set<String> retiredResourceTypes() {
+    Set<String> retired = new HashSet<>();
+    jdbcTemplate.query(
+        "SELECT frep_resource_value_type_code FROM THE.frep_resource_value_type_code "
+            + "WHERE expiry_date IS NOT NULL AND expiry_date <= SYSDATE",
+        rs -> {
+          String code = rs.getString(1);
+          if (code != null) {
+            retired.add(code.trim().toUpperCase(Locale.ROOT));
+          }
+        });
+    return retired;
   }
 
   private static void setEmptyResourceArray(CallableStatement cs, int index) throws SQLException {

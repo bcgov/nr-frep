@@ -70,6 +70,17 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
       clean(rs.getString("checklist_status_code")));
 
   /**
+   * Protocol-type filter for the checklist search. An {@code SLR} search also returns historical
+   * {@code SLB} records: the rename retired the SLB code without migrating existing data, so legacy
+   * rows keep {@code SLB} and must stay visible (view-only) in Search. Package-private so
+   * {@link SearchRepositoryImplTest} can execute this exact predicate rather than a copy of it.
+   */
+  static final String PROTOCOL_TYPE_PREDICATE = """
+      (:protocolType IS NULL
+            OR frv.frep_resource_value_type_code = :protocolType
+            OR (:protocolType = 'SLR' AND frv.frep_resource_value_type_code = 'SLB'))""";
+
+  /**
    * Inner checklist-search query, ported verbatim from {@code FREP_CHECKLIST_SEARCH.search} (the
    * {@code checklist_tbls} UNION across water/riparian/biodiversity/CHR, the {@code for_cli_audit}
    * join, the legacy {@code (+)} outer joins, region rollup, {@code LPAD} client, IDIR-prefix strip)
@@ -148,7 +159,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
          AND (fss.client_number = LPAD(:clientNumber, 8, '0') OR :clientNumber IS NULL)
          AND (checklist_tbls.evaluation_date >= TO_DATE(:evalFrom, 'YYYY-MM-DD') OR :evalFrom IS NULL)
          AND (checklist_tbls.evaluation_date <= TO_DATE(:evalTo, 'YYYY-MM-DD') OR :evalTo IS NULL)
-         AND (frv.frep_resource_value_type_code = :protocolType OR :protocolType IS NULL)
+         AND %s
          -- Protocol/district visibility (server-derived from the caller's roles): CHR rows only for
          -- the caller's districts (or every district for a sys-admin); non-CHR (Biodiversity/etc.)
          -- rows only when the caller has Biodiversity access.
@@ -157,7 +168,7 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
                   AND (:chrSeeAll = 1 OR ou.org_unit_code IN (:allowedChrCodes)))
             OR (frv.frep_resource_value_type_code <> 'CHR' AND :nonChrVisible = 1)
              )
-      """;
+      """.formatted(PROTOCOL_TYPE_PREDICATE);
 
   @Override
   public long countChecklists(ChecklistSearchCriteria criteria) {

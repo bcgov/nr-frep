@@ -268,10 +268,12 @@ class ProtocolChecklistServiceTest {
         "IDIR\\OTHER", "Other", "7");
     when(writeRepository.saveBiodiversityOpening(claimed, "IDIR\\ME")).thenReturn(claimed);
     when(writeRepository.getBiodiversityOpening("9001")).thenReturn(current);
+    // The resource value type comes from the record, not the URL — a new record resolves to SLR.
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLR");
 
     service.saveBiodiversityOpening("9001", claimed);
 
-    verify(writeRepository).assignBiodiversityLead("9001", "SLB", "IDIR\\ME", "IDIR\\OTHER", "7",
+    verify(writeRepository).assignBiodiversityLead("9001", "SLR", "IDIR\\ME", "IDIR\\OTHER", "7",
         "IDIR\\ME");
   }
 

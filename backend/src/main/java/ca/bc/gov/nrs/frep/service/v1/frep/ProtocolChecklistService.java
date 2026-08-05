@@ -136,7 +136,8 @@ public class ProtocolChecklistService {
     if (current != null && userId.equalsIgnoreCase(current.teamLeadNameId())) {
       return; // already the lead — nothing to do
     }
-    writeRepository.assignBiodiversityLead(checklistId, resourceTypeForProtocol("bio"),
+    writeRepository.assignBiodiversityLead(checklistId,
+        checklistRepository.resolveResourceType(checklistId),
         userId, current == null ? null : current.teamLeadNameId(),
         current == null ? null : current.teamLeadRevisionCount(), userId);
   }
@@ -685,7 +686,7 @@ public class ProtocolChecklistService {
     validateAttachmentType(fileName);
     // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(bytes, fileName);
-    String resourceType = resourceTypeForProtocol(protocol);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());
     return writeRepository.getAttachments(checklistId, resourceType);

@@ -17,7 +17,7 @@ import {
   Tag,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 
 import PrintableTable from '@/components/core/PrintableTable';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
@@ -27,7 +27,9 @@ import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -75,18 +77,52 @@ function toTableRows(sites: AcceptedSite[]) {
   }));
 }
 
+type AcceptedSiteRow = ReturnType<typeof toTableRows>[number];
+
+/**
+ * The row's checklist link (legacy FREP200 "Checklist" link): CHR opens its own screen, SLB/SLR
+ * open the protocol checklist (see {@link PROTOCOL_TO_PATH}); any other protocol has no link.
+ */
+const checklistLinkFor = (rowMeta: AcceptedSiteRow | undefined): string | undefined => {
+  if (!rowMeta) return undefined;
+  if (rowMeta.protocolCode === 'CHR') return `/protocol-checklists/chr/${rowMeta.id}`;
+  const protoPath = PROTOCOL_TO_PATH[rowMeta.protocolCode];
+  return protoPath ? `/protocol-checklists/${protoPath}/${rowMeta.id}` : undefined;
+};
+
 const AcceptedSitesPage: FC = () => {
   const { display } = useNotification();
   const navigate = useNavigate();
+  const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
 
-  const [effectiveYear, setEffectiveYear] = useState<string>('');
-  const [orgUnit, setOrgUnit] = useState<string>('');
-  const [protocolType, setProtocolType] = useState<string>(ALL_PROTOCOLS_VALUE);
+  // Scope the filter dropdowns to what the user can see (rows are also filtered server-side): a
+  // CHR-only user (no Bio) only gets their districts; the protocol list drops protocols they can't see.
+  const districtOptions = useMemo(
+    () =>
+      canEdit
+        ? orgUnits
+        : orgUnits.filter((u) => chrDistricts.includes(u.orgUnitCode.toUpperCase())),
+    [orgUnits, canEdit, chrDistricts],
+  );
+  const protocolOptions = useMemo(
+    () => protocols.filter((p) => (p.code === 'CHR' ? canAnyChr : canEdit)),
+    [protocols, canAnyChr, canEdit],
+  );
+
+  // Filters are seeded from the URL query string so the browser Back button (e.g. returning from a
+  // BIO/CHR checklist) restores the district/year/protocol the user was working in, instead of
+  // re-defaulting to the current master list. They're kept in sync with the URL below.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [effectiveYear, setEffectiveYear] = useState<string>(() => searchParams.get('year') ?? '');
+  const [orgUnit, setOrgUnit] = useState<string>(() => searchParams.get('orgUnit') ?? '');
+  const [protocolType, setProtocolType] = useState<string>(
+    () => searchParams.get('protocol') ?? ALL_PROTOCOLS_VALUE,
+  );
 
   // Opening whose polygon map is shown in the modal (null = closed).
   const [mapOpeningId, setMapOpeningId] = useState<string | null>(null);
@@ -121,13 +157,20 @@ const AcceptedSitesPage: FC = () => {
         const IN_SCOPE = new Set(['SLR', 'CHR']);
         setProtocols(fetchedProtocols.filter((p) => IN_SCOPE.has(p.code)));
 
+        // Default only when the filter wasn't already seeded from the URL (a fresh visit), so a Back
+        // navigation that carries year/orgUnit in the query string keeps the user's selection.
         const defaultYear = years.find((year) => year.current) ?? years[0];
-        if (defaultYear) setEffectiveYear(defaultYear.effectiveYear);
-        if (units[0]) setOrgUnit(units[0].orgUnitNo);
+        if (defaultYear) setEffectiveYear((prev) => prev || defaultYear.effectiveYear);
+        // Default to the first district the user can see (a CHR-only user must not default to a
+        // district they lack access to, which would just show an empty list).
+        const defaultUnits = canEdit
+          ? units
+          : units.filter((u) => chrDistricts.includes(u.orgUnitCode.toUpperCase()));
+        if (defaultUnits[0]) setOrgUnit((prev) => prev || defaultUnits[0].orgUnitNo);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load filter options",
@@ -142,7 +185,19 @@ const AcceptedSitesPage: FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [display]);
+    // canEdit/chrDistricts (stable per-user from useAuthorization) drive the default district choice.
+  }, [display, canEdit, chrDistricts]);
+
+  // Mirror the active filters into the URL query string (replace, so we don't stack history entries).
+  // This is what makes the selection survive a Back navigation from a checklist detail page.
+  useEffect(() => {
+    if (!effectiveYear && !orgUnit) return; // pre-config: nothing to persist yet
+    const next = new URLSearchParams();
+    if (effectiveYear) next.set('year', effectiveYear);
+    if (orgUnit) next.set('orgUnit', orgUnit);
+    if (protocolType) next.set('protocol', protocolType);
+    setSearchParams(next, { replace: true });
+  }, [effectiveYear, orgUnit, protocolType, setSearchParams]);
 
   const loadAcceptedSites = useCallback(async () => {
     if (!effectiveYear || !orgUnit) return;
@@ -158,7 +213,7 @@ const AcceptedSitesPage: FC = () => {
       });
       setSites(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = apiErrorMessage(err);
       display({
         kind: 'error',
         title: "We couldn't load accepted sites",
@@ -266,9 +321,9 @@ const AcceptedSitesPage: FC = () => {
               labelText="Org unit"
               value={orgUnit}
               onChange={(event) => setOrgUnit(event.target.value)}
-              disabled={configLoading || orgUnits.length === 0}
+              disabled={configLoading || districtOptions.length === 0}
             >
-              {orgUnits.map((unit) => (
+              {districtOptions.map((unit) => (
                 <SelectItem
                   key={unit.orgUnitNo}
                   value={unit.orgUnitNo}
@@ -284,7 +339,7 @@ const AcceptedSitesPage: FC = () => {
               disabled={configLoading}
             >
               <SelectItem value={ALL_PROTOCOLS_VALUE} text="All protocols" />
-              {protocols.map((protocol) => (
+              {protocolOptions.map((protocol) => (
                 <SelectItem
                   key={protocol.code}
                   value={protocol.code}
@@ -362,17 +417,7 @@ const AcceptedSitesPage: FC = () => {
                     <TableBody>
                       {rows.map((row) => {
                         const rowMeta = tableRows.find((item) => item.id === row.id);
-                        // Open the row's checklist (legacy FREP200 "Checklist" link): CHR → its own
-                        // screen, BIO/RIP/WAT → the protocol checklist; otherwise no link.
-                        const protoPath = rowMeta
-                          ? PROTOCOL_TO_PATH[rowMeta.protocolCode]
-                          : undefined;
-                        const checklistLink =
-                          rowMeta && rowMeta.protocolCode === 'CHR'
-                            ? `/protocol-checklists/chr/${rowMeta.id}`
-                            : protoPath
-                              ? `/protocol-checklists/${protoPath}/${rowMeta?.id}`
-                              : undefined;
+                        const checklistLink = checklistLinkFor(rowMeta);
 
                         return (
                           <TableRow {...getRowProps({ row })} key={row.id}>

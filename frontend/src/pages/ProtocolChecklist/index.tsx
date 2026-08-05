@@ -6,7 +6,6 @@ import {
   Layers,
   Location,
   Notebook,
-  Settings,
   type CarbonIconType,
 } from '@carbon/icons-react';
 import {
@@ -29,9 +28,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BioOpeningView from './BioOpeningView';
 import BioPlotsView from './BioPlotsView';
 import BioStratumView from './BioStratumView';
-// Administration / Notes / Attachments are shared (named Rip* for legacy reasons) and used by
-// Biodiversity. Riparian + Water are out of scope, so their dedicated editors are removed.
-import RipAdministrationView from './RipAdministrationView';
+// Notes / Attachments are shared (named Rip* for legacy reasons) and used by Biodiversity. Riparian
+// + Water are out of scope, so their dedicated editors are removed.
 import RipAttachmentsView from './RipAttachmentsView';
 import RipNotesView from './RipNotesView';
 import { formatSubmitValidation } from './submitValidation';
@@ -42,6 +40,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -50,7 +49,6 @@ import './protocolChecklist.scss';
 // Per-section tab icons (keyed by the backend section id), mirroring the contained-tab style with
 // an icon beside each label. Unknown sections fall back to a generic document icon.
 const SECTION_ICONS: Record<string, CarbonIconType> = {
-  administration: Settings,
   opening: Information,
   stratum: Layers,
   plots: Location,
@@ -126,7 +124,7 @@ const ProtocolChecklistPage: FC = () => {
           setNotFound(true);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load the checklist",
@@ -183,7 +181,7 @@ const ProtocolChecklistPage: FC = () => {
         display({
           kind: 'error',
           title: 'Submit failed',
-          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
       }
@@ -203,7 +201,7 @@ const ProtocolChecklistPage: FC = () => {
       display({
         kind: 'error',
         title: 'Unsubmit failed',
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {
@@ -290,9 +288,9 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Master list year', checklist.effectiveYear, true)}
                 {headerCell('Org unit', headerExtras['Org unit'])}
                 {headerCell('Checklist', checklist.checklistId, true)}
-                {headerCell('Client', headerExtras['Client'])}
+                {headerCell('Client number', headerExtras['Client'])}
                 {headerCell('Client name', headerExtras['Client name'])}
-                {headerCell('Opening', checklist.openingNumber, true)}
+                {headerCell('Opening number', checklist.openingNumber, true)}
                 {headerCell('Opening ID', headerExtras['Opening ID'])}
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}
@@ -366,14 +364,7 @@ const ProtocolChecklistPage: FC = () => {
                 {/* All Biodiversity sections edit inline (their own Edit/Save). */}
                 {checklist.sections.map((section, i) => (
                   <TabPanel key={section.id}>
-                    {section.id === 'administration' ? (
-                      <RipAdministrationView
-                        protocol={backendCode ?? ''}
-                        checklistId={id}
-                        canEdit={editable}
-                        submitted={submitted}
-                      />
-                    ) : section.id === 'notes' ? (
+                    {section.id === 'notes' ? (
                       <RipNotesView
                         protocol={backendCode ?? ''}
                         checklistId={id}

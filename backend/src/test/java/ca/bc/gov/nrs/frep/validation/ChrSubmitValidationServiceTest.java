@@ -97,6 +97,40 @@ class ChrSubmitValidationServiceTest {
   }
 
   @Test
+  void compositeWithFewerThanTwoMembersFailsSubmit() {
+    CheckList checklist = validChecklist();
+    Feature composite = checklist.getFeatures().get(0); // label "1"
+    composite.setCompositeFeatureInd("true");
+    Feature member = new Feature();
+    member.setFeatureLabel("2");
+    member.setCompositeFeatureInd("false");
+    member.setCompositeFeature("1"); // one member only
+    checklist.getFeatures().add(member);
+
+    assertTrue(hasError(service.validateBeforeSubmit(checklist), "composite"));
+  }
+
+  @Test
+  void compositeMembersMatchDespiteSurroundingWhitespace() {
+    CheckList checklist = validChecklist();
+    Feature composite = checklist.getFeatures().get(0); // label "1"
+    composite.setCompositeFeatureInd("true");
+    // Two members reference "1" but with stray whitespace — must still count (trimmed comparison).
+    Feature m1 = new Feature();
+    m1.setFeatureLabel("2");
+    m1.setCompositeFeatureInd("false");
+    m1.setCompositeFeature("1 ");
+    Feature m2 = new Feature();
+    m2.setFeatureLabel("3");
+    m2.setCompositeFeatureInd("false");
+    m2.setCompositeFeature(" 1");
+    checklist.getFeatures().add(m1);
+    checklist.getFeatures().add(m2);
+
+    assertFalse(hasError(service.validateBeforeSubmit(checklist), "composite"));
+  }
+
+  @Test
   void nullChecklistProducesSingleError() {
     List<ValidationError> errors = service.validateBeforeSubmit(null);
     assertEquals(1, errors.size());

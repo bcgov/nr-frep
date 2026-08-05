@@ -62,23 +62,15 @@ describe('plotHeaderErrors', () => {
     );
   });
 
-  it('blocks "Trees exist" on a non-NAR clear-cut stratum only', () => {
-    // CC + non-NAR + trees -> blocked (mirrors FREP_BIODIVERSITY_STRATUM.VALIDATE)
+  it('never blocks "Trees exist" — allowed on every stratum type incl. clear-cut', () => {
+    // The CC (except-NAR) gate was removed: trees exist is valid regardless of stratum type.
     expect(
-      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'CC', 'CC1').treeIndicator,
-    ).toMatch(/clear-cut/);
-    // CC + NAR + trees -> allowed (the requirement); case/whitespace-insensitive
-    expect(
-      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'CC', ' nar ').treeIndicator,
+      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'CC').treeIndicator,
     ).toBeUndefined();
-    // CC + non-NAR but trees unchecked -> no error
     expect(
-      plotHeaderErrors(validHeader({ treeIndicator: 'N' }), 'CC', 'CC1').treeIndicator,
+      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), 'DO').treeIndicator,
     ).toBeUndefined();
-    // Blank stratum type (summary not filled in) -> relaxed
-    expect(
-      plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), '', '').treeIndicator,
-    ).toBeUndefined();
+    expect(plotHeaderErrors(validHeader({ treeIndicator: 'Y' }), '').treeIndicator).toBeUndefined();
   });
 
   it('enforces BAF / fixed-area / full-count ranges and decimals', () => {
@@ -125,7 +117,7 @@ describe('standRowErrors', () => {
   });
 
   it('enforces DBH/height range and 1 decimal', () => {
-    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/between 12.6 and 400/);
+    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/greater than 12.5/);
     expect(standRowErrors({ dbh: '20.55' }).dbh).toMatch(/1 decimal place/);
     expect(standRowErrors({ height: '0.5' }).height).toMatch(/between 1.4 and 99.9/);
   });
@@ -148,7 +140,7 @@ describe('cwdRowErrors', () => {
 
   it('enforces diameter/length ranges (length must be > 0)', () => {
     expect(cwdRowErrors({ logDiameter: '5' }).logDiameter).toMatch(/between 7.6 and 400/);
-    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/between 0 and 99.9/);
+    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/greater than 0/);
   });
 
   it('passes a complete row', () => {

@@ -10,6 +10,13 @@ server:
   port: ${SERVER_PORT:3000}
   shutdown: graceful
   max-http-request-header-size: 16KB
+  # Connector-level request-body cap. Undertow enforces this independently of Spring's multipart
+  # settings, which don't apply here — nr-frep uploads arrive as base64 inside a JSON body, not
+  # multipart. This is a backstop only (NOT a per-file size limit): it stops an oversized upload
+  # from buffering unbounded bytes into heap, returning 413 instead. Default 50 MB; env-overridable.
+  # Note base64 inflates payloads ~33%, so 50 MB of body ≈ a ~37 MB file.
+  undertow:
+    max-http-post-size: ${MAX_HTTP_POST_SIZE:52428800}
   # Honor X-Forwarded-* from the Caddy reverse proxy when reconstructing the
   # request URL. Without this, Spring sees Host=frep-backend:8080 and the
   # browser-issued Origin=https://frep-a582fc-dev... is treated as cross-origin,
@@ -97,6 +104,18 @@ frep:
     bucket: ${OBJECT_STORAGE_BUCKET}
     access-key: ${OBJECT_STORAGE_ACCESS_KEY}
     secret-key: ${OBJECT_STORAGE_SECRET_KEY}
+  # ClamAV virus scanning for uploaded attachment/photo bytes (clamd INSTREAM over raw TCP to a
+  # shared in-cluster ClamAV service). Enabled by default in deployed envs; the local profile turns
+  # it off (no clamd locally). fail-open=false = fail-CLOSED: reject uploads when the scanner can't
+  # verify them. Requires a NetworkPolicy allowing egress to clamd on the tools namespace.
+  clamav:
+    enabled: ${CLAMAV_ENABLED:true}
+    host: ${CLAMAV_HOST:}
+    port: ${CLAMAV_PORT:3310}
+    fail-open: ${CLAMAV_FAIL_OPEN:false}
+    connect-timeout: ${CLAMAV_CONNECT_TIMEOUT:5s}
+    read-timeout: ${CLAMAV_READ_TIMEOUT:30s}
+    chunk-size: 8192
 
 resilience4j:
   circuitbreaker:

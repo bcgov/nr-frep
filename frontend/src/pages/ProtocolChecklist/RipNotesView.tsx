@@ -6,6 +6,7 @@ import type { RiparianNotes } from '@/types/protocolChecklist';
 
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 /**
  * Checklist Notes tab (legacy {@code checklistNote}) — a single free-text note, read-only with
@@ -31,7 +32,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],

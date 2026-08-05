@@ -1,5 +1,6 @@
 import {
   AVAILABLE_ROLES,
+  CHR_DISTRICT_EDITOR_PREFIX,
   validIdpProviders,
   type FamLoginUser,
   type IdpProviderType,
@@ -21,42 +22,40 @@ export const getCookie = (name: string): string => {
 };
 
 /**
- * Reads the Cognito **access token** from cookies set by AWS Amplify's CookieStorage.
- * This is the token sent to the backend API as a Bearer token.
+ * Note on token reads: Amplify's {@code configure()} re-seeds the token store to its default
+ * {@code localStorage} (see {@link clearStoredTokens} and main.tsx), so Cognito tokens are NOT
+ * available as DOM-visible cookies. Read them via {@code fetchAuthSession} (storage-agnostic)
+ * instead — see {@code services/http/headers.ts}. The only cookie we read directly is the
+ * backend-set XSRF token, via {@link getCookie} above.
+ */
+
+/**
+ * Removes every Amplify token/session entry for the configured app client. Used by the federated
+ * logout path ({@code buildFederatedLogoutUrl}), which drives the sign-out redirect chain itself
+ * (Siteminder → Keycloak → Cognito → app) instead of Amplify's {@code signOut()}: clearing the local
+ * tokens up front means the browser lands back on the app with no session and renders the logged-out
+ * Landing. The chain's final Cognito /logout hop clears the Cognito session cookie server-side.
  *
- * Access tokens carry `cognito:groups` (for authorization) and `sub` but do NOT
- * carry the `custom:idp_*` profile claims — those live only in the ID token.
+ * <p>Storage note: despite the {@code CookieStorage} override in main.tsx, Amplify's
+ * {@code Amplify.configure()} re-seeds the token store to its default {@code localStorage} on first
+ * call (aws-amplify initSingleton.mjs, the {@code !Amplify.libraryOptions.Auth} branch), so tokens
+ * actually live in localStorage — reads go through {@code fetchAuthSession}, which is storage-agnostic.
+ * We therefore clear the {@code CognitoIdentityServiceProvider.<clientId>.*} keys from localStorage;
+ * clearing cookies here would be a silent no-op and leave the local session intact after logout.
  */
-export const getAccessTokenFromCookie = (): string | undefined => {
-  const baseCookieName = `CognitoIdentityServiceProvider.${env.VITE_USER_POOLS_WEB_CLIENT_ID}`;
-  const userId = encodeURIComponent(getCookie(`${baseCookieName}.LastAuthUser`));
-  if (userId) {
-    const token = getCookie(`${baseCookieName}.${userId}.accessToken`);
-    return token || undefined;
+export const clearStoredTokens = (): void => {
+  const prefix = `CognitoIdentityServiceProvider.${env.VITE_USER_POOLS_WEB_CLIENT_ID}`;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith(prefix)) keys.push(key);
+    }
+    keys.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    /* storage disabled / unavailable — nothing to clear */
   }
-  return undefined;
 };
-
-/**
- * Reads the Cognito **ID token** from cookies set by AWS Amplify's CookieStorage.
- * Used **only** on the frontend to populate the local user profile (display name,
- * email, IDP provider, etc.). Never sent to the backend.
- */
-export const getIdTokenFromCookie = (): string | undefined => {
-  const baseCookieName = `CognitoIdentityServiceProvider.${env.VITE_USER_POOLS_WEB_CLIENT_ID}`;
-  const userId = encodeURIComponent(getCookie(`${baseCookieName}.LastAuthUser`));
-  if (userId) {
-    const token = getCookie(`${baseCookieName}.${userId}.idToken`);
-    return token || undefined;
-  }
-  return undefined;
-};
-
-/**
- * @deprecated Use {@link getAccessTokenFromCookie} for API calls or
- * {@link getIdTokenFromCookie} for local profile parsing.
- */
-export const getUserTokenFromCookie = getAccessTokenFromCookie;
 
 /**
  * Parses a Cognito ID token JWT into the app's FamLoginUser shape.
@@ -104,20 +103,31 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
 /**
  * Parses Cognito group strings into a user privilege object.
  *
- * Recognizes groups that exactly match {@link AVAILABLE_ROLES}
- * (e.g. "FREP_ADMIN", "FREP_EDITOR", "FREP_VIEW_ONLY").
- * Unrecognized groups are silently ignored.
+ * - Global roles that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMIN", "FREP_EDITOR",
+ *   "FREP_VIEW_ONLY") map to a `null` value (null = global, non-scoped role).
+ * - Per-district CHR groups ({@link CHR_DISTRICT_EDITOR_PREFIX}`<code>`, e.g.
+ *   "FREP_CHR_EDITOR_DISTRICT_DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
+ *   value is the `string[]` of district codes the user may edit CHR for (a scoped role).
+ * - Any other group is ignored.
  *
  * @param {string[]} input - Array of group strings from Cognito.
  * @returns {USER_PRIVILEGE_TYPE} The parsed privilege object.
  */
 export function parsePrivileges(input: string[]): USER_PRIVILEGE_TYPE {
   const result: USER_PRIVILEGE_TYPE = {};
+  const chrDistricts: string[] = [];
   for (const item of input) {
-    // Direct match against known Cognito groups (legacy WebADE role names)
-    if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
+    if (item.startsWith(CHR_DISTRICT_EDITOR_PREFIX)) {
+      const code = item.slice(CHR_DISTRICT_EDITOR_PREFIX.length).trim().toUpperCase();
+      if (code) chrDistricts.push(code);
+    } else if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
+      // Direct match against known global Cognito groups (legacy WebADE role names).
       result[item as ROLE_TYPE] = null; // null = global (non-scoped) role
     }
+  }
+  if (chrDistricts.length > 0) {
+    // Scoped role: the value carries the district codes (sorted, de-duplicated).
+    result.FREP_CHR_EDITOR = [...new Set(chrDistricts)].sort((a, b) => a.localeCompare(b));
   }
   return result;
 }

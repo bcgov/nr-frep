@@ -30,7 +30,7 @@ const AppRoutes: FC = () => {
   const hasAnyRole = (user?.roles?.length ?? 0) > 0;
 
   const routesToUse = useMemo(() => {
-    // Offline + not logged in: IDIR login can't run, so serve the offline route set (FREP Dashboard
+    // Offline + not logged in: IDIR login can't run, so serve the offline route set (FREP IMS
     // landing + device-local CHR checklists) instead of the public marketing Landing.
     if (!isLoggedIn) return online ? getPublicRoutes() : getOfflineRoutes();
     if (!hasAnyRole) return getNoRoleRoutes();

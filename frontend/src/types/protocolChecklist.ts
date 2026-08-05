@@ -47,12 +47,19 @@ export type BiodiversityOpening = {
   invasivePlantComment?: string;
   frepSiteEvaluationCode?: string;
   evaluatorOpinionComment?: string;
+  evaluationDate?: string;
   revisionCount?: string;
   // Read-only RESULTS reference fields (legacy FREP210 derives these from frep_selected_site); never
   // editable, not persisted on save.
   grossArea?: string;
   netArea?: string;
   harvestDate?: string;
+  // Evaluator = the evaluation-team lead (the Biodiversity analogue of CHR's "Assessed by").
+  // teamLeadNameId is the IDIR userid; teamLeadName is the resolved display name; the revision is the
+  // evaluator record's own optimistic-lock token.
+  teamLeadNameId?: string;
+  teamLeadName?: string;
+  teamLeadRevisionCount?: string;
 };
 
 /** A windthrow treatment on a stratum (mirrors FREP_WINDTHROW_TREAT_OBJECT). */
@@ -208,15 +215,6 @@ export type BioPlot = {
   cwdTable?: BioCwdRow[];
 };
 
-/** An evaluation-team member (FREP301 Administration); the team lead has teamLeadInd = 'Y'. */
-export type EvaluatorRow = {
-  evaluatorUserid?: string;
-  frepResourceValueId?: string;
-  teamLeadInd?: string;
-  evaluatorDescription?: string;
-  revisionCount?: string;
-};
-
 /** The single free-text note for a checklist (legacy Notes tab). */
 export type RiparianNotes = {
   checklistId?: string;
@@ -246,27 +244,6 @@ export type AttachmentUploadRequest = {
   description?: string;
   contentType?: string;
   data?: string;
-};
-
-/** Checklist Administration tab (FREP301) — evaluation date, site access/cost data, team. */
-export type AdministrationData = {
-  checklistId?: string;
-  selectedSiteId?: string;
-  resourceValueId?: string;
-  resourceValueType?: string;
-  statusCode?: string;
-  evaluationDate?: string;
-  siteAccessCode?: string;
-  blockAccessTime?: string;
-  hoursOnBlock?: string;
-  peopleOnBlock?: string;
-  additionalComments?: string;
-  teamLeadNameId?: string;
-  teamLeadName?: string;
-  teamLeadRevisionCount?: string;
-  revisionCount?: string;
-  revisionCountAccess?: string;
-  teamMembers?: EvaluatorRow[];
 };
 
 export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {

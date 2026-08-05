@@ -34,7 +34,9 @@ const floatError = (
   }
   const n = Number(value);
   if ((exclusiveMin ? n <= min : n < min) || n > max) {
-    return `${label} must be between ${min} and ${max}.`;
+    return exclusiveMin
+      ? `${label} must be greater than ${min} and no more than ${max}.`
+      : `${label} must be between ${min} and ${max}.`;
   }
   return '';
 };
@@ -124,37 +126,16 @@ const measurementMethodErrors = (
 };
 
 /**
- * "Trees exist" is not allowed on a clear-cut (CC) stratum — EXCEPT the NAR stratum, which may record
- * retained/residual trees on a clear cut. Mirrors the backend FREP_BIODIVERSITY_STRATUM.VALIDATE rule
- * (strata_type = 'CC' AND UPPER(TRIM(stratum_number)) <> 'NAR') so the stratum-save block is caught
- * inline here instead. A blank stratum type (summary not filled in) is not 'CC', so this relaxes
- * automatically. Keyed on stratum_number (the UI "Stratum ID"), never the numeric stratum_id PK.
- */
-const treesExistErrors = (
-  e: Record<string, string>,
-  g: Getter,
-  stratumType: string,
-  stratumNumber: string,
-): void => {
-  const isNar = stratumNumber.trim().toUpperCase() === 'NAR';
-  if (stratumType === 'CC' && !isNar && g('treeIndicator') === 'Y') {
-    e.treeIndicator =
-      "Trees exist isn't allowed on a clear-cut stratum (except NAR). Uncheck it to save.";
-  }
-};
-
-/**
  * Plot-header field errors keyed by field key. Legacy parity: UTM (conditional on the "no signal"
  * toggle), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
- * numeric ranges and decimals, comment length, the "exactly one measurement method" rule
- * (clear-cut → fixed-area radius only), and the CC/NAR "trees exist" gate. Split into rule groups to
- * keep each simple. `stratumNumber` (the UI "Stratum ID") is optional — blank relaxes the CC gate.
+ * numeric ranges and decimals, comment length, and the "exactly one measurement method" rule
+ * (clear-cut → fixed-area radius only). Split into rule groups to keep each simple.
+ *
+ * Note: "Trees exist" carries no stratum-type restriction — it's allowed on every stratum type,
+ * including clear-cut (CC). (Earlier the app mirrored the legacy CC-except-NAR block; per requirement
+ * that gate was removed here and in FREP_BIODIVERSITY_STRATUM.VALIDATE.)
  */
-export const plotHeaderErrors = (
-  plot: BioPlot,
-  stratumType: string,
-  stratumNumber = '',
-): Record<string, string> => {
+export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<string, string> => {
   const e: Record<string, string> = {};
   // Read a plot field as a trimmed string; non-string values (e.g. the table arrays) read as ''.
   const g: Getter = (k) => {
@@ -165,7 +146,6 @@ export const plotHeaderErrors = (
   bearingErrors(e, g);
   plotNumberErrors(e, g);
   measurementMethodErrors(e, g, stratumType);
-  treesExistErrors(e, g, stratumType, stratumNumber);
   return e;
 };
 
@@ -176,7 +156,9 @@ export const standRowErrors = (row: Row): Record<string, string> => {
   const g = (k: string) => String(row[k] ?? '').trim();
   if (isBlank(g('speciesCode'))) e.speciesCode = 'Species is required.';
   if (isBlank(g('decayClassCode'))) e.decayClassCode = 'WT class is required.';
-  put(e, 'dbh', requiredFloat(g('dbh'), 'DBH', 12.6, 400, 1));
+  // DBH rule is "> 12.5 cm" (legacy help); with 1-decimal precision the smallest valid value is 12.6.
+  // Exclusive-min 12.5 enforces exactly that while showing 12.5 (the threshold) in the message.
+  put(e, 'dbh', requiredFloat(g('dbh'), 'DBH', 12.5, 400, 1, true));
   put(e, 'height', requiredFloat(g('height'), 'Height', 1.4, 99.9, 1));
   return e;
 };

@@ -16,21 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RequestMapping("/api/v1/search")
 public interface SearchApiEndpoint {
 
-  @GetMapping("/checklists")
-  ResponseEntity<List<ChecklistSearchResult>> searchChecklists(
-      @RequestParam(required = false) String effectiveYear,
-      @RequestParam(required = false) String orgUnit,
-      @RequestParam(required = false) String protocolType,
-      @RequestParam(required = false) String licenceId,
-      @RequestParam(required = false) String cuttingPermitId,
-      @RequestParam(required = false) String cutBlockId,
-      @RequestParam(required = false) String openingId,
-      @RequestParam(required = false) String clientNumber,
-      @RequestParam(required = false) String checklistStatusCode,
-      @RequestParam(required = false) String checklistId,
-      @RequestParam(required = false) String evaluationDateFrom,
-      @RequestParam(required = false) String evaluationDateTo);
-
   /**
    * Server-side paginated checklist search — returns a page + true total (no 5000 VARRAY cap).
    * {@code sort} is {@code "field"} or {@code "field,(asc|desc)"} over a whitelisted set of fields.

@@ -4,6 +4,12 @@
 @use '@carbon/type';
 
 .#{vars.$bcgov-prefix}--header {
+  // The header is fixed + edge-to-edge (Carbon `inset-inline: 0`). With `viewport-fit=cover`
+  // it now fills the full device width incl. the safe areas; pad by the notch/rounded-corner
+  // insets so the toggle/title/profile stay clear of them. Both insets are 0 in portrait, so
+  // this only takes effect in landscape / on standalone-PWA notched devices.
+  padding-inline-start: env(safe-area-inset-left);
+  padding-inline-end: env(safe-area-inset-right);
 
   .#{vars.$bcgov-prefix}--header__name {
     margin-left: 0;

@@ -9,6 +9,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
 import java.sql.SQLException;
+import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,50 +29,15 @@ public class SearchService {
 
   private final SearchRepository searchRepository;
   private final FamUserDirectoryService famUserDirectoryService;
+  private final LoggedUserHelper loggedUserHelper;
 
   public SearchService(
-      SearchRepository searchRepository, FamUserDirectoryService famUserDirectoryService) {
+      SearchRepository searchRepository,
+      FamUserDirectoryService famUserDirectoryService,
+      LoggedUserHelper loggedUserHelper) {
     this.searchRepository = searchRepository;
     this.famUserDirectoryService = famUserDirectoryService;
-  }
-
-  /**
-   * Run a checklist search. Any blank parameter means "any".
-   */
-  public List<ChecklistSearchResult> searchChecklists(
-      String effectiveYear,
-      String orgUnit,
-      String protocolType,
-      String licenceId,
-      String cuttingPermitId,
-      String cutBlockId,
-      String openingId,
-      String clientNumber,
-      String checklistStatusCode,
-      String checklistId,
-      String evaluationDateFrom,
-      String evaluationDateTo
-  ) {
-    try {
-      return searchRepository.searchChecklists(new ChecklistSearchCriteria(
-          trimToNull(effectiveYear),
-          trimToNull(orgUnit),
-          normalizeProtocolType(protocolType).orElse(null),
-          trimToNull(licenceId),
-          trimToNull(cuttingPermitId),
-          trimToNull(cutBlockId),
-          trimToNull(openingId),
-          trimToNull(clientNumber),
-          trimToNull(checklistStatusCode),
-          trimToNull(checklistId),
-          trimToNull(evaluationDateFrom),
-          trimToNull(evaluationDateTo)
-      )).stream()
-          .map(SearchService::toChecklistSearchResult)
-          .toList();
-    } catch (DataAccessException ex) {
-      throw translateTooManyResults(ex);
-    }
+    this.loggedUserHelper = loggedUserHelper;
   }
 
   /** Default page size + cap, and the sortable result columns (public key -> result-set alias). */
@@ -92,7 +58,7 @@ public class SearchService {
       Map.entry("checklistStatusCode", "checklist_status_code"));
 
   /**
-   * Server-side paginated checklist search. Unlike {@link #searchChecklists} (the legacy VARRAY proc,
+   * Server-side paginated checklist search. Unlike (the legacy VARRAY proc,
    * capped at 5000 and unable to page), this runs a native paginated query and returns the true total,
    * so every page — and counts beyond 5000 — are reachable. {@code sort} is {@code "field"} or
    * {@code "field,(asc|desc)"} where {@code field} is one of the whitelisted keys (unknown fields fall
@@ -181,7 +147,7 @@ public class SearchService {
   }
 
   /** Builds the native-query criteria (trim-to-null + protocol normalization) shared by paged + stream. */
-  private static ChecklistSearchCriteria buildCriteria(
+  private ChecklistSearchCriteria buildCriteria(
       String effectiveYear,
       String orgUnit,
       String protocolType,
@@ -195,6 +161,13 @@ public class SearchService {
       String evaluationDateFrom,
       String evaluationDateTo
   ) {
+    // Protocol/district visibility derived from the caller's roles (see ChecklistSearchCriteria):
+    // sys-admins see all CHR; a district editor sees only their districts' CHR; Bio (and other
+    // non-CHR) rows are shown only to Bio-capable users (sys-admin or FREP_EDITOR).
+    boolean chrSeeAll = loggedUserHelper.isSysAdmin();
+    List<String> allowedChrCodes = List.copyOf(loggedUserHelper.chrDistrictCodes());
+    boolean nonChrVisible = loggedUserHelper.canEdit();
+
     return new ChecklistSearchCriteria(
         trimToNull(effectiveYear),
         trimToNull(orgUnit),
@@ -207,7 +180,10 @@ public class SearchService {
         trimToNull(checklistStatusCode),
         trimToNull(checklistId),
         trimToNull(evaluationDateFrom),
-        trimToNull(evaluationDateTo));
+        trimToNull(evaluationDateTo),
+        chrSeeAll,
+        allowedChrCodes,
+        nonChrVisible);
   }
 
   /**

@@ -12,6 +12,7 @@ import { useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
 import { DateField, TextField } from '@/pages/ChrChecklist/fields';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { Picture } from '@/types/chrChecklist';
 
@@ -29,10 +30,9 @@ const photoSrc = (picture: Picture): string | undefined => {
   const code = picture.code;
   if (!code) return undefined;
   if (code.startsWith('data:')) return code;
-  const mime =
-    picture.mimeTypeCode && picture.mimeTypeCode.includes('image/')
-      ? picture.mimeTypeCode
-      : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`;
+  const mime = picture.mimeTypeCode?.includes('image/')
+    ? picture.mimeTypeCode
+    : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`;
   return `data:${mime};base64,${code}`;
 };
 
@@ -111,6 +111,7 @@ const Photos: FC<{
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [description, setDescription] = useState('');
+  const [descriptionInvalid, setDescriptionInvalid] = useState(false);
   const [date, setDate] = useState('');
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
 
@@ -118,6 +119,13 @@ const Photos: FC<{
   // persist in a single save. Clear the upload fields once the save succeeds.
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return;
+    // Description is required for a new photo (the backend rejects a blank one). Flag it here so the
+    // user gets immediate inline feedback instead of a "Bad Request" after the round-trip.
+    if (!description.trim()) {
+      setDescriptionInvalid(true);
+      return;
+    }
+    setDescriptionInvalid(false);
     // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
     // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
     // accept="image/*", but drag-and-drop bypasses it — so re-check here.
@@ -244,10 +252,15 @@ const Photos: FC<{
               <div className="attach-card__field attach-card__field--desc">
                 <TextField
                   id="photo-description"
-                  labelText="Description"
+                  labelText={requiredLabel('Description', true)}
                   value={description}
                   disabled={busy}
-                  onChange={setDescription}
+                  invalid={descriptionInvalid}
+                  invalidText="Enter a description before uploading a photo."
+                  onChange={(v) => {
+                    setDescription(v);
+                    if (v.trim()) setDescriptionInvalid(false);
+                  }}
                 />
               </div>
               <div className="attach-card__field attach-card__field--date">

@@ -36,6 +36,7 @@ class CSVReportServiceTest {
         12.5, 30.0, null, "2021-03-01", "2021-09-15", "TSA12", List.of("BIO", "RIP"));
   }
 
+
   @Test
   void randomListCsvHasLegacyHeaderAndRowInOrder() {
     when(randomListService.findRandomList("2023", "DCK"))

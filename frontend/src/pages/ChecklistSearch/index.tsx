@@ -28,11 +28,13 @@ import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
 import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { buildExportFilename } from '@/utils/exportFilename';
 
 import './checklistSearch.scss';
 
@@ -66,8 +68,20 @@ const PROTOCOL_TO_PATH: Record<string, 'slr' | undefined> = {
   SLR: 'slr',
 };
 
+/**
+ * The row's checklist link: CHR opens its own screen, SLB/SLR open the protocol checklist (see
+ * {@link PROTOCOL_TO_PATH}); any other (or unknown) protocol has no link.
+ */
+const checklistLinkFor = (protocolCode: string | undefined, id: string): string | undefined => {
+  if (!protocolCode) return undefined;
+  if (protocolCode === 'CHR') return `/protocol-checklists/chr/${id}`;
+  const protoPath = PROTOCOL_TO_PATH[protocolCode];
+  return protoPath ? `/protocol-checklists/${protoPath}/${id}` : undefined;
+};
+
 const ChecklistSearchPage: FC = () => {
   const { display } = useNotification();
+  const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -75,6 +89,10 @@ const ChecklistSearchPage: FC = () => {
   const [configLoading, setConfigLoading] = useState(true);
 
   const [filters, setFilters] = useState<ChecklistSearchQuery>({});
+  // The filters that produced the currently-displayed results. Export uses this (not the live
+  // `filters`) so a CSV always matches the visible table even if the user edited a filter without
+  // re-searching.
+  const [searchedFilters, setSearchedFilters] = useState<ChecklistSearchQuery>({});
   const [results, setResults] = useState<ChecklistSearchResult[]>([]);
   // Server-side paging: page is 0-based (matches the backend); totalElements is the true match count
   // (no 5000 VARRAY cap), so every page is reachable.
@@ -125,7 +143,7 @@ const ChecklistSearchPage: FC = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load filter options",
@@ -158,6 +176,7 @@ const ChecklistSearchPage: FC = () => {
         pageSize: targetSize,
       });
       setResults(data.content);
+      setSearchedFilters(queryFilters);
       setTotalElements(data.totalElements);
       setPage(data.pageNumber);
       setPageSize(data.pageSize);
@@ -178,8 +197,20 @@ const ChecklistSearchPage: FC = () => {
 
   const exportCsv = async () => {
     try {
-      const { blob, filename } = await requestChecklistSearchCsv(filters);
-      triggerBrowserDownload(blob, filename);
+      const { blob } = await requestChecklistSearchCsv(searchedFilters);
+      // Descriptive name derived from the filters that produced the results (district code + year),
+      // replacing the generic backend default.
+      const orgUnitCode = orgUnits.find(
+        (unit) => unit.orgUnitNo === searchedFilters.orgUnit,
+      )?.orgUnitCode;
+      triggerBrowserDownload(
+        blob,
+        buildExportFilename({
+          base: 'FREP_Checklist_Search',
+          orgUnitCode,
+          effectiveYear: searchedFilters.effectiveYear,
+        }),
+      );
     } catch (err) {
       display({
         kind: 'error',
@@ -223,6 +254,20 @@ const ChecklistSearchPage: FC = () => {
     [orgUnits],
   );
 
+  // Scope the filter dropdowns to what the user can see (results are also filtered server-side): a
+  // CHR-only user (no Bio) only gets their districts; the protocol list drops protocols they can't see.
+  const districtOptions = useMemo(
+    () =>
+      canEdit
+        ? orgUnits
+        : orgUnits.filter((u) => chrDistricts.includes(u.orgUnitCode.toUpperCase())),
+    [orgUnits, canEdit, chrDistricts],
+  );
+  const protocolOptions = useMemo(
+    () => protocols.filter((p) => (p.code === 'CHR' ? canAnyChr : canEdit)),
+    [protocols, canAnyChr, canEdit],
+  );
+
   return (
     <Grid fullWidth className="default-grid checklist-search-grid">
       <Column sm={4} md={8} lg={16}>
@@ -254,7 +299,7 @@ const ChecklistSearchPage: FC = () => {
             disabled={configLoading}
           >
             <SelectItem value="" text="Any district" />
-            {orgUnits.map((unit) => (
+            {districtOptions.map((unit) => (
               <SelectItem
                 key={unit.orgUnitNo}
                 value={unit.orgUnitNo}
@@ -270,7 +315,7 @@ const ChecklistSearchPage: FC = () => {
             disabled={configLoading}
           >
             <SelectItem value="" text="Any protocol" />
-            {protocols.map((protocol) => (
+            {protocolOptions.map((protocol) => (
               <SelectItem
                 key={protocol.code}
                 value={protocol.code}
@@ -392,13 +437,7 @@ const ChecklistSearchPage: FC = () => {
                   <TableBody>
                     {rows.map((row) => {
                       const data = results.find((r) => r.checklistId === row.id);
-                      const protoPath = data ? PROTOCOL_TO_PATH[data.protocolCode] : undefined;
-                      const isChr = data?.protocolCode === 'CHR';
-                      const checklistLink = isChr
-                        ? `/protocol-checklists/chr/${row.id}`
-                        : protoPath
-                          ? `/protocol-checklists/${protoPath}/${row.id}`
-                          : undefined;
+                      const checklistLink = checklistLinkFor(data?.protocolCode, row.id);
                       return (
                         <TableRow {...getRowProps({ row })} key={row.id}>
                           {row.cells.map((cell) => {

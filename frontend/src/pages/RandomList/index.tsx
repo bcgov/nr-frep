@@ -28,8 +28,10 @@ import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
 import { useNotification } from '@/context/notification/useNotification';
+import { randomListCsvFilename } from '@/pages/RandomList/randomListCsvFilename';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
+import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
 
 import './randomList.scss';
@@ -115,7 +117,7 @@ const RandomListPage: FC = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load filter options",
@@ -146,7 +148,7 @@ const RandomListPage: FC = () => {
       setSites(data.sites ?? []);
       setSummary(data.summary ?? null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = apiErrorMessage(err);
       display({
         kind: 'error',
         title: "We couldn't load the district random list",
@@ -168,17 +170,18 @@ const RandomListPage: FC = () => {
   const exportCsv = useCallback(async () => {
     if (!effectiveYear) return;
     try {
-      const { blob, filename } = await requestRandomListCsv(effectiveYear, orgUnit || undefined);
-      triggerBrowserDownload(blob, filename);
+      const { blob } = await requestRandomListCsv(effectiveYear, orgUnit || undefined);
+      // Prefer a descriptive name derived from the selected filters over the backend default.
+      triggerBrowserDownload(blob, randomListCsvFilename(effectiveYear, orgUnits, orgUnit));
     } catch (err) {
       display({
         kind: 'error',
         title: "We couldn't export the random list",
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     }
-  }, [display, effectiveYear, orgUnit]);
+  }, [display, effectiveYear, orgUnit, orgUnits]);
 
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 
@@ -213,11 +216,11 @@ const RandomListPage: FC = () => {
         <TableCell key={cell.id}>
           {cell.value ? (
             <Tag type="green" size="sm">
-              In review
+              Accepted
             </Tag>
           ) : (
             <Tag type="gray" size="sm">
-              Pending
+              Not accepted
             </Tag>
           )}
         </TableCell>
@@ -247,7 +250,7 @@ const RandomListPage: FC = () => {
   const printColumns = TABLE_HEADERS.filter((header) => header.key !== 'mapView');
   const printRows = tableRows.map((row) => ({
     ...row,
-    underReview: row.underReview ? 'In review' : 'Pending',
+    underReview: row.underReview ? 'Accepted' : 'Not accepted',
   }));
   const printMeta = [
     summary?.orgUnitDescription,

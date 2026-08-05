@@ -23,6 +23,10 @@ public interface ConfigurationApiEndpoint {
   @GetMapping("/master-list-years")
   ResponseEntity<List<MasterListYearResponse>> getMasterListYears();
 
+  /** Existing years plus the next not-yet-created year — for the FREP700 Generate Master List screen. */
+  @GetMapping("/master-list-years/new")
+  ResponseEntity<List<MasterListYearResponse>> getNewMasterListYears();
+
   @GetMapping("/org-units")
   ResponseEntity<List<OrgUnitResponse>> getOrgUnits();
 

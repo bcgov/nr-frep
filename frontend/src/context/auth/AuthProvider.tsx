@@ -2,7 +2,8 @@ import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AuthContext, type AuthContextType } from './AuthContext';
-import { getAccessTokenFromCookie, parseToken } from './authUtils';
+import { clearStoredTokens, parseToken } from './authUtils';
+import { buildFederatedLogoutUrl } from './logoutChain';
 
 import type { FamLoginUser, LoginProvider } from './types';
 
@@ -21,10 +22,10 @@ const MIN_REFRESH_GAP_MS = 5_000;
  * BCGov SSO page; sign-out clears the Amplify session and redirects to the
  * configured landing URL.</p>
  *
- * <p>Tokens are read directly from the Amplify-managed cookies via
- * {@link getAccessTokenFromCookie}; this avoids the async {@link fetchAuthSession}
- * call on the hot path. {@link ensureFreshToken} is the async fallback that
- * proactively refreshes the access token when it is close to expiring.</p>
+ * <p>Access tokens for API calls are read via {@link fetchAuthSession} (storage-agnostic — see
+ * {@code services/http/headers.ts}), not from cookies: Amplify's {@code configure()} keeps tokens
+ * in its default {@code localStorage} store regardless of the CookieStorage override in main.tsx.
+ * {@link ensureFreshToken} proactively refreshes the access token when it is close to expiring.</p>
  */
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FamLoginUser | undefined>(undefined);
@@ -74,22 +75,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const logout = useCallback(() => {
+    // Primary path: drive the BC-Gov federated logout chain ourselves (Siteminder → Keycloak →
+    // Cognito → app) so the upstream IDIR/Keycloak/Cognito sessions are cleared — not just the local
+    // app tokens (which is all Amplify's signOut() reliably does here). We clear the Amplify token
+    // cookies up front so the return trip reads as logged out, then navigate; the chain's final
+    // Cognito /logout hop clears the Cognito session cookie server-side.
+    //
+    // Deliberately NOT setUser(undefined): a full-page navigation is imminent, and clearing state
+    // could momentarily mount the Landing page, whose effect reads-and-clears the SessionTimeout
+    // "session expired" flag before the round-trip returns — consuming the notice signal early.
+    const chainUrl = buildFederatedLogoutUrl(window.location.origin);
+    if (chainUrl) {
+      clearStoredTokens();
+      window.location.assign(chainUrl);
+      return;
+    }
+    // Fallback (chain env not configured): Amplify hosted-UI sign-out, which redirects through
+    // Cognito /logout to the configured redirectSignOut. No trailing assign('/') — that would clobber
+    // Amplify's redirect and leave the SSO session intact.
     void (async () => {
-      try {
-        await signOut();
-      } finally {
-        window.location.assign('/');
-      }
+      await signOut();
+      setUser(undefined);
     })();
-  }, []);
-
-  /**
-   * Synchronously read the cached access token from the Amplify cookie store.
-   * Used by code paths that cannot await (e.g. axios interceptors that bridge
-   * to header builders).
-   */
-  const userToken = useCallback((): string | undefined => {
-    return getAccessTokenFromCookie();
   }, []);
 
   /**
@@ -122,6 +129,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  /**
+   * Unconditional refresh (vs {@link ensureFreshToken}, which only refreshes near expiry): forces
+   * Cognito to mint a fresh rotated refresh token, sliding the session, and re-parses the user.
+   * Throws if the refresh token has expired (Amplify rejects the refresh, or returns no tokens) so
+   * the caller can treat it as a real expiry. Used by the SessionTimeout "Stay logged in" action.
+   */
+  const forceRefreshSession = useCallback(async (): Promise<void> => {
+    const session = await fetchAuthSession({ forceRefresh: true });
+    const idTokenObject = session.tokens?.idToken;
+    if (!idTokenObject) {
+      throw new Error('Session refresh failed — no tokens.');
+    }
+    setUser(parseToken(idTokenObject));
+  }, []);
+
   const contextValue: AuthContextType = useMemo(
     () => ({
       user,
@@ -129,10 +151,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isLoading,
       login,
       logout,
-      userToken,
       ensureFreshToken,
+      forceRefreshSession,
     }),
-    [user, isLoading, login, logout, userToken, ensureFreshToken],
+    [user, isLoading, login, logout, ensureFreshToken, forceRefreshSession],
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

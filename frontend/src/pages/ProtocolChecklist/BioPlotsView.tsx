@@ -27,6 +27,7 @@ import type {
   BioStratumRow,
 } from '@/types/protocolChecklist';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import {
@@ -35,6 +36,7 @@ import {
   standRowErrors,
 } from '@/pages/ProtocolChecklist/plotValidation';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 /**
  * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
@@ -51,6 +53,15 @@ type Props = {
   submitted: boolean;
   /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
   active?: boolean;
+};
+
+// Plot assessor userids are stored bare (no `IDIR\` prefix) — e.g. `ASODHI` — while the logged-in
+// user's providerUsername is the full `IDIR\ASODHI`. Strip the directory prefix so both compare and
+// store consistently with the existing bare-userid plot data.
+const bareUserid = (value?: string): string => value?.split('\\').pop()?.trim() ?? '';
+const sameEvaluator = (a?: string, b?: string): boolean => {
+  const norm = (v?: string) => bareUserid(v).toUpperCase();
+  return norm(a) !== '' && norm(a) === norm(b);
 };
 
 // Sub-table columns. `kind` picks the cell control: index = read-only row number,
@@ -117,6 +128,8 @@ const plotHasBlockingErrors = (
 
 const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
   const { display } = useNotification();
+  const { user } = useAuth();
+  const me = user?.providerUsername;
   const confirm = useConfirm();
   const [strata, setStrata] = useState<BioStratumRow[]>([]);
   const [stratumId, setStratumId] = useState('');
@@ -125,20 +138,21 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Reference data for the coded dropdowns. `evaluators` is null until loaded so we can show the
-  // "no evaluator yet" notice only after the lookup resolves.
+  // Reference data for the coded dropdowns.
   const [species, setSpecies] = useState<CodeOption[]>([]);
   const [wtDecay, setWtDecay] = useState<CodeOption[]>([]);
   const [cwdDecay, setCwdDecay] = useState<CodeOption[]>([]);
   const [strataTypes, setStrataTypes] = useState<CodeOption[]>([]);
-  const [evaluators, setEvaluators] = useState<CodeOption[] | null>(null);
+  // The checklist's Evaluator (team lead) from the Opening tab — the default "Evaluated by" for new
+  // plots. `name` is the FAM-resolved display; `userid` is the bare IDIR userid stored on the plot.
+  const [evaluator, setEvaluator] = useState<{ userid?: string; name?: string }>({});
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],
@@ -192,7 +206,10 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, checklistId]);
 
-  // Reference data (coded dropdowns + the checklist's evaluator list).
+  // Reference data for the coded dropdowns, plus the checklist Evaluator (team lead) that new plots
+  // default their "Evaluated by" to. The evaluator comes from the Opening tab's source
+  // (biodiversity_evaluator_name, FAM-resolved) — the same person shown as "Evaluator" there — not the
+  // checklist tombstone's last-updater userid.
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -200,19 +217,18 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       API.configuration.getWildlifeTreeDecay(),
       API.configuration.getCwdDecay(),
       API.configuration.getStrataTypes(),
-      API.configuration.getEvaluators(checklistId),
+      API.protocolChecklist.getBiodiversityOpening(checklistId),
     ])
-      .then(([sp, wt, cwd, st, ev]) => {
+      .then(([sp, wt, cwd, st, opening]) => {
         if (cancelled) return;
         setSpecies(sp);
         setWtDecay(wt);
         setCwdDecay(cwd);
         setStrataTypes(st);
-        setEvaluators(ev);
+        setEvaluator({ userid: opening.teamLeadNameId, name: opening.teamLeadName });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setEvaluators([]);
         reportError("We couldn't load the plot reference data", err);
       });
     return () => {
@@ -280,6 +296,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const addPlot = () => {
     setCurrent({
       stratumId,
+      // Default "Evaluated by" to the checklist's Evaluator; claimable via "Assign it to me".
+      assessorName: bareUserid(evaluator.userid),
       treeIndicator: 'N',
       cwdTransectIndicator: 'N',
       standTable: [],
@@ -287,17 +305,19 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     });
   };
 
+  // "Assign it to me" — claim this plot's assessor for the current user (mirrors the Opening
+  // Evaluator widget). Stored as a bare userid to match the existing plot data.
+  const assignToMe = () => {
+    if (!me) return;
+    setCurrent((prev) => (prev ? ({ ...prev, assessorName: bareUserid(me) } as BioPlot) : prev));
+  };
+
   // Inline validation runs live off the edited plot (like SiteDetail): a field's error shows the
   // moment it's invalid and clears when fixed. plotFieldError is a lookup into the header-error map;
   // standError / cwdError look up a sub-table cell. The Save handler blocks while any remain — no toast.
   const stratumType = selectedStratum?.strataTypeCode ?? '';
-  const stratumNumber = selectedStratum?.stratumNumber ?? '';
-  // "Trees exist" is disallowed on a clear-cut (CC) stratum except NAR — mirror the backend
-  // FREP_BIODIVERSITY_STRATUM.VALIDATE block so the user can't create the stratum-save trap. A blank
-  // stratum type (summary not filled in) is not 'CC', so this relaxes automatically.
-  const blockTrees = stratumType === 'CC' && stratumNumber.trim().toUpperCase() !== 'NAR';
   const headerErrors: Record<string, string> =
-    current && !readOnly ? plotHeaderErrors(current, stratumType, stratumNumber) : {};
+    current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
   const plotFieldError = (key: string): string => headerErrors[key] ?? '';
   const standError = (index: number, colKey: string): string =>
     standRowErrors(
@@ -424,6 +444,15 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           ? cwdDecay
           : [];
 
+  // Sub-table coded dropdowns (species / WT class / decay) display as "<code> - <description>",
+  // except WT Class, which shows the bare code. The wildlife-tree decay descriptions returned by
+  // get_wildlife_tree_decay_code describe SOFTWOODS (codes 1-8); hardwoods use only 1-5 and give
+  // some of those codes a different meaning, so pairing one description list with every row
+  // mislabels hardwood entries. Legacy rendered this dropdown code-only for the same reason
+  // (frep212BIOPlots.jsp: `labelProperty="code"`).
+  const codeOptionText = (o: CodeOption, kind: Col['kind']): string =>
+    kind === 'select-wt' ? o.code : `${o.code} - ${o.description}`;
+
   // --- field render helpers ---
   const roField = (label: string, value: string): ReactNode => (
     <div className="protocol-checklist__field">
@@ -484,6 +513,38 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     );
   };
 
+  // "Evaluated by" — the plot's assessor. Defaults to the checklist Evaluator (see addPlot) and is
+  // claimed via "Assign it to me" (mirrors the Opening Evaluator widget) rather than a team dropdown,
+  // since team management was removed. Shows the FAM-resolved name when the assessor is the checklist
+  // Evaluator, otherwise the bare userid.
+  const evaluatedByField = (): ReactNode => {
+    const currentId = get('assessorName');
+    const displayName = sameEvaluator(currentId, evaluator.userid)
+      ? evaluator.name || currentId
+      : currentId;
+    const error = plotFieldError('assessorName');
+    if (readOnly) {
+      return roField('Evaluated by', displayName);
+    }
+    return (
+      <div className="protocol-checklist__field" key="evaluatedBy">
+        <span className="protocol-checklist__label">{requiredLabel('Evaluated by', true)}</span>
+        <span
+          className="protocol-checklist__value"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <span>{displayName || '—'}</span>
+          {me && !sameEvaluator(currentId, me) && (
+            <Button kind="ghost" size="sm" disabled={busy} onClick={assignToMe}>
+              Assign it to me
+            </Button>
+          )}
+        </span>
+        {error !== '' && <div className="rip-field-grid__cell-error">{error}</div>}
+      </div>
+    );
+  };
+
   const checkField = (key: string, label: string, disabled = false): ReactNode =>
     readOnly ? (
       roField(label, get(key) === 'Y' ? 'Yes' : 'No')
@@ -523,7 +584,10 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     const error = cellError(index, col.key);
     if (col.kind) {
       const options = colOptions(col.kind);
-      if (readOnly) return options.find((o) => o.code === value)?.description ?? value ?? '—';
+      if (readOnly) {
+        const match = options.find((o) => o.code === value);
+        return match ? codeOptionText(match, col.kind) : value || '—';
+      }
       return withError(
         <Select
           id={`${caption}-${index}-${col.key}`}
@@ -535,8 +599,16 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           onChange={(e) => onChange(index, col.key, e.target.value)}
         >
           <SelectItem value="" text="—" />
+          {/* A saved code the list no longer offers (e.g. a retired code, or CWD decay class 5,
+              which the API now filters out as unsampled) would otherwise leave the Select with
+              no matching option — the browser falls back to the "—" placeholder and the next
+              save silently rewrites the cell to blank. Keep the stored value selectable so it
+              survives an edit the evaluator didn't intend to make. */}
+          {value !== '' && !options.some((o) => o.code === value) && (
+            <SelectItem value={value} text={value} />
+          )}
           {options.map((o) => (
-            <SelectItem key={o.code} value={o.code} text={o.description} />
+            <SelectItem key={o.code} value={o.code} text={codeOptionText(o, col.kind)} />
           ))}
         </Select>,
         error,
@@ -634,24 +706,12 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     return <p>Add a stratum on the Stratum summary tab before adding plots.</p>;
   }
 
-  const noEvaluators = evaluators !== null && evaluators.length === 0;
-
   return (
     <div className="rip-form">
       {/* The plots table and the plot form are mutually exclusive — the table is hidden
           while a plot form is open (mirrors the Stratum summary tab). */}
       {!current && (
         <>
-          {noEvaluators && (
-            <InlineNotification
-              kind="info"
-              lowContrast
-              hideCloseButton
-              title="No evaluator saved"
-              subtitle="Plots cannot be added until an Evaluator has been saved on the Administration tab."
-            />
-          )}
-
           {/* Two aligned columns: Stratum / Stratum type on the left, Add plot / # of plots
               completed on the right. */}
           <div className="bio-plot__header">
@@ -674,7 +734,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
                 kind="tertiary"
                 size="lg"
                 className="bio-strata__add"
-                disabled={busy || noEvaluators}
+                disabled={busy}
                 onClick={addPlot}
               >
                 <Add size={16} className="bio-strata__add-icon" />
@@ -765,7 +825,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
             </div>
             <div className="rip-form__grid">
               {textField('plotNumber', 'Plot #', 3, false, true)}
-              {selectField('assessorName', 'Evaluated by', evaluators ?? [], false, true)}
+              {evaluatedByField()}
               {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
               {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
               {textField('utmNorthing', 'Northing', 7, noUtmSignal, !noUtmSignal)}
@@ -775,23 +835,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
           <fieldset className="rip-form__group">
             <legend>Plot information</legend>
             <div className="rip-form__grid">
-              {checkField(
-                'treeIndicator',
-                'Trees exist',
-                blockTrees && get('treeIndicator') !== 'Y',
-              )}
+              {/* "Trees exist" is allowed on every stratum type (including clear-cut) — no gating. */}
+              {checkField('treeIndicator', 'Trees exist')}
             </div>
-            {/* Already-checked-on-a-CC-stratum case (e.g. type changed after entry): the checkbox
-               can't be disabled away without stranding data, so flag it and block the save. */}
-            {plotFieldError('treeIndicator') && (
-              <InlineNotification
-                kind="error"
-                title="Trees exist not allowed"
-                subtitle={plotFieldError('treeIndicator')}
-                hideCloseButton
-                lowContrast
-              />
-            )}
             <p className="rip-form__hint">Fill in one of:</p>
             <div className="rip-form__grid">
               {textField('basalAreaFactor', 'BAF', 2)}

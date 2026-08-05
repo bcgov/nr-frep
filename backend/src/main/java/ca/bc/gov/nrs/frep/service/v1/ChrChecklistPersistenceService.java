@@ -75,9 +75,30 @@ public class ChrChecklistPersistenceService {
   private EntityManager entityManager;
 
   private final ObjectStorageService objectStorageService;
+  private final VirusScanner virusScanner;
 
-  public ChrChecklistPersistenceService(ObjectStorageService objectStorageService) {
+  public ChrChecklistPersistenceService(
+      ObjectStorageService objectStorageService, VirusScanner virusScanner) {
     this.objectStorageService = objectStorageService;
+    this.virusScanner = virusScanner;
+  }
+
+  /**
+   * The 3-letter Natural Resource District {@code org_unit_code} for a CHR checklist (via
+   * checklist → resource value → selected site → org unit), used for district-scoped authorization.
+   * Returns {@code null} if the checklist doesn't exist. Lightweight scalar projection — no entity
+   * graph or photo bytes loaded.
+   */
+  public String getChecklistOrgUnitCode(long checklistId) {
+    return entityManager.createQuery(
+            "SELECT ou.orgUnitCode FROM ChrChecklist c "
+                + "JOIN c.frepResourceValue rv JOIN rv.frepSelectedSite s JOIN s.orgUnit ou "
+                + "WHERE c.chrChecklistId = :id",
+            String.class)
+        .setParameter("id", checklistId)
+        .getResultStream()
+        .findFirst()
+        .orElse(null);
   }
 
   public ChrChecklist getAcceptedSiteForChr(long checklistId) {
@@ -107,6 +128,22 @@ public class ChrChecklistPersistenceService {
     return entityManager.find(ChrChecklist.class, checklistId);
   }
 
+  /**
+   * The formatted mapsheet opening designator (e.g. "93A 026 0.0 110") for a selected site. Uses the
+   * same {@code THE.frep_formatted_mapsheet} function the Accepted Sites list and the Biodiversity
+   * header use, so the CHR header shows the identical value — not the raw {@code OPENING_NUMBER}
+   * fragment. Returns null when the site has no mapsheet/opening data.
+   */
+  public String getFormattedOpeningNumber(long frepSelectedSiteId) {
+    List<?> rows = entityManager.createNativeQuery(
+            "SELECT THE.frep_formatted_mapsheet(fss.mapsheet_grid, fss.mapsheet_letter, "
+                + "fss.mapsheet_square, fss.mapsheet_quad, fss.mapsheet_sub_quad, fss.opening_number) "
+                + "FROM THE.frep_selected_site fss WHERE fss.frep_selected_site_id = :selectedSiteId")
+        .setParameter("selectedSiteId", frepSelectedSiteId)
+        .getResultList();
+    return rows.isEmpty() || rows.get(0) == null ? null : rows.get(0).toString();
+  }
+
   public ChrChecklist updateChecklistOffline(Long checklistId, String userId) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
     FrepChecklistStatusCode status = entityManager.find(
@@ -133,6 +170,20 @@ public class ChrChecklistPersistenceService {
     );
     chrChecklist.setFrepChecklistStatusCode(status);
     chrChecklist.setDeviceCheckoutGuid(null);
+    chrChecklist.setUpdateUserid(userId);
+    chrChecklist.setUpdateTimestamp(new Date());
+    return chrChecklist;
+  }
+
+  /** Unsubmit a submitted checklist: SUB → ACT. Mirrors the JPA lifecycle used by activate/offline
+   *  rather than the FREP_TOMBSTONE.UNSUBMIT proc, whose CASE has no CHR branch (ORA-06592). */
+  public ChrChecklist unsubmitChecklist(Long checklistId, String userId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    FrepChecklistStatusCode status = entityManager.find(
+        FrepChecklistStatusCode.class,
+        ChrConstants.FrepChecklistStatusCode.ACT
+    );
+    chrChecklist.setFrepChecklistStatusCode(status);
     chrChecklist.setUpdateUserid(userId);
     chrChecklist.setUpdateTimestamp(new Date());
     return chrChecklist;
@@ -459,6 +510,8 @@ public class ChrChecklistPersistenceService {
 
       if (ChrStringUtils.hasAValue(picture.getCode())) {
         byte[] decoded = Base64.getDecoder().decode(picture.getCode());
+        // Scan the decoded photo bytes before upload — a hit throws VirusDetectedException (→ 422).
+        virusScanner.scanOrThrow(decoded, attachment.getFileName());
         uploads.add(new PhotoUpload(
             picture.getId() + "." + deriveMimeType(picture.getMimeTypeCode()),
             picture.getMimeTypeCode(),
@@ -1009,9 +1062,33 @@ public class ChrChecklistPersistenceService {
         .setParameter("fid", featureId)
         .getResultList();
     for (ChrAssociatedFeatureXref row : rows) {
+      // Evict the row from BOTH endpoint features' EAGER xref collections before removing it. The
+      // *retained* sibling (the endpoint that isn't being deleted) is still managed, and would
+      // otherwise reference a removed row at flush time -> TransientObjectException. Mirrors the same
+      // eager-inverse-set clearing already done for chrFeatureIdentities / participations /
+      // attachments. (The deleted feature's own collections were already emptied by
+      // clearIdentityChildren, so those removals are no-ops.)
+      evictAssociatedXrefFromIdentities(row);
       entityManager.remove(row);
     }
     entityManager.flush();
+  }
+
+  /**
+   * Drops an associated-feature xref from the eager collections of its {@code from} and {@code to}
+   * feature identities, keeping the managed graph consistent with the row's removal before flush.
+   */
+  private void evictAssociatedXrefFromIdentities(ChrAssociatedFeatureXref row) {
+    ChrFeatureIdentity fromIdentity =
+        entityManager.find(ChrFeatureIdentity.class, row.getId().getFromChrFeatureId());
+    if (fromIdentity != null) {
+      fromIdentity.getChrAssociatedFeatureXrefsForFromChrFeatureId().remove(row);
+    }
+    ChrFeatureIdentity toIdentity =
+        entityManager.find(ChrFeatureIdentity.class, row.getId().getToChrFeatureId());
+    if (toIdentity != null) {
+      toIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().remove(row);
+    }
   }
 
   /** Removes all composite-id xrefs for a feature (keyed by {@code id.chrFeatureId}) and flushes. */

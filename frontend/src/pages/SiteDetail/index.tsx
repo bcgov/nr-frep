@@ -27,6 +27,7 @@ import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
 
 import './siteDetail.scss';
@@ -292,7 +293,7 @@ const SiteDetailPage: FC = () => {
       display({
         kind: 'error',
         title: 'Save failed',
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {
@@ -323,7 +324,7 @@ const SiteDetailPage: FC = () => {
           setNotFound(true);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = apiErrorMessage(err);
         display({
           kind: 'error',
           title: "We couldn't load the site detail",

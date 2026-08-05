@@ -190,6 +190,9 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: false,
+    // Biodiversity: sys-admin or the (Bio-scoped) FREP_EDITOR. A CHR-only user can't open it. The
+    // backend also gates the Bio reads (BIO_EDIT).
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
   },
   {
     path: '/protocol-checklists/chr/:id',
@@ -201,6 +204,9 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: false,
+    // CHR: sys-admin or any CHR district editor (coarse gate). The specific district is enforced on
+    // the page (edit vs read-only) and by the backend read gate.
+    roles: ['FREP_ADMIN', 'FREP_CHR_EDITOR'],
   },
   {
     path: '/chr/offline',
@@ -225,8 +231,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: true,
   },
   {
-    path: '/reports',
-    id: 'Reports',
+    path: '/exports',
+    id: 'Exports',
     icon: Document,
     element: (
       <Layout>
@@ -283,7 +289,7 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
 
 /**
  * Offline route set — served to unauthenticated users while the device is offline. The landing
- * page becomes the FREP Dashboard (which shows only the Offline Checklist option when logged out),
+ * page becomes the FREP IMS (which shows only the Offline Checklist option when logged out),
  * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
  * These carry no role restriction, so they render as-is (Layout-wrapped).
  */
@@ -297,7 +303,7 @@ export const getOfflineRoutes = (): RouteDescription[] => [
   },
   {
     path: '/dashboard',
-    id: 'FREP Dashboard',
+    id: 'FREP IMS',
     element: (
       <Layout>
         <DashboardPage />

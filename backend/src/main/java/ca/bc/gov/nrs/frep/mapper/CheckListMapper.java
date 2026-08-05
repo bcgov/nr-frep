@@ -13,6 +13,7 @@ import ca.bc.gov.nrs.frep.entity.ChrFeatureLocationDetail;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureTypeXref;
 import ca.bc.gov.nrs.frep.entity.ChrMgmtStrategyPlanned;
 import ca.bc.gov.nrs.frep.entity.ChrMgmtStrategyUsed;
+import ca.bc.gov.nrs.frep.entity.ForestClient;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
@@ -65,16 +66,24 @@ public final class CheckListMapper extends FrepMapper {
 		// 1. Opening Information ***************************************************************************************************************************************
 		resource.setEvaluationDate(acceptedSite.getEvaluationDate());
 		resource.setAssessedBy(chrChecklist.getAssessedBy());
+		resource.setUpdateUserid(chrChecklist.getUpdateUserid());
+		resource.setUpdateTimestamp(ChrDateUtils.formatDateTime(chrChecklist.getUpdateTimestamp()));
         // Already have these in acceptedSites, probably don't need to get
 		resource.setDistrict(acceptedSite.getOrgUnitCode()+"-"+acceptedSite.getOrgUnitName());
 		resource.setOpeningID(acceptedSite.getOpeningID());
+		// Opening number (mapsheet designator, e.g. "93A 026 0.0 110") is the formatted mapsheet, not
+		// the raw OPENING_NUMBER column — set by the service via THE.frep_formatted_mapsheet so it
+		// matches the Biodiversity header and Accepted Sites list.
 		resource.setLicensee(acceptedSite.getLicenseNumber());
 		resource.setCuttingPermit(acceptedSite.getCuttingPermit());
 		resource.setBlock(acceptedSite.getCutBlock());
 
-		// Client can be null when there is no cutting permit/block numbers.
-		if (chrChecklist.getFrepResourceValue().getFrepSelectedSite().getForestClient() != null) {
-			resource.setClient(chrChecklist.getFrepResourceValue().getFrepSelectedSite().getForestClient().getClientName());
+		// Client can be null when there is no cutting permit/block numbers. Client number + name
+		// mirror the Biodiversity header, which shows both.
+		ForestClient forestClient = chrChecklist.getFrepResourceValue().getFrepSelectedSite().getForestClient();
+		if (forestClient != null) {
+			resource.setClient(forestClient.getClientNumber());
+			resource.setClientName(forestClient.getClientName());
 		}
 
 		resource.setYearOfHarvest(ChrDateUtils.formatYear(chrChecklist.getFrepResourceValue().getFrepSelectedSite().getDisturbanceEndDate()));

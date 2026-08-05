@@ -70,6 +70,12 @@ on:
       object_storage_secret_key:
         description: CHR object storage secret key
         required: true
+      clamav_host:
+        description: |
+          clamd host for the backend's CLAMAV_HOST (e.g.
+          clamav.<tools-namespace>.svc.cluster.local). Required by the backend
+          template — the deploy fails if it isn't provided.
+        required: false
 
     outputs:
       triggered:
@@ -105,6 +111,10 @@ jobs:
       OBJECT_STORAGE_BUCKET: ${{ secrets.object_storage_bucket }}
       OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.object_storage_access_key }}
       OBJECT_STORAGE_SECRET_KEY: ${{ secrets.object_storage_secret_key }}
+      # CLAMAV_HOST is a secret; route it through env (not inline in
+      # `parameters`) for a single bash expansion, same reasoning as
+      # DATABASE_PASSWORD above.
+      CLAMAV_HOST: ${{ secrets.clamav_host }}
     steps:
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
@@ -137,6 +147,10 @@ jobs:
             -p OBJECT_STORAGE_BUCKET="$OBJECT_STORAGE_BUCKET"
             -p OBJECT_STORAGE_ACCESS_KEY="$OBJECT_STORAGE_ACCESS_KEY"
             -p OBJECT_STORAGE_SECRET_KEY="$OBJECT_STORAGE_SECRET_KEY"
+            -p CLAMAV_ENABLED="${{ vars.CLAMAV_ENABLED || 'true' }}"
+            -p CLAMAV_HOST="$CLAMAV_HOST"
+            -p CLAMAV_PORT="${{ vars.CLAMAV_PORT || '3310' }}"
+            -p CLAMAV_FAIL_OPEN="${{ vars.CLAMAV_FAIL_OPEN || 'false' }}"
           triggers: ${{ inputs.triggers }}
 
   frontend:
@@ -172,7 +186,9 @@ jobs:
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
             -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
-            -p VITE_REDIRECT_SIGN_OUT="${{ vars.VITE_REDIRECT_SIGN_OUT }}"
+            -p VITE_LOGOUT_SITEMINDER_URL="${{ vars.VITE_LOGOUT_SITEMINDER_URL }}"
+            -p VITE_LOGOUT_KEYCLOAK_URL="${{ vars.VITE_LOGOUT_KEYCLOAK_URL }}"
+            -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_APP_NAME="${{ vars.VITE_APP_NAME }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"

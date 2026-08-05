@@ -8,11 +8,11 @@ import { expectNoGlobalError, gotoProtected } from './utils';
  * deployed FREP backend, so they don't write anything.
  */
 const PAGES = [
-  { path: '/dashboard', heading: 'FREP Dashboard' },
+  { path: '/dashboard', heading: 'FREP IMS' },
   { path: '/accepted-sites', heading: 'Accepted Sites' },
   { path: '/search/checklists', heading: 'Checklist Search' },
   { path: '/random-list', heading: 'District Random List' },
-  { path: '/reports', heading: 'Reports' },
+  { path: '/exports', heading: 'Exports' },
 ];
 
 test.describe('Protected page navigation', () => {

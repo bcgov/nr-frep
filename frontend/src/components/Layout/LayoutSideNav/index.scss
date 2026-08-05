@@ -5,7 +5,8 @@
 @use '@carbon/react/scss/theme' as *;
 @use '@carbon/type';
 
-// Drawer: slide off-screen when closed; hamburger/overlay close sets isSideNavExpanded false.
+// Drawer: slide off-screen when closed. It stays open through navigation; only the header
+// hamburger/X toggle sets isSideNavExpanded false.
 .side-nav-drawer.#{vars.$bcgov-prefix}--side-nav {
   inline-size: vars.$layout-side-nav-width;
   transform: translateX(-100%);
@@ -15,6 +16,18 @@
 
 .side-nav-drawer--open.#{vars.$bcgov-prefix}--side-nav {
   transform: translateX(0);
+}
+
+// Carbon marks the SideNav overlay `--overlay-active` whenever the nav is `expanded`, and we keep
+// the SideNav permanently expanded so the drawer stays mounted for its slide animation. On mobile
+// (< lg) that leaves Carbon's full-screen dimming overlay active even while the drawer is CLOSED —
+// it covers the page at z-index 6000 and swallows every tap, so the page looks frozen and nothing
+// is editable. Neutralise the overlay unless the drawer (its following sibling) is actually open.
+.#{vars.$bcgov-prefix}--side-nav__overlay-active:not(:has(~ .side-nav-drawer--open)) {
+  block-size: 0;
+  inline-size: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .cds--side-nav__link-text {

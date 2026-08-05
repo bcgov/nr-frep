@@ -77,8 +77,8 @@ describe('ProtocolChecklistPage submit', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
-    // frep.submit.common.teamlead is mapped to friendly text (title "Administration tab" + detail).
-    expect(await screen.findByText('Team Lead is mandatory for submit.')).toBeTruthy();
+    // frep.submit.common.teamlead is mapped to friendly text (title "Opening info" + detail).
+    expect(await screen.findByText('an evaluator is required.')).toBeTruthy();
   });
 
   it('renders a historical SLB record read-only with no submit/unsubmit controls', async () => {

@@ -121,7 +121,7 @@ const getReportFile = async (
     method: 'GET',
     credentials: BackendApiConfig.WITH_CREDENTIALS ? 'include' : 'same-origin',
     headers: {
-      'Accept': 'application/octet-stream',
+      Accept: 'application/octet-stream',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });

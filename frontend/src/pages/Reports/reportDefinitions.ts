@@ -93,8 +93,8 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     id: 'checklist-completion-status',
     title: 'Checklist Completion Status',
     summary:
-      'Resource-value checklist completion statistics by region and district, for a year range. '
-      + 'Counts in parentheses are unsubmitted checklists.',
+      'Resource-value checklist completion statistics by region and district, for a year range. ' +
+      'Counts in parentheses are unsubmitted checklists.',
     availableFormats: ['pdf'],
     fields: {
       dateRange: 'optional',
@@ -112,8 +112,8 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     id: 'checklist-rejection-reason',
     title: 'Checklist Rejection Reason',
     summary:
-      'Accepted vs. rejected checklist counts by region and district, with the rejection reasons '
-      + 'per district, for an org unit and year range.',
+      'Accepted vs. rejected checklist counts by region and district, with the rejection reasons ' +
+      'per district, for an org unit and year range.',
     availableFormats: ['pdf'],
     fields: {
       orgUnit: 'optional',
@@ -129,8 +129,8 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     id: 'chr-data-extract',
     title: 'Cultural Heritage — Data Extract',
     summary:
-      'Cultural Heritage Resource checklist, site and feature detail. Filtered by '
-      + 'org unit, master-list year, checklist status and resource value.',
+      'Cultural Heritage Resource checklist, site and feature detail. Filtered by ' +
+      'org unit, master-list year, checklist status and resource value.',
     availableFormats: ['csv'],
     fields: {
       orgUnit: 'required',

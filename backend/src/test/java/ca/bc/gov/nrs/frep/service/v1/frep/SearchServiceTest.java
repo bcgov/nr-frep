@@ -2,11 +2,13 @@ package ca.bc.gov.nrs.frep.service.v1.frep;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,13 +17,16 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchCriteria;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ClientSearchRow;
 import ca.bc.gov.nrs.frep.repository.v1.SearchRepository;
+import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ChecklistSearchResult;
 import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -41,8 +46,18 @@ class SearchServiceTest {
   @Mock
   private FamUserDirectoryService famUserDirectoryService;
 
+  @Mock
+  private LoggedUserHelper loggedUserHelper;
+
   @InjectMocks
   private SearchService service;
+
+  @BeforeEach
+  void defaultVisibility() {
+    // chrDistrictCodes() must be non-null (buildCriteria copies it); default no-CHR/no-Bio user.
+    // Lenient because the pure-mapping tests never build criteria.
+    lenient().when(loggedUserHelper.chrDistrictCodes()).thenReturn(Set.of());
+  }
 
   @Test
   void normalizeProtocolTypeNormalisesCaseWithoutAliasing() {
@@ -102,6 +117,42 @@ class SearchServiceTest {
   }
 
   @Test
+  void searchChecklistsPagedThreadsChrDistrictVisibilityIntoCriteria() {
+    // A CHR-district editor (no Bio, districts {DCK}) → criteria scopes CHR to DCK, hides Bio.
+    when(loggedUserHelper.isSysAdmin()).thenReturn(false);
+    when(loggedUserHelper.chrDistrictCodes()).thenReturn(Set.of("DCK"));
+    when(loggedUserHelper.canEdit()).thenReturn(false);
+    when(searchRepository.countChecklists(any())).thenReturn(0L);
+
+    service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");
+
+    ArgumentCaptor<ChecklistSearchCriteria> captor =
+        ArgumentCaptor.forClass(ChecklistSearchCriteria.class);
+    verify(searchRepository).countChecklists(captor.capture());
+    ChecklistSearchCriteria c = captor.getValue();
+    assertFalse(c.chrSeeAll());
+    assertEquals(List.of("DCK"), c.allowedChrDistrictCodes());
+    assertFalse(c.nonChrVisible());
+  }
+
+  @Test
+  void searchChecklistsPagedThreadsAdminVisibilityIntoCriteria() {
+    when(loggedUserHelper.isSysAdmin()).thenReturn(true);
+    when(loggedUserHelper.canEdit()).thenReturn(true);
+    when(searchRepository.countChecklists(any())).thenReturn(0L);
+
+    service.searchChecklistsPaged(
+        null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");
+
+    ArgumentCaptor<ChecklistSearchCriteria> captor =
+        ArgumentCaptor.forClass(ChecklistSearchCriteria.class);
+    verify(searchRepository).countChecklists(captor.capture());
+    assertTrue(captor.getValue().chrSeeAll());
+    assertTrue(captor.getValue().nonChrVisible());
+  }
+
+  @Test
   void toClientSearchResultMapsLocationRowFields() {
     var result = SearchService.toClientSearchResult(new ClientSearchRow(
         "10001", "TOLKO", "00010001", "TOLKO INDUSTRIES LTD.",
@@ -115,27 +166,6 @@ class SearchServiceTest {
     assertEquals("VERNON OFFICE", result.clientLocnName());
     assertEquals("VERNON", result.city());
     assertEquals("ACT", result.clientStatus());
-  }
-
-  @Test
-  void searchChecklistsBuildsCriteriaForRepository() {
-    when(searchRepository.searchChecklists(any())).thenReturn(List.of());
-
-    service.searchChecklists(
-        "2024", "56", "slb", "L1234", null, null, null, null, "RDY",
-        "9001", "2024-01-01", "2024-12-31");
-
-    ArgumentCaptor<ChecklistSearchCriteria> captor = ArgumentCaptor.forClass(ChecklistSearchCriteria.class);
-    verify(searchRepository).searchChecklists(captor.capture());
-    ChecklistSearchCriteria criteria = captor.getValue();
-    assertEquals("2024", criteria.effectiveYear());
-    assertEquals("56", criteria.orgUnitNo());
-    assertEquals("SLB", criteria.protocolTypeCode());
-    assertEquals("L1234", criteria.licenceId());
-    assertEquals("RDY", criteria.checklistStatusCode());
-    assertEquals("9001", criteria.checklistId());
-    assertEquals("2024-01-01", criteria.evaluationDateFrom());
-    assertEquals("2024-12-31", criteria.evaluationDateTo());
   }
 
   @Test

@@ -38,9 +38,7 @@ describe('PageTitleProvider', () => {
       </PageTitleProvider>,
     );
     await act(async () => screen.getByText('Set Title').click());
-    expect(screen.getByTestId('page-title').textContent).toBe(
-      'FREP - New Title',
-    );
+    expect(screen.getByTestId('page-title').textContent).toBe('FREP - New Title');
   });
 
   it('shares the page title across multiple consumers', async () => {
@@ -55,9 +53,7 @@ describe('PageTitleProvider', () => {
       </PageTitleProvider>,
     );
     await act(async () => screen.getByText('Set Title').click());
-    expect(screen.getByTestId('another-title').textContent).toBe(
-      'FREP - New Title',
-    );
+    expect(screen.getByTestId('another-title').textContent).toBe('FREP - New Title');
   });
 
   it('should fail if no provider is present', () => {

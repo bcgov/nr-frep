@@ -1,6 +1,5 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentUploadRequest;
@@ -124,31 +123,6 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   public ResponseEntity<Void> deleteBioPlot(String plotId, String revisionCount) {
     protocolChecklistService.deleteBioPlot(plotId, revisionCount);
     return ResponseEntity.ok().build();
-  }
-
-  @Override
-  public ResponseEntity<AdministrationData> getAdministration(String protocol, String checklistId) {
-    return ResponseEntity.ok(protocolChecklistService.getAdministration(protocol, checklistId));
-  }
-
-  @Override
-  public ResponseEntity<AdministrationData> saveAdministration(
-      String protocol, String checklistId, AdministrationData admin) {
-    return ResponseEntity.ok(protocolChecklistService.saveAdministration(protocol, admin));
-  }
-
-  @Override
-  public ResponseEntity<AdministrationData> addTeamMember(
-      String protocol, String checklistId, String evaluator, boolean teamLead) {
-    return ResponseEntity.ok(
-        protocolChecklistService.addTeamMember(protocol, checklistId, evaluator, teamLead));
-  }
-
-  @Override
-  public ResponseEntity<AdministrationData> removeTeamMember(
-      String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
-    return ResponseEntity.ok(protocolChecklistService.removeTeamMember(
-        protocol, checklistId, evaluatorUserid, revisionCount));
   }
 
   @Override

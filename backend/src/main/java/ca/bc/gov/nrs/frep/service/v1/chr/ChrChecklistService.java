@@ -22,9 +22,11 @@ import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,7 @@ public class ChrChecklistService {
   private final ObjectStorageService objectStorageService;
   private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
+  private final FamUserDirectoryService famUserDirectoryService;
 
   public ChrChecklistService(
       ChrChecklistPersistenceService persistenceService,
@@ -54,7 +57,8 @@ public class ChrChecklistService {
       ChrSubmitValidationService submitValidationService,
       ObjectStorageService objectStorageService,
       ObjectStorageProperties objectStorageProperties,
-      LoggedUserHelper loggedUserHelper
+      LoggedUserHelper loggedUserHelper,
+      FamUserDirectoryService famUserDirectoryService
   ) {
     this.persistenceService = persistenceService;
     this.checklistRepository = checklistRepository;
@@ -62,10 +66,10 @@ public class ChrChecklistService {
     this.objectStorageService = objectStorageService;
     this.objectStorageProperties = objectStorageProperties;
     this.loggedUserHelper = loggedUserHelper;
+    this.famUserDirectoryService = famUserDirectoryService;
   }
 
   public CheckList getChecklist(long checklistId) {
-    assertCanReadChecklist();
     ChrChecklist chrChecklist = persistenceService.getAcceptedSiteForChr(checklistId);
     if (chrChecklist == null) {
       throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
@@ -189,6 +193,28 @@ public class ChrChecklistService {
     return getChecklist(checklistId);
   }
 
+  /**
+   * Release an offline checkout (RDO → ACT) on behalf of the device that holds it, so the online copy
+   * is editable again — used when a user removes their offline copy. Idempotent: if the checklist
+   * isn't checked out, the current state is returned. Rejects when the supplied deviceCheckoutGuid
+   * doesn't match the server's, i.e. the checkout belongs to another device (admin activate is the
+   * fallback for that case).
+   */
+  @Transactional
+  public CheckList releaseCheckout(long checklistId, String deviceCheckoutGuid) {
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      return getChecklist(checklistId);
+    }
+    UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
+    if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
+      throw new InvalidParameterException(
+          "Release failed. This checklist is checked out on another device.");
+    }
+    persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
+    return getChecklist(checklistId);
+  }
+
   @Transactional
   public CheckList takeOffline(long checklistId) {
     String status = checklistRepository.getChecklistStatus(checklistId);
@@ -207,7 +233,12 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList unsubmitChecklist(long checklistId) {
-    checklistRepository.throwIfUnsubmitError(Long.toString(checklistId), loggedUserHelper.getLoggedUserId());
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.SUB.equals(status)) {
+      throw new InvalidParameterException(
+          "Unsubmit failed. Checklist status is " + status + " when SUB is expected.");
+    }
+    persistenceService.unsubmitChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 
@@ -225,6 +256,18 @@ public class ChrChecklistService {
           objectStorageProperties.accessKey(),
           objectStorageProperties.secretKey()
       );
+      // Opening number is the formatted mapsheet designator (e.g. "93A 026 0.0 110"), fetched via
+      // THE.frep_formatted_mapsheet so it matches the Biodiversity header and Accepted Sites list —
+      // the raw OPENING_NUMBER column is only the last fragment.
+      checkList.setOpeningNumber(persistenceService.getFormattedOpeningNumber(
+          chrChecklist.getFrepResourceValue().getFrepSelectedSite().getFrepSelectedSiteId()));
+      // Resolve the evaluator (assessed-by) userid to a "Name (USERID)" display via FAM, matching the
+      // Biodiversity evaluator field. The raw userid stays in assessedBy for the save round-trip and
+      // the "Assign it to me" comparison; assessedByName is display-only.
+      if (ChrStringUtils.hasAValue(checkList.getAssessedBy())) {
+        checkList.setAssessedByName(famUserDirectoryService.resolveName(checkList.getAssessedBy())
+            .orElse(checkList.getAssessedBy()));
+      }
       populatePhotoBytes(checkList);
       return checkList;
     } catch (Exception ex) {
@@ -293,13 +336,17 @@ public class ChrChecklistService {
   private void validatePictures(CheckList checklist) {
     if (checklist.getPictures() != null) {
       for (Picture picture : checklist.getPictures()) {
+        // Only validate newly-added photos (no id). Existing rows already passed at creation, and
+        // re-validating them here would block add/delete of any photo when a legacy row has a blank
+        // description. Submit (ChrSubmitValidationService) still validates every photo's description.
+        if (ChrStringUtils.hasAValue(picture.getId())) {
+          continue;
+        }
         if (!ChrStringUtils.hasAValue(picture.getDescription())) {
           throw new InvalidParameterException(
               "One or more photos are missing mandatory descriptions.");
         }
-        // Only validate newly-added photos (no id); existing rows already passed at creation.
-        if (!ChrStringUtils.hasAValue(picture.getId())
-            && !ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
+        if (!ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
           throw new InvalidParameterException(
               "Only image files (JPG, PNG, GIF, BMP, TIF) can be uploaded as photos.");
         }
@@ -316,11 +363,6 @@ public class ChrChecklistService {
               + " has been modified by another user (" + lastUpdateUser
               + ") since you've retreived it. Any changes made have been lost and the latest version has been retrieved.");
     }
-  }
-
-  private void assertCanReadChecklist() {
-    // Reads are open to any authenticated user; write/activate authorization is enforced by
-    // @PreAuthorize on ChrChecklistApiEndpoint (see FrepAuthorities).
   }
 
   private String deriveMimeType(String mimeType) {

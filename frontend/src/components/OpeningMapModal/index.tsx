@@ -6,6 +6,7 @@ import OpeningMap from '@/components/OpeningMap';
 import type { FeatureCollection } from 'geojson';
 
 import API from '@/services/APIs';
+import { apiErrorMessage } from '@/utils/apiError';
 
 type Props = {
   /** Opening ID to map; null closes the modal. */
@@ -35,8 +36,7 @@ const OpeningMapModal: FC<Props> = ({ openingId, onClose }) => {
         if (!cancelled) setPolygon(fc);
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : 'Failed to load the opening map.');
+        if (!cancelled) setError(apiErrorMessage(err, 'Failed to load the opening map.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -75,7 +75,10 @@ const OpeningMapModal: FC<Props> = ({ openingId, onClose }) => {
           lowContrast
         />
       )}
-      {!error && (polygon === null || polygon.features.length > 0) && (
+      {/* Only mount the map while the modal is open. Carbon keeps modal children in the DOM when
+          closed, and a Leaflet map initialized in a hidden (0-size) container renders broken tiles.
+          Gating on openingId means it mounts fresh and visible each time the modal opens. */}
+      {openingId !== null && !error && (polygon === null || polygon.features.length > 0) && (
         <OpeningMap polygon={polygon} />
       )}
     </Modal>

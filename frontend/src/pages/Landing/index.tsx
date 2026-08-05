@@ -1,10 +1,12 @@
 import { ArrowRight, Login } from '@carbon/icons-react';
-import { Button, Column, Grid } from '@carbon/react';
+import { Button, Column, Grid, InlineNotification } from '@carbon/react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import logo_rev from '@/assets/img/bc-gov-logo-rev.png';
 import logo from '@/assets/img/bc-gov-logo.png';
 import LandingImg from '@/assets/img/landing.jpg';
+import { SESSION_EXPIRED_FLAG } from '@/components/SessionTimeout';
 import useBreakpoint from '@/hooks/useBreakpoint';
 
 import type { BreakpointType } from '@/hooks/useBreakpoint/types';
@@ -22,6 +24,17 @@ const LandingPage: FC = () => {
   const { login } = useAuth();
   const online = useOnlineStatus();
   const navigate = useNavigate();
+
+  // Show the "session expired" notice once, when we land here via a timeout
+  // logout (SessionTimeout stashes the flag before signing out). Read-and-clear
+  // so a manual refresh of the login page doesn't keep showing it.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => {
+    if (sessionStorage.getItem(SESSION_EXPIRED_FLAG) === '1') {
+      setSessionExpired(true);
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+    }
+  }, []);
 
   const elementMarginMap: Record<BreakpointType, number> = {
     max: 6,
@@ -48,12 +61,24 @@ const LandingPage: FC = () => {
             </div>
 
             <h1 data-testid="landing-title" className="landing-title">
-              FREP
+              FREP IMS
             </h1>
 
             <h2 data-testid="landing-subtitle" className="landing-subtitle">
               Natural Resources Application
             </h2>
+
+            {sessionExpired && (
+              <InlineNotification
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                className="landing-session-expired"
+                data-testid="landing-session-expired"
+                title="You've been logged out"
+                subtitle="Your session expired for security reasons and any unsaved changes were lost. Log in again to continue."
+              />
+            )}
 
             <div className="buttons-container single-row">
               {online ? (
@@ -81,7 +106,7 @@ const LandingPage: FC = () => {
                   </Button>
                 </>
               ) : (
-                // Offline: IDIR login can't run, so enter the offline FREP Dashboard.
+                // Offline: IDIR login can't run, so enter the offline FREP IMS.
                 <Button
                   type="button"
                   onClick={() => navigate('/dashboard')}

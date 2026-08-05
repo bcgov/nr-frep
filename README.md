@@ -1,6 +1,8 @@
-# FREP
+# FREP - Forest and Range Evaluation Program
 
-A full-stack application scaffold for the Natural Resources sector.
+FREP is a BC Government application for evaluating forest and range practices. Field evaluators select
+forestry sites for a master-list year, capture and edit protocol checklists (biodiversity and Culture
+Heritage), search across checklists, and generate reports.
 
 | Component | Technology |
 |-----------|------------|
@@ -9,7 +11,21 @@ A full-stack application scaffold for the Natural Resources sector.
 | Database | Oracle (`spring.datasource.*`, same as nr-fspts) |
 | Auth | AWS Cognito (FAM) — IDIR sign-in |
 
+## Documentation
+
+Full project documentation lives in [`docs/`](./docs/README.md):
+
+- [Architecture](./docs/architecture.md) — components, data flow, auth
+- [Site map](./docs/site-map.md) — pages, routes, and navigation flow
+- [Local development](./docs/local-development.md) — full setup guide (Compose, VPN/Oracle, auth modes)
+- [Deployment](./docs/deployment.md) — OpenShift slots, CI/CD, cross-repo release coordination
+- [Database](./docs/database.md) — Oracle `THE` schema + the stored-procedure pattern
+- [Testing](./docs/testing.md) — unit tests + Playwright E2E
+
 ## Run locally
+
+> Quickstart below. See [docs/local-development.md](./docs/local-development.md) for the full guide —
+> Docker Compose, VPN/Oracle setup, and auth-on vs. auth-off modes.
 
 Authentication runs against the real FAM Cognito user pool; you'll need
 Cognito client / domain values in both `.env` files before the app will
@@ -19,7 +35,7 @@ backend will respond `401` to `/api/**` until you sign in.
 ### Prerequisites
 
 - Java 21+ and Maven 3.9+
-- Node.js 20+ and npm
+- Node.js 20+ and npm (CI and the production image use Node 24)
 - Cognito user pool details (see `frontend/.env.example` and `backend/.env.example`)
 
 ### 1. Start the backend
@@ -56,8 +72,12 @@ redirects through Cognito → BCGov SSO → back to `/dashboard`.
 
 Leave `VITE_BACKEND_URL` empty in `frontend/.env` so Vite proxies `/api` to the backend.
 
-## What's included
+## Features
 
-- **Frontend:** Landing, dashboard, layout, routing, role-aware navigation, full Cognito + IDIR auth flow.
-- **Backend:** Spring Boot OAuth 2.0 resource server, CSRF cookie strategy, `/api/v1/*` endpoints, actuator health.
-- **CI/CD:** GitHub Actions workflows, compliance files, deployment templates.
+- **Site selection** — district random lists and targeted-site creation for a master-list year.
+- **Protocol checklists** — biodiversity (SLB/SLR) and Culture Heritage (CHR, offline-capable):
+  capture, edit, and submit.
+- **Search & reports** — cross-protocol checklist search plus Jasper/CSV reporting.
+- **Role-aware access** — FAM/IDIR sign-in with `FREP_ADMIN` / `FREP_EDITOR` / `FREP_VIEW_ONLY` roles.
+
+See [docs/architecture.md](./docs/architecture.md) for the full breakdown.

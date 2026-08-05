@@ -104,7 +104,7 @@ const FeatureList: FC<{
       const set = new Set(list ?? []);
       if (wasAssociated) set.delete(label);
       else set.add(label);
-      return [...set].sort();
+      return [...set].sort((a, b) => a.localeCompare(b));
     };
     onChange(
       features.map((f, i) => {
@@ -119,8 +119,16 @@ const FeatureList: FC<{
     );
   };
 
-  const siblingLabels = features
-    .filter((_, i) => i !== selected)
+  const otherFeatures = features.filter((_, i) => i !== selected);
+  const siblingLabels = otherFeatures
+    .map((f) => f.featureLabel)
+    .filter((label): label is string => Boolean(label));
+
+  // Candidate composite anchors: other features not already grouped into a composite themselves
+  // (mirrors the legacy SelectFeature filter, which excludes siblings whose compositeFeature is set),
+  // plus the current feature's existing target so editing it doesn't drop the current selection.
+  const compositeCandidateLabels = otherFeatures
+    .filter((f) => !f.compositeFeature || f.featureLabel === current?.compositeFeature)
     .map((f) => f.featureLabel)
     .filter((label): label is string => Boolean(label));
 
@@ -144,6 +152,7 @@ const FeatureList: FC<{
           onPatch={patchSelected}
           readOnly={readOnly}
           siblingLabels={siblingLabels}
+          compositeCandidateLabels={compositeCandidateLabels}
           onToggleAssociated={toggleAssociated}
         />
       </div>

@@ -1,8 +1,8 @@
 import { useState, useEffect, type ReactNode, useCallback } from 'react';
 
-import { env } from '@/env';
-
 import { PageTitleContext } from './PageTitleContext';
+
+import { env } from '@/env';
 
 export const PageTitleProvider = ({ children }: { children: ReactNode }) => {
   const [pageTitle, setPageTitleState] = useState(document.title);

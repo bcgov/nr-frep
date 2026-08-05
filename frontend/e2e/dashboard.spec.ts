@@ -6,7 +6,7 @@ test.describe('Dashboard', () => {
   test('renders the dashboard with screen tiles', async ({ page }) => {
     await gotoProtected(page, '/dashboard');
 
-    await expect(page.getByRole('heading', { name: 'FREP Dashboard', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'FREP IMS', level: 1 })).toBeVisible();
     // Each screen tile shows its name as an <h2>.
     await expect(page.getByRole('heading', { name: 'Accepted Sites', level: 2 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Checklist Search', level: 2 })).toBeVisible();

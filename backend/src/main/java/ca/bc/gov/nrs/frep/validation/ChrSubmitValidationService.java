@@ -109,7 +109,7 @@ public class ChrSubmitValidationService {
     req(errors, ref, "generalLocation", c.getGeneralLocation(),
         "Please provide a general location name.");
     req(errors, ref, "assessedBy", c.getAssessedBy(),
-        "Please save the opening info so the Assessed By field is populated.");
+        "Please save the opening info so the Evaluator field is populated.");
     req(errors, ref, "rating", c.getRating(), "Please provide a Rating in Block summary.");
 
     conditional(errors, ref, "q8Comments",
@@ -130,13 +130,25 @@ public class ChrSubmitValidationService {
       return;
     }
     long members = c.getFeatures().stream()
-        .filter(f -> feature.getFeatureLabel() != null
-            && feature.getFeatureLabel().equalsIgnoreCase(f.getCompositeFeature()))
+        .filter(f -> matchesCompositeLabel(feature.getFeatureLabel(), f.getCompositeFeature()))
         .count();
     if (members < 2) {
       errors.add(err(ref(c, feature), "composite",
-          "Composite has only one feature member — please select another feature to be a member of the composite."));
+          "A composite feature must include at least two features. To add one, open another feature, "
+              + "check “Composite feature”, and set its “Composite of (feature label)” "
+              + "to this feature’s label."));
     }
+  }
+
+  /**
+   * Composite membership matches on the feature label, case-insensitively and trimmed. The legacy
+   * validator compared with {@code equalsIgnoreCase} only; because "Composite of (feature label)" is
+   * free text, a stray leading/trailing space would silently drop a member and falsely trigger the
+   * "must include at least two features" submit error. Trimming both sides fixes that.
+   */
+  private static boolean matchesCompositeLabel(String featureLabel, String compositeReference) {
+    return featureLabel != null && compositeReference != null
+        && featureLabel.trim().equalsIgnoreCase(compositeReference.trim());
   }
 
   // --- per feature ---

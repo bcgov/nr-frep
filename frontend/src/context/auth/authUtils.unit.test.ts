@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { parseToken } from './authUtils';
+vi.mock('@/env', () => ({ env: { VITE_USER_POOLS_WEB_CLIENT_ID: 'test-client' } }));
+
+import { clearStoredTokens, parseToken } from './authUtils';
 
 import type { JWT } from './types';
 
@@ -57,5 +59,58 @@ describe('parseToken', () => {
       }),
     );
     expect(user?.idpProvider).toBeUndefined();
+  });
+
+  it('collapses per-district CHR groups into a scoped FREP_CHR_EDITOR role', () => {
+    const user = parseToken(
+      jwt({
+        'custom:idp_name': 'idir',
+        'custom:idp_username': 'JSMITH',
+        'cognito:groups': ['FREP_CHR_EDITOR_DISTRICT_DCK', 'FREP_CHR_EDITOR_DISTRICT_DCC'],
+      }),
+    );
+
+    // Surfaces as the synthetic FREP_CHR_EDITOR role (so hasAnyRole works) with the district codes.
+    expect(user?.roles).toEqual(['FREP_CHR_EDITOR']);
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC', 'DCK']); // de-duped + sorted
+  });
+});
+
+describe('clearStoredTokens', () => {
+  const prefix = 'CognitoIdentityServiceProvider.test-client';
+
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => window.localStorage.clear());
+
+  it('removes every Amplify token entry for the configured client', () => {
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, 'idir\\jsmith');
+    window.localStorage.setItem(`${prefix}.idir\\jsmith.accessToken`, 'a.b.c');
+    window.localStorage.setItem(`${prefix}.idir\\jsmith.idToken`, 'd.e.f');
+    window.localStorage.setItem(`${prefix}.idir\\jsmith.refreshToken`, 'ghi');
+    window.localStorage.setItem(`${prefix}.idir\\jsmith.clockDrift`, '0');
+
+    clearStoredTokens();
+
+    const remaining = Object.keys(window.localStorage).filter((k) => k.startsWith(prefix));
+    expect(remaining).toEqual([]);
+  });
+
+  it("leaves unrelated keys (and another client's tokens) untouched", () => {
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, 'idir\\jsmith');
+    window.localStorage.setItem('theme', 'dark');
+    window.localStorage.setItem('CognitoIdentityServiceProvider.other-client.LastAuthUser', 'x');
+
+    clearStoredTokens();
+
+    expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
+    expect(window.localStorage.getItem('theme')).toBe('dark');
+    expect(
+      window.localStorage.getItem('CognitoIdentityServiceProvider.other-client.LastAuthUser'),
+    ).toBe('x');
+  });
+
+  it('is a no-op when there is nothing to clear', () => {
+    expect(() => clearStoredTokens()).not.toThrow();
+    expect(window.localStorage).toHaveLength(0);
   });
 });

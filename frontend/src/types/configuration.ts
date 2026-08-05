@@ -26,23 +26,6 @@ export type CodeOption = {
   description: string;
 };
 
-/** Filters for the FAM evaluator (FREP-editor) search. All optional; blank = no filter. */
-export type EvaluatorSearchParams = {
-  userId?: string;
-  firstName?: string;
-  lastName?: string;
-  page?: number;
-  size?: number;
-};
-
-/** A page of FREP-editor candidates from the FAM evaluator search (code = IDIR username). */
-export type EvaluatorSearchResult = {
-  users: CodeOption[];
-  total: number;
-  page: number;
-  size: number;
-};
-
 /** One BEC catalogue row returned by the FREP211 BEC search. */
 export type BecRow = {
   bgcZoneCode?: string;

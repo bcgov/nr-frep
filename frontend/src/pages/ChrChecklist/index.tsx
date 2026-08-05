@@ -31,12 +31,19 @@ import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
 
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import {
+  classifyStaleness,
+  isStale,
+  stalenessBanner,
+  type StalenessVerdict,
+} from '@/services/offline/chrStaleness';
 import {
   CHR_STATUS,
   type CheckList,
@@ -45,6 +52,7 @@ import {
   type Picture,
   type ValidationError,
 } from '@/types/chrChecklist';
+import { apiErrorMessage } from '@/utils/apiError';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -98,14 +106,27 @@ const errorTitle = (e: ValidationError): string => {
   return label ? `Features — Feature ${label}` : tab;
 };
 
+// Stable React key for a submit-validation error, built from its identifying fields (no array index).
+const errorKey = (e: ValidationError): string =>
+  [e.field, e.entityLabel, e.referenceId, e.message].filter(Boolean).join('|');
+
+// The "Read only" banner copy, by why the checklist is locked.
+const readOnlyReason = (status: CheckList['status']): string => {
+  if (status === CHR_STATUS.READ_ONLY_OFFLINE) {
+    return 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.';
+  }
+  if (status === CHR_STATUS.SUBMITTED) {
+    return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
+  }
+  return 'This checklist is not active, so it is read-only.';
+};
+
 /** Strip browser data-URL prefixes from new photos and recompute the MRVA before sending. */
 const prepareForSave = (checkList: CheckList): CheckList => ({
   ...checkList,
   mrvaRatingCode: calculateMrvaRatingCode(checkList.rating, checkList.features),
   pictures: (checkList.pictures ?? []).map((p) =>
-    p.code && p.code.startsWith('data:')
-      ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') }
-      : p,
+    p.code?.startsWith('data:') ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') } : p,
   ),
 });
 
@@ -117,8 +138,9 @@ const extractValidationErrors = (err: unknown): ValidationError[] | null => {
 const ChrChecklistPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { display } = useNotification();
-  const { canEdit, isViewOnly, canPerformSysAdminActions } = useAuthorization();
+  const { canPerformSysAdminActions, canChr } = useAuthorization();
   const online = useOnlineStatus();
 
   const [checkList, setCheckList] = useState<CheckList | null>(null);
@@ -126,6 +148,12 @@ const ChrChecklistPage: FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isOfflineCopy, setIsOfflineCopy] = useState(false);
+  // Server-vs-local reconcile for an offline copy: verdict + the server's last-updater audit.
+  const [offlineStaleness, setOfflineStaleness] = useState<{
+    verdict: StalenessVerdict;
+    updateUserid?: string;
+    updateTimestamp?: string;
+  } | null>(null);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState(0);
@@ -164,7 +192,7 @@ const ChrChecklistPage: FC = () => {
         display({
           kind: 'error',
           title: "We couldn't load the CHR checklist",
-          subtitle: err instanceof Error ? err.message : 'Unknown error',
+          subtitle: apiErrorMessage(err),
           timeout: 9000,
         });
         setHasError(true);
@@ -178,6 +206,42 @@ const ChrChecklistPage: FC = () => {
     };
   }, [id, display]);
 
+  // When viewing an offline copy, reconcile it against the server so we can warn if it's been
+  // superseded (reactivated/submitted/removed elsewhere) — see chrStaleness. Server copies aren't
+  // stale; their last-updated info is read straight off the checklist below.
+  useEffect(() => {
+    if (!isOfflineCopy) {
+      setOfflineStaleness(null);
+      return undefined;
+    }
+    if (!online) {
+      setOfflineStaleness({ verdict: 'UNVERIFIED' });
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [record, server] = await Promise.all([
+          chrOfflineRepo.load(id),
+          API.chrChecklist.getChecklist(id),
+        ]);
+        if (cancelled) return;
+        setOfflineStaleness({
+          verdict: classifyStaleness(record?.deviceCheckoutGuid, server),
+          updateUserid: server.updateUserid,
+          updateTimestamp: server.updateTimestamp,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const status = (err as { status?: number })?.status;
+        setOfflineStaleness({ verdict: status === 404 ? 'GONE' : 'UNVERIFIED' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isOfflineCopy, online]);
+
   // Editability mirrors the backend gate: an online (server) copy can only be saved when its status
   // is ACT — the legacy save rejects any other status with "Checklist status does not allow this
   // operation." An offline copy is the user's own checked-out (RDO) copy, editable locally until
@@ -189,9 +253,18 @@ const ChrChecklistPage: FC = () => {
   // editability depends only on its status, not the online role check (which requires a session
   // that doesn't exist offline; the backend re-checks permission on upload). Online (server) copies
   // keep the role + status gating.
+  // CHR editing is district-scoped: sys-admin or the FREP_CHR_EDITOR_DISTRICT_<code> role matching
+  // this checklist's org unit. (Replaces the old global canEdit, which excluded district editors.)
+  const canEditThisChr = canChr(checkList?.orgUnitCode);
   const readOnly = isOfflineCopy
     ? checkList?.status === CHR_STATUS.SUBMITTED
-    : isViewOnly || !canEdit || statusLocked;
+    : !canEditThisChr || statusLocked;
+
+  // A stale offline copy can't be uploaded (the server checkout was reset/submitted/removed), so both
+  // Submit and Sync changes — which upload — are dead ends and are hidden; the banner explains why and
+  // only "Remove from device" is offered.
+  const offlineOutOfDate =
+    isOfflineCopy && offlineStaleness != null && isStale(offlineStaleness.verdict);
 
   const patch = useCallback(
     (p: Partial<CheckList>) => setCheckList((prev) => (prev ? { ...prev, ...p } : prev)),
@@ -203,7 +276,9 @@ const ChrChecklistPage: FC = () => {
       display({
         kind: 'error',
         title,
-        subtitle: err instanceof Error ? err.message : 'Unknown error',
+        // The backend's real reason lives in the response body's `message` (e.g. a validation error);
+        // apiErrorMessage prefers that over the bare status phrase ("Bad Request").
+        subtitle: apiErrorMessage(err),
         timeout: 9000,
       }),
     [display],
@@ -423,6 +498,32 @@ const ChrChecklistPage: FC = () => {
     }
   };
 
+  // Discard a stale offline copy (its server checkout is gone, so it can't be uploaded) and return to
+  // the previous screen. No release call — the server has already moved on. Removing a *current*
+  // offline copy still lives on the Offline checklists list, which releases the checkout.
+  const handleRemoveOfflineCopy = async () => {
+    if (
+      !(await confirm({
+        title: 'Remove from device?',
+        message:
+          'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        confirmButtonText: 'Remove',
+      }))
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await chrOfflineRepo.remove(id);
+      display({ kind: 'success', title: 'Offline copy removed', timeout: 4000 });
+      navigate(-1);
+    } catch (err) {
+      reportError('Could not remove offline copy', err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUpload = async () => {
     if (!checkList) return;
     setBusy(true);
@@ -530,15 +631,58 @@ const ChrChecklistPage: FC = () => {
         </div>
       </Column>
 
+      {isOfflineCopy &&
+        offlineStaleness &&
+        (() => {
+          const banner = stalenessBanner(offlineStaleness.verdict, offlineStaleness);
+          if (!banner) return null;
+          return (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind={banner.kind}
+                title={banner.title}
+                subtitle={banner.subtitle}
+                hideCloseButton
+                lowContrast
+              />
+            </Column>
+          );
+        })()}
+
+      {!canEditThisChr && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="info"
+            title="View only"
+            subtitle="You do not have permission to edit CHR checklists for this district."
+            hideCloseButton
+            lowContrast
+          />
+        </Column>
+      )}
+
+      {canEditThisChr && statusLocked && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="info"
+            title="Read only"
+            subtitle={readOnlyReason(checkList.status)}
+            hideCloseButton
+            lowContrast
+          />
+        </Column>
+      )}
+
       <Column sm={4} md={8} lg={16}>
         <Tile className="protocol-checklist__summary">
           <div className="protocol-checklist__summary-grid">
-            {/* Tombstone header laid out like the Biodiversity checklist. Fields the CHR record
-                doesn't carry (client name, opening number) are simply omitted. */}
+            {/* Tombstone header laid out like the Biodiversity checklist (same fields, same order). */}
             {headerCell('Master list year', checkList.effectiveYear)}
             {headerCell('Org unit', orgUnit)}
             {headerCell('Checklist', checkList.checklistID)}
-            {headerCell('Client', checkList.client)}
+            {headerCell('Client number', checkList.client)}
+            {headerCell('Client name', checkList.clientName)}
+            {headerCell('Opening number', checkList.openingNumber)}
             {headerCell('Opening ID', checkList.openingID)}
             {headerCell('Licence', checkList.licensee)}
             {headerCell('Cutting permit', checkList.cuttingPermit)}
@@ -550,45 +694,15 @@ const ChrChecklistPage: FC = () => {
                 {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
               </Tag>
             </div>
-            {headerCell('Evaluator', checkList.assessedBy)}
+            {headerCell('Evaluator', checkList.assessedByName || checkList.assessedBy)}
             {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
           </div>
         </Tile>
       </Column>
 
-      {!canEdit && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineNotification
-            kind="info"
-            title="View only"
-            subtitle="You do not have permission to edit CHR checklists."
-            hideCloseButton
-            lowContrast
-          />
-        </Column>
-      )}
-
-      {canEdit && !isViewOnly && statusLocked && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineNotification
-            kind="info"
-            title="Read only"
-            subtitle={
-              checkList.status === CHR_STATUS.READ_ONLY_OFFLINE
-                ? 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.'
-                : checkList.status === CHR_STATUS.SUBMITTED
-                  ? 'This checklist has been submitted and is read-only. Unsubmit it to make changes.'
-                  : 'This checklist is not active, so it is read-only.'
-            }
-            hideCloseButton
-            lowContrast
-          />
-        </Column>
-      )}
-
       <Column sm={4} md={8} lg={16}>
         <div className="chr-checklist__actions">
-          {!readOnly && online && (
+          {!readOnly && online && !offlineOutOfDate && (
             <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
               Submit
             </Button>
@@ -602,8 +716,7 @@ const ChrChecklistPage: FC = () => {
               FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
           {!isOfflineCopy &&
             online &&
-            canEdit &&
-            !isViewOnly &&
+            canEditThisChr &&
             checkList.status === CHR_STATUS.SUBMITTED && (
               <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
                 Unsubmit
@@ -617,9 +730,18 @@ const ChrChecklistPage: FC = () => {
                 Reactivate
               </Button>
             )}
-          {isOfflineCopy && online && (
+          {isOfflineCopy && online && !offlineOutOfDate && (
             <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
               Sync changes
+            </Button>
+          )}
+          {isOfflineCopy && offlineOutOfDate && (
+            <Button
+              kind="danger--tertiary"
+              onClick={() => void handleRemoveOfflineCopy()}
+              disabled={busy}
+            >
+              Remove from device
             </Button>
           )}
         </div>
@@ -633,9 +755,9 @@ const ChrChecklistPage: FC = () => {
             This checklist isn&apos;t ready to submit. Fix the following, then submit again:
           </p>
           <div className="chr-checklist__errors">
-            {errors.map((e, i) => (
+            {errors.map((e) => (
               <InlineNotification
-                key={`err-${i}`}
+                key={errorKey(e)}
                 kind="error"
                 title={errorTitle(e)}
                 subtitle={e.message}

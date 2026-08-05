@@ -12,8 +12,6 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistField;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistSection;
 import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistHeaderData;
-import ca.bc.gov.nrs.frep.struct.v1.frep.AdministrationData;
-import ca.bc.gov.nrs.frep.struct.v1.frep.EvaluatorRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
@@ -22,6 +20,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.sql.SQLException;
@@ -65,19 +64,22 @@ public class ProtocolChecklistService {
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
+  private final VirusScanner virusScanner;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService
+      FamUserDirectoryService famUserDirectoryService,
+      VirusScanner virusScanner
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
+    this.virusScanner = virusScanner;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -100,24 +102,53 @@ public class ProtocolChecklistService {
     }
   }
 
-  /** Typed read of the Biodiversity Opening screen for editing. */
+  /** Typed read of the Biodiversity Opening screen for editing (with the evaluator name resolved). */
   public BiodiversityOpening getBiodiversityOpening(String checklistId) {
     BiodiversityOpening opening = writeRepository.getBiodiversityOpening(checklistId);
     if (opening == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND,
           "Stand Level Retention checklist not found: " + checklistId);
     }
-    return opening;
+    return withResolvedBioLead(opening);
   }
 
-  /** Save the Biodiversity Opening screen via FREP_210_BIO_OPENING.SAVE. */
+  /** Save the Biodiversity Opening via FREP_210_BIO_OPENING.SAVE, then apply any evaluator claim. */
   public BiodiversityOpening saveBiodiversityOpening(String checklistId, BiodiversityOpening opening) {
     assertChecklistEditable(checklistId);
     validateBiodiversityOpening(opening);
+    String userId = loggedUserHelper.getLoggedUserId();
     BiodiversityOpening toSave = opening.checklistId() == null
         ? opening.withIdentity(checklistId, opening.revisionCount())
         : opening;
-    return writeRepository.saveBiodiversityOpening(toSave, loggedUserHelper.getLoggedUserId());
+    writeRepository.saveBiodiversityOpening(toSave, userId);
+    // "Assign it to me": the payload names the caller as the evaluator. Act only when the caller is
+    // claiming it for themselves (never a third party) — a takeover replaces the previous lead. The
+    // evaluator record is a separate table/revision, so it doesn't disturb the opening save above.
+    applyEvaluatorAssignment(checklistId, opening.teamLeadNameId(), userId);
+    return getBiodiversityOpening(checklistId);
+  }
+
+  private void applyEvaluatorAssignment(String checklistId, String requestedLead, String userId) {
+    if (!userId.equals(requestedLead)) {
+      return;
+    }
+    BiodiversityOpening current = writeRepository.getBiodiversityOpening(checklistId);
+    if (current != null && userId.equalsIgnoreCase(current.teamLeadNameId())) {
+      return; // already the lead — nothing to do
+    }
+    writeRepository.assignBiodiversityLead(checklistId, resourceTypeForProtocol("bio"),
+        userId, current == null ? null : current.teamLeadNameId(),
+        current == null ? null : current.teamLeadRevisionCount(), userId);
+  }
+
+  /** Resolve the evaluator (team lead) userid to a display name via FAM, mirroring the header. */
+  private BiodiversityOpening withResolvedBioLead(BiodiversityOpening opening) {
+    if (opening == null || StringUtils.isBlank(opening.teamLeadNameId())) {
+      return opening;
+    }
+    String name = famUserDirectoryService.resolveName(opening.teamLeadNameId())
+        .orElse(opening.teamLeadNameId());
+    return opening.withTeamLead(opening.teamLeadNameId(), name, opening.teamLeadRevisionCount());
   }
 
   /**
@@ -555,7 +586,7 @@ public class ProtocolChecklistService {
         String prefix = "Stand row " + (i + 1) + ": ";
         requireField(r.speciesCode(), prefix + "Species", errors);
         requireField(r.decayClassCode(), prefix + "WT class", errors);
-        requireFloat(r.dbh(), prefix + "DBH", 12.6, 400, 1, false, errors);
+        requireFloat(r.dbh(), prefix + "DBH", 12.5, 400, 1, true, errors);
         requireFloat(r.height(), prefix + "Height", 1.4, 99.9, 1, false, errors);
       }
     }
@@ -608,7 +639,9 @@ public class ProtocolChecklistService {
     }
     double n = Double.parseDouble(text);
     if ((exclusiveMin ? n <= min : n < min) || n > max) {
-      errors.add(label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+      errors.add(exclusiveMin
+          ? label + " must be greater than " + fmt(min) + " and no more than " + fmt(max) + "."
+          : label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
     }
   }
 
@@ -625,185 +658,6 @@ public class ProtocolChecklistService {
   // The resource value type the shared procs key on is resolved from the record
   // (checklistRepository.resolveResourceType) — SLB (legacy) / SLR (going forward) — not the URL. The
   // {protocol} path segment only selects the family; it no longer determines the code.
-
-  public AdministrationData getAdministration(String protocol, String checklistId) {
-    return withResolvedTeamNames(
-        writeRepository.getAdministration(checklistId, checklistRepository.resolveResourceType(checklistId)));
-  }
-
-  public AdministrationData saveAdministration(String protocol, AdministrationData admin) {
-    assertChecklistEditable(admin.checklistId());
-    validateAdministration(admin);
-    return withResolvedTeamNames(
-        writeRepository.saveAdministration(admin, loggedUserHelper.getLoggedUserId()));
-  }
-
-  public AdministrationData addTeamMember(
-      String protocol, String checklistId, String evaluator, boolean teamLead) {
-    assertChecklistEditable(checklistId);
-    return withResolvedTeamNames(writeRepository.addTeamMember(checklistId,
-        checklistRepository.resolveResourceType(checklistId), evaluator, teamLead,
-        loggedUserHelper.getLoggedUserId()));
-  }
-
-  public AdministrationData removeTeamMember(
-      String protocol, String checklistId, String evaluatorUserid, String revisionCount) {
-    assertChecklistEditable(checklistId);
-    return withResolvedTeamNames(writeRepository.deleteTeamMember(
-        checklistId, checklistRepository.resolveResourceType(checklistId), evaluatorUserid,
-        revisionCount));
-  }
-
-  /**
-   * Resolve the evaluation team's userids to {@code "First Last (userid)"} via FAM, mirroring the
-   * Evaluator display. The cost-resource GET only returns userids (the team lead as a scalar, the
-   * members' {@code evaluatorDescription} comes back null), so both are looked up here; FAM results
-   * are cached and an unresolved userid falls back to itself.
-   */
-  private AdministrationData withResolvedTeamNames(AdministrationData admin) {
-    if (admin == null) {
-      return admin;
-    }
-    String teamLeadName = StringUtils.isBlank(admin.teamLeadNameId())
-        ? admin.teamLeadName()
-        : famUserDirectoryService.resolveName(admin.teamLeadNameId()).orElse(admin.teamLeadNameId());
-    List<EvaluatorRow> members = admin.teamMembers() == null
-        ? admin.teamMembers()
-        : admin.teamMembers().stream().map(this::withResolvedMemberName).toList();
-    return new AdministrationData(
-        admin.checklistId(),
-        admin.selectedSiteId(),
-        admin.resourceValueId(),
-        admin.resourceValueType(),
-        admin.statusCode(),
-        admin.evaluationDate(),
-        admin.siteAccessCode(),
-        admin.blockAccessTime(),
-        admin.hoursOnBlock(),
-        admin.peopleOnBlock(),
-        admin.additionalComments(),
-        admin.teamLeadNameId(),
-        teamLeadName,
-        admin.teamLeadRevisionCount(),
-        admin.revisionCount(),
-        admin.revisionCountAccess(),
-        members);
-  }
-
-  private EvaluatorRow withResolvedMemberName(EvaluatorRow member) {
-    if (member == null || StringUtils.isBlank(member.evaluatorUserid())) {
-      return member;
-    }
-    String name = famUserDirectoryService.resolveName(member.evaluatorUserid())
-        .orElse(StringUtils.isBlank(member.evaluatorDescription())
-            ? member.evaluatorUserid()
-            : member.evaluatorDescription());
-    return new EvaluatorRow(
-        member.evaluatorUserid(),
-        member.frepResourceValueId(),
-        member.teamLeadInd(),
-        name,
-        member.revisionCount());
-  }
-
-  // --- Administration field validation (legacy FREP301 FrepCostResourceValidatingManager) ---
-
-  /**
-   * Validate the Administration scalar fields, mirroring the legacy FREP301
-   * {@code FrepCostResourceValidatingManager} "Save" chain: evaluation date not in the future;
-   * access / on-block hours numeric within 0–9999.99 to two decimals; people on block an integer
-   * 0–10; and people on block ≥ the number of people on the evaluation team. Throws
-   * {@link InvalidPayloadException} (HTTP 400) carrying all collected messages.
-   */
-  private static void validateAdministration(AdministrationData admin) {
-    List<String> errors = new ArrayList<>();
-    validateEvaluationDate(admin.evaluationDate(), errors);
-    validateHours(admin.blockAccessTime(), "Hrs. access time", errors);
-    validateHours(admin.hoursOnBlock(), "Hrs. on block", errors);
-    Integer peopleOnBlock = validatePeople(admin.peopleOnBlock(), errors);
-    if (peopleOnBlock != null && teamCountOf(admin) > peopleOnBlock) {
-      errors.add("People on block must be greater than or equal to the total number of people "
-          + "listed on the team.");
-    }
-    if (!errors.isEmpty()) {
-      ApiError error = ApiError.builder()
-          .timestamp(LocalDateTime.now())
-          .message(String.join(" ", errors))
-          .status(HttpStatus.BAD_REQUEST)
-          .build();
-      throw new InvalidPayloadException(error);
-    }
-  }
-
-  private static void validateEvaluationDate(String value, List<String> errors) {
-    if (StringUtils.isBlank(value)) {
-      return;
-    }
-    LocalDate date;
-    try {
-      date = LocalDate.parse(value.trim());
-    } catch (DateTimeParseException ex) {
-      errors.add("Evaluation date must be a valid date (YYYY-MM-DD).");
-      return;
-    }
-    if (date.isAfter(LocalDate.now())) {
-      errors.add("Evaluation date cannot be in the future.");
-    }
-  }
-
-  private static void validateHours(String value, String label, List<String> errors) {
-    if (StringUtils.isBlank(value)) {
-      return;
-    }
-    String text = value.trim();
-    if (!text.matches("[-+]?\\d*\\.?\\d+")) {
-      errors.add(label + " must be a number.");
-      return;
-    }
-    double number = Double.parseDouble(text);
-    if (number < 0 || number > 9999.99) {
-      errors.add(label + " must be between 0 and 9999.99.");
-      return;
-    }
-    int dot = text.indexOf('.');
-    if (dot >= 0 && text.length() - dot - 1 > 2) {
-      errors.add(label + " can have at most 2 decimal places.");
-    }
-  }
-
-  /** Returns the parsed people-on-block (blank → 0), or {@code null} when present but invalid. */
-  private static Integer validatePeople(String value, List<String> errors) {
-    if (StringUtils.isBlank(value)) {
-      return 0;
-    }
-    String text = value.trim();
-    if (!text.matches("-?\\d+")) {
-      errors.add("People on block must be a whole number.");
-      return null;
-    }
-    int number;
-    try {
-      number = Integer.parseInt(text);
-    } catch (NumberFormatException ex) {
-      errors.add("People on block must be between 0 and 10.");
-      return null;
-    }
-    if (number < 0 || number > 10) {
-      errors.add("People on block must be between 0 and 10.");
-      return null;
-    }
-    return number;
-  }
-
-  /** Team size = the team lead (when set) plus the non-lead members, per the legacy people count. */
-  private static int teamCountOf(AdministrationData admin) {
-    int lead = StringUtils.isNotBlank(admin.teamLeadNameId()) ? 1 : 0;
-    long members = admin.teamMembers() == null ? 0
-        : admin.teamMembers().stream()
-            .filter(member -> !"Y".equals(member.teamLeadInd()))
-            .count();
-    return lead + (int) members;
-  }
 
   public RiparianNotes getNotes(String protocol, String checklistId) {
     return writeRepository.getNotes(checklistId, checklistRepository.resolveResourceType(checklistId));
@@ -829,8 +683,9 @@ public class ProtocolChecklistService {
       String protocol, String checklistId, String fileName, String description, String mimeType,
       byte[] bytes) {
     validateAttachmentType(fileName);
-    String resourceType = checklistRepository.resolveResourceType(checklistId);
-    assertEditable(resourceType);
+    // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
+    virusScanner.scanOrThrow(bytes, fileName);
+    String resourceType = resourceTypeForProtocol(protocol);
     writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
         loggedUserHelper.getLoggedUserId());
     return writeRepository.getAttachments(checklistId, resourceType);
@@ -992,7 +847,6 @@ public class ProtocolChecklistService {
 
   private List<SectionDefinition> bioSections(String checklistId) {
     return List.of(
-        section("administration", "Administration", ChecklistSectionData::emptySection),
         section("opening", "Opening info", () -> checklistRepository.getBioOpening(checklistId)),
         section("stratum", "Stratum summary", () -> checklistRepository.getBioStratum(checklistId)),
         section("plots", "Plots", () -> checklistRepository.getBioPlots(checklistId)),

@@ -29,6 +29,14 @@ public class RoleConstants {
   /** Legacy WebADE / Cognito group for read-only access. */
   public static final String VIEW_ONLY_AUTHORITY = "FREP_VIEW_ONLY";
 
+  /**
+   * Prefix for the per-district CHR editor roles (FAM V92): {@code FREP_CHR_EDITOR_DISTRICT_<code>},
+   * where {@code <code>} is the 3-letter Natural Resource District org-unit code (e.g. DCK). A user
+   * holding one may edit/submit CHR checklists for that district only. Distinct from the global roles
+   * above: a plain {@code FREP_EDITOR} is Biodiversity-only and grants no CHR access.
+   */
+  public static final String CHR_DISTRICT_EDITOR_PREFIX = "FREP_CHR_EDITOR_DISTRICT_";
+
   /** Roles that may perform HTTP write operations (POST, PUT, PATCH, DELETE). */
   public static final String[] WRITE_AUTHORITIES = {
       SYS_ADMIN_AUTHORITY,

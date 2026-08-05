@@ -14,9 +14,9 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonPropertyOrder({ "checklistID", "downloadedBy", "downloadedDate", "FREPAssessment", "evaluationYear",
-		"evaluationDate", "assessedBy", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
-		"LandscapeUnit", "FirstNation", "openingID", "licensee", "cp", "block", "Proponent",
-		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "yearofHarvest", "firstNationsName",
+		"evaluationDate", "assessedBy", "assessedByName", "NewDistrict", "district", "GeographicTSA", "ActualTSA", "Region",
+		"LandscapeUnit", "FirstNation", "openingID", "openingNumber", "licensee", "cuttingPermit", "block", "Proponent",
+		"LicencseeCheckfromRESULTS", "OpeningCategory", "client", "clientName", "yearOfHarvest", "firstNationsName",
 		"generalLocation", "targeted", "Contact1Name", "Contact1Date", "Contact1Contacted", "Contact2Name",
 		"Contact2Date", "Contact2Contacted", "Contact3Name", "Contact3Date", "Contact3Contacted",
 		"FeatureID1Description", "FeatureID1Source", "FeatureID2Description", "FeatureID2Source", "FeatureID2Comments",
@@ -50,6 +50,12 @@ public class CheckList {
 	private String downloadedBy;
 	@JsonProperty("downloadedDate")
 	private String downloadedDate;
+	/** IDIR of the user who last updated the record (CHR_CHECKLIST.UPDATE_USERID). */
+	@JsonProperty("updateUserid")
+	private String updateUserid;
+	/** When the record was last updated, formatted yyyy-MM-dd HH:mm:ss (CHR_CHECKLIST.UPDATE_TIMESTAMP). */
+	@JsonProperty("updateTimestamp")
+	private String updateTimestamp;
 	@JsonProperty("FREPAssessment")
 	private String fREPAssessment;
 	@JsonProperty("evaluationYear")
@@ -58,6 +64,13 @@ public class CheckList {
 	private String evaluationDate;
 	@JsonProperty("assessedBy")
 	private String assessedBy;
+	/**
+	 * FAM-resolved display name for {@link #assessedBy} ("Name (USERID)"), read-only. Mirrors the
+	 * Biodiversity evaluator display; never posted back — {@link #assessedBy} carries the raw userid
+	 * that the save/round-trip and "Assign it to me" comparison use.
+	 */
+	@JsonProperty("assessedByName")
+	private String assessedByName;
 	@JsonProperty("NewDistrict")
 	private String newDistrict;
 	@JsonProperty("district")
@@ -74,9 +87,11 @@ public class CheckList {
 	private String firstNation;
 	@JsonProperty("openingID")
 	private String openingID;
+	@JsonProperty("openingNumber")
+	private String openingNumber;
 	@JsonProperty("licensee")
 	private String licensee;
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	private String cuttingPermit;
 	@JsonProperty("block")
 	private String block;
@@ -88,7 +103,9 @@ public class CheckList {
 	private String openingCategory;
 	@JsonProperty("client")
 	private String client;
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("clientName")
+	private String clientName;
+	@JsonProperty("yearOfHarvest")
 	private String yearOfHarvest;
 	@JsonProperty("firstNationsName")
 	private String firstNationName;
@@ -270,6 +287,16 @@ public class CheckList {
 		this.assessedBy = assessedBy;
 	}
 
+	@JsonProperty("assessedByName")
+	public String getAssessedByName() {
+		return assessedByName;
+	}
+
+	@JsonProperty("assessedByName")
+	public void setAssessedByName(String assessedByName) {
+		this.assessedByName = assessedByName;
+	}
+
 	@JsonProperty("NewDistrict")
 	public String getNewDistrict() {
 		return newDistrict;
@@ -350,6 +377,16 @@ public class CheckList {
 		this.openingID = openingID;
 	}
 
+	@JsonProperty("openingNumber")
+	public String getOpeningNumber() {
+		return openingNumber;
+	}
+
+	@JsonProperty("openingNumber")
+	public void setOpeningNumber(String openingNumber) {
+		this.openingNumber = openingNumber;
+	}
+
 	@JsonProperty("licensee")
 	public String getLicensee() {
 		return licensee;
@@ -365,12 +402,12 @@ public class CheckList {
 		return block;
 	}
 
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	public String getCuttingPermit() {
 		return cuttingPermit;
 	}
 
-	@JsonProperty("cp")
+	@JsonProperty("cuttingPermit")
 	public void setCuttingPermit(String cuttingPermit) {
 		this.cuttingPermit = cuttingPermit;
 	}
@@ -420,12 +457,22 @@ public class CheckList {
 		this.client = client;
 	}
 
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("clientName")
+	public String getClientName() {
+		return clientName;
+	}
+
+	@JsonProperty("clientName")
+	public void setClientName(String clientName) {
+		this.clientName = clientName;
+	}
+
+	@JsonProperty("yearOfHarvest")
 	public String getYearOfHarvest() {
 		return yearOfHarvest;
 	}
 
-	@JsonProperty("yearofHarvest")
+	@JsonProperty("yearOfHarvest")
 	public void setYearOfHarvest(String yearOfHarvest) {
 		this.yearOfHarvest = yearOfHarvest;
 	}
@@ -1031,6 +1078,26 @@ public class CheckList {
 	@JsonProperty("downloadedDate")
 	public void setDownloadedDate(String downloadedDate) {
 		this.downloadedDate = downloadedDate;
+	}
+
+	@JsonProperty("updateUserid")
+	public String getUpdateUserid() {
+		return updateUserid;
+	}
+
+	@JsonProperty("updateUserid")
+	public void setUpdateUserid(String updateUserid) {
+		this.updateUserid = updateUserid;
+	}
+
+	@JsonProperty("updateTimestamp")
+	public String getUpdateTimestamp() {
+		return updateTimestamp;
+	}
+
+	@JsonProperty("updateTimestamp")
+	public void setUpdateTimestamp(String updateTimestamp) {
+		this.updateTimestamp = updateTimestamp;
 	}
 
 	@JsonProperty("deviceCheckoutGuid")

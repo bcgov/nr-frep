@@ -58,19 +58,6 @@ class MasterListRepositoryImplTest {
   }
 
   @Test
-  void regenerateDistrictWiresProc() throws Exception {
-    when(cs.getString(3)).thenReturn(null);
-
-    repository.regenerateDistrict("2025", "43", "idir");
-
-    verify(connection).prepareCall("{call FREP_700_GEN_MASTER.regenerate (?,?,?,?)}");
-    verify(cs).setString(1, "2025");
-    verify(cs).setString(2, "43");
-    verify(cs).setString(4, "idir");
-    verify(cs).registerOutParameter(3, Types.VARCHAR);
-  }
-
-  @Test
   void saveCommentsWiresProc() throws Exception {
     when(cs.getString(4)).thenReturn(null);
 

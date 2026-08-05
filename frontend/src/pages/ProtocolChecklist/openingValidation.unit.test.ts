@@ -6,6 +6,8 @@ import { validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
 
 const valid = (overrides: Partial<BiodiversityOpening> = {}): BiodiversityOpening => ({
   locationDescription: 'A clear-cut block near the lake',
+  evaluationDate: '2024-06-01',
+  teamLeadNameId: 'IDIR\\LEAD',
   invasivePlantIndicator: 'N',
   innovativePracticeInd: 'N',
   frepSiteEvaluationCode: 'M',

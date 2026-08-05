@@ -1,8 +1,6 @@
 import type {
   BecRow,
   CodeOption,
-  EvaluatorSearchParams,
-  EvaluatorSearchResult,
   MasterListYear,
   OrgUnit,
   Protocol,
@@ -26,6 +24,17 @@ export class ConfigurationService extends HttpClient {
     return this.doRequest<MasterListYear[]>(this.config, {
       method: 'GET',
       url: '/v1/configuration/master-list-years',
+    });
+  }
+
+  /**
+   * Existing years plus the next not-yet-created year — for the FREP700 Generate Master List screen,
+   * so a sys-admin can select and generate the upcoming year.
+   */
+  getNewMasterListYears(): CancelablePromise<MasterListYear[]> {
+    return this.doRequest<MasterListYear[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/master-list-years/new',
     });
   }
 
@@ -173,22 +182,4 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
-  /**
-   * Searches IDIR users holding the FREP editor role (via FAM) for the Administration "Add
-   * evaluator" modal — optional userId/first/last filters, paginated (FAM caps size at 100). Not
-   * district-scoped (FAM has no district dimension); empty when the FAM lookup isn't configured.
-   */
-  searchEvaluators(params: EvaluatorSearchParams): CancelablePromise<EvaluatorSearchResult> {
-    return this.doRequest<EvaluatorSearchResult>(this.config, {
-      method: 'GET',
-      url: '/v1/configuration/evaluator-search',
-      query: {
-        userId: params.userId,
-        firstName: params.firstName,
-        lastName: params.lastName,
-        page: params.page,
-        size: params.size,
-      },
-    });
-  }
 }

@@ -420,6 +420,21 @@ const FeatureEditor: FC<{
               disabled={readOnly}
               onChange={(v) => onPatch({ featureInfoSourceCode: v })}
             />
+            {/* Its own full-width row directly under label/class/source. The grid auto-flows, so
+                left at the end of the list this landed in whatever cell was free — wedged beside the
+                composite hint and the registered-site checkbox. */}
+            <div className="chr-form__full-row">
+              <TextAreaField
+                id="feat-desc"
+                labelText="Feature description"
+                value={str('featureDescription')}
+                disabled={readOnly}
+                limit={FEATURE_TEXT_LIMITS.featureDescription}
+                invalid={Boolean(err('featureDescription'))}
+                invalidText={err('featureDescription')}
+                onChange={(v) => onPatch({ featureDescription: v })}
+              />
+            </div>
             {/* Inline help explaining the composite-feature concept, shown just above the composite
                 control (mirrors the "How is the MRVA rating determined?" disclosure). */}
             <details className="chr-feature-help">
@@ -474,16 +489,6 @@ const FeatureEditor: FC<{
                 onChange={(v) => onPatch({ borden: v })}
               />
             )}
-            <TextAreaField
-              id="feat-desc"
-              labelText="Feature description"
-              value={str('featureDescription')}
-              disabled={readOnly}
-              limit={FEATURE_TEXT_LIMITS.featureDescription}
-              invalid={Boolean(err('featureDescription'))}
-              invalidText={err('featureDescription')}
-              onChange={(v) => onPatch({ featureDescription: v })}
-            />
           </div>
           {siblingLabels.length > 0 && (
             <fieldset className="rip-form__group">

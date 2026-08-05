@@ -34,7 +34,7 @@ describe('overLimitError', () => {
     // 200 curly apostrophes = 200 characters but 600 bytes. A character-based maxLength would
     // have let this through and the save would have failed at the database.
     const smartQuotes = '’'.repeat(200);
-    expect(smartQuotes.length).toBe(200);
+    expect(smartQuotes).toHaveLength(200);
     expect(overLimitError(smartQuotes, 500)).toBe(
       'Too long — the limit is 500 and this entry uses 600.',
     );

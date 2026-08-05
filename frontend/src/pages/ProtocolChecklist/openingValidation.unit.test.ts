@@ -37,7 +37,7 @@ describe('validateOpening', () => {
     // BIODIVERSITY_CHECKLIST.LOCATION_DESCRIPTION is VARCHAR2(50 BYTE), so 26 curly quotes (26
     // characters, 78 bytes) overflows it even though a character count would say it fits.
     const smartQuotes = '\u2019'.repeat(26);
-    expect(smartQuotes.length).toBe(26);
+    expect(smartQuotes).toHaveLength(26);
     expect(
       validateOpening(valid({ locationDescription: smartQuotes })).locationDescription,
     ).toMatch(/the limit is 50 and this entry uses 78/);

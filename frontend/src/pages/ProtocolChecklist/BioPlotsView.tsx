@@ -12,10 +12,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TextArea,
   TextInput,
 } from '@carbon/react';
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 
+import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CodeOption } from '@/types/configuration';
@@ -31,12 +33,14 @@ import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import {
+  PLOT_TEXT_LIMITS,
   cwdRowErrors,
   plotHeaderErrors,
   standRowErrors,
 } from '@/pages/ProtocolChecklist/plotValidation';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { byteLength } from '@/utils/textLimits';
 
 /**
  * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
@@ -97,6 +101,12 @@ const UTM_ZONE_OPTIONS: CodeOption[] = ['7', '8', '9', '10', '11'].map((z) => ({
   code: z,
   description: z,
 }));
+
+/**
+ * Plot fields rendered as a multi-line box rather than a single-line input — the free-text comment
+ * only. Mirrors MULTILINE_KEYS in BioStratumView, where the same 2000-char "Comments" field lives.
+ */
+const MULTILINE_KEYS = new Set(['plotComment']);
 
 const TABLE_MAX = 100;
 const TABLE_WARN = 50;
@@ -307,9 +317,15 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
   // "Assign it to me" — claim this plot's assessor for the current user (mirrors the Opening
   // Evaluator widget). Stored as a bare userid to match the existing plot data.
+  // Clear the server-resolved display name with it: it describes the *previous* assessor, so leaving
+  // it would show their name next to the new userid until the save round-trips.
   const assignToMe = () => {
     if (!me) return;
-    setCurrent((prev) => (prev ? ({ ...prev, assessorName: bareUserid(me) } as BioPlot) : prev));
+    setCurrent((prev) =>
+      prev
+        ? ({ ...prev, assessorName: bareUserid(me), assessorDisplayName: undefined } as BioPlot)
+        : prev,
+    );
   };
 
   // Inline validation runs live off the edited plot (like SiteDetail): a field's error shows the
@@ -469,19 +485,33 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     required = false,
   ): ReactNode => {
     const error = plotFieldError(key);
-    return readOnly ? (
-      roField(label, get(key))
+    if (readOnly) {
+      return roField(label, get(key));
+    }
+    const inputProps = {
+      id: `plot-${key}`,
+      labelText: requiredLabel(label, required),
+      value: get(key),
+      maxLength,
+      disabled,
+      onChange: (e: { target: { value: string } }) => set(key, e.target.value),
+      invalid: error !== '',
+      invalidText: error,
+    };
+    const input = MULTILINE_KEYS.has(key) ? (
+      <TextArea {...inputProps} rows={4} />
     ) : (
-      <TextInput
-        id={`plot-${key}`}
-        labelText={requiredLabel(label, required)}
-        value={get(key)}
-        maxLength={maxLength}
-        disabled={disabled}
-        onChange={(e) => set(key, e.target.value)}
-        invalid={error !== ''}
-        invalidText={error}
-      />
+      <TextInput {...inputProps} />
+    );
+    // Length-limited free text carries a live counter; plotHeaderErrors already blocks the save and
+    // supplies the error text, so the counter only reports the count.
+    const limit = PLOT_TEXT_LIMITS[key];
+    return limit === undefined ? (
+      input
+    ) : (
+      <FieldWithCounter used={byteLength(get(key))} limit={limit}>
+        {input}
+      </FieldWithCounter>
     );
   };
 
@@ -515,13 +545,16 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
   // "Evaluated by" — the plot's assessor. Defaults to the checklist Evaluator (see addPlot) and is
   // claimed via "Assign it to me" (mirrors the Opening Evaluator widget) rather than a team dropdown,
-  // since team management was removed. Shows the FAM-resolved name when the assessor is the checklist
-  // Evaluator, otherwise the bare userid.
+  // since team management was removed. Shown as "First Last (USERID)" like the checklist header:
+  // the API resolves the saved assessor through FAM (assessorDisplayName). The checklist Evaluator
+  // is the fallback for an unsaved assessor — a new plot, or one just claimed via "Assign it to me",
+  // where nothing has round-tripped yet. Bare userid if neither is available.
   const evaluatedByField = (): ReactNode => {
     const currentId = get('assessorName');
-    const displayName = sameEvaluator(currentId, evaluator.userid)
-      ? evaluator.name || currentId
-      : currentId;
+    const resolved = get('assessorDisplayName');
+    const displayName =
+      resolved ||
+      (sameEvaluator(currentId, evaluator.userid) ? evaluator.name || currentId : currentId);
     const error = plotFieldError('assessorName');
     if (readOnly) {
       return roField('Evaluated by', displayName);
@@ -761,7 +794,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
                   {rows.map((row) => (
                     <TableRow key={row.plotId}>
                       <TableCell>{row.plotNumber || row.plotId}</TableCell>
-                      <TableCell>{row.assessorName}</TableCell>
+                      <TableCell>{row.assessorDisplayName || row.assessorName}</TableCell>
                       <TableCell>
                         <Button
                           kind="ghost"

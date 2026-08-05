@@ -11,6 +11,7 @@ import {
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
+import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CodeOption } from '@/types/configuration';
@@ -18,10 +19,11 @@ import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
-import { validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
+import { OPENING_TEXT_LIMITS, validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
+import { byteLength } from '@/utils/textLimits';
 
 /**
  * Biodiversity Opening section (FREP210) — read-only form mirroring the legacy layout, edited
@@ -203,8 +205,14 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       cell(label, get(key))
     );
 
-  const textarea = (key: keyof BiodiversityOpening, label: string, required = false): ReactNode =>
-    editing ? (
+  // Length-limited fields carry a live counter. `validateOpening` already blocks the save and
+  // supplies the error text, so the counter only reports the count — the two can't disagree.
+  const textarea = (key: keyof BiodiversityOpening, label: string, required = false): ReactNode => {
+    if (!editing) {
+      return cell(label, get(key), true);
+    }
+    const limit = OPENING_TEXT_LIMITS[key];
+    const field = (
       <TextArea
         key={key}
         id={`bio-${key}`}
@@ -214,9 +222,15 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         invalid={Boolean(fieldErrors[key])}
         invalidText={fieldErrors[key]}
       />
-    ) : (
-      cell(label, get(key), true)
     );
+    return limit === undefined ? (
+      field
+    ) : (
+      <FieldWithCounter key={key} used={byteLength(get(key))} limit={limit}>
+        {field}
+      </FieldWithCounter>
+    );
+  };
 
   // Evaluation date — a single-date picker writing back the YYYY-MM-DD the SAVE proc expects (mirrors
   // the CHR Opening tab). Future dates are blocked at the picker (maxDate) and in validateOpening.

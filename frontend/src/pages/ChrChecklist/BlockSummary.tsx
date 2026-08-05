@@ -8,6 +8,8 @@ import { requiredLabel } from '@/utils/requiredLabel';
 import type { CheckList } from '@/types/chrChecklist';
 
 import { RATING_CODES, calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
+import { BLOCK_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import { addTextLimitErrors } from '@/utils/textLimits';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -81,6 +83,8 @@ const blockSummaryErrors = (d: Draft): Record<string, string> => {
   ) {
     e.q10Comments = 'A description is required.';
   }
+  // Free-text length, same rule as the feature editor — see textLimits.ts.
+  addTextLimitErrors(e, d as Record<string, unknown>, BLOCK_TEXT_LIMITS);
   return e;
 };
 
@@ -97,6 +101,8 @@ const EditQaRow: FC<{
   commentLabel: string;
   commentValue?: string;
   commentError?: string;
+  /** Byte limit of the backing column (see textLimits.ts) — drives the counter. */
+  commentLimit: number;
   onCommentChange: (v: string) => void;
 }> = ({
   id,
@@ -107,6 +113,7 @@ const EditQaRow: FC<{
   commentLabel,
   commentValue,
   commentError,
+  commentLimit,
   onCommentChange,
 }) => (
   <>
@@ -116,7 +123,7 @@ const EditQaRow: FC<{
         id={commentId}
         labelText={requiredLabel(commentLabel, true)}
         value={commentValue}
-        maxLength={2000}
+        limit={commentLimit}
         invalid={Boolean(commentError)}
         invalidText={commentError}
         onChange={onCommentChange}
@@ -281,6 +288,7 @@ const BlockSummary: FC<{
                 commentLabel="Q8 description"
                 commentValue={draft.q8Comments}
                 commentError={fieldErrors.q8Comments}
+                commentLimit={BLOCK_TEXT_LIMITS.q8Comments}
                 onCommentChange={(v) => set({ q8Comments: v })}
               />
               <EditQaRow
@@ -299,6 +307,7 @@ const BlockSummary: FC<{
                 commentLabel="Q9 description"
                 commentValue={draft.q9Comments}
                 commentError={fieldErrors.q9Comments}
+                commentLimit={BLOCK_TEXT_LIMITS.q9Comments}
                 onCommentChange={(v) => set({ q9Comments: v })}
               />
               <EditQaRow
@@ -317,6 +326,7 @@ const BlockSummary: FC<{
                 commentLabel="Q10 description"
                 commentValue={draft.q10Comments}
                 commentError={fieldErrors.q10Comments}
+                commentLimit={BLOCK_TEXT_LIMITS.q10Comments}
                 onCommentChange={(v) => set({ q10Comments: v })}
               />
             </div>
@@ -342,7 +352,9 @@ const BlockSummary: FC<{
               id="chr-rating-rationale"
               labelText="Rating rationale"
               value={draft.ratingRationale}
-              maxLength={2000}
+              limit={BLOCK_TEXT_LIMITS.ratingRationale}
+              invalid={Boolean(fieldErrors.ratingRationale)}
+              invalidText={fieldErrors.ratingRationale}
               onChange={(v) => set({ ratingRationale: v })}
             />
           </fieldset>

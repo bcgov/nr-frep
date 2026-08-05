@@ -11,14 +11,16 @@ import {
 import { useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
-import { DateField, TextField } from '@/pages/ChrChecklist/fields';
+import { DateField, TextAreaField } from '@/pages/ChrChecklist/fields';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { Picture } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import { ATTACHMENT_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
+import { overLimitError } from '@/utils/textLimits';
 
 /**
  * Build a displayable image src from a picture's `code`. Newly-added photos already carry a
@@ -125,6 +127,9 @@ const Photos: FC<{
       setDescriptionInvalid(true);
       return;
     }
+    // Over-length is reported by the field's own counter; just don't start an upload that the
+    // database would reject at the end of it.
+    if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description)) return;
     setDescriptionInvalid(false);
     // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
     // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
@@ -249,20 +254,6 @@ const Photos: FC<{
           <div className="attach-card__header">Upload file</div>
           <div className="attach-card__body">
             <div className="attach-card__fields">
-              <div className="attach-card__field attach-card__field--desc">
-                <TextField
-                  id="photo-description"
-                  labelText={requiredLabel('Description', true)}
-                  value={description}
-                  disabled={busy}
-                  invalid={descriptionInvalid}
-                  invalidText="Enter a description before uploading a photo."
-                  onChange={(v) => {
-                    setDescription(v);
-                    if (v.trim()) setDescriptionInvalid(false);
-                  }}
-                />
-              </div>
               <div className="attach-card__field attach-card__field--date">
                 {/* The Carbon DatePicker is mounted only once the Attachments tab is active (see the
                     `active` prop) — mounting it during the page's initial load trips a flatpickr
@@ -276,6 +267,22 @@ const Photos: FC<{
                     onChange={setDate}
                   />
                 )}
+              </div>
+              <div className="attach-card__field attach-card__field--desc">
+                <TextAreaField
+                  id="photo-description"
+                  labelText={requiredLabel('Description', true)}
+                  value={description}
+                  rows={3}
+                  disabled={busy}
+                  limit={ATTACHMENT_TEXT_LIMITS.description}
+                  invalid={descriptionInvalid}
+                  invalidText="Enter a description before uploading a photo."
+                  onChange={(v) => {
+                    setDescription(v);
+                    if (v.trim()) setDescriptionInvalid(false);
+                  }}
+                />
               </div>
             </div>
             <div

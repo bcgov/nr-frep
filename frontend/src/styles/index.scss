@@ -75,6 +75,38 @@
     opacity: 0;
   }
 }
+// Live byte counter under a length-limited textarea (see utils/textLimits.ts), bottom-right of the
+// box. Global rather than page-scoped: both the CHR checklist and the protocol checklist Notes tab
+// render it, and each page loads only its own stylesheet. Carbon's form-item carries the bottom
+// margin that would push the counter away from the textarea, so it is zeroed and re-applied below
+// the counter instead — keeping the count visually attached to the field it describes.
+.frep-field {
+  margin-bottom: 1rem;
+
+  .cds--form-item {
+    margin-bottom: 0;
+  }
+}
+
+.frep-field__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+.frep-field__counter {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums; // digits stop jittering as the count changes
+  color: var(--cds-text-secondary, #525252);
+
+  &--over {
+    color: var(--cds-text-error, #da1e28);
+    font-weight: 600;
+  }
+}
+
 // --- Print -------------------------------------------------------------------
 // Client-side "Printer Version" support (legacy FREP parity). Pages render a
 // print-only <PrintableTable> for the full list and wrap their interactive UI

@@ -1,5 +1,7 @@
 import type { BioPlot } from '@/types/protocolChecklist';
 
+import { byteLength, overLimitError } from '@/utils/textLimits';
+
 // Mirrors the legacy FREP212 Frep212ValidationManager save chains (plot header + stand-table and
 // CWD rows) so a bad save is caught inline rather than only at the proc.
 
@@ -87,7 +89,9 @@ const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
   } else {
     put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
   }
-  if (g('plotComment').length > 2000) e.plotComment = 'Comments must be 2000 characters or fewer.';
+  if (byteLength(g('plotComment')) > PLOT_TEXT_LIMITS.plotComment) {
+    e.plotComment = `Comments — ${overLimitError(g('plotComment'), PLOT_TEXT_LIMITS.plotComment)}`;
+  }
   if (!isBlank(g('basalAreaFactor'))) {
     put(e, 'basalAreaFactor', intError(g('basalAreaFactor'), 'BAF', 1, 99));
   }
@@ -147,6 +151,16 @@ export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<str
   plotNumberErrors(e, g);
   measurementMethodErrors(e, g, stratumType);
   return e;
+};
+
+/**
+ * Byte limit for the plot's free-text comment, keyed by field — the same number the rule above
+ * enforces, exported to the counter so display and validation can't drift apart. Bytes, not
+ * characters: `BIODIVERSITY_PLOT.PLOT_COMMENT` is `VARCHAR2(2000 BYTE)` (nr-mof-db
+ * V2.00403__BIODIVERSITY_PLOT.sql).
+ */
+export const PLOT_TEXT_LIMITS: Record<string, number> = {
+  plotComment: 2000,
 };
 
 /** Stand-table (tree) row errors keyed by column key: species + WT class required; DBH/height

@@ -33,6 +33,7 @@ import {
   RESERVE_TYPE_CODES,
 } from '@/pages/ChrChecklist/codeLists';
 import { featureErrors } from '@/pages/ChrChecklist/featureValidation';
+import { FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 
 type PatchFn = (patch: Partial<Feature>) => void;
 
@@ -478,6 +479,9 @@ const FeatureEditor: FC<{
               labelText="Feature description"
               value={str('featureDescription')}
               disabled={readOnly}
+              limit={FEATURE_TEXT_LIMITS.featureDescription}
+              invalid={Boolean(err('featureDescription'))}
+              invalidText={err('featureDescription')}
               onChange={(v) => onPatch({ featureDescription: v })}
             />
           </div>
@@ -908,6 +912,9 @@ const FeatureEditor: FC<{
               labelText="Description of damage"
               value={str('descriptionofdamage')}
               disabled={readOnly}
+              limit={FEATURE_TEXT_LIMITS.descriptionofdamage}
+              invalid={Boolean(err('descriptionofdamage'))}
+              invalidText={err('descriptionofdamage')}
               onChange={(v) => onPatch({ descriptionofdamage: v })}
             />
           )}
@@ -988,6 +995,7 @@ const FeatureEditor: FC<{
                 labelText={requiredLabel('Q4 description', true)}
                 value={str('q4Description')}
                 disabled={readOnly}
+                limit={FEATURE_TEXT_LIMITS.q4Description}
                 invalid={Boolean(err('q4Description'))}
                 invalidText={err('q4Description')}
                 onChange={(v) => onPatch({ q4Description: v })}
@@ -1007,6 +1015,7 @@ const FeatureEditor: FC<{
                 labelText={requiredLabel('Q5 description', true)}
                 value={str('q5Description')}
                 disabled={readOnly}
+                limit={FEATURE_TEXT_LIMITS.q5Description}
                 invalid={Boolean(err('q5Description'))}
                 invalidText={err('q5Description')}
                 onChange={(v) => onPatch({ q5Description: v })}
@@ -1026,6 +1035,7 @@ const FeatureEditor: FC<{
                 labelText={requiredLabel('Q6 description', true)}
                 value={str('q6Description')}
                 disabled={readOnly}
+                limit={FEATURE_TEXT_LIMITS.q6Description}
                 invalid={Boolean(err('q6Description'))}
                 invalidText={err('q6Description')}
                 onChange={(v) => onPatch({ q6Description: v })}
@@ -1048,6 +1058,9 @@ const FeatureEditor: FC<{
             labelText="Feature rating rationale"
             value={str('featureRatingRationale')}
             disabled={readOnly}
+            limit={FEATURE_TEXT_LIMITS.featureRatingRationale}
+            invalid={Boolean(err('featureRatingRationale'))}
+            invalidText={err('featureRatingRationale')}
             onChange={(v) => onPatch({ featureRatingRationale: v })}
           />
         </div>
@@ -1062,6 +1075,9 @@ const FeatureEditor: FC<{
             value={str('featureComment')}
             rows={10}
             disabled={readOnly}
+            limit={FEATURE_TEXT_LIMITS.featureComment}
+            invalid={Boolean(err('featureComment'))}
+            invalidText={err('featureComment')}
             onChange={(v) => onPatch({ featureComment: v })}
           />
         </div>

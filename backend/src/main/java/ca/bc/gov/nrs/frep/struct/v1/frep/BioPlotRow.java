@@ -8,5 +8,15 @@ public record BioPlotRow(
     String plotId,
     String plotNumber,
     String assessorName,
+    String assessorDisplayName,
     String revisionCount
-) {}
+) {
+
+  /**
+   * Returns a copy carrying the FAM-resolved assessor name for display. {@code assessorName} stays
+   * the bare userid the column actually stores, so nothing downstream compares against a label.
+   */
+  public BioPlotRow withAssessorDisplayName(String displayName) {
+    return new BioPlotRow(plotId, plotNumber, assessorName, displayName, revisionCount);
+  }
+}

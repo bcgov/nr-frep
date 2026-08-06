@@ -123,6 +123,24 @@ public class LoggedUserHelper {
   }
 
   /**
+   * True if the user may edit a site's resources (FREP110 Site Details): {@code FREP_ADMIN},
+   * {@code FREP_EDITOR}, or any per-district CHR editor.
+   *
+   * <p>Site records are shared across protocols, so the Biodiversity-only {@link #canEdit()} is the
+   * wrong gate here: a CHR district editor already sees their districts' sites
+   * ({@code AcceptedSiteService} filters on {@link #canChr}) and maintains the CHR checklists hanging
+   * off them, yet could not edit the site those checklists belong to.
+   *
+   * <p>Deliberately the coarse "CHR anywhere" check, not per-district — Site Details is keyed by site
+   * id, and the district-scoped variant would need the site's org unit resolved the way
+   * {@code ChrChecklistAuthorizer} does for checklists. <em>Creating</em> a targeted site (FREP200)
+   * stays editor-only.
+   */
+  public boolean canEditSite() {
+    return canEdit() || canAnyChr();
+  }
+
+  /**
    * True if the user may access CHR for the given 3-letter district {@code org_unit_code}. Sys-admins
    * see every district; a district editor sees only the codes they hold a role for.
    */

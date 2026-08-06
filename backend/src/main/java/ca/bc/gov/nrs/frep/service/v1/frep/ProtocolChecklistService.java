@@ -23,6 +23,7 @@ import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,6 +42,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -713,16 +715,36 @@ public class ProtocolChecklistService {
         checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
   }
 
-  public List<AttachmentRow> saveAttachment(
-      String protocol, String checklistId, String fileName, String description, String mimeType,
-      byte[] bytes) {
+  /**
+   * Store one uploaded attachment. Multipart spools the body to a temp file, so the only point the
+   * whole file is in heap is the {@code byte[]} below — read <b>once</b> and reused for the scan and
+   * the write, since {@link MultipartFile#getBytes()} allocates a fresh array on every call.
+   */
+  public void saveAttachment(
+      String protocol, String checklistId, MultipartFile file, String description) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "The selected file is empty. Choose a file with content and try again.");
+    }
+    String fileName = file.getOriginalFilename();
     validateAttachmentType(fileName);
+    byte[] bytes = readBytes(file, fileName);
     // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(bytes, fileName);
-    String resourceType = checklistRepository.resolveResourceType(checklistId);
-    writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
-        loggedUserHelper.getLoggedUserId());
-    return writeRepository.getAttachments(checklistId, resourceType);
+    // Resource type comes from the record, not the {protocol} path segment (SLB legacy / SLR
+    // go-forward) — see the section comment above.
+    writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
+        fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+  }
+
+  /** Pull the spooled upload into heap, turning the I/O failure into a clean 400 rather than a 500. */
+  private static byte[] readBytes(MultipartFile file, String fileName) {
+    try {
+      return file.getBytes();
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Could not read the uploaded file" + (fileName == null ? "" : " " + fileName) + ".", ex);
+    }
   }
 
   /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
@@ -737,12 +759,10 @@ public class ProtocolChecklistService {
     }
   }
 
-  public List<AttachmentRow> deleteAttachment(
-      String protocol, String checklistId, String attachmentId) {
+  public void deleteAttachment(String protocol, String checklistId, String attachmentId) {
     String resourceType = checklistRepository.resolveResourceType(checklistId);
     assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
-    return writeRepository.getAttachments(checklistId, resourceType);
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */

@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
-import FormData from 'form-data';
 
 import type { OnCancel } from '@/config/api/CancelablePromise';
 import type { AxiosError, AxiosRequestConfig, AxiosResponse, AxiosInstance } from 'axios';
@@ -42,7 +41,7 @@ export const isBlob = (value: any): value is Blob => {
 };
 
 export const isFormData = (value: any): value is FormData => {
-  return value instanceof FormData;
+  return typeof FormData !== 'undefined' && value instanceof FormData;
 };
 
 export const isSuccess = (status: number): boolean => {
@@ -161,14 +160,11 @@ export const getHeaders = async (
     resolve(options, config.HEADERS),
   ]);
 
-  const formHeaders = (typeof formData?.getHeaders === 'function' && formData?.getHeaders()) || {};
-
   const headers = Object.entries({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     ...additionalHeaders,
     ...options.headers,
-    ...formHeaders,
   })
     .filter(([_, value]) => isDefined(value))
     .reduce(
@@ -198,6 +194,14 @@ export const getHeaders = async (
     } else if (!isFormData(options.body)) {
       headers['Content-Type'] = 'application/json';
     }
+  }
+
+  // Multipart must carry the boundary the browser generates, and the browser only adds it when the
+  // header is absent. Deleting is required, not just skipping: 'application/json' is seeded as a
+  // base default above, so leaving it in place would send a FormData body labelled as JSON and the
+  // server would fail to parse it. Mirrors nr-fspts's apiFetch, which never sets Content-Type.
+  if (isFormData(options.body) || isFormData(formData)) {
+    delete headers['Content-Type'];
   }
 
   return headers;

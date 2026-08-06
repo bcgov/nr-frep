@@ -64,4 +64,23 @@ class LoggedUserHelperTest {
     assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canChr(null)).isFalse();
     assertThat(withAuthorities("FREP_ADMIN").canChr(null)).isTrue(); // admin passes regardless
   }
+
+  @Test
+  void siteEditingIsOpenToEditorsAndChrDistrictEditorsAlike() {
+    // Site records are shared across protocols, so canEditSite is deliberately wider than canEdit.
+    assertThat(withAuthorities("FREP_EDITOR").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_ADMIN").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canEditSite()).isTrue();
+    // ...but it is still a role check: view-only and no-role users cannot edit.
+    assertThat(withAuthorities("FREP_VIEW_ONLY").canEditSite()).isFalse();
+    assertThat(withAuthorities().canEditSite()).isFalse();
+  }
+
+  @Test
+  void chrDistrictEditorGainsSiteEditingWithoutGainingBiodiversityWrite() {
+    LoggedUserHelper helper = withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK");
+
+    assertThat(helper.canEditSite()).isTrue();
+    assertThat(helper.canEdit()).isFalse();
+  }
 }

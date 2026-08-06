@@ -1,4 +1,3 @@
-import FormData from 'form-data';
 import { describe, it, expect, vi } from 'vitest';
 
 import * as requestModule from './request';
@@ -159,6 +158,23 @@ describe('getHeaders edge cases', () => {
     const options = { ...validOptions, body: 'x' };
     const headers = await requestModule.getHeaders(validConfig, options);
     expect(headers['Content-Type']).toBe('text/plain');
+  });
+  // Multipart uploads must reach the browser with no Content-Type so it can add the boundary.
+  // 'application/json' is seeded as a base default, so the header has to be deleted, not skipped.
+  it('omits Content-Type entirely for a FormData body', async () => {
+    const body = new FormData();
+    body.append('file', new Blob(['x'], { type: 'text/plain' }), 'x.txt');
+    const headers = await requestModule.getHeaders(validConfig, { ...validOptions, body });
+    expect(headers['Content-Type']).toBeUndefined();
+  });
+  it('omits Content-Type when the FormData arrives via the formData argument', async () => {
+    const formData = requestModule.getFormData({ ...validOptions, formData: { a: 'b' } });
+    const headers = await requestModule.getHeaders(validConfig, validOptions, formData);
+    expect(headers['Content-Type']).toBeUndefined();
+  });
+  it('still sets JSON for an ordinary object body', async () => {
+    const headers = await requestModule.getHeaders(validConfig, { ...validOptions, body: { a: 1 } });
+    expect(headers['Content-Type']).toBe('application/json');
   });
 });
 

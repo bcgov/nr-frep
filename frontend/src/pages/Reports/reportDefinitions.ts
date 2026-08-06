@@ -45,6 +45,25 @@ const BIODIVERSITY_EXTRACT_LAYOUT: ReportFieldKey[][] = [
   ['orgUnit', 'masterListYear', 'resourceValueStatus', 'openingId'],
 ];
 
+/**
+ * Who may run a given report. Single source of truth for both the card list (which reports are
+ * shown) and the generate buttons inside {@link ReportConfigForm} — they are the same rule, and
+ * expressing it twice is how the two drifted: the backend stopped requiring editor access for the
+ * checklist reports while the form still hid their buttons behind it.
+ *
+ * Mirrors the backend gates: `chr-data-extract` is `@reportAuth.canGenerate` (CHR access, plus a
+ * district the caller holds — enforced server-side), the Biodiversity extracts need editor access,
+ * and the Jasper checklist reports are open to any authenticated user.
+ */
+export const mayRunReport = (
+  reportId: string,
+  access: { canEdit: boolean; canAnyChr: boolean },
+): boolean => {
+  if (reportId === 'chr-data-extract') return access.canAnyChr;
+  if (reportId.startsWith('biodiversity-extract')) return access.canEdit;
+  return true;
+};
+
 export const GENERATABLE_REPORTS: GeneratableReport[] = [
   {
     id: 'biodiversity-extract-block',
@@ -123,8 +142,11 @@ export const GENERATABLE_REPORTS: GeneratableReport[] = [
     layout: [['orgUnit', 'dateRange']],
   },
   // Reports → Cultural Heritage → Data Extract (legacy JCRS FREPRPT022). CSV data extract (97 flat
-  // columns) filtered by org unit, master-list year, checklist status and resource value. Admin-only
-  // in legacy — access gating is deferred (see plan), so this is visible to all report users for now.
+  // columns) filtered by org unit, master-list year, checklist status and resource value. The only
+  // district-scoped report: the card is shown when the user has CHR access anywhere (see index.tsx),
+  // and the backend's ReportAuthorizer additionally requires the requested org unit to be a district
+  // the caller holds — sys-admins pass for any district, including "All". Every other report here is
+  // gated on role only (Biodiversity extracts need editor access; the checklist reports are open).
   {
     id: 'chr-data-extract',
     title: 'Cultural Heritage — Data Extract',

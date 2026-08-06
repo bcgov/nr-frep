@@ -34,8 +34,11 @@ const DESCRIPTION_LIMIT = 120;
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
- * list, download, upload, and delete file attachments. Bytes move as base64 JSON (mirroring the
- * CHR photo flow) so the standard authenticated API client handles auth + CSRF.
+ * list, download, upload, and delete file attachments. Uploads are `multipart/form-data`: the raw
+ * `File` goes on the wire, so there's no base64 inflation and the server can spool it to disk
+ * instead of holding it in heap. Auth + CSRF still ride on the standard API client.
+ *
+ * Downloads are still base64 JSON — the read path is a separate piece of work.
  */
 
 type Props = {
@@ -76,24 +79,22 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
 ];
 const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
+// Keep in step with spring.servlet.multipart.max-file-size (application.yml).
+const MAX_ATTACHMENT_MB = 15;
+const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+const formatMb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+
 // True when an attachment is an image we can preview as a thumbnail.
+//
+// TIFF is deliberately excluded even though it's an allowed attachment type: no mainstream browser
+// renders it in an <img>, so treating it as previewable meant downloading the whole file (TIFFs are
+// the largest, least compressible type here), base64-ing it into a data URL, and silently falling
+// back to the placeholder when it failed to decode.
 function isImage(row: AttachmentRow): boolean {
   const mime = (row.mimeTypeCode || '').toLowerCase();
+  if (mime.includes('tif')) return false;
   if (mime.includes('image')) return true;
-  return /\.(jpe?g|png|gif|bmp|tiff?|webp)$/.test((row.fileName || '').toLowerCase());
-}
-
-// Read a File as base64 (without the data: prefix).
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result);
-      resolve(result.slice(result.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
-    reader.readAsDataURL(file);
-  });
+  return /\.(jpe?g|png|gif|bmp|webp)$/.test((row.fileName || '').toLowerCase());
 }
 
 const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
@@ -122,6 +123,16 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         timeout: 9000,
       }),
     [display],
+  );
+
+  // Upload and delete respond 204, so the list is re-read after every mutation rather than being
+  // patched from a response body — one source of truth for what the server holds.
+  const refreshRows = useCallback(
+    () =>
+      API.protocolChecklist
+        .getAttachments(protocol, checklistId)
+        .then((list) => setRows(list)),
+    [protocol, checklistId],
   );
 
   useEffect(() => {
@@ -201,16 +212,36 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       });
       return;
     }
+    // Fail fast on size and empty files so the user isn't left waiting for an upload the server
+    // will reject anyway. The server stays the source of truth for both (413 / 400).
+    if (file.size === 0) {
+      display({
+        kind: 'error',
+        title: 'File is empty',
+        subtitle: `"${file.name}" contains no data. Choose a different file.`,
+        timeout: 8000,
+      });
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      display({
+        kind: 'error',
+        title: 'File is too large',
+        subtitle:
+          `"${file.name}" is ${formatMb(file.size)} MB. The maximum is ${MAX_ATTACHMENT_MB} MB.`,
+        timeout: 8000,
+      });
+      return;
+    }
     setBusy(true);
     try {
-      const data = await toBase64(file);
-      const updated = await API.protocolChecklist.uploadAttachment(protocol, checklistId, {
-        fileName: file.name,
-        description: description.trim(),
-        contentType: file.type,
-        data,
-      });
-      setRows(updated);
+      await API.protocolChecklist.uploadAttachment(
+        protocol,
+        checklistId,
+        file,
+        description.trim(),
+      );
+      await refreshRows();
       setDescription('');
       display({ kind: 'success', title: 'Attachment uploaded', timeout: 4000 });
     } catch (err) {
@@ -255,12 +286,8 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       return;
     setBusy(true);
     try {
-      const updated = await API.protocolChecklist.deleteAttachment(
-        protocol,
-        checklistId,
-        row.checklistAttachmentId,
-      );
-      setRows(updated);
+      await API.protocolChecklist.deleteAttachment(protocol, checklistId, row.checklistAttachmentId);
+      await refreshRows();
       display({ kind: 'success', title: 'Attachment removed', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);

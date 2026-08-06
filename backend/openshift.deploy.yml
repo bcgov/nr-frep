@@ -266,6 +266,11 @@ objects:
                   mountPath: /logs
                 - name: app-storage
                   mountPath: /temp
+                # Load-bearing, do not remove: the container runs with readOnlyRootFilesystem, so
+                # this emptyDir is the only place the JVM can write. Spring spools every
+                # multipart/form-data upload to a temp file here (file-size-threshold=0) instead of
+                # buffering it in heap — without the mount, attachment/photo uploads fail outright.
+                # emptyDir usage counts against the pod's ephemeral-storage limit below.
                 - name: tmp-storage
                   mountPath: /tmp
               securityContext:

@@ -244,12 +244,6 @@ export type AttachmentContent = {
 };
 
 /** Upload payload — {@code data} is base64-encoded file bytes. */
-export type AttachmentUploadRequest = {
-  fileName?: string;
-  description?: string;
-  contentType?: string;
-  data?: string;
-};
 
 export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {
   biodiversity: 'bio',

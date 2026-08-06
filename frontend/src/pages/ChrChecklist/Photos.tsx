@@ -133,8 +133,12 @@ const Photos: FC<{
     setDescriptionInvalid(false);
     // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
     // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
-    // accept="image/*", but drag-and-drop bypasses it — so re-check here.
-    const images = files.filter((file) => file.type.startsWith('image/'));
+    // accept="image/jpeg,image/png,image/gif,image/bmp", but drag-and-drop bypasses it — so re-check here.
+    // TIFF is excluded: browsers can't decode it, so the downscale below would silently keep the
+    // full-resolution original and it could never render. Matches ALLOWED_IMAGE_CODES server-side.
+    const images = files.filter(
+      (file) => file.type.startsWith('image/') && !file.type.includes('tif'),
+    );
     if (images.length < files.length) {
       display({
         kind: 'error',
@@ -314,7 +318,7 @@ const Photos: FC<{
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/bmp"
                 capture="environment"
                 multiple
                 hidden

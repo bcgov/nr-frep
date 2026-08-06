@@ -41,7 +41,12 @@ public class ChrChecklistService {
   // (VARCHAR2(3), NOT NULL, FK to MIME_TYPE_CODE), so a non-image (or an image type whose code isn't a
   // valid 3-char code, e.g. WEBP/TIFF) would fail on save with ORA-12899 / ORA-02291. Guard new photos
   // up front. Mirrors deriveMimeType's output (jpeg->jpg) against the image codes in MIME_TYPE_CODE.
-  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP", "TIF");
+  // TIF is deliberately absent. It fell through every net: browsers can't decode TIFF, so the
+  // client-side downscale in Photos.tsx silently kept the full-resolution original, no thumbnail
+  // could ever render, and it is excluded from server-side normalization — leaving a photo stored at
+  // full size that never displays. TIF remains valid for Biodiversity *attachments*, where scanned
+  // maps have a real fidelity argument; it has none for a site photo.
+  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP");
 
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
@@ -348,7 +353,7 @@ public class ChrChecklistService {
         }
         if (!ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
           throw new InvalidParameterException(
-              "Only image files (JPG, PNG, GIF, BMP, TIF) can be uploaded as photos.");
+              "Only image files (JPG, PNG, GIF, BMP) can be uploaded as photos.");
         }
       }
     }

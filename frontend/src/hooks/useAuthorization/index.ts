@@ -35,6 +35,14 @@ export type AuthorizationInfo = {
   canAnyChr: boolean;
   /** `true` when the user may access CHR for the given 3-letter district `org_unit_code`. */
   canChr: (orgUnitCode: string | undefined | null) => boolean;
+  /**
+   * `true` when the user may edit a site's resources (FREP110 Site Details) — editors *or* any
+   * per-district CHR editor. Broader than {@link canEdit}: site records are shared across protocols,
+   * so a CHR district editor maintaining their districts' checklists can edit the sites those
+   * checklists hang off. Mirrors `LoggedUserHelper.canEditSite()`. Creating a targeted site
+   * (FREP200) still requires {@link canCreate}.
+   */
+  canEditSite: boolean;
   /** Checks if the user holds a specific role. */
   hasRole: (role: ROLE_TYPE) => boolean;
   /** The full user object for advanced checks (may be `undefined` before login). */
@@ -80,6 +88,7 @@ export const useAuthorization = (): AuthorizationInfo => {
     const canEdit = isSysAdmin || isUpdate;
     const canCreate = canEdit;
     const canDelete = canEdit;
+    const canEditSite = canEdit || canAnyChr;
     const canPerformSysAdminActions = isSysAdmin;
 
     const hasRole = (role: ROLE_TYPE) => roles.includes(role);
@@ -96,6 +105,7 @@ export const useAuthorization = (): AuthorizationInfo => {
       chrDistricts,
       canAnyChr,
       canChr,
+      canEditSite,
       hasRole,
       user,
     };

@@ -1,7 +1,6 @@
 import type {
   AttachmentContent,
   AttachmentRow,
-  AttachmentUploadRequest,
   BiodiversityOpening,
   BioPlot,
   BioPlotRow,
@@ -201,26 +200,40 @@ export class ProtocolChecklistService extends HttpClient {
     });
   }
 
+  /**
+   * Upload one attachment as `multipart/form-data`: the raw `File` goes on the wire, with no base64
+   * step. `mediaType` is deliberately unset — the browser must supply `multipart/form-data` with its
+   * own boundary (see `getHeaders` in `config/api/request.ts`). The description rides in the body
+   * rather than the query string because it is free text up to 2000 chars.
+   *
+   * Resolves to `void` (204): the caller re-fetches the list.
+   */
   uploadAttachment(
     protocol: string,
     checklistId: string,
-    request: AttachmentUploadRequest,
-  ): CancelablePromise<AttachmentRow[]> {
-    return this.doRequest<AttachmentRow[]>(this.config, {
+    file: File,
+    description?: string,
+  ): CancelablePromise<void> {
+    const body = new FormData();
+    body.append('file', file);
+    if (description && description.trim()) {
+      body.append('description', description.trim());
+    }
+    return this.doRequest<void>(this.config, {
       method: 'POST',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments',
       path: { protocol, checklistId },
-      body: request,
-      mediaType: 'application/json',
+      body,
     });
   }
 
+  /** Delete an attachment. Resolves to `void` (204); the caller re-fetches the list. */
   deleteAttachment(
     protocol: string,
     checklistId: string,
     attachmentId: string,
-  ): CancelablePromise<AttachmentRow[]> {
-    return this.doRequest<AttachmentRow[]>(this.config, {
+  ): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
       method: 'DELETE',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}',
       path: { protocol, checklistId, attachmentId },

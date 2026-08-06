@@ -3,6 +3,8 @@ import { Fragment, useEffect, useMemo, useState, type FC, type ReactNode } from 
 
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import { mayRunReport } from './reportDefinitions';
+
 import type { GeneratableReport, ReportFieldKey } from './reportDefinitions';
 import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
 
@@ -95,6 +97,7 @@ const ReportConfigForm: FC<Props> = ({
 }) => {
   const { display } = useNotification();
   const { canEdit, canAnyChr, isSysAdmin, chrDistricts } = useAuthorization();
+  const mayGenerate = mayRunReport(definition.id, { canEdit, canAnyChr });
   const [form, setForm] = useState<FormState>(BLANK);
   const [errors, setErrors] = useState<FormErrors>({});
   const [generating, setGenerating] = useState(false);
@@ -392,21 +395,22 @@ const ReportConfigForm: FC<Props> = ({
         <Button kind="ghost" disabled={generating} onClick={() => setForm(BLANK)}>
           Reset
         </Button>
-        {/* Report generation requires write access (FREP_ADMIN / FREP_EDITOR) — view-only users see
-            no generate buttons (the backend rejects the POST with 403 regardless). */}
-        {canEdit && formats.includes('csv') && (
+        {/* Per-report access (mayRunReport), not a blanket editor check: the checklist reports are
+            open to any authenticated user, the CHR extract needs CHR access, and only the
+            Biodiversity extracts require editor. The backend enforces the same rule. */}
+        {mayGenerate && formats.includes('csv') && (
           <Button kind="tertiary" disabled={generating} onClick={() => void generate('csv')}>
             Export CSV
           </Button>
         )}
-        {canEdit && formats.includes('pdf') && (
+        {mayGenerate && formats.includes('pdf') && (
           <Button disabled={generating} onClick={() => void generate('pdf')}>
             Generate PDF
           </Button>
         )}
-        {!canEdit && (
+        {!mayGenerate && (
           <span className="report-form__readonly-note">
-            You need editor access to generate reports.
+            You don&apos;t have access to generate this report.
           </span>
         )}
       </div>

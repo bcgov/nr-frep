@@ -14,16 +14,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 /**
  * HTTP contract for the Cultural Heritage (CHR) checklist API. Implemented by
- * {@link ca.bc.gov.nrs.frep.controller.v1.ChrChecklistApiController}. Reads require the coarse
- * {@link FrepAuthorities#CHR_EDIT} (sys-admin or any CHR district editor); writes require the
- * per-district gate {@code @chrAuth.canEditChecklist(...)} ({@link ChrChecklistAuthorizer}), which
- * resolves the checklist's district; activation is {@link FrepAuthorities#ADMIN} (legacy
- * {@code ACTIVATECHECKLIST} is sys-admin only).
+ * {@link ca.bc.gov.nrs.frep.controller.v1.ChrChecklistApiController}. CHR is strictly
+ * district-scoped: every endpoint that names a checklist — <em>reads included</em> — uses
+ * {@code @chrAuth.canEditChecklist(...)} ({@link ChrChecklistAuthorizer}), which resolves the
+ * checklist's district and checks it against the caller's (sys-admins pass for any district).
+ * Activation is {@link FrepAuthorities#ADMIN} (legacy {@code ACTIVATECHECKLIST} is sys-admin only).
  */
 @RequestMapping("/api/v1/chr")
 public interface ChrChecklistApiEndpoint {
 
-  @PreAuthorize(FrepAuthorities.CHR_EDIT)
+  // District-scoped like every other CHR endpoint: CHR data is visible only to editors who hold the
+  // checklist's district (sys-admins see all). The coarse "any CHR" gate used here previously left a
+  // direct read open — search and accepted-sites were district-filtered by the same change that
+  // introduced per-district access, so the id couldn't be discovered, but it could still be guessed.
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
   @GetMapping("/checklists/{id}")
   ResponseEntity<CheckList> getChecklist(@PathVariable long id);
 

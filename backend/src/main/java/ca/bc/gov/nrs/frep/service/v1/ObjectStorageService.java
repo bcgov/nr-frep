@@ -121,13 +121,22 @@ public class ObjectStorageService {
     return !listObjectsWithPrefix(prefix).isEmpty();
   }
 
+  /**
+   * Every object under {@code prefix}. A single {@code listObjectsV2} call returns at most 1000 keys and
+   * reports the rest only via a continuation token, so the paginator is used to follow it — otherwise
+   * callers silently see a truncated first page, and {@link #deleteObjectsWithPrefix} would report a
+   * partial delete as a complete one. The result is materialized inside the try-with-resources because
+   * the paginator is lazy and issues its requests as it is iterated.
+   */
   private List<S3Object> listObjectsWithPrefix(String prefix) {
     try (S3Client client = client()) {
-      return client.listObjectsV2(ListObjectsV2Request.builder()
+      return client.listObjectsV2Paginator(ListObjectsV2Request.builder()
               .bucket(properties.bucket())
               .prefix(prefix)
               .build())
-          .contents();
+          .contents()
+          .stream()
+          .toList();
     }
   }
 

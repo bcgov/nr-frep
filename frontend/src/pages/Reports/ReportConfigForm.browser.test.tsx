@@ -155,3 +155,52 @@ describe('ReportConfigForm — CHR Data Extract district scoping', () => {
     expect(texts.some((t) => t?.includes('DKM'))).toBe(true);
   });
 });
+
+describe('ReportConfigForm — per-report generate access', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    auth.value = { canEdit: true, canAnyChr: true, isSysAdmin: true, chrDistricts: [] };
+  });
+
+  // A CHR-district user holds no editor role. The checklist reports are open to any authenticated
+  // user and the CHR extract needs CHR access, so all three must be generatable — the form used to
+  // hide every generate button behind canEdit, which locked them out of reports the API allows.
+  const chrOnly = { canEdit: false, canAnyChr: true, isSysAdmin: false, chrDistricts: ['DCC'] };
+
+  it('a CHR-district user may generate the Jasper checklist reports', () => {
+    auth.value = chrOnly;
+    renderForm(pdfDefinition);
+
+    expect(screen.getByRole('button', { name: /Generate PDF/ })).toBeInTheDocument();
+    expect(screen.queryByText(/don.t have access to generate/i)).not.toBeInTheDocument();
+  });
+
+  it('a CHR-district user may generate the CHR data extract', () => {
+    auth.value = chrOnly;
+    renderForm(csvDefinition); // chr-data-extract
+
+    expect(screen.getByRole('button', { name: /Export CSV/ })).toBeInTheDocument();
+  });
+
+  it('a CHR-district user may not generate the Biodiversity extracts', () => {
+    auth.value = chrOnly;
+    renderForm(GENERATABLE_REPORTS.find((r) => r.id === 'biodiversity-extract-block')!);
+
+    expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/don.t have access to generate/i)).toBeInTheDocument();
+  });
+
+  it('a view-only user may still generate an unrestricted checklist report', () => {
+    auth.value = { canEdit: false, canAnyChr: false, isSysAdmin: false, chrDistricts: [] };
+    renderForm(pdfDefinition);
+
+    expect(screen.getByRole('button', { name: /Generate PDF/ })).toBeInTheDocument();
+  });
+
+  it('a view-only user may not generate the CHR data extract', () => {
+    auth.value = { canEdit: false, canAnyChr: false, isSysAdmin: false, chrDistricts: [] };
+    renderForm(csvDefinition);
+
+    expect(screen.getByText(/don.t have access to generate/i)).toBeInTheDocument();
+  });
+});

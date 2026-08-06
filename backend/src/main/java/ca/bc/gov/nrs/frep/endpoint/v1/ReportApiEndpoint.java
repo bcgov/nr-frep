@@ -1,6 +1,5 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
-import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -56,8 +55,20 @@ public interface ReportApiEndpoint {
       @RequestParam(name = "evaluationDateFrom", required = false) String evaluationDateFrom,
       @RequestParam(name = "evaluationDateTo", required = false) String evaluationDateTo);
 
-  /** JasperReports template reports (PDF/CSV). */
-  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  /**
+   * JasperReports template reports (PDF/CSV) — Checklist Completion Status and Checklist Rejection
+   * Reason. These are <em>not</em> protocol- or district-scoped: any authenticated user may run them
+   * (the baseline {@code authenticated()} rule in
+   * {@link ca.bc.gov.nrs.frep.security.ApiAuthorizationCustomizer} still applies), matching the
+   * Reports screen, which shows them to everyone. They previously required
+   * {@code FrepAuthorities.CONTENT_EDIT}, so a view-only user or a CHR district editor saw both
+   * reports listed and got a 403 on generate.
+   *
+   * <p>{@code reportId} shares one id space with the CSV data extracts, but this endpoint serves only
+   * Jasper definitions ({@code procName == null}); {@code ReportService} rejects the rest so a CSV
+   * extract can't reach it and bypass {@link ca.bc.gov.nrs.frep.security.ReportAuthorizer}, which
+   * gates {@code chr-data-extract} on the caller's district.
+   */
   @PostMapping("/{reportId}")
   ResponseEntity<byte[]> generateReport(
       @PathVariable("reportId") String reportId,

@@ -17,6 +17,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import ca.bc.gov.nrs.frep.entity.ChrChecklistAttachment;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
+import java.time.Instant;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
@@ -354,5 +356,48 @@ class ChrChecklistPersistenceServiceTest {
     service.deletePhoto(1001L, photo.getChrchecklistAttachmentId(), "IDIR\\tester");
 
     verify(objectStorage).deleteObject("1001-77.jpg");
+  }
+
+  // ── Photo ordering ───────────────────────────────────────────────────
+  //
+  // Newest first: with ascending order a newly uploaded photo lands on the last page, so a user on
+  // page 1 sees nothing change after uploading. The mapped collection is an unordered Set, so this
+  // ordering is imposed here and is what the pager slices.
+
+  private ChrChecklistAttachment photoAddedAt(long id, String isoInstant) {
+    ChrChecklistAttachment photo = new ChrChecklistAttachment();
+    photo.setChrchecklistAttachmentId(id);
+    photo.setFileName("p" + id + ".JPG");
+    photo.setMimeTypeCode("JPG");
+    photo.setDescription("Photo " + id);
+    photo.setEntryTimestamp(Date.from(Instant.parse(isoInstant)));
+    photo.setChrChecklist(checklist);
+    checklist.getChrChecklistAttachments().add(photo);
+    return photo;
+  }
+
+  @Test
+  void photoMetadataIsNewestFirst() {
+    photoAddedAt(1L, "2026-08-01T10:00:00Z");
+    photoAddedAt(2L, "2026-08-03T10:00:00Z");
+    photoAddedAt(3L, "2026-08-02T10:00:00Z");
+
+    List<Picture> photos = service.getPhotoMetadata(1001L);
+
+    assertEquals(List.of("2", "3", "1"), photos.stream().map(Picture::getId).toList());
+  }
+
+  @Test
+  void photosAddedInTheSameSecondFallBackToIdDescending() {
+    // entry_timestamp is an Oracle DATE (second precision), so same-second photos are common. Without
+    // a tiebreaker the page boundary would be non-deterministic: a row could repeat on one page and
+    // vanish from another.
+    photoAddedAt(10L, "2026-08-01T10:00:00Z");
+    photoAddedAt(12L, "2026-08-01T10:00:00Z");
+    photoAddedAt(11L, "2026-08-01T10:00:00Z");
+
+    List<Picture> photos = service.getPhotoMetadata(1001L);
+
+    assertEquals(List.of("12", "11", "10"), photos.stream().map(Picture::getId).toList());
   }
 }

@@ -931,9 +931,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   }
 
   /**
-   * List attachment metadata for a riparian checklist via {@code FREP_CHECKLIST_ATTACHMENTS.GET}
-   * (24 params: tombstone 1-18, resource_value_id IN @19, checklist_id IN @20, type @21, status
-   * @22, error @23, results cursor @24). Cursor columns per the legacy DataManager.
+   * One page of attachment metadata, newest first.
+   *
+   * <p>Descending by creation time is a UX decision: ascending puts a newly uploaded attachment on
+   * the <em>last</em> page, so a user on page 1 sees nothing change after uploading. The id is a
+   * tiebreaker because {@code entry_timestamp} is an Oracle DATE (second precision) — attachments
+   * added in the same second would otherwise page non-deterministically.
    */
   private static final String BIO_ATTACHMENTS_PAGE = """
       SELECT bca.biodiversity_chklst_attach_id AS chklst_attach_id
@@ -942,7 +945,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
            , bca.mime_type_code
         FROM THE.biodiversity_chklst_attach bca
        WHERE bca.biodiversity_checklist_id = ?
-       ORDER BY bca.biodiversity_chklst_attach_id
+       ORDER BY bca.entry_timestamp DESC, bca.biodiversity_chklst_attach_id DESC
       OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
       """;
 

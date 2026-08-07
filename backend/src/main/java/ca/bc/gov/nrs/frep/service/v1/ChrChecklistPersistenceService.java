@@ -511,19 +511,25 @@ public class ChrChecklistPersistenceService {
     if (chrChecklist == null) {
       return List.of();
     }
-    // Deterministic order: creation time, id as tiebreaker. The tiebreaker is required, not
-    // cosmetic — entry_timestamp is an Oracle DATE (second precision), so photos added in the same
-    // second would otherwise page non-deterministically, repeating on one page and vanishing from
-    // another. The mapped collection is an unordered Set, so the sort happens here.
+    // Newest first, by creation time, with the id as tiebreaker.
+    //
+    // Descending is a UX decision, not an arbitrary one: with ascending order a newly uploaded photo
+    // lands on the *last* page, so a user sitting on page 1 sees nothing change after uploading and
+    // reasonably concludes it failed. Newest-first puts it where they are looking.
+    //
+    // The tiebreaker is required, not cosmetic — entry_timestamp is an Oracle DATE (second
+    // precision), so photos added in the same second would otherwise page non-deterministically,
+    // repeating on one page and vanishing from another. The mapped collection is an unordered Set,
+    // so the sort happens here rather than in a query.
     List<ChrChecklistAttachment> ordered = new ArrayList<>();
     for (Object candidate : chrChecklist.getChrChecklistAttachments()) {
       ordered.add((ChrChecklistAttachment) candidate);
     }
     ordered.sort(Comparator
         .comparing(ChrChecklistAttachment::getEntryTimestamp,
-            Comparator.nullsFirst(Comparator.naturalOrder()))
+            Comparator.nullsLast(Comparator.reverseOrder()))
         .thenComparing(ChrChecklistAttachment::getChrchecklistAttachmentId,
-            Comparator.nullsFirst(Comparator.naturalOrder())));
+            Comparator.nullsLast(Comparator.reverseOrder())));
 
     List<Picture> pictures = new ArrayList<>();
     for (ChrChecklistAttachment attachment : ordered) {

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChrChecklistPage from './index';
 
@@ -18,9 +18,12 @@ vi.mock('@/services/APIs', () => ({
       saveBlockSummary: vi.fn(),
       saveContacts: vi.fn(),
       saveFeatures: vi.fn(),
+      getPhotos: vi.fn(),
+      getPhotoContent: vi.fn(),
       addPhoto: vi.fn(),
       deletePhoto: vi.fn(),
       submit: vi.fn(),
+      unsubmit: vi.fn(),
       activate: vi.fn(),
     },
   },
@@ -59,6 +62,7 @@ const api = API.chrChecklist as unknown as {
   getChecklist: ReturnType<typeof vi.fn>;
   save: ReturnType<typeof vi.fn>;
   saveOpening: ReturnType<typeof vi.fn>;
+  getPhotos: ReturnType<typeof vi.fn>;
   activate: ReturnType<typeof vi.fn>;
   submit: ReturnType<typeof vi.fn>;
 };
@@ -92,6 +96,12 @@ const sampleChecklist = {
 };
 
 describe('ChrChecklistPage', () => {
+  // The Photos tab loads its own page of metadata as soon as an online checklist is available, so
+  // every test needs this to resolve — even the ones that never touch photos.
+  beforeEach(() => {
+    api.getPhotos.mockResolvedValue({ photos: [], totalCount: 0 });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

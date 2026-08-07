@@ -2,7 +2,9 @@ import { expect } from 'vitest';
 
 expect.extend({
   toContainText(received: HTMLElement, expected: string) {
-    const pass = received.textContent?.includes(expected);
+    // Vitest's matcher contract requires a definite boolean; textContent is nullable, so an element
+    // with no text is a plain "does not contain" rather than an undefined result.
+    const pass = received.textContent?.includes(expected) ?? false;
     return {
       pass,
       message: () =>

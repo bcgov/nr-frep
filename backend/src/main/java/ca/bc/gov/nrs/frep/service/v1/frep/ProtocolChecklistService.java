@@ -20,6 +20,7 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
@@ -68,6 +69,7 @@ public class ProtocolChecklistService {
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
   private final VirusScanner virusScanner;
+  private final ObjectStorageService objectStorage;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
@@ -75,7 +77,8 @@ public class ProtocolChecklistService {
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
       FamUserDirectoryService famUserDirectoryService,
-      VirusScanner virusScanner
+      VirusScanner virusScanner,
+      ObjectStorageService objectStorage
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
@@ -83,6 +86,7 @@ public class ProtocolChecklistService {
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
     this.virusScanner = virusScanner;
+    this.objectStorage = objectStorage;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -705,9 +709,34 @@ public class ProtocolChecklistService {
         loggedUserHelper.getLoggedUserId());
   }
 
-  public List<AttachmentRow> getAttachments(String protocol, String checklistId) {
-    return writeRepository.getAttachments(checklistId, checklistRepository.resolveResourceType(checklistId));
+  /**
+   * One page of attachment metadata, with each row's real size read from object storage.
+   *
+   * <p>The size cannot come from the database: {@code file_size} there is derived from the Oracle
+   * BLOB, which Biodiversity deliberately leaves empty, so it always reads 0.00. A HEAD per row on
+   * the page is exact and bounded; a prefix listing is not an option because the keys are flat
+   * ({@code slr/<id>}) and would sweep every checklist's attachments.
+   */
+  public AttachmentPage getAttachments(String protocol, String checklistId, int page, int size) {
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    List<AttachmentRow> rows = writeRepository.getAttachments(checklistId, resourceType, page, size);
+    List<AttachmentRow> withSizes = rows.stream()
+        .map(row -> {
+          long bytes = objectStorage.getObjectSize(bioObjectKey(row.checklistAttachmentId()));
+          return new AttachmentRow(row.checklistAttachmentId(), row.fileName(), row.description(),
+              row.mimeTypeCode(), bytes < 0 ? null : String.valueOf(bytes));
+        })
+        .toList();
+    return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
+
+  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  private static String bioObjectKey(String attachmentId) {
+    return "slr/" + attachmentId;
+  }
+
+  /** A page of attachment metadata plus the total, for the pager. */
+  public record AttachmentPage(List<AttachmentRow> attachments, int totalCount) {}
 
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {

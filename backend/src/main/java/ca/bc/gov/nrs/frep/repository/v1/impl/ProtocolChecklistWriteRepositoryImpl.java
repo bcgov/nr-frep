@@ -935,29 +935,59 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
    * (24 params: tombstone 1-18, resource_value_id IN @19, checklist_id IN @20, type @21, status
    * @22, error @23, results cursor @24). Cursor columns per the legacy DataManager.
    */
-  public List<AttachmentRow> getAttachments(String checklistId, String resourceType) {
-    String resourceValueId = resolveResourceValueId(checklistId, resourceType);
-    return executeCall(
-        callSql(ATTACH_PKG, "GET", 24),
-        cs -> {
-          for (int i = 1; i <= 18; i++) {
-            cs.registerOutParameter(i, Types.VARCHAR);
-          }
-          cs.setString(19, resourceValueId);
-          cs.setString(20, checklistId);
-          cs.registerOutParameter(21, Types.VARCHAR);
-          cs.registerOutParameter(22, Types.VARCHAR);
-          cs.registerOutParameter(23, Types.VARCHAR);
-          registerOutCursor(cs, 24);
-        },
-        cs -> {
-          throwIfError(ATTACH_PKG, "GET", cs.getString(23));
-          return readCursor(cs, 24, rs -> new AttachmentRow(
-              rs.getString("chklst_attach_id"), rs.getString("file_name"),
-              rs.getString("description"), rs.getString("MIME_TYPE_CODE"),
-              rs.getString("file_size")));
-        });
+  private static final String BIO_ATTACHMENTS_PAGE = """
+      SELECT bca.biodiversity_chklst_attach_id AS chklst_attach_id
+           , bca.file_name
+           , bca.description
+           , bca.mime_type_code
+        FROM THE.biodiversity_chklst_attach bca
+       WHERE bca.biodiversity_checklist_id = ?
+       ORDER BY bca.biodiversity_chklst_attach_id
+      OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+      """;
+
+  private static final String BIO_ATTACHMENTS_COUNT =
+      "SELECT COUNT(*) FROM THE.biodiversity_chklst_attach WHERE biodiversity_checklist_id = ?";
+
+  /**
+   * One page of a Biodiversity checklist's attachment metadata, read directly rather than through
+   * {@code FREP_CHECKLIST_ATTACHMENTS.GET}.
+   *
+   * <p>The package cursor has no paging and returns the whole set, and it joins
+   * {@code biodiversity_attach_content} solely to compute {@code file_size} from
+   * {@code DBMS_LOB.getlength}. That column is useless to us — Biodiversity bytes live in object
+   * storage and the BLOB is deliberately left empty, so it always reads 0.00 — and the join is an
+   * inner one, which would silently hide any attachment row lacking a content row. Dropping both
+   * leaves a single-table read; size is filled from object storage by the service.
+   *
+   * <p>Requires SELECT on {@code THE.BIODIVERSITY_CHKLST_ATTACH} (the proc ran with definer rights
+   * and needed no such grant); confirmed present 2026-08-06.
+   */
+  @Override
+  public List<AttachmentRow> getAttachments(String checklistId, String resourceType, int page, int size) {
+    return jdbcTemplate.query(
+        BIO_ATTACHMENTS_PAGE,
+        (rs, n) -> new AttachmentRow(
+            trimNumericId(rs.getString("chklst_attach_id")), rs.getString("file_name"),
+            rs.getString("description"), rs.getString("mime_type_code"), null),
+        Long.valueOf(checklistId), (long) page * size, size);
   }
+
+  /** Oracle JDBC renders a NUMBER id as e.g. "77.0"; the object key and the API use "77". */
+  private static String trimNumericId(String value) {
+    if (value == null) {
+      return null;
+    }
+    return value.endsWith(".0") ? value.substring(0, value.length() - 2) : value;
+  }
+
+  @Override
+  public int countAttachments(String checklistId, String resourceType) {
+    Integer count = jdbcTemplate.queryForObject(
+        BIO_ATTACHMENTS_COUNT, Integer.class, Long.valueOf(checklistId));
+    return count == null ? 0 : count;
+  }
+
 
   /**
    * Download an attachment's bytes. Metadata (file name, mime) always comes from {@code GET_BLOB}; for

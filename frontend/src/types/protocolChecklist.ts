@@ -228,6 +228,12 @@ export type RiparianNotes = {
 };
 
 /** Metadata for one checklist attachment (legacy Attachments tab). */
+/** One page of attachment metadata; bytes are fetched separately. */
+export type AttachmentPageResponse = {
+  attachments: AttachmentRow[];
+  totalCount: number;
+};
+
 export type AttachmentRow = {
   checklistAttachmentId?: string;
   fileName?: string;

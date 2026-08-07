@@ -5,8 +5,14 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import ca.bc.gov.nrs.frep.endpoint.v1.ChrChecklistApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService;
 import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService.ChrSubmitValidationException;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PhotoPageResponse;
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Cultural Heritage (CHR) checklist API. Mappings declared on {@link ChrChecklistApiEndpoint}.
@@ -51,8 +57,33 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
   }
 
   @Override
-  public ResponseEntity<CheckList> savePhotos(long id, CheckList checklist) {
-    return ResponseEntity.ok(chrChecklistService.savePicturesSection(checklist));
+  public ResponseEntity<Void> addPhoto(
+      long id, MultipartFile file, String description, String date, String deviceCheckoutGuid) {
+    chrChecklistService.addPhoto(id, file, description, date, deviceCheckoutGuid);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<PhotoPageResponse> getPhotos(long id, int page, int size) {
+    ChrChecklistService.PhotoPage result = chrChecklistService.getPhotos(id, page, size);
+    return ResponseEntity.ok(new PhotoPageResponse(result.photos(), result.totalCount()));
+  }
+
+  @Override
+  public ResponseEntity<byte[]> getPhotoContent(long id, long photoId) {
+    ChrChecklistService.PhotoContent photo = chrChecklistService.getPhotoContent(id, photoId);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+            .filename(photo.fileName() == null ? "photo" : photo.fileName(), StandardCharsets.UTF_8)
+            .build().toString())
+        .contentType(MediaType.parseMediaType(photo.mimeType()))
+        .body(photo.content());
+  }
+
+  @Override
+  public ResponseEntity<Void> deletePhoto(long id, long photoId, String deviceCheckoutGuid) {
+    chrChecklistService.deletePhoto(id, photoId, deviceCheckoutGuid);
+    return ResponseEntity.noContent().build();
   }
 
   @Override

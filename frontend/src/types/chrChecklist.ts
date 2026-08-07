@@ -310,3 +310,9 @@ export const CHR_STATUS = {
   SUBMITTED: 'SUB',
   READ_ONLY_OFFLINE: 'RDO',
 } as const;
+
+/** One page of CHR photo metadata; bytes are fetched per photo from the content endpoint. */
+export type PhotoPageResponse = {
+  photos: Picture[];
+  totalCount: number;
+};

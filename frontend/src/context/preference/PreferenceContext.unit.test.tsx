@@ -3,6 +3,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
+import type { Mock } from 'vitest';
+
 import { PreferenceProvider } from './PreferenceProvider';
 import { usePreference } from './usePreference';
 import { loadUserPreference, saveUserPreference } from './utils';
@@ -53,16 +55,16 @@ const renderWithProviders = async () => {
 
 describe('PreferenceContext', () => {
   it('provides the default userPreference', async () => {
-    (loadUserPreference as vi.Mock).mockResolvedValue({ theme: 'g10', testData: 'default' });
+    (loadUserPreference as Mock).mockResolvedValue({ theme: 'g10', testData: 'default' });
     await renderWithProviders();
     expect(screen.getByTestId('test-value').textContent).toBe('default');
   });
 
   it('updatePreferences changes the testData', async () => {
-    (loadUserPreference as vi.Mock)
+    (loadUserPreference as Mock)
       .mockResolvedValueOnce({ theme: 'g10', testData: 'default' })
       .mockResolvedValueOnce({ theme: 'g10', testData: 'g100' });
-    (saveUserPreference as vi.Mock).mockResolvedValue({ theme: 'g10', testData: 'g100' });
+    (saveUserPreference as Mock).mockResolvedValue({ theme: 'g10', testData: 'g100' });
     await renderWithProviders();
     expect(screen.getByTestId('test-value').textContent).toBe('default');
     await act(async () => screen.getByText('Set g100').click());

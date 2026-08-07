@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentPageResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
@@ -123,10 +124,17 @@ public interface ProtocolChecklistApiEndpoint {
       @PathVariable String checklistId,
       @RequestBody RiparianNotes notes);
 
+  /**
+   * One page of attachment metadata. Paged so the response can't grow with the attachment count —
+   * there is no per-checklist limit — and so the client fetches a bounded number of thumbnails.
+   */
   @PreAuthorize(FrepAuthorities.FREP_EDIT)
   @GetMapping("/protocol-checklists/{protocol}/{checklistId}/attachments")
-  ResponseEntity<List<AttachmentRow>> getAttachments(
-      @PathVariable String protocol, @PathVariable String checklistId);
+  ResponseEntity<AttachmentPageResponse> getAttachments(
+      @PathVariable String protocol,
+      @PathVariable String checklistId,
+      @RequestParam(name = "page", defaultValue = "0") int page,
+      @RequestParam(name = "size", defaultValue = "10") int size);
 
   @PreAuthorize(FrepAuthorities.FREP_EDIT)
   @GetMapping("/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}/content")

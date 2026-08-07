@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import * as requestModule from './request';
-import { ApiError, type APIConfig, type ApiRequestOptions, type HttpMethod } from './types';
+import {
+  ApiError,
+  HttpClient,
+  type APIConfig,
+  type ApiRequestOptions,
+  type HttpMethod,
+} from './types';
 
 import type { OnCancel } from './CancelablePromise';
 import type { AxiosInstance, AxiosResponse } from 'axios';
@@ -353,3 +359,23 @@ describe('catchErrorCodes', () => {
     expect(() => requestModule.catchErrorCodes(validOptions, result)).not.toThrow();
   });
 });
+
+// Regression: getHeaders deleting Content-Type is not enough on its own. Axios merges instance
+// defaults *beneath* per-request headers, so a default set on the instance survives the delete and
+// is what actually goes on the wire — every multipart upload failed with 415 until the instance
+// stopped declaring one. Asserting on getHeaders' return value cannot catch this; the instance has
+// to be inspected directly.
+describe('HttpClient axios instance', () => {
+  it('declares no default Content-Type, so per-request headers fully control it', () => {
+    const client = new HttpClient({ ...validConfig });
+
+    expect(client.axiosInstance.defaults.headers?.['Content-Type']).toBeUndefined();
+  });
+
+  it('still passes configured headers through', () => {
+    const client = new HttpClient({ ...validConfig, HEADERS: { 'X-Test': '1' } as never });
+
+    expect(client.axiosInstance.defaults.headers?.['X-Test']).toBe('1');
+  });
+});
+

@@ -1,6 +1,6 @@
 import type {
   AttachmentContent,
-  AttachmentRow,
+  AttachmentPageResponse,
   BiodiversityOpening,
   BioPlot,
   BioPlotRow,
@@ -180,11 +180,18 @@ export class ProtocolChecklistService extends HttpClient {
     });
   }
 
-  getAttachments(protocol: string, checklistId: string): CancelablePromise<AttachmentRow[]> {
-    return this.doRequest<AttachmentRow[]>(this.config, {
+  /** One page of attachment metadata. Sizes come from object storage, filled in server-side. */
+  getAttachments(
+    protocol: string,
+    checklistId: string,
+    page = 0,
+    size = 10,
+  ): CancelablePromise<AttachmentPageResponse> {
+    return this.doRequest<AttachmentPageResponse>(this.config, {
       method: 'GET',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments',
       path: { protocol, checklistId },
+      query: { page, size },
     });
   }
 

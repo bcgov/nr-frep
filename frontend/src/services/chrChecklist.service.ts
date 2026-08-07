@@ -1,4 +1,4 @@
-import type { CheckList } from '@/types/chrChecklist';
+import type { PhotoPageResponse, CheckList } from '@/types/chrChecklist';
 
 import { CancelablePromise } from '@/config/api/CancelablePromise';
 import { HttpClient, type APIConfig } from '@/config/api/types';
@@ -61,8 +61,69 @@ export class ChrChecklistService extends HttpClient {
     return this.saveSection('features', checklistId, checkList);
   }
 
-  savePhotos(checklistId: string, checkList: CheckList): CancelablePromise<CheckList> {
-    return this.saveSection('photos', checklistId, checkList);
+  /** One page of photo metadata — no bytes. */
+  getPhotos(checklistId: string, page = 0, size = 10): CancelablePromise<PhotoPageResponse> {
+    return this.doRequest<PhotoPageResponse>(this.config, {
+      method: 'GET',
+      url: '/v1/chr/checklists/{checklistId}/photos',
+      path: { checklistId },
+      query: { page, size },
+    });
+  }
+
+  /**
+   * One photo's stored bytes, as a binary blob. Replaces the base64 that used to ride inside the
+   * checklist GET, so a checklist with many photos no longer builds one enormous response.
+   */
+  getPhotoContent(checklistId: string, photoId: string): CancelablePromise<Blob> {
+    return this.doRequest<Blob>(this.config, {
+      method: 'GET',
+      url: '/v1/chr/checklists/{checklistId}/photos/{photoId}/content',
+      path: { checklistId, photoId },
+      responseType: 'blob',
+    });
+  }
+
+  /**
+   * Attach one photo as `multipart/form-data`. A leaf operation, not a section save: it writes only
+   * the photo, never the checklist, so it does not bump `revisionCount` and cannot conflict with an
+   * in-flight edit on another tab. `mediaType` is deliberately unset so the browser supplies the
+   * multipart boundary. Resolves to `void` (204).
+   */
+  addPhoto(
+    checklistId: string,
+    file: File,
+    description: string,
+    date?: string,
+    deviceCheckoutGuid?: string,
+  ): CancelablePromise<void> {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('description', description);
+    if (date) body.append('date', date);
+    // Only needed while the checklist is checked out (RDO): the offline check-in flush sends it to
+    // prove it holds the checkout, since the RDO → ACT flip happens later in the document save.
+    if (deviceCheckoutGuid) body.append('deviceCheckoutGuid', deviceCheckoutGuid);
+    return this.doRequest<void>(this.config, {
+      method: 'POST',
+      url: '/v1/chr/checklists/{checklistId}/photos',
+      path: { checklistId },
+      body,
+    });
+  }
+
+  /** Remove one photo (row + stored bytes). Resolves to `void` (204). */
+  deletePhoto(
+    checklistId: string,
+    photoId: string,
+    deviceCheckoutGuid?: string,
+  ): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
+      method: 'DELETE',
+      url: '/v1/chr/checklists/{checklistId}/photos/{photoId}',
+      path: { checklistId, photoId },
+      query: deviceCheckoutGuid ? { deviceCheckoutGuid } : undefined,
+    });
   }
 
   /** Submit for review. On validation failure the API responds 400 with a ValidationError[] body. */

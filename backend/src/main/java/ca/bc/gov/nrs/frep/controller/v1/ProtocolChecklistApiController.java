@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentPageResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
@@ -137,8 +138,12 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   }
 
   @Override
-  public ResponseEntity<List<AttachmentRow>> getAttachments(String protocol, String checklistId) {
-    return ResponseEntity.ok(protocolChecklistService.getAttachments(protocol, checklistId));
+  public ResponseEntity<AttachmentPageResponse> getAttachments(
+      String protocol, String checklistId, int page, int size) {
+    ProtocolChecklistService.AttachmentPage result =
+        protocolChecklistService.getAttachments(protocol, checklistId, page, size);
+    return ResponseEntity.ok(
+        new AttachmentPageResponse(result.attachments(), result.totalCount()));
   }
 
   @Override

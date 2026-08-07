@@ -122,7 +122,7 @@ class ApiAuthorizationSecurityTest {
     @Bean(name = "chrAuth")
     ChrChecklistAuthorizer chrAuth(LoggedUserHelper auth) {
       ChrChecklistPersistenceService persistence =
-          new ChrChecklistPersistenceService(null, null) {
+          new ChrChecklistPersistenceService(null) {
             @Override
             public String getChecklistOrgUnitCode(long checklistId) {
               return CHECKLIST_DISTRICT;

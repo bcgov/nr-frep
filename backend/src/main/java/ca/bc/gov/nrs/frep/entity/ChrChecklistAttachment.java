@@ -18,6 +18,16 @@ public class ChrChecklistAttachment implements java.io.Serializable {
 	@JoinColumn(name = "CHR_CHECKLIST_ID")
 	private ChrChecklist chrChecklist;
 
+	/**
+	 * Optional FK to CHR_FEATURE_DETAIL — the feature this photo documents, if any
+	 * (constraint CHCA_CHFD_FK). Mapped as the bare id rather than a {@code @ManyToOne}: only the
+	 * association is carried, so a relation would buy an extra fetch and a lifecycle coupling to
+	 * ChrFeatureDetail for nothing. The referenced feature must belong to the same checklist —
+	 * enforced in ChrChecklistPersistenceService#addPhoto, since the FK alone permits any feature.
+	 */
+	@Column(name = "CHR_FEATURE_ID")
+	private Long chrFeatureId;
+
 	@Column(name = "MIME_TYPE_CODE")
 	private String mimeTypeCode;
 
@@ -64,6 +74,14 @@ public class ChrChecklistAttachment implements java.io.Serializable {
 
 	public void setChrChecklist(ChrChecklist chrChecklist) {
 		this.chrChecklist = chrChecklist;
+	}
+
+	public Long getChrFeatureId() {
+		return chrFeatureId;
+	}
+
+	public void setChrFeatureId(Long chrFeatureId) {
+		this.chrFeatureId = chrFeatureId;
 	}
 
 	public String getMimeTypeCode() {

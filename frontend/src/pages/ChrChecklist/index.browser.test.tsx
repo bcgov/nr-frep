@@ -182,6 +182,129 @@ describe('ChrChecklistPage', () => {
     );
   });
 
+  // ── Offline photos must survive every local write ──────────────────────
+  //
+  // A photo captured offline holds its bytes in the local record and nowhere else until check-in
+  // flushes them. Any local save that drops `pictures` destroys them permanently — which is what the
+  // shared server-payload shape (`pictures: []`) did from three separate call sites.
+
+  const offlineCopyWithAPhoto = () => ({
+    checklistId: '1001',
+    checkList: {
+      ...sampleChecklist,
+      status: 'RDO',
+      pictures: [
+        { description: 'Captured offline', mimeTypeCode: 'image/png', code: 'data:image/png;base64,iVBOR' },
+      ],
+    },
+    dirty: true,
+    deviceCheckoutGuid: 'guid',
+  });
+
+  const savedLocally = () =>
+    (repo.saveLocal.mock.calls.at(-1)?.[0] ?? {}) as { pictures?: unknown[] };
+
+  it('keeps offline photos when a section is saved locally', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(offlineCopyWithAPhoto());
+    repo.saveLocal.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(repo.saveLocal).toHaveBeenCalled());
+    expect(savedLocally().pictures).toHaveLength(1);
+  });
+
+  it('keeps offline photos when Sync changes writes the local copy before uploading', async () => {
+    // The worst of the three: this ran immediately before upload() flushed the photos, so the bytes
+    // were already gone by the time the flush looked for them — and the sync reported success.
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(offlineCopyWithAPhoto());
+    repo.saveLocal.mockResolvedValue(undefined);
+    repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    // Same guid on both sides, so the copy classifies as CURRENT — a stale one hides Sync/Submit.
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+    });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sync changes' }));
+
+    await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
+    expect(savedLocally().pictures).toHaveLength(1);
+  });
+
+  it('drops the local copy after a successful sync', async () => {
+    // A check-in clears the server's checkout guid, so a retained copy can never upload again.
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(offlineCopyWithAPhoto());
+    repo.saveLocal.mockResolvedValue(undefined);
+    repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    repo.remove.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+    });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sync changes' }));
+
+    await waitFor(() => expect(repo.remove).toHaveBeenCalledWith('1001'));
+    // No longer an offline copy: the page is now showing the checked-in server checklist.
+    await waitFor(() => expect(screen.queryByText('Offline copy')).toBeNull());
+  });
+
+  it('keeps the local copy when a sync fails', async () => {
+    // The whole point of removing only on success: a failed check-in must stay retryable, with the
+    // photos still on the device.
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(offlineCopyWithAPhoto());
+    repo.saveLocal.mockResolvedValue(undefined);
+    repo.upload.mockRejectedValue(new Error('conflict'));
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+    });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sync changes' }));
+
+    await waitFor(() => expect(repo.upload).toHaveBeenCalled());
+    expect(repo.remove).not.toHaveBeenCalled();
+    expect(screen.getByText('Offline copy')).toBeTruthy();
+  });
+
+  it('keeps offline photos when Submit checks the copy in first', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(offlineCopyWithAPhoto());
+    repo.saveLocal.mockResolvedValue(undefined);
+    repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    repo.remove.mockResolvedValue(undefined);
+    api.submit.mockResolvedValue({ ...sampleChecklist, status: 'SUB' });
+    api.getChecklist.mockResolvedValue({
+      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+    });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
+    expect(savedLocally().pictures).toHaveLength(1);
+    // The submit payload is a server save, so it still strips them.
+    expect(api.submit.mock.calls[0][1]).toMatchObject({ pictures: [] });
+  });
+
   it('warns when an offline copy has been superseded on the server', async () => {
     useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue({

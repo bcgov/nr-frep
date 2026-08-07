@@ -75,7 +75,7 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
     const file = pictureToFile(picture);
     if (!file) continue;
     await API.chrChecklist.addPhoto(
-      checklistId, file, picture.description ?? '', picture.date, guid);
+      checklistId, file, picture.description ?? '', picture.date, guid, picture.featureId);
   }
 };
 
@@ -166,6 +166,11 @@ export const chrOfflineRepo = {
 
     const payload: CheckList = {
       ...record.checkList,
+      // Stripped here, at the wire, and nowhere earlier. The stored copy must keep its photos until
+      // flushPhotos above has sent them — the local base64 is the only copy of an offline capture.
+      // The save ignores `pictures` anyway, so shipping them would only re-upload every photo's
+      // base64 alongside the document.
+      pictures: [],
       deviceCheckoutGuid: record.deviceCheckoutGuid,
       revisionCount: record.revisionCount,
     };

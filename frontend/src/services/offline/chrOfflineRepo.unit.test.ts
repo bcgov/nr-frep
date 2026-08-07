@@ -143,6 +143,53 @@ describe('chrOfflineRepo', () => {
       expect(order).toEqual(['addPhoto', 'save']);
     });
 
+    it('strips photos from the document payload but only after flushing them', async () => {
+      // Both halves matter. The bytes must reach the photo endpoints, and they must NOT ride along
+      // in the document save (which ignores `pictures` and would just re-upload every base64).
+      const order: string[] = [];
+      api.addPhoto.mockImplementation(() => {
+        order.push('addPhoto');
+        return Promise.resolve();
+      });
+      api.save.mockImplementation((payload: { pictures?: unknown[] }) => {
+        order.push('save');
+        expect(payload.pictures).toEqual([]);
+        return Promise.resolve({ checklistID: '1', revisionCount: '3' });
+      });
+      table.get.mockResolvedValue({
+        checklistId: '1',
+        checkList: { checklistID: '1', pictures: [newPhoto('Captured offline')] },
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      });
+
+      await chrOfflineRepo.upload('1');
+
+      expect(order).toEqual(['addPhoto', 'save']);
+      expect(api.addPhoto).toHaveBeenCalledTimes(1);
+    });
+
+    it('carries the feature a photo documents through the flush', async () => {
+      // The association is set at upload and never edited, so if the flush drops it there is no
+      // later write that could restore it — an offline photo would lose its feature permanently.
+      api.save.mockResolvedValue({ checklistID: '1', revisionCount: '3' });
+      table.get.mockResolvedValue({
+        checklistId: '1',
+        checkList: {
+          checklistID: '1',
+          pictures: [{ ...newPhoto('Photo of feature 3'), featureId: '5001' }],
+        },
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      });
+
+      await chrOfflineRepo.upload('1');
+
+      expect(api.addPhoto.mock.calls[0][5]).toBe('5001');
+    });
+
     it('issues a DELETE for each photo removed offline', async () => {
       api.save.mockResolvedValue({ checklistID: '1', revisionCount: '3' });
       table.get.mockResolvedValue({

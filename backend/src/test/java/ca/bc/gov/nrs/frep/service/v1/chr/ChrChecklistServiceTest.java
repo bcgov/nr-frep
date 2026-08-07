@@ -169,7 +169,7 @@ class ChrChecklistServiceTest {
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
     InvalidParameterException ex = assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, photo, "  ", null, null));
+        () -> service.addPhoto(1001L, photo, "  ", null, null, null));
 
     assertTrue(ex.getMessage().contains("description is required"));
     verifyNoInteractions(virusScanner);
@@ -183,7 +183,7 @@ class ChrChecklistServiceTest {
         new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[] {1, 2, 3});
 
     InvalidParameterException ex = assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, notAnImage, "A description", null, null));
+        () -> service.addPhoto(1001L, notAnImage, "A description", null, null, null));
 
     assertTrue(ex.getMessage().contains("Only image files"));
   }
@@ -195,7 +195,7 @@ class ChrChecklistServiceTest {
     MockMultipartFile empty = new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[0]);
 
     assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, empty, "A description", null, null));
+        () -> service.addPhoto(1001L, empty, "A description", null, null, null));
     verifyNoInteractions(virusScanner);
   }
 
@@ -207,12 +207,12 @@ class ChrChecklistServiceTest {
     byte[] content = {1, 2, 3};
     MockMultipartFile photo = new MockMultipartFile("file", "site.jpg", "image/jpeg", content);
 
-    service.addPhoto(1001L, photo, " A description ", "2026-05-01", null);
+    service.addPhoto(1001L, photo, " A description ", "2026-05-01", 42L, null);
 
     InOrder order = inOrder(virusScanner, persistenceService);
     order.verify(virusScanner).scanOrThrow(content, "site.jpg");
     order.verify(persistenceService).addPhoto(
-        eq(1001L), eq("site.jpg"), eq("A description"), eq("2026-05-01"), eq("image/jpeg"),
+        eq(1001L), eq("site.jpg"), eq("A description"), eq("2026-05-01"), eq(42L), eq("image/jpeg"),
         eq(content), eq("IDIR\\tester"));
   }
 
@@ -230,7 +230,7 @@ class ChrChecklistServiceTest {
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
     assertDoesNotThrow(
-        () -> service.addPhoto(1001L, photo, "A description", null, guid.toString()));
+        () -> service.addPhoto(1001L, photo, "A description", null, null, guid.toString()));
     assertDoesNotThrow(() -> service.deletePhoto(1001L, 7L, guid.toString()));
   }
 
@@ -246,7 +246,7 @@ class ChrChecklistServiceTest {
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
     InvalidParameterException wrongToken = assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, photo, "A description", null, "not-my-checkout"));
+        () -> service.addPhoto(1001L, photo, "A description", null, null, "not-my-checkout"));
     assertTrue(wrongToken.getMessage().contains("checked out on another device"));
 
     // A caller with no token at all is refused the same way.
@@ -265,7 +265,7 @@ class ChrChecklistServiceTest {
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
     assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, photo, "A description", null, null));
+        () -> service.addPhoto(1001L, photo, "A description", null, null, null));
     assertThrows(InvalidParameterException.class, () -> service.deletePhoto(1001L, 7L, null));
     verifyNoInteractions(persistenceService);
   }
@@ -339,7 +339,7 @@ class ChrChecklistServiceTest {
 
     // 1. delete a photo removed offline, 2. upload one captured offline — both still RDO
     assertDoesNotThrow(() -> service.deletePhoto(1001L, 7L, guid.toString()));
-    assertDoesNotThrow(() -> service.addPhoto(1001L, photo, "Captured offline", null, guid.toString()));
+    assertDoesNotThrow(() -> service.addPhoto(1001L, photo, "Captured offline", null, null, guid.toString()));
 
     // 3. the document save then performs the RDO -> ACT check-in
     CheckList payload = new CheckList();

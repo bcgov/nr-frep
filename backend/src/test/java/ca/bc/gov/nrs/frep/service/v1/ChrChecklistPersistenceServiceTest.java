@@ -3,6 +3,7 @@ package ca.bc.gov.nrs.frep.service.v1;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,6 +32,7 @@ import ca.bc.gov.nrs.frep.entity.ChrFeatureTypeXref;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValue;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
@@ -324,7 +326,7 @@ class ChrChecklistPersistenceServiceTest {
     checklist.setUpdateTimestamp(before);
     checklist.setUpdateUserid("ORIGINAL");
 
-    service.addPhoto(1001L, "site.jpg", "A description", null, "image/jpeg",
+    service.addPhoto(1001L, "site.jpg", "A description", null, null, "image/jpeg",
         new byte[] {1, 2, 3}, "IDIR\\tester");
 
     assertEquals(before, checklist.getUpdateTimestamp(),
@@ -385,6 +387,97 @@ class ChrChecklistPersistenceServiceTest {
     List<Picture> photos = service.getPhotoMetadata(1001L);
 
     assertEquals(List.of("2", "3", "1"), photos.stream().map(Picture::getId).toList());
+  }
+
+  // ── The photo → feature association (CHR_FEATURE_ID) ─────────────────
+  //
+  // An optional FK to CHR_FEATURE_DETAIL: which feature the photo documents. Written once at upload
+  // and read back with the metadata; there is no edit path, which is why photo rows need no
+  // optimistic lock.
+
+  private ChrFeatureIdentity featureOnTheChecklist(long featureId, String label) {
+    ChrFeatureIdentity feature = new ChrFeatureIdentity();
+    feature.setChrFeatureId(featureId);
+    feature.setFeatureLabel(label);
+    feature.setChrChecklist(checklist);
+    checklist.getChrFeatureIdentities().add(feature);
+    return feature;
+  }
+
+  @Test
+  void addPhotoRecordsTheFeatureItDocuments() {
+    featureOnTheChecklist(5001L, "3");
+
+    service.addPhoto(1001L, "site.jpg", "A description", null, 5001L, "image/jpeg",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = persisted.stream()
+        .filter(ChrChecklistAttachment.class::isInstance)
+        .map(ChrChecklistAttachment.class::cast)
+        .findFirst().orElseThrow();
+    assertEquals(5001L, stored.getChrFeatureId());
+  }
+
+  @Test
+  void addPhotoLeavesTheFeatureUnsetWhenNoneIsGiven() {
+    // The association is optional — the column is nullable and the upload UI need not supply one.
+    service.addPhoto(1001L, "site.jpg", "A description", null, null, "image/jpeg",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = persisted.stream()
+        .filter(ChrChecklistAttachment.class::isInstance)
+        .map(ChrChecklistAttachment.class::cast)
+        .findFirst().orElseThrow();
+    assertNull(stored.getChrFeatureId());
+  }
+
+  @Test
+  void addPhotoRejectsAFeatureBelongingToAnotherChecklist() {
+    // The FK is satisfied by any existing feature, so without this check a photo could be hung off
+    // another checklist's feature. Nothing may be persisted or written to object storage.
+    featureOnTheChecklist(5001L, "3");
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, "site.jpg", "A description", null, 9999L, "image/jpeg",
+            new byte[] {1, 2, 3}, "IDIR\\tester"));
+
+    assertTrue(ex.getMessage().contains("9999"));
+    verify(entityManager, never()).persist(any(ChrChecklistAttachment.class));
+    verifyNoInteractions(objectStorage);
+  }
+
+  @Test
+  void photoMetadataCarriesTheFeatureIdAndItsLabel() {
+    featureOnTheChecklist(5001L, "3");
+    photoAddedAt(1L, "2026-08-01T10:00:00Z").setChrFeatureId(5001L);
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertEquals("5001", picture.getFeatureId());
+    assertEquals("3", picture.getFeatureLabel(),
+        "the label is resolved on read so a client can name the feature without a second lookup");
+  }
+
+  @Test
+  void photoMetadataOmitsTheFeatureWhenThePhotoHasNone() {
+    photoAddedAt(1L, "2026-08-01T10:00:00Z");
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertNull(picture.getFeatureId());
+    assertNull(picture.getFeatureLabel());
+  }
+
+  @Test
+  void photoMetadataKeepsTheFeatureIdWhenTheFeatureIsGone() {
+    // Deleting a feature does not clear the photo's column, so the id must still round-trip; only
+    // the label is unresolvable.
+    photoAddedAt(1L, "2026-08-01T10:00:00Z").setChrFeatureId(5001L);
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertEquals("5001", picture.getFeatureId());
+    assertNull(picture.getFeatureLabel());
   }
 
   @Test

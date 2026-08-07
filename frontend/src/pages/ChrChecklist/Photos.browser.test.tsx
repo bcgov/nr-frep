@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -49,6 +49,74 @@ describe('Photos display', () => {
     );
     const img = screen.getByAltText('cam') as HTMLImageElement;
     expect(img.getAttribute('src')).toBe('data:image/png;base64,XYZ');
+  });
+
+  // ── The per-photo content fetch ──────────────────────────────────────
+  //
+  // These are the largest responses in the app, so a duplicate round is real bytes. The guard has to
+  // be a ref: `fetched` state only lands after the response, so anything that re-renders during the
+  // in-flight window would see the photo as un-fetched and request it again.
+
+  const serverPhoto = (id: string) => ({ id, description: `photo ${id}`, mimeTypeCode: 'image/png' });
+
+  it('fetches each photo exactly once', async () => {
+    const fetchContent = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+
+    render(
+      <Photos
+        {...baseProps}
+        fetchContent={fetchContent}
+        totalCount={2}
+        pictures={[serverPhoto('91'), serverPhoto('92')]}
+      />,
+    );
+
+    await waitFor(() => expect(fetchContent).toHaveBeenCalledTimes(2));
+    expect(fetchContent.mock.calls.map((c) => c[0]).sort()).toEqual(['91', '92']);
+  });
+
+  it('does not re-request in-flight photos when the parent re-renders', async () => {
+    // The real trigger: `fetchContent` was an inline arrow in the parent's JSX, so every render gave
+    // the effect a new dependency identity and started another round before the first had resolved.
+    let release: (blob: Blob) => void = () => {};
+    const spy = vi
+      .fn()
+      .mockReturnValue(new Promise<Blob>((resolve) => { release = resolve; }));
+    // Wrapped in a fresh arrow each render, exactly as the parent's JSX used to do: the identity
+    // changes every time, but every call funnels to the one spy so a refetch is visible.
+    const { rerender } = render(
+      <Photos {...baseProps} fetchContent={(pid) => spy(pid)} totalCount={1} pictures={[serverPhoto('91')]} />,
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <Photos {...baseProps} fetchContent={(pid) => spy(pid)} totalCount={1} pictures={[serverPhoto('91')]} />,
+    );
+    release(new Blob(['x'], { type: 'image/png' }));
+
+    // The in-flight result must still land — the request is already paid for.
+    await waitFor(() => expect(screen.getByAltText('photo 91')).toBeTruthy());
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a photo whose fetch failed', async () => {
+    // The in-flight guard must not become a permanent block: a failed photo has no bytes to show,
+    // so a later render has to be able to ask again.
+    const fetchContent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+
+    const { rerender } = render(
+      <Photos {...baseProps} fetchContent={fetchContent} totalCount={1} pictures={[serverPhoto('91')]} />,
+    );
+    await waitFor(() => expect(fetchContent).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <Photos {...baseProps} fetchContent={fetchContent} totalCount={1} pictures={[serverPhoto('91')]} />,
+    );
+
+    await waitFor(() => expect(fetchContent).toHaveBeenCalledTimes(2));
   });
 
   it('marks Description required and blocks upload without one', async () => {

@@ -90,12 +90,18 @@ export class ChrChecklistService extends HttpClient {
    * in-flight edit on another tab. `mediaType` is deliberately unset so the browser supplies the
    * multipart boundary. Resolves to `void` (204).
    */
+  /**
+   * `featureId` is last rather than in the server's parameter order (`date`, `featureId`,
+   * `deviceCheckoutGuid`) deliberately: both are optional strings, so slotting it before the guid
+   * would let an existing five-argument call pass the guid as the feature id and still compile.
+   */
   addPhoto(
     checklistId: string,
     file: File,
     description: string,
     date?: string,
     deviceCheckoutGuid?: string,
+    featureId?: string,
   ): CancelablePromise<void> {
     const body = new FormData();
     body.append('file', file);
@@ -104,6 +110,8 @@ export class ChrChecklistService extends HttpClient {
     // Only needed while the checklist is checked out (RDO): the offline check-in flush sends it to
     // prove it holds the checkout, since the RDO → ACT flip happens later in the document save.
     if (deviceCheckoutGuid) body.append('deviceCheckoutGuid', deviceCheckoutGuid);
+    // Which feature the photo documents. Write-once, at upload — there is no metadata-edit flow.
+    if (featureId) body.append('featureId', featureId);
     return this.doRequest<void>(this.config, {
       method: 'POST',
       url: '/v1/chr/checklists/{checklistId}/photos',

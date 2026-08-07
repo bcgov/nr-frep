@@ -142,17 +142,20 @@ public class ChrChecklistService {
    * invalidates a client's in-flight checklist edit. It does still require the checklist to be
    * editable — the status check that {@code saveSection} would have applied is enforced here, since
    * nothing else guards these endpoints.
+   *
+   * <p>{@code featureId} is optional: set once, at upload, to record which feature the photo
+   * documents. The persistence layer rejects a feature that belongs to another checklist.
    */
   @Transactional
   public void addPhoto(long checklistId, MultipartFile file, String description, String fileDate,
-      String deviceCheckoutGuid) {
+      Long featureId, String deviceCheckoutGuid) {
     assertPhotoEditable(checklistId, deviceCheckoutGuid);
     validateNewPhoto(file, description);
     byte[] content = readBytes(file);
     // Scan before anything is persisted — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(content, file.getOriginalFilename());
     persistenceService.addPhoto(
-        checklistId, file.getOriginalFilename(), description.trim(), fileDate,
+        checklistId, file.getOriginalFilename(), description.trim(), fileDate, featureId,
         file.getContentType(), content, loggedUserHelper.getLoggedUserId());
   }
 

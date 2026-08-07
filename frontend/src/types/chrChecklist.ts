@@ -25,6 +25,8 @@ export type Picture = {
   description?: string;
   code?: string; // base64 (no data-URL prefix on save)
   mimeTypeCode?: string;
+  /** The feature this photo documents, if any. Set once at upload; the server resolves the label. */
+  featureId?: string;
   featureLabel?: string;
   fileName?: string;
   checklistId?: string;

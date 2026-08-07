@@ -68,6 +68,10 @@ public interface ChrChecklistApiEndpoint {
    * offline check-in flush sends it to prove it holds the checkout. Ignored when the checklist is
    * ACT.
    *
+   * <p>{@code featureId} is optional and records which of the checklist's features the photo
+   * documents. It is write-once, set here at upload: there is no photo metadata-edit flow, which is
+   * also why photo rows carry no optimistic lock.
+   *
    * <p>{@code id} must stay named {@code id} and typed {@code long}: the {@code @PreAuthorize}
    * expression binds {@code #id} by parameter name, and {@link ChrChecklistAuthorizer} has a second
    * overload taking a {@code CheckList} that falls back to the coarse "any CHR district" check —
@@ -80,6 +84,7 @@ public interface ChrChecklistApiEndpoint {
       @RequestParam("file") MultipartFile file,
       @RequestParam("description") String description,
       @RequestParam(name = "date", required = false) String date,
+      @RequestParam(name = "featureId", required = false) Long featureId,
       @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
 
   /**

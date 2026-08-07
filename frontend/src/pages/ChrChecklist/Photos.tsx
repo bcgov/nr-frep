@@ -140,37 +140,57 @@ const Photos: FC<{
   // so a long session paging through photos doesn't leak them.
   const [fetched, setFetched] = useState<Record<string, string>>({});
 
+  // Ids already requested. A ref, not the `fetched` state, because state lands only after the
+  // response: any render during the in-flight window would otherwise see an id as un-fetched and
+  // request it again. Photos are the largest responses in the app, so a duplicate round is real
+  // bytes, not just a stray line in the network tab. Refs survive StrictMode's development-only
+  // remount, so this also stops that from doubling every fetch.
+  const requested = useRef<Set<string>>(new Set());
+  // Every object URL created here, so unmount can revoke all of them. Reading `fetched` from an
+  // unmount-only effect closes over its first-render value ({}) and revokes nothing.
+  const createdUrls = useRef<string[]>([]);
+  const unmounted = useRef(false);
+
   useEffect(() => {
-    let cancelled = false;
-    const pending = pictures.filter((p) => p.id && !p.code && !fetched[p.id]);
-    if (pending.length === 0) return undefined;
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+      createdUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      createdUrls.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    const pending = pictures.filter((p) => p.id && !p.code && !requested.current.has(p.id));
+    if (pending.length === 0) return;
+    pending.forEach((p) => requested.current.add(p.id as string));
+
     void Promise.all(
       pending.map(async (picture) => {
+        const photoId = picture.id as string;
         try {
-          const blob = await fetchContent(picture.id as string);
-          return [picture.id as string, URL.createObjectURL(blob)] as [string, string];
+          const blob = await fetchContent(photoId);
+          const url = URL.createObjectURL(blob);
+          createdUrls.current.push(url);
+          return [photoId, url] as [string, string];
         } catch {
-          return null; // one unreadable photo must not blank the whole tab
+          // Drop the claim so a later render can retry; one unreadable photo must not blank the tab.
+          requested.current.delete(photoId);
+          return null;
         }
       }),
     ).then((entries) => {
-      if (cancelled) return;
       const loaded = entries.filter((e): e is [string, string] => e !== null);
+      // Deliberately NOT cancelled on a dependency change. The request is already paid for and the
+      // ref stops it being reissued, so discarding the result here would leave the photo permanently
+      // blank — only an unmount is a reason to drop it.
+      if (unmounted.current) {
+        loaded.forEach(([, url]) => URL.revokeObjectURL(url));
+        return;
+      }
       if (loaded.length > 0) setFetched((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [pictures, fetched, fetchContent]);
-
-  useEffect(
-    () => () => {
-      Object.values(fetched).forEach((url) => URL.revokeObjectURL(url));
-    },
-    // Intentionally on unmount only; revoking on every change would break images still rendered.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  }, [pictures, fetchContent]);
 
   /** A photo's src: its own bytes when it has them, otherwise the fetched object URL. */
   const resolveSrc = (picture: Picture): string | undefined =>

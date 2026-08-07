@@ -58,8 +58,9 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
 
   @Override
   public ResponseEntity<Void> addPhoto(
-      long id, MultipartFile file, String description, String date, String deviceCheckoutGuid) {
-    chrChecklistService.addPhoto(id, file, description, date, deviceCheckoutGuid);
+      long id, MultipartFile file, String description, String date, Long featureId,
+      String deviceCheckoutGuid) {
+    chrChecklistService.addPhoto(id, file, description, date, featureId, deviceCheckoutGuid);
     return ResponseEntity.noContent().build();
   }
 

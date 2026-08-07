@@ -38,7 +38,11 @@ public interface ProtocolChecklistWriteRepository {
   String checklistIdForPlot(String plotId);
   RiparianNotes getNotes(String checklistId, String resourceType);
   RiparianNotes saveNotes(RiparianNotes o, String resourceType, String userId);
-  List<AttachmentRow> getAttachments(String checklistId, String resourceType);
+  /** One page of attachment metadata, ordered by id. Sizes are filled from object storage. */
+  List<AttachmentRow> getAttachments(String checklistId, String resourceType, int page, int size);
+
+  /** Total attachments on the checklist, for the pager. */
+  int countAttachments(String checklistId, String resourceType);
   AttachmentContent getAttachmentContent(
       String checklistId, String resourceType, String attachmentId);
   void saveAttachment(

@@ -22,7 +22,11 @@ vi.mock('@/services/APIs', () => ({
   },
 }));
 
-vi.mock('@/hooks/useAuthorization', () => ({ useAuthorization: () => ({ canEdit: true }) }));
+// canEditSite is the gate for editing an existing site's resources (editors *or* CHR district
+// editors); canEdit still gates the Add Target Site create flow.
+vi.mock('@/hooks/useAuthorization', () => ({
+  useAuthorization: () => ({ canEdit: true, canEditSite: true }),
+}));
 
 // Stable display reference — the page's load effect depends on it, so a fresh fn per render churns.
 const { display } = vi.hoisted(() => ({ display: vi.fn() }));

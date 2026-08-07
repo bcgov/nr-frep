@@ -164,4 +164,28 @@ describe('useAuthorization — protocol + district scope', () => {
     expect(result.current.canChr('DCK')).toBe(true);
     expect(result.current.canChr('ANYTHING')).toBe(true);
   });
+
+  // Site records are shared across protocols, so site editing is deliberately wider than canEdit:
+  // a CHR district editor maintains the checklists hanging off a site and must be able to edit it.
+  it('a CHR-district-only user may edit site details without gaining Bio write', () => {
+    withUser({ roles: ['FREP_CHR_EDITOR'], privileges: { FREP_CHR_EDITOR: ['DCK'] } });
+
+    const { result } = renderHook(() => useAuthorization());
+
+    expect(result.current.canEditSite).toBe(true);
+    expect(result.current.canEdit).toBe(false);
+    expect(result.current.canCreate).toBe(false); // Add Target Site stays editor-only
+  });
+
+  it.each([
+    ['FREP_EDITOR', true],
+    ['FREP_ADMIN', true],
+    ['FREP_VIEW_ONLY', false],
+  ])('canEditSite for %s is %s', (role, expected) => {
+    withRoles([role as never]);
+
+    const { result } = renderHook(() => useAuthorization());
+
+    expect(result.current.canEditSite).toBe(expected);
+  });
 });

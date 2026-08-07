@@ -10,11 +10,16 @@ server:
   port: ${SERVER_PORT:3000}
   shutdown: graceful
   max-http-request-header-size: 16KB
-  # Connector-level request-body cap. Undertow enforces this independently of Spring's multipart
-  # settings, which don't apply here — nr-frep uploads arrive as base64 inside a JSON body, not
-  # multipart. This is a backstop only (NOT a per-file size limit): it stops an oversized upload
-  # from buffering unbounded bytes into heap, returning 413 instead. Default 50 MB; env-overridable.
-  # Note base64 inflates payloads ~33%, so 50 MB of body ≈ a ~37 MB file.
+  # Connector-level request-body backstop, enforced by Undertow independently of Spring's multipart
+  # limits. It sits ABOVE spring.servlet.multipart.max-request-size (below) so the multipart layer is
+  # what normally rejects an oversized upload, with a field-level message; this only catches a body
+  # that never reaches it. 50 MB, env-overridable.
+  #
+  # Deliberately NOT raised to the nr-fspts ~500 MB envelope. The binding constraint on upload size
+  # is heap, not the connector: the ClamAV scan and the object-storage/BLOB write both need the whole
+  # file as a byte[], and the JVM runs with -Xmx400m (backend/Dockerfile) under -XX:+ExitOnOutOfMemoryError,
+  # so an oversized upload kills the pod rather than failing one request. nr-fspts configures 100 MB
+  # per file on the same 200m heap, which is not actually reachable.
   undertow:
     max-http-post-size: ${MAX_HTTP_POST_SIZE:52428800}
   # Honor X-Forwarded-* from the Caddy reverse proxy when reconstructing the
@@ -26,6 +31,20 @@ server:
 spring:
   application:
     name: frep-backend
+  # Attachment/photo uploads (multipart/form-data). 15 MB per file, uniform across Biodiversity
+  # attachments and CHR photos; max-request-size leaves headroom for the metadata parts on a
+  # single-file upload. Sized by heap, not by the connector or the virus scanner: the scan and the
+  # storage write each need the whole file as a byte[] on a 400m heap (see the Undertow note above);
+  # clamd's StreamMaxLength is 150M and ephemeral storage is 500Mi, so neither binds here.
+  #
+  # file-size-threshold is left at its 0 default so every part spools to a temp file under
+  # java.io.tmpdir instead of buffering in memory — disk is the resource we have spare. That makes
+  # the /tmp emptyDir mount in openshift.deploy.yml load-bearing: the container runs with
+  # readOnlyRootFilesystem, so without it Spring cannot write the spool file at all.
+  servlet:
+    multipart:
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:15MB}
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:17MB}
   datasource:
     url: "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=${DATABASE_HOST})(PORT=${DATABASE_PORT:1543}))(CONNECT_DATA=(SERVICE_NAME=${DATABASE_SERVICE_NAME})(SERVER=DEDICATED)))"
     username: ${DATABASE_USER}

@@ -16,7 +16,7 @@ describe('UserService', () => {
   });
 
   it('updateUserPreferences should resolve successfully', async () => {
-    const prefs = { theme: 'g100' };
+    const prefs = { theme: 'g100' as const };
     const result = await service.updateUserPreferences(prefs);
     expect(result).toBeUndefined();
   });

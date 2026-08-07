@@ -19,6 +19,7 @@ import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
+import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
@@ -29,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.io.IOException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +44,12 @@ public class ChrChecklistService {
   // (VARCHAR2(3), NOT NULL, FK to MIME_TYPE_CODE), so a non-image (or an image type whose code isn't a
   // valid 3-char code, e.g. WEBP/TIFF) would fail on save with ORA-12899 / ORA-02291. Guard new photos
   // up front. Mirrors deriveMimeType's output (jpeg->jpg) against the image codes in MIME_TYPE_CODE.
-  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP", "TIF");
+  // TIF is deliberately absent. It fell through every net: browsers can't decode TIFF, so the
+  // client-side downscale in Photos.tsx silently kept the full-resolution original, no thumbnail
+  // could ever render, and it is excluded from server-side normalization — leaving a photo stored at
+  // full size that never displays. TIF remains valid for Biodiversity *attachments*, where scanned
+  // maps have a real fidelity argument; it has none for a site photo.
+  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP");
 
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
@@ -49,6 +57,7 @@ public class ChrChecklistService {
   private final ObjectStorageService objectStorageService;
   private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
+  private final VirusScanner virusScanner;
   private final FamUserDirectoryService famUserDirectoryService;
 
   public ChrChecklistService(
@@ -58,7 +67,8 @@ public class ChrChecklistService {
       ObjectStorageService objectStorageService,
       ObjectStorageProperties objectStorageProperties,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService
+      FamUserDirectoryService famUserDirectoryService,
+      VirusScanner virusScanner
   ) {
     this.persistenceService = persistenceService;
     this.checklistRepository = checklistRepository;
@@ -66,6 +76,7 @@ public class ChrChecklistService {
     this.objectStorageService = objectStorageService;
     this.objectStorageProperties = objectStorageProperties;
     this.loggedUserHelper = loggedUserHelper;
+    this.virusScanner = virusScanner;
     this.famUserDirectoryService = famUserDirectoryService;
   }
 
@@ -125,9 +136,96 @@ public class ChrChecklistService {
     return saveSection(checklist, persistenceService::saveFeaturesSection, this::validateFeatures);
   }
 
+  /**
+   * Attach one photo. A leaf operation on the checklist, not a section save: it does not run the
+   * optimistic-lock check and does not bump {@code revision_count}, so uploading a photo never
+   * invalidates a client's in-flight checklist edit. It does still require the checklist to be
+   * editable — the status check that {@code saveSection} would have applied is enforced here, since
+   * nothing else guards these endpoints.
+   *
+   * <p>{@code featureId} is optional: set once, at upload, to record which feature the photo
+   * documents. The persistence layer rejects a feature that belongs to another checklist.
+   */
   @Transactional
-  public CheckList savePicturesSection(CheckList checklist) {
-    return saveSection(checklist, persistenceService::savePicturesSection, this::validatePictures);
+  public void addPhoto(long checklistId, MultipartFile file, String description, String fileDate,
+      Long featureId, String deviceCheckoutGuid) {
+    assertPhotoEditable(checklistId, deviceCheckoutGuid);
+    validateNewPhoto(file, description);
+    byte[] content = readBytes(file);
+    // Scan before anything is persisted — a hit throws VirusDetectedException (→ 422).
+    virusScanner.scanOrThrow(content, file.getOriginalFilename());
+    persistenceService.addPhoto(
+        checklistId, file.getOriginalFilename(), description.trim(), fileDate, featureId,
+        file.getContentType(), content, loggedUserHelper.getLoggedUserId());
+  }
+
+  /** Remove one photo. Leaf operation, same guarantees as {@link #addPhoto}. */
+  @Transactional
+  public void deletePhoto(long checklistId, long photoId, String deviceCheckoutGuid) {
+    assertPhotoEditable(checklistId, deviceCheckoutGuid);
+    persistenceService.deletePhoto(checklistId, photoId, loggedUserHelper.getLoggedUserId());
+  }
+
+  /**
+   * Photos may only be added or removed while the checklist is editable. The per-section saves get
+   * this from {@code saveSection}; the photo endpoints bypass that (deliberately — they must stay
+   * token-neutral), so the check is applied explicitly rather than inherited.
+   *
+   * <p>Two editable states, not one:
+   * <ul>
+   *   <li>{@code ACT} — editable online by anyone with district access.</li>
+   *   <li>{@code RDO} — checked out to a device. Still editable, but <em>only</em> by the holder of
+   *       that checkout, so the caller must present the matching {@code deviceCheckoutGuid} (same
+   *       rule as {@link #releaseCheckout} and {@code uploadChecklist}).</li>
+   * </ul>
+   *
+   * <p>RDO has to be allowed or offline check-in cannot work at all: photos are flushed through
+   * these endpoints <em>before</em> the document save, and the {@code RDO → ACT} flip happens inside
+   * that save — so at flush time the checklist is still checked out. Requiring the guid keeps the
+   * guarantee that a checked-out checklist can't be altered from another device, which an ACT-or-RDO
+   * check alone would have dropped. Anything else (notably {@code SUB}) is refused: a submitted
+   * checklist is the genuinely immutable state this guard exists for.
+   */
+  private void assertPhotoEditable(long checklistId, String deviceCheckoutGuid) {
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      return;
+    }
+    if (ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
+      if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
+        throw new InvalidParameterException(
+            "This checklist is checked out on another device, so its photos can't be changed here.");
+      }
+      return;
+    }
+    throw new InvalidParameterException(
+        "The checklist status is currently "
+            + ChrConstants.frepChecklistStatusDescriptions().getOrDefault(status, status)
+            + ", so its photos can't be changed.");
+  }
+
+  private void validateNewPhoto(MultipartFile file, String description) {
+    if (file == null || file.isEmpty()) {
+      throw new InvalidParameterException(
+          "The selected file is empty. Choose a file with content and try again.");
+    }
+    if (!ChrStringUtils.hasAValue(description)) {
+      throw new InvalidParameterException("A description is required for every photo.");
+    }
+    String mimeType = deriveMimeType(file.getContentType()).toUpperCase();
+    if (!ALLOWED_IMAGE_CODES.contains(mimeType)) {
+      throw new InvalidParameterException(
+          "Only image files (JPG, PNG, GIF, BMP) can be uploaded as photos.");
+    }
+  }
+
+  private static byte[] readBytes(MultipartFile file) {
+    try {
+      return file.getBytes();
+    } catch (IOException ex) {
+      throw new InvalidParameterException("Could not read the uploaded photo.");
+    }
   }
 
   /**
@@ -172,6 +270,10 @@ public class ChrChecklistService {
           "The checklist status is currently " + status + " when ACT is expected.");
     }
 
+    // Photos are independent resources now, so the submitted payload's `pictures` are only a stale
+    // client-side copy — a caller could omit them and skip the per-photo checks entirely. Replace
+    // them with what the record actually holds before validating.
+    checklist.setPictures(persistenceService.getPhotoMetadata(checklistId));
     List<ValidationError> validationErrors = submitValidationService.validateBeforeSubmit(checklist);
     if (!validationErrors.isEmpty()) {
       throw new ChrSubmitValidationException(validationErrors);
@@ -268,7 +370,10 @@ public class ChrChecklistService {
         checkList.setAssessedByName(famUserDirectoryService.resolveName(checkList.getAssessedBy())
             .orElse(checkList.getAssessedBy()));
       }
-      populatePhotoBytes(checkList);
+      // Photo *metadata* rides along (the mapper fills it); the bytes do not. Every photo is fetched
+      // individually from the content endpoint — including by take-offline, which downloads them
+      // before taking the checkout. Embedding them here meant one response held every photo at
+      // ~2.33x its stored size (byte[] + base64), the last unbounded read path in the app.
       return checkList;
     } catch (Exception ex) {
       throw new FrepApiRuntimeException(ex.getMessage(), ex);
@@ -276,37 +381,46 @@ public class ChrChecklistService {
   }
 
   /**
-   * Embeds each stored photo's base64 bytes into the checklist response (mirrors legacy
-   * {@code CheckListMapper} which fetched photos from object storage on read). The object key is
-   * {@code {checklistId}-{attachmentId}.{ext}} — the same key {@code savePictures} /
-   * {@code syncChecklistPhotos} write with. {@code code} is set to RAW base64 (no data-URL prefix),
-   * matching the legacy contract; the UI prepends the prefix using {@code mimeTypeCode}. A missing
-   * or unreadable object is logged and skipped so one bad photo never fails the whole GET.
+   * One photo's stored bytes. The object key is {@code {checklistId}-{attachmentId}.{ext}} — the same
+   * key {@code addPhoto} writes with.
    */
-  private void populatePhotoBytes(CheckList checkList) {
-    if (checkList.getPictures() == null) {
-      return;
+  public PhotoContent getPhotoContent(long checklistId, long photoId) {
+    Picture picture = persistenceService.getPhotoMetadata(checklistId).stream()
+        .filter(p -> String.valueOf(photoId).equals(p.getId()))
+        .findFirst()
+        .orElseThrow(() -> new EntityNotFoundException(
+            "Photo " + photoId + " was not found on checklist " + checklistId + "."));
+    String mimeType = deriveMimeType(picture.getMimeTypeCode());
+    String key = checklistId + "-" + photoId + "." + mimeType;
+    byte[] bytes = objectStorageService.getObjectBytes(key);
+    if (bytes == null || bytes.length == 0) {
+      throw new EntityNotFoundException("Photo " + photoId + " has no stored content.");
     }
-    String checklistId = checkList.getChecklistID();
-    for (Picture picture : checkList.getPictures()) {
-      if (!ChrStringUtils.hasAValue(picture.getId())) {
-        continue;
-      }
-      String key = checklistId + "-" + picture.getId() + "." + deriveMimeType(picture.getMimeTypeCode());
-      try {
-        byte[] bytes = objectStorageService.getObjectBytes(key);
-        if (bytes != null && bytes.length > 0) {
-          picture.setCode(Base64.getEncoder().encodeToString(bytes));
-        }
-      } catch (Exception ex) {
-        log.warn("Could not load CHR photo {} for checklist {}: {}", key, checklistId, ex.getMessage());
-      }
-    }
+    return new PhotoContent(picture.getFileName(), "image/" + mimeType, bytes);
   }
 
+  /** A photo's stored bytes, served as a binary download rather than embedded base64. */
+  public record PhotoContent(String fileName, String mimeType, byte[] content) {}
+
+  /**
+   * One page of the checklist's photo metadata, newest-page-friendly ordering: creation order, with
+   * the id as tiebreaker because {@code entry_timestamp} is an Oracle DATE (second precision) and
+   * photos added in the same second would otherwise page non-deterministically.
+   */
+  public PhotoPage getPhotos(long checklistId, int page, int size) {
+    List<Picture> all = persistenceService.getPhotoMetadata(checklistId);
+    int from = Math.min(page * size, all.size());
+    int to = Math.min(from + size, all.size());
+    return new PhotoPage(all.subList(from, to), all.size());
+  }
+
+  /** A page of photo metadata plus the total, for the pager. */
+  public record PhotoPage(List<Picture> photos, int totalCount) {}
+
   private void validateSaveRequest(CheckList checklist) {
+    // Pictures are not validated here: a checklist save no longer persists them at all (they are
+    // added and removed through the photo endpoints), so anything in the payload is ignored.
     validateFeatures(checklist);
-    validatePictures(checklist);
   }
 
   private void validateFeatures(CheckList checklist) {
@@ -333,26 +447,6 @@ public class ChrChecklistService {
     }
   }
 
-  private void validatePictures(CheckList checklist) {
-    if (checklist.getPictures() != null) {
-      for (Picture picture : checklist.getPictures()) {
-        // Only validate newly-added photos (no id). Existing rows already passed at creation, and
-        // re-validating them here would block add/delete of any photo when a legacy row has a blank
-        // description. Submit (ChrSubmitValidationService) still validates every photo's description.
-        if (ChrStringUtils.hasAValue(picture.getId())) {
-          continue;
-        }
-        if (!ChrStringUtils.hasAValue(picture.getDescription())) {
-          throw new InvalidParameterException(
-              "One or more photos are missing mandatory descriptions.");
-        }
-        if (!ALLOWED_IMAGE_CODES.contains(deriveMimeType(picture.getMimeTypeCode()).toUpperCase())) {
-          throw new InvalidParameterException(
-              "Only image files (JPG, PNG, GIF, BMP, TIF) can be uploaded as photos.");
-        }
-      }
-    }
-  }
 
   private void assertRevisionCount(CheckList checklist, long checklistId) {
     long revisionCount = checklistRepository.getRevisionCount(checklistId);

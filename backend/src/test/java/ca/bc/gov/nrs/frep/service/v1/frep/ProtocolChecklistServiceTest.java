@@ -1,12 +1,18 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,7 +29,9 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.service.v1.frep.ProtocolChecklistService.ProtocolSubmitValidationException;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,10 +39,13 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,6 +65,9 @@ class ProtocolChecklistServiceTest {
 
   @Mock
   private FamUserDirectoryService famUserDirectoryService;
+
+  @Mock
+  private VirusScanner virusScanner;
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -495,5 +509,83 @@ class ProtocolChecklistServiceTest {
       Map<String, String> fields
   ) {
     return ChecklistSectionData.of(header, fields);
+  }
+
+  // ── Attachment upload (multipart) ────────────────────────────────────
+
+  private static MockMultipartFile upload(String name, byte[] content) {
+    return new MockMultipartFile("file", name, "application/pdf", content);
+  }
+
+  @Test
+  void rejectsAnEmptyUploadBeforeScanningOrWriting() {
+    // Legacy rejected zero-byte attachments (frep.web.error.emptyFile); the rewrite lost that, and
+    // an empty file produces a metadata row pointing at nothing.
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", upload("notes.pdf", new byte[0]), "desc"));
+
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    verifyNoInteractions(virusScanner);
+    verify(writeRepository, never())
+        .saveAttachment(any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void rejectsAMissingFilePart() {
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", null, "desc"));
+    verifyNoInteractions(virusScanner);
+  }
+
+  @Test
+  void rejectsAnUnsupportedExtensionBeforeScanning() {
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    verifyNoInteractions(virusScanner);
+  }
+
+  @Test
+  void scansTheUploadedBytesBeforePersistingThem() {
+    byte[] content = {1, 2, 3, 4};
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\SOMEONE");
+
+    service.saveAttachment("bio", "1", upload("notes.pdf", content), " spaced desc ");
+
+    InOrder order = inOrder(virusScanner, writeRepository);
+    order.verify(virusScanner).scanOrThrow(content, "notes.pdf");
+    // SLR, not the {protocol} segment: the type is resolved from the record (@BeforeEach stub).
+    order.verify(writeRepository).saveAttachment(
+        eq("1"), eq("SLR"), eq("notes.pdf"), eq(" spaced desc "), eq("application/pdf"),
+        eq(content), eq("IDIR\\SOMEONE"));
+  }
+
+  @Test
+  void readsTheUploadedFileOnlyOnce() throws Exception {
+    // getBytes() allocates a fresh array per call, so calling it for the scan and again for the
+    // write would put two copies of the file on a 400m heap. nr-fspts does exactly that.
+    MultipartFile file = mock(MultipartFile.class);
+    when(file.isEmpty()).thenReturn(false);
+    when(file.getOriginalFilename()).thenReturn("notes.pdf");
+    when(file.getContentType()).thenReturn("application/pdf");
+    when(file.getBytes()).thenReturn(new byte[] {9, 9});
+
+    assertDoesNotThrow(() -> service.saveAttachment("bio", "1", file, "desc"));
+
+    verify(file, times(1)).getBytes();
+  }
+
+  @Test
+  void turnsAnUnreadableUploadIntoABadRequestRatherThanA500() throws Exception {
+    MultipartFile file = mock(MultipartFile.class);
+    when(file.isEmpty()).thenReturn(false);
+    when(file.getOriginalFilename()).thenReturn("notes.pdf");
+    when(file.getBytes()).thenThrow(new IOException("spool file vanished"));
+
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", file, "desc"));
+    assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    verifyNoInteractions(virusScanner);
   }
 }

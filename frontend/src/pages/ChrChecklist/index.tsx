@@ -53,6 +53,7 @@ import {
   type ValidationError,
 } from '@/types/chrChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
+import { pictureToFile } from '@/utils/pictureFile';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -121,13 +122,26 @@ const readOnlyReason = (status: CheckList['status']): string => {
   return 'This checklist is not active, so it is read-only.';
 };
 
-/** Strip browser data-URL prefixes from new photos and recompute the MRVA before sending. */
-const prepareForSave = (checkList: CheckList): CheckList => ({
+/**
+ * The local (device) shape: the whole document, photos included. Offline a captured photo's base64
+ * is the ONLY copy of those bytes until check-in flushes it, so anything written to Dexie must carry
+ * `pictures` through untouched.
+ */
+const prepareForLocalSave = (checkList: CheckList): CheckList => ({
   ...checkList,
   mrvaRatingCode: calculateMrvaRatingCode(checkList.rating, checkList.features),
-  pictures: (checkList.pictures ?? []).map((p) =>
-    p.code?.startsWith('data:') ? { ...p, code: p.code.replace(/^data:[^;]+;base64,/, '') } : p,
-  ),
+});
+
+/**
+ * The wire shape for a server save. Photos are separate resources since the multipart split — a save
+ * ignores `pictures` entirely — so they are stripped rather than shipped back as base64.
+ *
+ * <p>Never use this for a local save. Doing so wiped every offline-captured photo before it could be
+ * flushed; see {@link prepareForLocalSave}.
+ */
+const prepareForServerSave = (checkList: CheckList): CheckList => ({
+  ...prepareForLocalSave(checkList),
+  pictures: [],
 });
 
 const extractValidationErrors = (err: unknown): ValidationError[] | null => {
@@ -148,6 +162,11 @@ const ChrChecklistPage: FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isOfflineCopy, setIsOfflineCopy] = useState(false);
+  // Photos are no longer embedded in the checklist GET. Online, the tab reads its own page; offline,
+  // the page is sliced from the locally stored copy, which still carries each photo's base64.
+  const [photoPage, setPhotoPage] = useState(0);
+  const [photoPageSize, setPhotoPageSize] = useState(10);
+  const [photoTotal, setPhotoTotal] = useState(0);
   // Server-vs-local reconcile for an offline copy: verdict + the server's last-updater audit.
   const [offlineStaleness, setOfflineStaleness] = useState<{
     verdict: StalenessVerdict;
@@ -297,13 +316,12 @@ const ChrChecklistPage: FC = () => {
     ): Promise<boolean> => {
       setBusy(true);
       try {
-        const payload = prepareForSave(merged);
         if (isOfflineCopy) {
-          await chrOfflineRepo.saveLocal(payload);
+          await chrOfflineRepo.saveLocal(prepareForLocalSave(merged));
           setCheckList(merged);
           display({ kind: 'success', title: 'Saved offline', timeout: 4000 });
         } else {
-          const saved = await endpoint(id, payload);
+          const saved = await endpoint(id, prepareForServerSave(merged));
           setCheckList((prev) => (prev ? applyBack(prev, saved) : prev));
           display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
         }
@@ -404,20 +422,126 @@ const ChrChecklistPage: FC = () => {
     [checkList, persistSection],
   );
 
-  const savePhotos = useCallback(
-    (pictures: Picture[]): Promise<boolean> => {
-      if (!checkList) return Promise.resolve(false);
-      return persistSection(
-        (cid, cl) => API.chrChecklist.savePhotos(cid, cl),
-        { ...checkList, pictures },
-        (prev, saved) => ({
-          ...prev,
-          pictures: saved.pictures,
-          revisionCount: saved.revisionCount,
-        }),
-      );
+  /**
+   * Stable per-checklist reference. As an inline arrow this was a new function on every render, and
+   * it is a dependency of the Photos tab's fetch effect — so every render re-ran that effect and
+   * could re-request photos already in flight.
+   */
+  const fetchPhotoContent = useCallback(
+    (photoId: string) => API.chrChecklist.getPhotoContent(id, photoId),
+    [id],
+  );
+
+  /**
+   * Load one page of photo metadata. Offline the local copy is the source of truth (it holds the
+   * bytes); online this is a metadata-only read and each image is fetched individually for display.
+   */
+  const loadPhotos = useCallback(
+    async (targetPage = photoPage, targetSize = photoPageSize) => {
+      if (isOfflineCopy) {
+        const all = checkList?.pictures ?? [];
+        setPhotoTotal(all.length);
+        setPhotoPage(targetPage);
+        setPhotoPageSize(targetSize);
+        return;
+      }
+      const result = await API.chrChecklist.getPhotos(id, targetPage, targetSize);
+      setPhotoTotal(result.totalCount);
+      setPhotoPage(targetPage);
+      setPhotoPageSize(targetSize);
+      setCheckList((prev) => (prev ? { ...prev, pictures: result.photos } : prev));
     },
-    [checkList, persistSection],
+    [id, isOfflineCopy, checkList?.pictures, photoPage, photoPageSize],
+  );
+
+  /**
+   * Add photos. Online each file is POSTed individually to the photo endpoint — sequentially, so a
+   * batch never holds several files in server heap at once, and one failure doesn't lose the rest.
+   * Offline there is nothing to POST: the photo is appended to the locally stored checklist with its
+   * base64 intact, and the check-in flush uploads it later.
+   */
+  // The checklist GET no longer carries photos, so the tab loads its own first page once the
+  // checklist is available. Offline copies already hold everything locally.
+  useEffect(() => {
+    if (!checkList || isOfflineCopy) return;
+    void API.chrChecklist
+      .getPhotos(id, 0, photoPageSize)
+      .then((result) => {
+        setPhotoTotal(result.totalCount);
+        setCheckList((prev) => (prev ? { ...prev, pictures: result.photos } : prev));
+      })
+      .catch(() => {
+        /* a failed photo page must not block the rest of the checklist */
+      });
+    // Deliberately keyed on the checklist id only: re-running on every checkList change would loop,
+    // since this sets checkList.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isOfflineCopy]);
+
+  const addPhotos = useCallback(
+    async (additions: Picture[]): Promise<boolean> => {
+      if (!checkList) return false;
+      setBusy(true);
+      try {
+        if (isOfflineCopy) {
+          const merged = { ...checkList, pictures: [...(checkList.pictures ?? []), ...additions] };
+          await chrOfflineRepo.saveLocal(merged);
+          setCheckList(merged);
+          display({ kind: 'success', title: 'Saved offline', timeout: 4000 });
+          return true;
+        }
+        for (const picture of additions) {
+          const file = pictureToFile(picture);
+          if (!file) continue;
+          await API.chrChecklist.addPhoto(
+            id, file, picture.description ?? '', picture.date, undefined, picture.featureId);
+        }
+        await loadPhotos();
+        display({ kind: 'success', title: 'Photo saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Could not save the photo', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, id, isOfflineCopy, loadPhotos, display, reportError],
+  );
+
+  /**
+   * Remove one photo. Offline the removal is recorded locally — including the server id, so the
+   * check-in flush can issue the matching DELETE; delete-by-absence no longer exists server-side.
+   */
+  const deletePhoto = useCallback(
+    async (picture: Picture): Promise<boolean> => {
+      if (!checkList) return false;
+      setBusy(true);
+      try {
+        if (isOfflineCopy) {
+          const merged = {
+            ...checkList,
+            pictures: (checkList.pictures ?? []).filter((p) => p !== picture),
+          };
+          await chrOfflineRepo.saveLocal(merged, picture.id ? [picture.id] : []);
+          setCheckList(merged);
+          display({ kind: 'success', title: 'Removed offline', timeout: 4000 });
+          return true;
+        }
+        if (picture.id) {
+          await API.chrChecklist.deletePhoto(id, picture.id);
+        }
+        await loadPhotos();
+        display({ kind: 'success', title: 'Photo removed', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Could not remove the photo', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, id, isOfflineCopy, loadPhotos, display, reportError],
   );
 
   const handleSubmit = async () => {
@@ -432,13 +556,14 @@ const ChrChecklistPage: FC = () => {
       // fails validation, we're cleanly on the online ACT checklist and can fix + resubmit.
       let toSubmit = checkList;
       if (isOfflineCopy) {
-        await chrOfflineRepo.saveLocal(prepareForSave(checkList));
+        // Local save — keeps the photos, which upload() is about to flush.
+        await chrOfflineRepo.saveLocal(prepareForLocalSave(checkList));
         toSubmit = await chrOfflineRepo.upload(id);
         await chrOfflineRepo.remove(id);
         setIsOfflineCopy(false);
         setCheckList(toSubmit);
       }
-      const saved = await API.chrChecklist.submit(id, prepareForSave(toSubmit));
+      const saved = await API.chrChecklist.submit(id, prepareForServerSave(toSubmit));
       setCheckList(saved);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
     } catch (err) {
@@ -528,10 +653,23 @@ const ChrChecklistPage: FC = () => {
     if (!checkList) return;
     setBusy(true);
     try {
-      await chrOfflineRepo.saveLocal(prepareForSave(checkList));
+      // Local save — stripping photos here (as a server payload would) deleted every offline capture
+      // moments before upload() flushed them, so the bytes were gone by the time it looked.
+      await chrOfflineRepo.saveLocal(prepareForLocalSave(checkList));
       const saved = await chrOfflineRepo.upload(id);
+      // Drop the local draft, exactly as the submit chain does. A check-in clears the server's
+      // deviceCheckoutGuid, so a retained copy could never be uploaded again — it would sit there
+      // looking editable, and (since the save response carries no photos) looking like it had lost
+      // them. Only on success: a failed upload must leave the copy untouched so it can be retried.
+      await chrOfflineRepo.remove(id);
+      setIsOfflineCopy(false);
       setCheckList(saved);
-      display({ kind: 'success', title: 'Checklist uploaded', timeout: 5000 });
+      display({
+        kind: 'success',
+        title: 'Checklist uploaded',
+        subtitle: 'Your changes are checked in and the offline copy has been removed.',
+        timeout: 5000,
+      });
     } catch (err) {
       reportError(
         'Upload failed — the checklist may have changed on the server; re-pull and retry',
@@ -818,8 +956,21 @@ const ChrChecklistPage: FC = () => {
             </TabPanel>
             <TabPanel>
               <Photos
-                pictures={checkList.pictures ?? []}
-                onSave={savePhotos}
+                pictures={
+                  isOfflineCopy
+                    ? (checkList.pictures ?? []).slice(
+                        photoPage * photoPageSize,
+                        photoPage * photoPageSize + photoPageSize,
+                      )
+                    : (checkList.pictures ?? [])
+                }
+                onAdd={addPhotos}
+                onDelete={deletePhoto}
+                fetchContent={fetchPhotoContent}
+                page={photoPage}
+                pageSize={photoPageSize}
+                totalCount={isOfflineCopy ? (checkList.pictures ?? []).length : photoTotal}
+                onPageChange={(nextPage, nextSize) => void loadPhotos(nextPage, nextSize)}
                 readOnly={readOnly}
                 busy={busy}
                 active={tab === 5}

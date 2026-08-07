@@ -25,6 +25,8 @@ export type Picture = {
   description?: string;
   code?: string; // base64 (no data-URL prefix on save)
   mimeTypeCode?: string;
+  /** The feature this photo documents, if any. Set once at upload; the server resolves the label. */
+  featureId?: string;
   featureLabel?: string;
   fileName?: string;
   checklistId?: string;
@@ -310,3 +312,9 @@ export const CHR_STATUS = {
   SUBMITTED: 'SUB',
   READ_ONLY_OFFLINE: 'RDO',
 } as const;
+
+/** One page of CHR photo metadata; bytes are fetched per photo from the content endpoint. */
+export type PhotoPageResponse = {
+  photos: Picture[];
+  totalCount: number;
+};

@@ -7,6 +7,8 @@ import {
   stalenessBanner,
 } from '@/services/offline/chrStaleness';
 
+import type { StalenessVerdict } from '@/services/offline/chrStaleness';
+
 describe('classifyStaleness', () => {
   it('is CURRENT when the server checkout still matches the local guid', () => {
     expect(classifyStaleness('guid-1', { status: 'RDO', deviceCheckoutGuid: 'guid-1' })).toBe(
@@ -36,7 +38,8 @@ describe('classifyStaleness', () => {
 
 describe('isStale', () => {
   it('flags superseded/removed verdicts, not current/unverified', () => {
-    expect(['RECLAIMED', 'SUBMITTED_ELSEWHERE', 'GONE'].every(isStale)).toBe(true);
+    const superseded: StalenessVerdict[] = ['RECLAIMED', 'SUBMITTED_ELSEWHERE', 'GONE'];
+    expect(superseded.every(isStale)).toBe(true);
     expect(isStale('CURRENT')).toBe(false);
     expect(isStale('UNVERIFIED')).toBe(false);
   });

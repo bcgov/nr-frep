@@ -2,6 +2,8 @@ package ca.bc.gov.nrs.frep.entity;
 
 import jakarta.persistence.*;
 
+import org.hibernate.annotations.OptimisticLock;
+
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
@@ -95,6 +97,18 @@ public class ChrChecklist implements java.io.Serializable {
 	@JoinColumn(name = "CHR_CHECKLIST_ID", insertable = false, updatable = false)
 	private Set chrChecklistParticipations = new HashSet(0);
 
+	/**
+	 * Photos are leaf resources: adding or removing one must NOT advance this checklist's shared
+	 * @Version token, or a user editing any other tab has their next save rejected as "modified by
+	 * another user" (requirement ii of the multipart split).
+	 *
+	 * <p>Hibernate increments the owner's version whenever an owned collection is dirty, so mutating
+	 * this Set — even without touching a single checklist column — bumps revision_count.
+	 * {@code @OptimisticLock(excluded = true)} is what exempts it. The photo endpoints also avoid
+	 * mutating the collection at all; this annotation is the guarantee that any future caller which
+	 * does cannot silently reintroduce the bump.
+	 */
+	@OptimisticLock(excluded = true)
 	@OneToMany(targetEntity = ChrChecklistAttachment.class, fetch = FetchType.EAGER)
 	@JoinColumn(name = "CHR_CHECKLIST_ID", insertable = false, updatable = false)
 	private Set chrChecklistAttachments = new HashSet(0);

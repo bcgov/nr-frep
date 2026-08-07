@@ -20,9 +20,11 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,6 +43,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -66,6 +69,7 @@ public class ProtocolChecklistService {
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
   private final VirusScanner virusScanner;
+  private final ObjectStorageService objectStorage;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
@@ -73,7 +77,8 @@ public class ProtocolChecklistService {
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
       FamUserDirectoryService famUserDirectoryService,
-      VirusScanner virusScanner
+      VirusScanner virusScanner,
+      ObjectStorageService objectStorage
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
@@ -81,6 +86,7 @@ public class ProtocolChecklistService {
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
     this.virusScanner = virusScanner;
+    this.objectStorage = objectStorage;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -703,9 +709,34 @@ public class ProtocolChecklistService {
         loggedUserHelper.getLoggedUserId());
   }
 
-  public List<AttachmentRow> getAttachments(String protocol, String checklistId) {
-    return writeRepository.getAttachments(checklistId, checklistRepository.resolveResourceType(checklistId));
+  /**
+   * One page of attachment metadata, with each row's real size read from object storage.
+   *
+   * <p>The size cannot come from the database: {@code file_size} there is derived from the Oracle
+   * BLOB, which Biodiversity deliberately leaves empty, so it always reads 0.00. A HEAD per row on
+   * the page is exact and bounded; a prefix listing is not an option because the keys are flat
+   * ({@code slr/<id>}) and would sweep every checklist's attachments.
+   */
+  public AttachmentPage getAttachments(String protocol, String checklistId, int page, int size) {
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    List<AttachmentRow> rows = writeRepository.getAttachments(checklistId, resourceType, page, size);
+    List<AttachmentRow> withSizes = rows.stream()
+        .map(row -> {
+          long bytes = objectStorage.getObjectSize(bioObjectKey(row.checklistAttachmentId()));
+          return new AttachmentRow(row.checklistAttachmentId(), row.fileName(), row.description(),
+              row.mimeTypeCode(), bytes < 0 ? null : String.valueOf(bytes));
+        })
+        .toList();
+    return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
+
+  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  private static String bioObjectKey(String attachmentId) {
+    return "slr/" + attachmentId;
+  }
+
+  /** A page of attachment metadata plus the total, for the pager. */
+  public record AttachmentPage(List<AttachmentRow> attachments, int totalCount) {}
 
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {
@@ -713,16 +744,36 @@ public class ProtocolChecklistService {
         checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
   }
 
-  public List<AttachmentRow> saveAttachment(
-      String protocol, String checklistId, String fileName, String description, String mimeType,
-      byte[] bytes) {
+  /**
+   * Store one uploaded attachment. Multipart spools the body to a temp file, so the only point the
+   * whole file is in heap is the {@code byte[]} below — read <b>once</b> and reused for the scan and
+   * the write, since {@link MultipartFile#getBytes()} allocates a fresh array on every call.
+   */
+  public void saveAttachment(
+      String protocol, String checklistId, MultipartFile file, String description) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "The selected file is empty. Choose a file with content and try again.");
+    }
+    String fileName = file.getOriginalFilename();
     validateAttachmentType(fileName);
+    byte[] bytes = readBytes(file, fileName);
     // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(bytes, fileName);
-    String resourceType = checklistRepository.resolveResourceType(checklistId);
-    writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
-        loggedUserHelper.getLoggedUserId());
-    return writeRepository.getAttachments(checklistId, resourceType);
+    // Resource type comes from the record, not the {protocol} path segment (SLB legacy / SLR
+    // go-forward) — see the section comment above.
+    writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
+        fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+  }
+
+  /** Pull the spooled upload into heap, turning the I/O failure into a clean 400 rather than a 500. */
+  private static byte[] readBytes(MultipartFile file, String fileName) {
+    try {
+      return file.getBytes();
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Could not read the uploaded file" + (fileName == null ? "" : " " + fileName) + ".", ex);
+    }
   }
 
   /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
@@ -737,12 +788,10 @@ public class ProtocolChecklistService {
     }
   }
 
-  public List<AttachmentRow> deleteAttachment(
-      String protocol, String checklistId, String attachmentId) {
+  public void deleteAttachment(String protocol, String checklistId, String attachmentId) {
     String resourceType = checklistRepository.resolveResourceType(checklistId);
     assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
-    return writeRepository.getAttachments(checklistId, resourceType);
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */

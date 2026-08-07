@@ -2,7 +2,7 @@ import { Accordion, AccordionItem, Column, Grid, InlineNotification } from '@car
 import { useEffect, useMemo, useState, type FC } from 'react';
 
 import ReportConfigForm from './ReportConfigForm';
-import { GENERATABLE_REPORTS, type GeneratableReport } from './reportDefinitions';
+import { GENERATABLE_REPORTS, mayRunReport, type GeneratableReport } from './reportDefinitions';
 
 import type { CodeOption, MasterListYear, OrgUnit } from '@/types/configuration';
 
@@ -25,15 +25,11 @@ const ReportsPage: FC = () => {
   const { display } = useNotification();
   const { canEdit, canAnyChr } = useAuthorization();
 
-  // Only show reports the user may run: the CHR extract needs CHR access; the Biodiversity extracts
-  // need Bio access. Other (checklist) reports are unrestricted here. The backend also enforces this.
+  // Only show reports the user may run — same rule the generate buttons use (mayRunReport), so a
+  // card can't be visible with its buttons hidden. The backend enforces this independently.
   const visibleReports = useMemo(
     () =>
-      GENERATABLE_REPORTS.filter((report) => {
-        if (report.id === 'chr-data-extract') return canAnyChr;
-        if (report.id.startsWith('biodiversity-extract')) return canEdit;
-        return true;
-      }),
+      GENERATABLE_REPORTS.filter((report) => mayRunReport(report.id, { canEdit, canAnyChr })),
     [canEdit, canAnyChr],
   );
 

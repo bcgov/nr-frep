@@ -34,6 +34,11 @@ export type ApiRequestOptions = {
   readonly body?: unknown;
   readonly mediaType?: string;
   readonly responseHeader?: string;
+  /**
+   * Axios response type. Needed for binary endpoints (photo/attachment content): without it axios
+   * parses the body as JSON and mangles the bytes.
+   */
+  readonly responseType?: 'arraybuffer' | 'blob' | 'json' | 'text';
   readonly errors?: Record<number, string>;
   readonly middleware?: Array<ApiMiddleware>;
   readonly meta?: Record<string, unknown>;
@@ -90,10 +95,12 @@ export class HttpClient {
     // Do not set axios baseURL: getUrl() already prefixes config.BASE.
     this.axiosInstance = axios.create({
       timeout: config.TIMEOUT || 60000, // Default timeout of 60 seconds
-      headers: {
-        'Content-Type': 'application/json',
-        ...config.HEADERS,
-      },
+      // Deliberately no default Content-Type. getHeaders() sets it per request — defaulting to
+      // application/json, and *deleting* it for a FormData body so the browser can supply
+      // `multipart/form-data` with its boundary. An instance-level default survives that delete
+      // (axios merges defaults beneath per-request headers) and wins, which made every multipart
+      // upload fail with 415 "Content-Type 'application/json' is not supported".
+      headers: { ...config.HEADERS },
     });
   }
 

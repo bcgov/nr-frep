@@ -1,6 +1,7 @@
 import { Download, TrashCan, Upload } from '@carbon/icons-react';
 import {
   Button,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -8,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react';
-import { useRef, useState, type FC } from 'react';
+import { useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
 import { DateField, TextAreaField } from '@/pages/ChrChecklist/fields';
@@ -23,10 +24,11 @@ import { formatShortDate } from '@/utils/date';
 import { overLimitError } from '@/utils/textLimits';
 
 /**
- * Build a displayable image src from a picture's `code`. Newly-added photos already carry a
- * full data URL; photos loaded from the server carry RAW base64 (legacy contract), so prepend a
- * `data:<mimeType>;base64,` prefix using the picture's mimeTypeCode. Returns undefined when there
- * is no image data to show.
+ * Build a displayable src from a picture's own `code`, when it has one.
+ *
+ * Only two kinds of photo carry bytes locally now: one just captured (a data URL from the canvas
+ * downscale), and one held in an offline copy. Photos read from the server carry metadata only and
+ * are fetched individually from the content endpoint — see `resolveSrc` below.
  */
 const photoSrc = (picture: Picture): string | undefined => {
   const code = picture.code;
@@ -99,7 +101,17 @@ const processFile = async (
  */
 const Photos: FC<{
   pictures: Picture[];
-  onSave: (pictures: Picture[]) => Promise<boolean>;
+  /** Add the given new photos (each carries its bytes as a data-URL `code`). */
+  onAdd: (additions: Picture[]) => Promise<boolean>;
+  /** Remove one existing photo. */
+  onDelete: (picture: Picture) => Promise<boolean>;
+  /** Fetch one photo's bytes for display. Not called for photos that already carry a `code`. */
+  fetchContent: (photoId: string) => Promise<Blob>;
+  /** Pager state; `onPageChange` is 0-based. */
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  onPageChange: (page: number, pageSize: number) => void;
   readOnly: boolean;
   busy: boolean;
   /** True when the Attachments tab is the selected tab. Gates the date picker's mount: Carbon mounts
@@ -107,11 +119,83 @@ const Photos: FC<{
    * transition trips a flatpickr render loop. Deferring to first activation mounts it post-load
    * (same timing as the Edit-triggered pickers on the other tabs), which is safe. */
   active: boolean;
-}> = ({ pictures, onSave, readOnly, busy, active }) => {
+}> = ({
+  pictures,
+  onAdd,
+  onDelete,
+  fetchContent,
+  page,
+  pageSize,
+  totalCount,
+  onPageChange,
+  readOnly,
+  busy,
+  active,
+}) => {
   const confirm = useConfirm();
   const { display } = useNotification();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  // Object URLs for photos fetched from the content endpoint, keyed by photo id. Revoked on unmount
+  // so a long session paging through photos doesn't leak them.
+  const [fetched, setFetched] = useState<Record<string, string>>({});
+
+  // Ids already requested. A ref, not the `fetched` state, because state lands only after the
+  // response: any render during the in-flight window would otherwise see an id as un-fetched and
+  // request it again. Photos are the largest responses in the app, so a duplicate round is real
+  // bytes, not just a stray line in the network tab. Refs survive StrictMode's development-only
+  // remount, so this also stops that from doubling every fetch.
+  const requested = useRef<Set<string>>(new Set());
+  // Every object URL created here, so unmount can revoke all of them. Reading `fetched` from an
+  // unmount-only effect closes over its first-render value ({}) and revokes nothing.
+  const createdUrls = useRef<string[]>([]);
+  const unmounted = useRef(false);
+
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+      createdUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      createdUrls.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    const pending = pictures.filter((p) => p.id && !p.code && !requested.current.has(p.id));
+    if (pending.length === 0) return;
+    pending.forEach((p) => requested.current.add(p.id as string));
+
+    void Promise.all(
+      pending.map(async (picture) => {
+        const photoId = picture.id as string;
+        try {
+          const blob = await fetchContent(photoId);
+          const url = URL.createObjectURL(blob);
+          createdUrls.current.push(url);
+          return [photoId, url] as [string, string];
+        } catch {
+          // Drop the claim so a later render can retry; one unreadable photo must not blank the tab.
+          requested.current.delete(photoId);
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      const loaded = entries.filter((e): e is [string, string] => e !== null);
+      // Deliberately NOT cancelled on a dependency change. The request is already paid for and the
+      // ref stops it being reissued, so discarding the result here would leave the photo permanently
+      // blank — only an unmount is a reason to drop it.
+      if (unmounted.current) {
+        loaded.forEach(([, url]) => URL.revokeObjectURL(url));
+        return;
+      }
+      if (loaded.length > 0) setFetched((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+    });
+  }, [pictures, fetchContent]);
+
+  /** A photo's src: its own bytes when it has them, otherwise the fetched object URL. */
+  const resolveSrc = (picture: Picture): string | undefined =>
+    photoSrc(picture) ?? (picture.id ? fetched[picture.id] : undefined);
+
   const [description, setDescription] = useState('');
   const [descriptionInvalid, setDescriptionInvalid] = useState(false);
   const [date, setDate] = useState('');
@@ -133,8 +217,12 @@ const Photos: FC<{
     setDescriptionInvalid(false);
     // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
     // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
-    // accept="image/*", but drag-and-drop bypasses it — so re-check here.
-    const images = files.filter((file) => file.type.startsWith('image/'));
+    // accept="image/jpeg,image/png,image/gif,image/bmp", but drag-and-drop bypasses it — so re-check here.
+    // TIFF is excluded: browsers can't decode it, so the downscale below would silently keep the
+    // full-resolution original and it could never render. Matches ALLOWED_IMAGE_CODES server-side.
+    const images = files.filter(
+      (file) => file.type.startsWith('image/') && !file.type.includes('tif'),
+    );
     if (images.length < files.length) {
       display({
         kind: 'error',
@@ -151,7 +239,9 @@ const Photos: FC<{
         date: date.trim(),
       })),
     );
-    if (await onSave([...pictures, ...additions])) {
+    // Only the new photos are sent: each is created individually by the photo endpoint, so the
+    // existing set is never resubmitted (and so can never be deleted by omission).
+    if (await onAdd(additions)) {
       setDescription('');
       setDate('');
     }
@@ -165,11 +255,11 @@ const Photos: FC<{
       }))
     )
       return;
-    await onSave(pictures.filter((_, i) => i !== index));
+    await onDelete(pictures[index]);
   };
 
   const download = (picture: Picture) => {
-    const src = photoSrc(picture);
+    const src = resolveSrc(picture);
     if (!src) return;
     const link = document.createElement('a');
     link.href = src;
@@ -191,7 +281,7 @@ const Photos: FC<{
           </TableHead>
           <TableBody>
             {pictures.map((picture, index) => {
-              const src = photoSrc(picture);
+              const src = resolveSrc(picture);
               return (
                 <TableRow key={picture.id ?? `photo-${index}`}>
                   <TableCell>
@@ -247,6 +337,20 @@ const Photos: FC<{
             })}
           </TableBody>
         </Table>
+      )}
+
+      {totalCount > pageSize && (
+        <Pagination
+          page={page + 1}
+          pageSize={pageSize}
+          pageSizes={[10, 25, 50]}
+          totalItems={totalCount}
+          disabled={busy}
+          onChange={({ page: nextPage, pageSize: nextSize }) => {
+            // Carbon is 1-based, the API 0-based; a size change resets to the first page.
+            onPageChange(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+          }}
+        />
       )}
 
       {!readOnly && (
@@ -314,7 +418,7 @@ const Photos: FC<{
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/bmp"
                 capture="environment"
                 multiple
                 hidden

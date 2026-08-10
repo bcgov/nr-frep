@@ -38,6 +38,13 @@ parameters:
     value: "200m"
   - name: MIN_MEM
     value: "500Mi"
+  # Container timezone. Drives the JVM default zone, which the log pattern
+  # (%d in logging.pattern.console) renders against — OpenShift containers are
+  # UTC by default, which puts every log line 7-8 hours off the BC business
+  # day. A named zone resolves from the tzdb bundled in the JDK, so no OS
+  # tzdata package is required on the Alpine base image.
+  - name: TZ
+    value: America/Vancouver
   - name: APP_LOG_LEVEL
     value: INFO
   - name: SPRING_SECURITY_LOG_LEVEL
@@ -161,6 +168,8 @@ objects:
                 - containerPort: 8080
                   protocol: TCP
               env:
+                - name: TZ
+                  value: ${TZ}
                 - name: SERVER_PORT
                   value: "8080"
                 - name: AWS_COGNITO_ISSUER_URI

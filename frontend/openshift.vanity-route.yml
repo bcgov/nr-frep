@@ -1,0 +1,81 @@
+---
+# PROD vanity (custom-hostname) Route for the frontend.
+#
+# Applied SEPARATELY from frontend/openshift.deploy.yml and ONLY on the PROD
+# deploy (see the "Vanity Route (PROD)" step in reusable-deploy.yml).
+#
+# It lives in its own template because OpenShift v1 templates can't render an
+# object conditionally (`oc process` emits every object), so a vanity Route
+# baked into the main template would also be created — with the wrong hostname
+# — on TEST / PR-preview deploys. Keeping it here and gating the apply step on
+# PROD avoids that.
+#
+# On PROD this is the ONLY public Route. The default cluster-domain route
+# (frontend/openshift.route.yml) is applied only when target != 'prod', so
+# production is reachable solely via VANITY_HOST — one URL, no
+# nr-frep-prod.apps.gold... fallback. There is deliberately no second hostname
+# to fall back on, which is why the vanity cert is verified in a dry-run
+# deploy well ahead of go-live rather than on the day.
+#
+# TLS is edge-terminated with the Entrust-issued cert for VANITY_HOST:
+#   certificate   = the leaf/server cert (CN/SAN = VANITY_HOST)
+#   key           = its matching unencrypted private key
+#   caCertificate = the intermediate + cross-signing root chain
+#
+# The chain matters here. The leaf is issued by "Entrust OV TLS Issuing RSA
+# CA 2", which is itself issued by "Sectigo Public Server Authentication Root
+# R46" — a root that is cross-signed by "USERTrust RSA Certification
+# Authority". Supplying only the Entrust intermediate can make the router
+# reject the Route with `unknown authority` on clusters whose OS trust store
+# lacks R46. Pass intermediate + R46 concatenated (in that order). If the
+# router still refuses, append the USERTrust root as a third certificate.
+#
+# All three are non-secret-in-template PARAMETERS fed from GitHub Environment
+# secrets at deploy time (VANITY_TLS_*). insecureEdgeTerminationPolicy:
+# Redirect sends http -> https, matching the default Route.
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: nr-frep-frontend-vanity-route
+parameters:
+  - name: NAME
+    description: App name prefix (must match the main deploy)
+    value: nr-frep
+  - name: ZONE
+    description: Deploy zone — 'prod' (must match the main deploy's object suffix)
+    required: true
+  - name: VANITY_HOST
+    description: Custom public hostname, e.g. frep.nrs.gov.bc.ca
+    required: true
+  - name: VANITY_TLS_CERTIFICATE
+    description: PEM leaf/server certificate for VANITY_HOST
+    required: true
+  - name: VANITY_TLS_KEY
+    description: PEM private key matching VANITY_TLS_CERTIFICATE (unencrypted)
+    required: true
+  - name: VANITY_TLS_CA_CERTIFICATE
+    description: PEM CA chain (intermediate + cross-signing root) for VANITY_HOST
+    required: true
+objects:
+  - apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      # Distinct name from the default Route so both coexist in the namespace.
+      name: ${NAME}-frontend-${ZONE}-vanity
+      labels:
+        app: ${NAME}-frontend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      host: ${VANITY_HOST}
+      to:
+        kind: Service
+        # Same Service the default Route targets.
+        name: ${NAME}-frontend-${ZONE}
+      port:
+        targetPort: http
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+        certificate: ${VANITY_TLS_CERTIFICATE}
+        key: ${VANITY_TLS_KEY}
+        caCertificate: ${VANITY_TLS_CA_CERTIFICATE}

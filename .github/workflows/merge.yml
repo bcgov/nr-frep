@@ -27,7 +27,7 @@ jobs:
       # Find the PR number associated with this squash-merged commit on main,
       # so we can deploy the same image tag that the PR was running.
       - id: pr
-        uses: bcgov/action-get-pr@bf6c85d0ed23a151f2829956c140fde87979bbf2 # v0.2.0
+        uses: bcgov/action-get-pr@3931962bf13b3f4702d0013ec7c836f752ff1a3b # v0.3.0
 
   deploy-test:
     name: TEST Deploys (${{ needs.init.outputs.pr }})
@@ -55,6 +55,8 @@ jobs:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
+      backend_replicas: "2"
+      frontend_replicas: "2"
 
   tests:
     name: Tests
@@ -68,52 +70,93 @@ jobs:
     with:
       target: test
 
-  # ── PROD deploy + image promote: TEMPORARILY DISABLED ─────────────────
-  # Merges to main no longer deploy to PROD. To re-enable, uncomment the
-  # `deploy-prod` and `promote` jobs below. (Both are commented out together:
-  # `promote` has `needs: [deploy-prod]`, so leaving it active would make the
-  # workflow invalid.)
+  # ── PROD deploy + monitor + promote: TEMPORARILY ENABLED ══════════════
   #
-  # deploy-prod:
-  #   name: PROD Deploys (${{ needs.init.outputs.pr }})
-  #   needs: [tests, init]
-  #   permissions:
-  #     contents: read
-  #   uses: ./.github/workflows/reusable-deploy.yml
-  #   secrets:
-  #     oc_namespace: ${{ secrets.oc_namespace }}
-  #     oc_token: ${{ secrets.oc_token }}
-  #     database_user: ${{ secrets.database_user }}
-  #     database_password: ${{ secrets.database_password }}
-  #     database_host: ${{ secrets.database_host }}
-  #     database_service_name: ${{ secrets.database_service_name }}
-  #     keystore_secret: ${{ secrets.keystore_secret }}
-  #     object_storage_host: ${{ secrets.object_storage_host }}
-  #     object_storage_bucket: ${{ secrets.object_storage_bucket }}
-  #     object_storage_access_key: ${{ secrets.object_storage_access_key }}
-  #     object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
-  #   with:
-  #     environment: prod
-  #     target: prod
-  #     tag: ${{ needs.init.outputs.pr }}
+  # ⚠️  RE-DISABLE THESE BEFORE LEAVING THEM ALONE. The standing policy is NO
+  # PROD deploys until go-live (~2026-09-07). All three jobs below are enabled
+  # only for the pre-go-live verification run: prove the vanity cert and URL
+  # work, prove Sysdig alerts land, then scale the pods down and comment all
+  # three back out until go-live.
   #
-  # # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
-  # # record of "this is the image running in production right now" and a
-  # # rollback target.
-  # promote:
-  #   name: Promote Images
-  #   needs: [deploy-prod, init]
-  #   runs-on: ubuntu-slim
-  #   permissions:
-  #     packages: write
-  #   strategy:
-  #     matrix:
-  #       package: [backend, frontend]
-  #   timeout-minutes: 1
-  #   steps:
-  #     - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-  #       with:
-  #         registry: ghcr.io
-  #         repository: ${{ github.repository }}/${{ matrix.package }}
-  #         target: ${{ needs.init.outputs.pr }}
-  #         tags: prod
+  # Comment/uncomment ALL THREE together — `monitor-prod` and `promote` both
+  # have `needs: [deploy-prod]`, so leaving either active on its own makes the
+  # whole workflow invalid.
+  deploy-prod:
+    name: PROD Deploys (${{ needs.init.outputs.pr }})
+    needs: [tests, init]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-deploy.yml
+    secrets:
+      oc_namespace: ${{ secrets.oc_namespace }}
+      oc_token: ${{ secrets.oc_token }}
+      database_user: ${{ secrets.database_user }}
+      database_password: ${{ secrets.database_password }}
+      database_host: ${{ secrets.database_host }}
+      database_service_name: ${{ secrets.database_service_name }}
+      keystore_secret: ${{ secrets.keystore_secret }}
+      object_storage_host: ${{ secrets.object_storage_host }}
+      object_storage_bucket: ${{ secrets.object_storage_bucket }}
+      object_storage_access_key: ${{ secrets.object_storage_access_key }}
+      object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
+      # CLAMAV_HOST is `required: true` in backend/openshift.deploy.yml, so
+      # omitting it makes `oc process` fail outright — not a soft default.
+      # Its value is environment-scoped: clamd runs in the per-environment
+      # namespace (bd657f-prod), NOT a shared tools namespace.
+      clamav_host: ${{ secrets.CLAMAV_HOST }}
+      # PROD vanity Route (frep.nrs.gov.bc.ca) — the ONLY public URL on prod.
+      # Consumed only when the `prod` environment also defines the VANITY_HOST
+      # variable; the deploy step skips itself otherwise, which would leave
+      # prod with no route at all. See frontend/openshift.vanity-route.yml.
+      vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
+      vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
+      vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
+    with:
+      environment: prod
+      target: prod
+      tag: ${{ needs.init.outputs.pr }}
+      backend_replicas: "3"
+      frontend_replicas: "3"
+
+  # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
+  # unset — adoption is gradual. Alert templates live in monitoring/alerts/.
+  monitor-prod:
+    name: Sysdig Monitor (PROD)
+    needs: [deploy-prod]
+    runs-on: ubuntu-24.04
+    environment: prod
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      # Consolidated from bcgov/action-sysdig-monitor into the bcgov/actions
+      # suite. v0.5.0 is the first release carrying sysdig-monitor, and it
+      # keeps the __APP__ template substitution that monitoring/alerts/*.json
+      # depend on — don't downgrade this pin.
+      - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
+        with:
+          sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
+          oc_namespace: ${{ secrets.oc_namespace }}
+          app: nr-frep
+
+  # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
+  # record of "this is the image running in production right now" and a
+  # rollback target.
+  promote:
+    name: Promote Images
+    needs: [deploy-prod, init]
+    runs-on: ubuntu-slim
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [backend, frontend]
+    timeout-minutes: 1
+    steps:
+      - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
+        with:
+          registry: ghcr.io
+          repository: ${{ github.repository }}/${{ matrix.package }}
+          target: ${{ needs.init.outputs.pr }}
+          tags: prod

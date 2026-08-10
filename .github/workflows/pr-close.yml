@@ -39,10 +39,36 @@ jobs:
       # for each. Listing both sub-app labels here makes PR close actually
       # remove the deployed objects.
       #
-      # Caveat: `oc`'s `all` alias does NOT include NetworkPolicy, so the
-      # per-PR ingress NetworkPolicies (defined in both openshift.deploy.yml
-      # files) are NOT swept by this cleanup. They accumulate over time;
-      # if that becomes a problem, add an explicit
-      #   oc delete networkpolicy -l app=...
-      # step here.
+      # NetworkPolicies are NOT covered by `oc delete all` — the
+      # cleanup-networkpolicies job below handles them explicitly.
       cleanup_name: nr-frep-backend-${{ github.event.number }} nr-frep-frontend-${{ github.event.number }}
+
+  # `oc delete all` (used by the helper above) expands to pods, services,
+  # routes, deployments, replicasets, configmaps, etc. — but NOT
+  # networkpolicy. Both openshift.deploy.yml templates create per-PR
+  # NetworkPolicies (frontend ingress-from-router, backend
+  # ingress-from-frontend), so without this step they accumulate forever in
+  # the namespace. Match by the same `app=` label values the helper uses.
+  cleanup-networkpolicies:
+    name: Cleanup PR NetworkPolicies
+    needs: cleanup
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Delete per-PR NetworkPolicies
+        uses: bcgov/action-oc-runner@09b5eeae15bdbc7f7a21b406ee2c66a1d5819f8c # v1.6.0
+        with:
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_token: ${{ secrets.oc_token }}
+          # Same reasoning as the helper above: without an explicit server the
+          # action defaults to silver and would target the wrong cluster.
+          oc_server: ${{ vars.oc_server }}
+          commands: |
+            set -eu
+            for label in \
+              "nr-frep-backend-${{ github.event.number }}" \
+              "nr-frep-frontend-${{ github.event.number }}"
+            do
+              echo "Deleting networkpolicies matching app=${label}"
+              oc delete networkpolicy -l "app=${label}" --ignore-not-found
+            done

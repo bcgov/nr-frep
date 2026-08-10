@@ -31,6 +31,23 @@ on:
         description: Container tag
         default: ${{ github.event.number }}
         type: string
+      backend_replicas:
+        description: |
+          Backend pod count. Sets Deployment.spec.replicas AND both ends of the
+          backend HPA (MIN_REPLICAS = MAX_REPLICAS), so the count is pinned
+          rather than autoscaled — predictable against the namespace quota.
+          Defaults to "1" so PR previews stay light; merge.yml sets "2" for
+          TEST and "3" for PROD.
+        default: "1"
+        type: string
+      frontend_replicas:
+        description: |
+          Frontend pod count. Defaults to "2" — the value hardcoded in
+          frontend/openshift.deploy.yml before this was parameterized, so PR
+          previews and TEST are unchanged. merge.yml sets "2" for TEST and "3"
+          for PROD.
+        default: "2"
+        type: string
       triggers:
         description: Triggers for deployment (paths that must change)
         default: ""
@@ -75,6 +92,21 @@ on:
           clamd host for the backend's CLAMAV_HOST (e.g.
           clamav.<tools-namespace>.svc.cluster.local). Required by the backend
           template — the deploy fails if it isn't provided.
+        required: false
+      vanity_tls_certificate:
+        description: |
+          PEM leaf/server certificate for the PROD vanity Route hostname
+          (vars.VANITY_HOST). Applied only on PROD when VANITY_HOST is set.
+        required: false
+      vanity_tls_key:
+        description: |
+          PEM private key (unencrypted) matching vanity_tls_certificate.
+        required: false
+      vanity_tls_ca_certificate:
+        description: |
+          PEM CA chain for the vanity certificate: the Entrust intermediate
+          followed by the Sectigo R46 cross-signing root. See the chain notes
+          in frontend/openshift.vanity-route.yml.
         required: false
 
     outputs:
@@ -135,6 +167,8 @@ jobs:
             -p ZONE="${{ inputs.target }}"
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
+            -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
+            -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
@@ -163,6 +197,11 @@ jobs:
       contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
+    # Job-level so the vanity step's `if:` can read it (a step's own `env` is
+    # not available to that step's `if`). Environment-scoped var — set only on
+    # the `prod` environment; empty everywhere else, which skips the step.
+    env:
+      VANITY_HOST: ${{ vars.VANITY_HOST }}
     steps:
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
@@ -181,9 +220,9 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
-            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
+            -p REPLICAS="${{ inputs.frontend_replicas }}"
             -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
             -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
             -p VITE_LOGOUT_SITEMINDER_URL="${{ vars.VITE_LOGOUT_SITEMINDER_URL }}"
@@ -192,4 +231,56 @@ jobs:
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_APP_NAME="${{ vars.VITE_APP_NAME }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
+          triggers: ${{ inputs.triggers }}
+
+      # Default cluster-domain Route (nr-frep-<slot>.apps.gold...). Applied on
+      # every environment EXCEPT prod — PROD is served ONLY by the vanity Route
+      # below, so it gets no default route and has a single public URL. TEST and
+      # PR previews have no custom hostname and need this. Its own template
+      # because `oc process` can't skip an object per environment.
+      - name: Default Route (non-PROD)
+        if: ${{ inputs.target != 'prod' }}
+        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        with:
+          file: frontend/openshift.route.yml
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_server: ${{ vars.oc_server }}
+          oc_token: ${{ secrets.oc_token }}
+          debug: false
+          overwrite: true
+          parameters:
+            -p NAME="nr-frep"
+            -p ZONE="${{ inputs.target }}"
+            -p SLOT="${{ inputs.slot || inputs.target }}"
+          triggers: ${{ inputs.triggers }}
+
+      # PROD vanity Route (frep.nrs.gov.bc.ca). On PROD this is the ONLY public
+      # Route — the default-route step above is skipped for prod.
+      #
+      # Runs only on PROD and only when the vanity host is configured
+      # (VANITY_HOST unset -> skipped), so TEST and PR previews are unaffected.
+      # The cert / key / chain are multiline PEM secrets: routed through env
+      # and passed as "$VAR" (single bash expansion) so their newlines survive
+      # — same reasoning as DATABASE_PASSWORD in the backend job above.
+      - name: Vanity Route (PROD)
+        if: ${{ inputs.target == 'prod' && env.VANITY_HOST != '' }}
+        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        env:
+          VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
+          VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
+          VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
+        with:
+          file: frontend/openshift.vanity-route.yml
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_server: ${{ vars.oc_server }}
+          oc_token: ${{ secrets.oc_token }}
+          debug: false
+          overwrite: true
+          parameters:
+            -p NAME="nr-frep"
+            -p ZONE="${{ inputs.target }}"
+            -p VANITY_HOST="$VANITY_HOST"
+            -p VANITY_TLS_CERTIFICATE="$VANITY_TLS_CERTIFICATE"
+            -p VANITY_TLS_KEY="$VANITY_TLS_KEY"
+            -p VANITY_TLS_CA_CERTIFICATE="$VANITY_TLS_CA_CERTIFICATE"
           triggers: ${{ inputs.triggers }}

@@ -23,6 +23,13 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    # Job-level, NOT step-level: a step's own `env:` block is not in scope for
+    # that same step's `if:`, so gating on step-level vars silently evaluates
+    # them as empty and the step never runs. Same reason the frontend job's
+    # VANITY_HOST sits at job level in reusable-deploy.yml.
+    env:
+      SONAR_TOKEN: ${{ secrets.sonar_token_backend }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY_BACKEND }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -45,19 +52,22 @@ jobs:
         working-directory: backend
         run: mvn -B -DskipITs verify
 
-      # Sonar is gated on the secret being present so PRs from forks (which
-      # don't get secrets) don't fail. projectKey is currently the BC Gov
-      # starter-kit's — update it when a real FREP SonarCloud project exists.
+      # Sonar is gated on BOTH the token and the project key being present, so
+      # PRs from forks (no secrets) and repos that haven't had their SonarCloud
+      # projects created yet skip the scan instead of failing it.
+      #
+      # Backend and frontend deliberately use SEPARATE project keys. nr-fspts
+      # shares one key between them, which makes each scan replace the other's
+      # results — don't copy that here.
       - name: SonarCloud scan
-        if: env.SONAR_TOKEN != ''
+        if: env.SONAR_TOKEN != '' && env.SONAR_PROJECT_KEY != ''
         working-directory: backend
-        env:
-          SONAR_TOKEN: ${{ secrets.sonar_token_backend }}
         run: |
           mvn -B sonar:sonar \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.organization=bcgov-sonarcloud \
-            -Dsonar.projectKey=quickstart-openshift_backend \
+            -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+            -Dsonar.projectName=nr-frep-backend \
             -Dsonar.token="$SONAR_TOKEN"
 
   frontend-tests:
@@ -68,14 +78,25 @@ jobs:
     steps:
       - uses: bcgov/action-test-and-analyse@8f699e3fd3fadd9a6adf6f4b1f2638ef7ecfefb9 # v2.0.0
         env:
-          sonar_token: ${{ secrets.sonar_token_frontend }}
+          # The composite action skips its Sonar step when the token is empty,
+          # and there is no step-level `if:` available inside it. So blank the
+          # token when the project key isn't configured — that makes a missing
+          # SONAR_PROJECT_KEY_FRONTEND skip the scan (as for fork PRs) rather
+          # than run it against an empty key. Lint and tests still run either
+          # way; only the Sonar upload is gated.
+          sonar_token: ${{ vars.SONAR_PROJECT_KEY_FRONTEND != '' && secrets.sonar_token_frontend || '' }}
         with:
           # `lint` already runs prettier via eslint-plugin-prettier, so no
           # separate `format:check` step. `test:coverage` is the real script
           # name in package.json (Vitest with --coverage; auto-installs
           # Playwright browsers via the pretest:coverage hook).
+          #
+          # --ignore-scripts skips DEPENDENCY install hooks only. Our own
+          # `pretest:coverage` is an `npm run` lifecycle hook, so Playwright
+          # still installs. Keep this flag in sync with reusable-tests.yml —
+          # SonarCloud only flags one of the two `npm ci` call sites.
           commands: |
-            npm ci
+            npm ci --ignore-scripts
             npm run lint
             npm run test:coverage
           dir: frontend
@@ -83,7 +104,8 @@ jobs:
           sonar_args: >
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts,**/*.test.ts,**/*.test.tsx,**/e2e/**
             -Dsonar.organization=bcgov-sonarcloud
-            -Dsonar.projectKey=quickstart-openshift_frontend
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY_FRONTEND }}
+            -Dsonar.projectName=nr-frep-frontend
             -Dsonar.sources=src
             -Dsonar.test.inclusions=**/*spec.ts,**/*.test.ts,**/*.test.tsx
             -Dsonar.javascript.lcov.reportPaths=./coverage/lcov.info

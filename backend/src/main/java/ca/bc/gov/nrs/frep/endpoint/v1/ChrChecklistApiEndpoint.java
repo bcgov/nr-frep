@@ -123,14 +123,14 @@ public interface ChrChecklistApiEndpoint {
 
   @PreAuthorize(FrepAuthorities.ADMIN)
   @PostMapping("/checklists/{id}/activate")
-  ResponseEntity<CheckList> activateChecklist(@PathVariable long id);
+  ResponseEntity<Void> activateChecklist(@PathVariable long id);
 
   // Self-service release of an offline checkout (RDO → ACT): editor-callable, but only succeeds when
   // the request's deviceCheckoutGuid matches the server's, so it releases only the caller's own
   // checkout. Admin activate above is the fallback for a checkout stranded on another device.
   @PreAuthorize("@chrAuth.canEditChecklist(#id)")
   @PostMapping("/checklists/{id}/release")
-  ResponseEntity<CheckList> releaseCheckout(@PathVariable long id, @RequestBody ReleaseCheckoutRequest body);
+  ResponseEntity<Void> releaseCheckout(@PathVariable long id, @RequestBody ReleaseCheckoutRequest body);
 
   @PreAuthorize("@chrAuth.canEditChecklist(#id)")
   @PostMapping("/checklists/{id}/offline")

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -16,7 +17,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.nrs.frep.ChrConstants;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
+import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStandRow;
@@ -32,6 +42,7 @@ import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.service.v1.frep.ProtocolChecklistService.ProtocolSubmitValidationException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +50,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -66,8 +78,16 @@ class ProtocolChecklistServiceTest {
   @Mock
   private FamUserDirectoryService famUserDirectoryService;
 
+  private static final java.util.UUID CHECKOUT_TOKEN =
+      java.util.UUID.fromString("11111111-2222-3333-4444-555555555555");
+
   @Mock
   private VirusScanner virusScanner;
+
+  // The attachment list fills each row's real size with a HEAD per row against object storage
+  // (PR 3a) — so any test that returns a non-empty attachment page needs this wired.
+  @Mock
+  private ca.bc.gov.nrs.frep.service.v1.ObjectStorageService objectStorage;
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -78,6 +98,490 @@ class ProtocolChecklistServiceTest {
     // historical SLB records are view-only (mutations 403). Default the editable path to SLR; the
     // few view-only/read tests override this stub to SLB explicitly.
     lenient().when(checklistRepository.resolveResourceType(anyString())).thenReturn("SLR");
+    // Writes now also consult status. Default to ACT so the existing tests exercise the realistic
+    // editable path; the status tests below override it.
+    lenient().when(checklistRepository.getBioChecklistStatus(anyString()))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+  }
+
+  // ── Status enforcement (BE-1) ────────────────────────────────────────
+  //
+  // Until now nothing on the Biodiversity write path read status at all: assertEditable rejected only
+  // legacy SLB records, so a SUB or RDO SLR checklist was still writable through the API and the UI
+  // was the sole gate. Verified against DEV on 2026-08-07 — the notes proc accepted a write to a
+  // record the app treats as read-only.
+
+  private BioStratum aStratum() {
+    return stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+  }
+
+  // ── Snapshot check-in (BE-5) ─────────────────────────────────────────
+  //
+  // Each of these pins a step the week-1 spike verified against DEV. They are ordering guarantees,
+  // so they assert with InOrder rather than just "was called".
+
+  private BioSnapshotUpload anUpload(List<BioSnapshotUpload.BioStratumUpload> strata,
+      List<BioSnapshotUpload.Tombstone> tombstones) {
+    return new BioSnapshotUpload(
+        BioSnapshot.CURRENT_SCHEMA_VERSION, CHECKOUT_TOKEN.toString(),
+        opening(null, "loc", "N", null, "N", null, null),
+        new RiparianNotes("9001", "field notes", "3"),
+        strata, tombstones);
+  }
+
+  private void givenCheckedOutToThisDevice() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001")).thenReturn(CHECKOUT_TOKEN);
+  }
+
+  @Test
+  void checkInThreadsTheOpeningsTokenIntoTheNotesSave() {
+    // The opening and notes write the SAME BIODIVERSITY_CHECKLIST row and share one revision_count.
+    // Sending the device's stale token on the notes save fails record.modified2 every time.
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    service.uploadSnapshot("9001", anUpload(List.of(), List.of()));
+
+    ArgumentCaptor<RiparianNotes> notes = ArgumentCaptor.forClass(RiparianNotes.class);
+    verify(writeRepository).saveNotes(notes.capture(), any(), any());
+    assertEquals("4", notes.getValue().revisionCount(),
+        "notes must use the token the opening returned, not the device's stale '3'");
+  }
+
+  @Test
+  void checkInAssignsRealIdsAndRepointsPlotsAtThem() {
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.saveBioStratum(any(), any())).thenReturn(
+        stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null).withIdentity("5001", "1"));
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    BioPlot offlinePlot = plot("someone", null, null, "1", "N", List.of())
+        .withIdentity("tmp:plot-1", "tmp:stratum-1", null);
+    BioStratum offlineStratum =
+        stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null)
+            .withIdentity("tmp:stratum-1", null);
+
+    service.uploadSnapshot("9001", anUpload(
+        List.of(new BioSnapshotUpload.BioStratumUpload(offlineStratum, List.of(offlinePlot))),
+        List.of()));
+
+    ArgumentCaptor<BioStratum> savedStratum = ArgumentCaptor.forClass(BioStratum.class);
+    verify(writeRepository).saveBioStratum(savedStratum.capture(), any());
+    assertEquals(null, savedStratum.getValue().stratumId(), "a tmp: id must be cleared for insert");
+
+    ArgumentCaptor<BioPlot> savedPlot = ArgumentCaptor.forClass(BioPlot.class);
+    verify(writeRepository).saveBioPlot(savedPlot.capture(), any());
+    assertEquals("5001", savedPlot.getValue().stratumId(),
+        "the plot must point at the stratum's real id, not the tmp: one it was captured against");
+    assertEquals(null, savedPlot.getValue().plotId());
+  }
+
+  @Test
+  void checkInDeletesPlotsBeforeTheirStratum() {
+    // The stratum delete REFUSES while any plot references it — it does not cascade. Wrong order
+    // aborts the whole sync on an error that reads like a data problem.
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.deleteBioPlot(any(), any())).thenReturn("");
+    when(writeRepository.deleteBioStratum(any(), any())).thenReturn("");
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    service.uploadSnapshot("9001", anUpload(List.of(), List.of(
+        new BioSnapshotUpload.Tombstone("STRATUM", "5001", "1"),
+        new BioSnapshotUpload.Tombstone("PLOT", "7001", "1"))));
+
+    // Listed stratum-first in the payload; must still execute plot-first.
+    InOrder order = inOrder(writeRepository);
+    order.verify(writeRepository).deleteBioPlot("7001", "1");
+    order.verify(writeRepository).deleteBioStratum("5001", "1");
+  }
+
+  @Test
+  void checkInSavesBeforeItDeletesAndReleasesTheCheckoutLast() {
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.deleteBioPlot(any(), any())).thenReturn("");
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    service.uploadSnapshot("9001", anUpload(List.of(),
+        List.of(new BioSnapshotUpload.Tombstone("PLOT", "7001", "1"))));
+
+    // Deletes after saves, so an id assigned in this sync can't be removed by a stale reference; and
+    // the checkout is released only once everything else has landed.
+    InOrder order = inOrder(writeRepository);
+    order.verify(writeRepository).saveBiodiversityOpening(any(), any());
+    order.verify(writeRepository).deleteBioPlot("7001", "1");
+    order.verify(writeRepository).activate(eq("9001"), any());
+  }
+
+  @Test
+  void aFailedDeleteAbortsTheCheckIn() {
+    // The delete procs report failure as a message, not an exception. Ignoring it would silently drop
+    // the deletion and the row would reappear on the device — what tombstones exist to prevent.
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.deleteBioStratum(any(), any()))
+        .thenReturn("frep.error.usr.childexists:STRATUM_ID;");
+
+    assertThrows(ConflictFoundException.class, () -> service.uploadSnapshot("9001",
+        anUpload(List.of(), List.of(new BioSnapshotUpload.Tombstone("STRATUM", "5001", "1")))));
+
+    verify(writeRepository, never()).activate(any(), any());
+  }
+
+  @Test
+  void checkInFromAnotherDeviceIsRefused() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001"))
+        .thenReturn(java.util.UUID.fromString("99999999-9999-9999-9999-999999999999"));
+
+    assertThrows(ResponseStatusException.class,
+        () -> service.uploadSnapshot("9001", anUpload(List.of(), List.of())));
+    verify(writeRepository, never()).saveBiodiversityOpening(any(), any());
+  }
+
+  @Test
+  void anUnreadableSnapshotVersionIsBlockedNotMigrated() {
+    // Never silently reinterpret an older graph — that is how a sync corrupts rather than fails.
+    BioSnapshotUpload old = new BioSnapshotUpload(
+        "0", CHECKOUT_TOKEN.toString(), opening(null, "loc", "N", null, "N", null, null),
+        null, List.of(), List.of());
+
+    assertThrows(InvalidParameterException.class, () -> service.uploadSnapshot("9001", old));
+    verify(writeRepository, never()).saveBiodiversityOpening(any(), any());
+  }
+
+  // ── Offline snapshot (BE-4) ──────────────────────────────────────────
+
+  @Test
+  void theSnapshotDoesNotClaimTheCheckout() {
+    // Reads first, checkout last (decision 18): an abandoned download must leave the checklist
+    // editable online rather than stranded in RDO with no local copy to show for it.
+    when(writeRepository.getBiodiversityOpening("9001"))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null));
+    when(writeRepository.listBioStrata("9001")).thenReturn(List.of());
+    when(writeRepository.getAttachments(eq("9001"), any(), anyInt(), anyInt()))
+        .thenReturn(List.of());
+
+    service.getSnapshot("9001");
+
+    verify(writeRepository, never()).takeOffline(any(), any(), any());
+  }
+
+  @Test
+  void theSnapshotIsRefusedForANonSlrRecord() {
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");
+
+    assertThrows(ResponseStatusException.class, () -> service.getSnapshot("9001"));
+    verify(writeRepository, never()).listBioStrata(any());
+  }
+
+  @Test
+  void theSnapshotCarriesEveryAttachmentNotJustTheFirstPage() {
+    // The list read is paginated for the online tab, but an offline copy needs the complete set —
+    // page 1 would silently truncate both what the device can see and what it can flush back.
+    when(writeRepository.getBiodiversityOpening("9001"))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null));
+    when(writeRepository.listBioStrata("9001")).thenReturn(List.of());
+    List<AttachmentRow> firstPage = new ArrayList<>();
+    for (int i = 0; i < 50; i++) {
+      firstPage.add(new AttachmentRow(String.valueOf(i), "f" + i + ".pdf", "d", "PDF", "1.00"));
+    }
+    when(writeRepository.getAttachments(eq("9001"), any(), eq(0), anyInt())).thenReturn(firstPage);
+    when(writeRepository.getAttachments(eq("9001"), any(), eq(1), anyInt()))
+        .thenReturn(List.of(new AttachmentRow("50", "f50.pdf", "d", "PDF", "1.00")));
+
+    BioSnapshot snapshot = service.getSnapshot("9001");
+
+    assertEquals(51, snapshot.attachments().size());
+  }
+
+  @Test
+  void theSnapshotIsNotTruncatedByAWrongTotalCount() {
+    // countAttachments is a separate query from the page read. If the snapshot terminated on it, a
+    // disagreement between the two would silently drop attachments the device can then neither see
+    // nor flush back. Here the count says 0 while two full pages exist.
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLR");
+    when(writeRepository.getBiodiversityOpening("9001"))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null));
+    when(writeRepository.listBioStrata("9001")).thenReturn(List.of());
+    when(writeRepository.countAttachments(any(), any())).thenReturn(0);
+    List<AttachmentRow> fullPage = new ArrayList<>();
+    for (int i = 0; i < 50; i++) {
+      fullPage.add(new AttachmentRow(String.valueOf(i), "f" + i + ".pdf", "d", "PDF", "1.00"));
+    }
+    when(writeRepository.getAttachments(eq("9001"), any(), eq(0), anyInt())).thenReturn(fullPage);
+    when(writeRepository.getAttachments(eq("9001"), any(), eq(1), anyInt()))
+        .thenReturn(List.of(new AttachmentRow("50", "f50.pdf", "d", "PDF", "1.00")));
+
+    assertEquals(51, service.getSnapshot("9001").attachments().size());
+  }
+
+  @Test
+  void theSnapshotStopsOnAShortPageRatherThanSpinning() {
+    // Defensive: an empty first page must end the walk immediately.
+    when(writeRepository.getBiodiversityOpening("9001"))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null));
+    when(writeRepository.listBioStrata("9001")).thenReturn(List.of());
+    when(writeRepository.getAttachments(eq("9001"), any(), anyInt(), anyInt()))
+        .thenReturn(List.of());
+
+    BioSnapshot snapshot = service.getSnapshot("9001");
+
+    assertEquals(0, snapshot.attachments().size());
+    assertEquals(BioSnapshot.CURRENT_SCHEMA_VERSION, snapshot.schemaVersion());
+  }
+
+  @Test
+  void theSnapshotNestsPlotsUnderTheirStratum() {
+    when(writeRepository.getBiodiversityOpening("9001"))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null));
+    when(writeRepository.listBioStrata("9001")).thenReturn(
+        List.of(new BioStratumRow("5001", "A1", "CC", null, "1", "2.5", "1")));
+    when(writeRepository.getBioStratum("5001")).thenReturn(
+        stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null).withIdentity("5001", "1"));
+    when(writeRepository.listBioPlots("5001")).thenReturn(
+        List.of(new BioPlotRow("7001", "P1", "someone", null, "1")));
+    when(writeRepository.getBioPlot("7001"))
+        .thenReturn(plot("someone", null, null, "1", "N", List.of()));
+    when(writeRepository.getAttachments(eq("9001"), any(), anyInt(), anyInt()))
+        .thenReturn(List.of());
+
+    BioSnapshot snapshot = service.getSnapshot("9001");
+
+    assertEquals(1, snapshot.strata().size());
+    assertEquals("5001", snapshot.strata().get(0).stratum().stratumId());
+    assertEquals(1, snapshot.strata().get(0).plots().size());
+  }
+
+  // ── Attachment leaf guard (BE-3) ─────────────────────────────────────
+  //
+  // saveAttachment previously had no editability guard at all — not even the SLB exclusion — so an
+  // attachment could be added to a historical or submitted checklist. Both leaves now run the same
+  // three-way check as the section saves, and as CHR's photo endpoints.
+
+  private static MockMultipartFile anAttachment() {
+    return new MockMultipartFile("file", "map.pdf", "application/pdf", new byte[] {1, 2, 3});
+  }
+
+  @Test
+  void uploadingAnAttachmentToASubmittedChecklistIsForbidden() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "9001", anAttachment(), "a map", null));
+    verifyNoInteractions(virusScanner);
+  }
+
+  @Test
+  void uploadingAnAttachmentWhileCheckedOutNeedsTheDevicesToken() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001"))
+        .thenReturn(java.util.UUID.fromString("11111111-2222-3333-4444-555555555555"));
+
+    assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "9001", anAttachment(), "a map", "not-my-checkout"));
+  }
+
+  @Test
+  void theOfflineFlushCanUploadWhileCheckedOutWithItsOwnToken() {
+    // RDO must be allowed for the holder, or offline check-in cannot work: attachments are flushed
+    // before the snapshot lands, and the RDO -> ACT flip happens at the end of that sync.
+    java.util.UUID token = java.util.UUID.fromString("11111111-2222-3333-4444-555555555555");
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001")).thenReturn(token);
+
+    assertDoesNotThrow(() -> service.saveAttachment(
+        "bio", "9001", anAttachment(), "a map", token.toString()));
+    verify(writeRepository).saveAttachment(
+        eq("9001"), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void deletingAnAttachmentOnASubmittedChecklistIsForbidden() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    assertThrows(ResponseStatusException.class,
+        () -> service.deleteAttachment("bio", "9001", "77", null));
+    verify(writeRepository, never()).deleteAttachment(any(), any(), any());
+  }
+
+  // ── Offline checkout (BE-2) ──────────────────────────────────────────
+
+  @Test
+  void takeOfflineIssuesAServerMintedToken() {
+    when(writeRepository.takeOffline(eq("9001"), any(), any())).thenReturn("");
+
+    BioCheckout result = service.takeOffline("9001");
+
+    assertEquals("RDO", result.statusCode());
+    // The token must be server-issued, and must be the one actually written.
+    ArgumentCaptor<java.util.UUID> written = ArgumentCaptor.forClass(java.util.UUID.class);
+    verify(writeRepository).takeOffline(eq("9001"), written.capture(), any());
+    assertEquals(written.getValue().toString(), result.deviceCheckoutGuid());
+  }
+
+  @Test
+  void takeOfflineIsRefusedForAHistoricalSlbRecord() {
+    // Checking out an SLB record would hand a device a copy it could never sync back.
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");
+
+    // Refused by the pre-existing SLB guard, which throws ResponseStatusException rather than
+    // AccessForbiddenException — different type, same 403, and it keeps the more specific
+    // "historical record" wording instead of the generic SLR-only one.
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.takeOffline("9001"));
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    assertTrue(ex.getReason().contains("historical"));
+    verify(writeRepository, never()).takeOffline(any(), any(), any());
+  }
+
+  @Test
+  void takeOfflineIsRefusedWhenTheProcSaysTheStatusIsWrong() {
+    // The ACT guard lives in the proc's WHERE clause, so "already checked out" surfaces as an error
+    // string rather than a thrown exception — it still has to become a refusal, not a silent success.
+    when(writeRepository.takeOffline(eq("9001"), any(), any()))
+        .thenReturn("frep.error.usr.checkout.unavailable;");
+
+    assertThrows(AccessForbiddenException.class, () -> service.takeOffline("9001"));
+  }
+
+  @Test
+  void releaseRequiresTheCallersOwnToken() {
+    when(checklistRepository.getBioChecklistStatus("9001")).thenReturn("RDO");
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001"))
+        .thenReturn(java.util.UUID.fromString("11111111-2222-3333-4444-555555555555"));
+
+    assertThrows(AccessForbiddenException.class,
+        () -> service.releaseCheckout("9001", "not-my-checkout"));
+    verify(writeRepository, never()).activate(any(), any());
+  }
+
+  @Test
+  void releaseWithTheMatchingTokenActivates() {
+    java.util.UUID token = java.util.UUID.fromString("11111111-2222-3333-4444-555555555555");
+    when(checklistRepository.getBioChecklistStatus("9001")).thenReturn("RDO");
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001")).thenReturn(token);
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    BioCheckout result = service.releaseCheckout("9001", token.toString());
+
+    assertEquals("ACT", result.statusCode());
+    assertEquals(null, result.deviceCheckoutGuid());
+    verify(writeRepository).activate(eq("9001"), any());
+  }
+
+  @Test
+  void releasingAChecklistThatIsNotCheckedOutIsANoOp() {
+    // Idempotent, matching CHR: the common cause is a device discarding a copy the server already
+    // reclaimed, and failing that would leave the user stuck with an undismissable local copy.
+    when(checklistRepository.getBioChecklistStatus("9001")).thenReturn("ACT");
+
+    BioCheckout result = service.releaseCheckout("9001", "anything");
+
+    assertEquals("ACT", result.statusCode());
+    verify(writeRepository, never()).activate(any(), any());
+  }
+
+  @Test
+  void adminActivateNeedsNoToken() {
+    // The stranded-device fallback: no token is available by definition.
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    BioCheckout result = service.activate("9001");
+
+    assertEquals("ACT", result.statusCode());
+    assertEquals(null, result.deviceCheckoutGuid());
+    verify(checklistRepository, never()).getBioDeviceCheckoutGuid(any());
+  }
+
+  @Test
+  void activateIsRefusedWhenNothingIsCheckedOut() {
+    when(writeRepository.activate(eq("9001"), any()))
+        .thenReturn("frep.error.usr.checkout.notheld;");
+
+    assertThrows(AccessForbiddenException.class, () -> service.activate("9001"));
+  }
+
+  @Test
+  void saveOnASubmittedChecklistIsForbidden() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.saveBioStratum(aStratum()));
+
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    assertTrue(ex.getReason().contains("submitted"));
+    verify(writeRepository, never()).saveBioStratum(any(), any());
+  }
+
+  @Test
+  void onlineSaveOnACheckedOutChecklistIsForbidden() {
+    // The per-section endpoints send no checkout token, so RDO must refuse them — that is what makes
+    // a checked-out checklist read-only online while the device still holds it.
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getBioDeviceCheckoutGuid("9001"))
+        .thenReturn(java.util.UUID.fromString("11111111-2222-3333-4444-555555555555"));
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.saveBioStratum(aStratum()));
+
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    assertTrue(ex.getReason().contains("checked out"));
+    verify(writeRepository, never()).saveBioStratum(any(), any());
+  }
+
+  @Test
+  void saveOnAnActiveChecklistIsAllowed() {
+    // Control: proves the refusals above are the status check firing, not the guard blocking
+    // everything. Without this, a bug that refused every write would still pass the two tests above.
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+
+    assertDoesNotThrow(() -> service.saveBioStratum(aStratum()));
+
+    verify(writeRepository).saveBioStratum(any(), any());
+  }
+
+  @Test
+  void saveOnAMissingChecklistDefersToTheProcNotFound() {
+    // A null status means no such row — nothing writes a null status, so this is the not-found path.
+    // It must stay permissive: turning it into a 403 would report a bogus id as "read-only".
+    when(checklistRepository.getBioChecklistStatus("9001")).thenReturn(null);
+
+    assertDoesNotThrow(() -> service.saveBioStratum(aStratum()));
+
+    verify(writeRepository).saveBioStratum(any(), any());
+  }
+
+  @Test
+  void theSlbExclusionIsCheckedBeforeStatus() {
+    // A historical SLB record must be refused as SLB regardless of its status — the message the user
+    // sees should say "historical", not "submitted".
+    when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");
+    lenient().when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class, () -> service.saveBioStratum(aStratum()));
+
+    assertTrue(ex.getReason().contains("historical"));
   }
 
   @Test
@@ -522,7 +1026,7 @@ class ProtocolChecklistServiceTest {
     // Legacy rejected zero-byte attachments (frep.web.error.emptyFile); the rewrite lost that, and
     // an empty file produces a metadata row pointing at nothing.
     ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-        () -> service.saveAttachment("bio", "1", upload("notes.pdf", new byte[0]), "desc"));
+        () -> service.saveAttachment("bio", "1", upload("notes.pdf", new byte[0]), "desc", null));
 
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     verifyNoInteractions(virusScanner);
@@ -533,14 +1037,14 @@ class ProtocolChecklistServiceTest {
   @Test
   void rejectsAMissingFilePart() {
     assertThrows(ResponseStatusException.class,
-        () -> service.saveAttachment("bio", "1", null, "desc"));
+        () -> service.saveAttachment("bio", "1", null, "desc", null));
     verifyNoInteractions(virusScanner);
   }
 
   @Test
   void rejectsAnUnsupportedExtensionBeforeScanning() {
     ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc", null));
 
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     verifyNoInteractions(virusScanner);
@@ -551,7 +1055,7 @@ class ProtocolChecklistServiceTest {
     byte[] content = {1, 2, 3, 4};
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\SOMEONE");
 
-    service.saveAttachment("bio", "1", upload("notes.pdf", content), " spaced desc ");
+    service.saveAttachment("bio", "1", upload("notes.pdf", content), " spaced desc ", null);
 
     InOrder order = inOrder(virusScanner, writeRepository);
     order.verify(virusScanner).scanOrThrow(content, "notes.pdf");
@@ -571,7 +1075,7 @@ class ProtocolChecklistServiceTest {
     when(file.getContentType()).thenReturn("application/pdf");
     when(file.getBytes()).thenReturn(new byte[] {9, 9});
 
-    assertDoesNotThrow(() -> service.saveAttachment("bio", "1", file, "desc"));
+    assertDoesNotThrow(() -> service.saveAttachment("bio", "1", file, "desc", null));
 
     verify(file, times(1)).getBytes();
   }
@@ -584,7 +1088,7 @@ class ProtocolChecklistServiceTest {
     when(file.getBytes()).thenThrow(new IOException("spool file vanished"));
 
     ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-        () -> service.saveAttachment("bio", "1", file, "desc"));
+        () -> service.saveAttachment("bio", "1", file, "desc", null));
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     verifyNoInteractions(virusScanner);
   }

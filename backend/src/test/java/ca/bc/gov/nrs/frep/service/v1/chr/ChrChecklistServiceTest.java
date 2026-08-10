@@ -17,6 +17,7 @@ import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
@@ -130,10 +131,11 @@ class ChrChecklistServiceTest {
     when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\user");
     when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
     when(checklistRepository.getDeviceCheckoutGuid(1001L)).thenReturn(guid);
-    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(new ChrChecklist());
 
-    // Trailing getChecklist() maps a bare entity and throws (wrapped); we assert the release delegated.
-    assertThrows(FrepApiRuntimeException.class, () -> service.releaseCheckout(1001L, guid.toString()));
+    // Release resolves to 204 now, so this asserts the delegation directly rather than through the
+    // exception the old trailing getChecklist() threw on a bare entity.
+    service.releaseCheckout(1001L, guid.toString());
+
     verify(persistenceService).activateChecklist(1001L, "IDIR\\user");
   }
 
@@ -152,11 +154,10 @@ class ChrChecklistServiceTest {
   @Test
   void releaseCheckoutIsNoOpWhenNotCheckedOut() {
     when(checklistRepository.getChecklistStatus(1001L)).thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
-    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(new ChrChecklist());
 
-    // Already active — returns current state (getChecklist maps a bare entity → wrapped throw) without
-    // touching the guid or activating.
-    assertThrows(FrepApiRuntimeException.class, () -> service.releaseCheckout(1001L, "any-guid"));
+    // Already active — nothing to release, and no aggregate is read just to hand one back.
+    service.releaseCheckout(1001L, "any-guid");
+
     verify(checklistRepository, never()).getDeviceCheckoutGuid(anyLong());
     verify(persistenceService, never()).activateChecklist(anyLong(), anyString());
   }
@@ -245,12 +246,14 @@ class ChrChecklistServiceTest {
     MockMultipartFile photo =
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
-    InvalidParameterException wrongToken = assertThrows(InvalidParameterException.class,
+    // 403, not 400: the request is well formed, the caller just may not do this to this checklist in
+    // its current state. Aligned with the SLR guard (2026-08-10) so one rule reports one status.
+    AccessForbiddenException wrongToken = assertThrows(AccessForbiddenException.class,
         () -> service.addPhoto(1001L, photo, "A description", null, null, "not-my-checkout"));
     assertTrue(wrongToken.getMessage().contains("checked out on another device"));
 
     // A caller with no token at all is refused the same way.
-    assertThrows(InvalidParameterException.class,
+    assertThrows(AccessForbiddenException.class,
         () -> service.deletePhoto(1001L, 7L, null));
     verifyNoInteractions(persistenceService);
   }
@@ -264,9 +267,9 @@ class ChrChecklistServiceTest {
     MockMultipartFile photo =
         new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
-    assertThrows(InvalidParameterException.class,
+    assertThrows(AccessForbiddenException.class,
         () -> service.addPhoto(1001L, photo, "A description", null, null, null));
-    assertThrows(InvalidParameterException.class, () -> service.deletePhoto(1001L, 7L, null));
+    assertThrows(AccessForbiddenException.class, () -> service.deletePhoto(1001L, 7L, null));
     verifyNoInteractions(persistenceService);
   }
 

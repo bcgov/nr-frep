@@ -341,8 +341,11 @@ describe('ChrChecklistPage', () => {
       canChr: () => true,
     });
     repo.load.mockResolvedValue(undefined);
-    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
-    api.activate.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    // RDO on load; ACT once reactivated. Activate itself resolves to void (204) — the page re-reads.
+    api.getChecklist
+      .mockResolvedValueOnce({ ...sampleChecklist, status: 'RDO' })
+      .mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    api.activate.mockResolvedValue(undefined);
 
     renderPage();
 
@@ -353,5 +356,9 @@ describe('ChrChecklistPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Reactivate' }));
     expect(api.activate).toHaveBeenCalledWith('1001');
+    // The page must re-read rather than use the (now empty) activate response — otherwise it would
+    // render undefined and the banner would never clear.
+    await waitFor(() => expect(api.getChecklist).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Read only')).toBeNull());
   });
 });

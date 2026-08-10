@@ -613,7 +613,9 @@ const ChrChecklistPage: FC = () => {
   const handleReactivate = async () => {
     setBusy(true);
     try {
-      const saved = await API.chrChecklist.activate(id);
+      // Activate returns 204; re-read rather than having a status flip hand back the whole aggregate.
+      await API.chrChecklist.activate(id);
+      const saved = await API.chrChecklist.getChecklist(id);
       setCheckList(saved);
       display({ kind: 'success', title: 'Checklist reactivated', timeout: 4000 });
     } catch (err) {

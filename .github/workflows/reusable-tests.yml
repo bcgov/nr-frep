@@ -63,9 +63,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # --ignore-scripts: dependency install hooks (postinstall etc.) run
+      # arbitrary third-party code on a runner that also holds this job's
+      # secrets. 20 packages in the lockfile declare install scripts; skipping
+      # them was verified not to affect the build — esbuild resolves its
+      # platform binary via optionalDependencies, not a postinstall. Playwright
+      # browsers come from the explicit command below, not an install hook.
       - name: Install dependencies
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npx playwright install --with-deps ${{ matrix.project }}
 
       - name: Run Playwright

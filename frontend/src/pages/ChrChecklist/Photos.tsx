@@ -339,7 +339,18 @@ const Photos: FC<{
         </Table>
       )}
 
-      {totalCount > pageSize && (
+      {/*
+        Shown whenever the checklist has photos — including when they all fit on one page, so the
+        count and the 10/25/50 selector stay available. Deliberately NOT gated on
+        `totalCount > pageSize`: that hid both from anyone with fewer than 10 photos, leaving no way
+        to pre-select a larger page size before uploading more.
+
+        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
+        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
+        re-read that follows a delete. The parent early-returns a skeleton while the checklist
+        loads, so this never renders before the first count arrives.
+      */}
+      {totalCount > 0 && (
         <Pagination
           page={page + 1}
           pageSize={pageSize}

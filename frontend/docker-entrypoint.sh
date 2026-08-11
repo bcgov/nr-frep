@@ -29,6 +29,7 @@ window.config = {
   VITE_LOGOUT_KEYCLOAK_CLIENT_ID: "$(escape "${VITE_LOGOUT_KEYCLOAK_CLIENT_ID:-}")",
   VITE_BACKEND_URL: "$(escape "${VITE_BACKEND_URL:-}")",
   VITE_APP_NAME: "$(escape "${VITE_APP_NAME:-FREP IMS}")",
+  VITE_SILVA_BASE_URL: "$(escape "${VITE_SILVA_BASE_URL:-https://silva.nrs.gov.bc.ca}")",
   VITE_ZONE: "$(escape "${VITE_ZONE:-dev}")"
 };
 EOF

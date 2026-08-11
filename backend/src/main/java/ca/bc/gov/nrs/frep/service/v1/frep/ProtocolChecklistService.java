@@ -94,6 +94,9 @@ public class ProtocolChecklistService {
   private static final Pattern UNSIGNED_DECIMAL =
       Pattern.compile("(?:\\d+(?:\\.\\d+)?|\\.\\d+)");
 
+  /** Hard cap on attachment rows returned per call; matches SearchService / OpeningTargetService. */
+  private static final int MAX_PAGE_SIZE = 100;
+
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
@@ -747,10 +750,19 @@ public class ProtocolChecklistService {
    * BLOB, which Biodiversity deliberately leaves empty, so it always reads 0.00. A HEAD per row on
    * the page is exact and bounded; a prefix listing is not an option because the keys are flat
    * ({@code slr/<id>}) and would sweep every checklist's attachments.
+   *
+   * <p>{@code size} is clamped to {@link #MAX_PAGE_SIZE} (and at least 1) and {@code page} floored
+   * at 0, matching SearchService / OpeningTargetService. The cap matters more here than on a plain
+   * query: the loop below issues one object-storage HEAD <em>per row</em>, so an unclamped
+   * {@code ?size=} would turn a single request into that many sequential remote calls. A negative
+   * page would reach Oracle as a negative OFFSET.
    */
   public AttachmentPage getAttachments(String protocol, String checklistId, int page, int size) {
+    int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+    int safePage = Math.max(0, page);
     String resourceType = checklistRepository.resolveResourceType(checklistId);
-    List<AttachmentRow> rows = writeRepository.getAttachments(checklistId, resourceType, page, size);
+    List<AttachmentRow> rows =
+        writeRepository.getAttachments(checklistId, resourceType, safePage, safeSize);
     List<AttachmentRow> withSizes = rows.stream()
         .map(row -> {
           long bytes = objectStorage.getObjectSize(bioObjectKey(row.checklistAttachmentId()));

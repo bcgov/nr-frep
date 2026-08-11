@@ -26,12 +26,14 @@ import OpeningMapModal from '@/components/OpeningMapModal';
 import type { AcceptedSite } from '@/types/acceptedSite';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 import './acceptedSites.scss';
 
@@ -94,6 +96,7 @@ const AcceptedSitesPage: FC = () => {
   const { display } = useNotification();
   const navigate = useNavigate();
   const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
+  const { user } = useAuth();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -234,8 +237,8 @@ const AcceptedSitesPage: FC = () => {
   const tableRows = useMemo(() => toTableRows(sites), [sites]);
 
   // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
-  // (DataTable render-prop → rows.map → cells.map → onClick). First cell links to the checklist;
-  // the map cell opens the in-app opening map.
+  // (DataTable render-prop → rows.map → cells.map → onClick). First cell links to the checklist,
+  // Opening ID out to SILVA, and the map cell opens the in-app opening map.
   const renderCell = (
     cell: { id: string; value: string; info: { header: string } },
     checklistLink: string | undefined,
@@ -257,6 +260,22 @@ const AcceptedSitesPage: FC = () => {
       return (
         <TableCell key={cell.id}>
           <RouterLink to={checklistLink}>{cell.value}</RouterLink>
+        </TableCell>
+      );
+    }
+    // Opening ID deep-links into SILVA with an idp_hint for the signed-in provider, so the user
+    // lands on the opening without a second login. Rows without an opening id stay plain text.
+    if (cell.info.header === 'openingId') {
+      const href = silvaOpeningUrl(cell.value, user?.idpProvider);
+      return (
+        <TableCell key={cell.id}>
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+              {cell.value}
+            </a>
+          ) : (
+            cell.value
+          )}
         </TableCell>
       );
     }

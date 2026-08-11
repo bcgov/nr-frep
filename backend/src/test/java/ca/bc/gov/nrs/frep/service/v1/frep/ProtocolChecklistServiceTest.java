@@ -1126,4 +1126,50 @@ class ProtocolChecklistServiceTest {
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     verifyNoInteractions(virusScanner);
   }
+
+  // getAttachments issues one object-storage HEAD per returned row, so an unclamped `size` turns a
+  // single request into that many sequential remote calls. These assert on the values handed to the
+  // repository, which is where the cap has to bite — not on the response length.
+
+  @Test
+  void getAttachmentsClampsPageSizeBeforeQuerying() {
+    when(writeRepository.getAttachments(eq("1"), eq("SLR"), anyInt(), anyInt()))
+        .thenReturn(List.of());
+    when(writeRepository.countAttachments("1", "SLR")).thenReturn(0);
+
+    service.getAttachments("bio", "1", 0, 5000);
+
+    verify(writeRepository).getAttachments("1", "SLR", 0, 100);
+  }
+
+  @Test
+  void getAttachmentsFloorsNegativePageAndSize() {
+    when(writeRepository.getAttachments(eq("1"), eq("SLR"), anyInt(), anyInt()))
+        .thenReturn(List.of());
+    when(writeRepository.countAttachments("1", "SLR")).thenReturn(0);
+
+    service.getAttachments("bio", "1", -5, 0);
+
+    // A negative page would reach Oracle as a negative OFFSET; size 0 would return nothing forever.
+    verify(writeRepository).getAttachments("1", "SLR", 0, 1);
+  }
+
+  @Test
+  void getAttachmentsIssuesOneStorageLookupPerReturnedRow() {
+    when(writeRepository.getAttachments(eq("1"), eq("SLR"), anyInt(), anyInt()))
+        .thenReturn(List.of(
+            new AttachmentRow("7", "a.pdf", "first", "PDF", null),
+            new AttachmentRow("8", "b.pdf", "second", "PDF", null)));
+    when(writeRepository.countAttachments("1", "SLR")).thenReturn(2);
+    when(objectStorage.getObjectSize("slr/7")).thenReturn(1024L);
+    when(objectStorage.getObjectSize("slr/8")).thenReturn(-1L);
+
+    ProtocolChecklistService.AttachmentPage page = service.getAttachments("bio", "1", 0, 10);
+
+    assertEquals(2, page.attachments().size());
+    assertEquals("1024", page.attachments().get(0).fileSize());
+    // A negative size means "not found in object storage" and must surface as null, not "-1".
+    assertEquals(null, page.attachments().get(1).fileSize());
+    assertEquals(2, page.totalCount());
+  }
 }

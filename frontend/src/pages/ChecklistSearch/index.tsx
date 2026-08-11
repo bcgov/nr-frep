@@ -27,6 +27,7 @@ import TableHeaderBar from '@/components/core/TableHeaderBar';
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
 import type { ChecklistSearchQuery, ChecklistSearchResult } from '@/types/search';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
@@ -35,6 +36,7 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 import { buildExportFilename } from '@/utils/exportFilename';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 import './checklistSearch.scss';
 
@@ -82,6 +84,7 @@ const checklistLinkFor = (protocolCode: string | undefined, id: string): string 
 const ChecklistSearchPage: FC = () => {
   const { display } = useNotification();
   const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
+  const { user } = useAuth();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -442,6 +445,23 @@ const ChecklistSearchPage: FC = () => {
                               return (
                                 <TableCell key={cell.id}>
                                   <RouterLink to={checklistLink}>{cell.value}</RouterLink>
+                                </TableCell>
+                              );
+                            }
+                            // Opening ID deep-links into SILVA with an idp_hint for the
+                            // signed-in provider, so the user lands on the opening without a
+                            // second login. Rows with no opening id stay plain text.
+                            if (cell.info.header === 'openingId') {
+                              const silvaHref = silvaOpeningUrl(cell.value, user?.idpProvider);
+                              return (
+                                <TableCell key={cell.id}>
+                                  {silvaHref ? (
+                                    <a href={silvaHref} target="_blank" rel="noopener noreferrer">
+                                      {cell.value}
+                                    </a>
+                                  ) : (
+                                    cell.value
+                                  )}
                                 </TableCell>
                               );
                             }

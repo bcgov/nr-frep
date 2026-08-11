@@ -3,15 +3,21 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.e2e.json" }
+    { "path": "./tsconfig.e2e.json" },
+    { "path": "./tsconfig.test.json" }
   ]
   /*
-   * tsconfig.test.json is deliberately NOT referenced here. The IDE
-   * (IntelliJ/VS Code) auto-discovers it and uses it to resolve `@/*`
-   * paths and Vitest globals when editing *.test.{ts,tsx} files. Putting
-   * it in this references list would also pull tests into `tsc -b`,
-   * which would block `npm run build` on pre-existing latent type errors
-   * inside test files (e.g. role typing in ProtectedRoute.browser.test).
-   * Address those separately if/when test type-checking moves into CI.
+   * tsconfig.test.json is referenced here so `tsc -b` type-checks test files too. It used to be
+   * excluded because of latent type errors inside them; those were fixed (a nullable `pass` in
+   * custom-matchers, placeholder role strings in ProtectedRoute.browser.test, a widened array in
+   * chrStaleness.unit.test, `vi.Mock` used as a type in PreferenceContext.unit.test, and a widened
+   * theme in users.service.unit.test).
+   *
+   * Worth keeping: without this, a component's prop contract can change and its tests keep compiling
+   * against the old one. That happened — Photos.browser.test.tsx went on passing the removed `onSave`
+   * prop, and passed at runtime only because its fixtures never reached the changed code path.
+   *
+   * NOTE: `tsc --noEmit -p tsconfig.json` checks NOTHING here — this root project has no files of its
+   * own. Type-checking requires `tsc -b`.
    */
 }

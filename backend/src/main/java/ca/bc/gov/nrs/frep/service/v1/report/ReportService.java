@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.service.v1.report;
 
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportFormat;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.exception.ReportGenerationException;
 import ca.bc.gov.nrs.frep.exception.ReportNotFoundException;
 import jakarta.annotation.PostConstruct;
@@ -72,6 +73,12 @@ public class ReportService {
   @PostConstruct
   void warmCompileCache() {
     for (ReportDefinition definition : ReportDefinition.values()) {
+      // CSV data extracts (procName != null) have no JRXML by design — they render through
+      // CSVReportService. Skipping them keeps six spurious "no JRXML on the classpath" warnings out
+      // of every boot log, where they'd mask a genuinely broken Jasper template.
+      if (definition.getProcName() != null) {
+        continue;
+      }
       try {
         compiledCache.put(definition.getId(), compileTemplate(definition));
 
@@ -88,6 +95,16 @@ public class ReportService {
 
   public ReportResult generateReport(String reportId, ReportRequest request) {
     ReportDefinition definition = ReportDefinition.fromId(reportId);
+    // This endpoint serves Jasper definitions only (procName == null). The CSV data extracts share the
+    // same id space but belong to POST /api/v1/reports/csv/{reportName}, which is where
+    // ReportAuthorizer gates chr-data-extract on the caller's district — so accepting one here would
+    // route around that check. Until now the only thing stopping it was the absence of a matching
+    // JRXML on the classpath, which is an accident rather than a guard.
+    if (definition.getProcName() != null) {
+      throw new InvalidParameterException(
+          "Report " + definition.getId() + " is a CSV data extract; generate it via "
+              + "POST /api/v1/reports/csv/" + definition.getId() + ".");
+    }
     ReportFormat format = ReportFormat.fromNullable(request.format());
 
     Map<String, Object> params = parameterProvider.buildJasperParameters(definition, request);

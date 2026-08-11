@@ -295,6 +295,13 @@
   }
 }
 
+// A field that should occupy a whole row of a `.rip-form__grid` rather than flow into the next free
+// cell — e.g. the Feature description textarea, which reads as its own block under the identifying
+// fields instead of being wedged beside a checkbox.
+.chr-form__full-row {
+  grid-column: 1 / -1;
+}
+
 // Inline disclosure help inside a feature form grid (e.g. "What is a composite feature?"). Spans the
 // full grid width so it reads as its own row, and mirrors the .chr-mrva-help disclosure styling.
 .chr-feature-help {

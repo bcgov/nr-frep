@@ -2,7 +2,6 @@ package ca.bc.gov.nrs.frep.service.v1;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
-import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService.PhotoUpload;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXrefId;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
@@ -37,6 +36,7 @@ import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepMrvaRatingCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
+import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
@@ -49,11 +49,15 @@ import ca.bc.gov.nrs.frep.util.UuidUtils;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
+import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.apache.commons.io.FilenameUtils;
@@ -75,12 +79,9 @@ public class ChrChecklistPersistenceService {
   private EntityManager entityManager;
 
   private final ObjectStorageService objectStorageService;
-  private final VirusScanner virusScanner;
 
-  public ChrChecklistPersistenceService(
-      ObjectStorageService objectStorageService, VirusScanner virusScanner) {
+  public ChrChecklistPersistenceService(ObjectStorageService objectStorageService) {
     this.objectStorageService = objectStorageService;
-    this.virusScanner = virusScanner;
   }
 
   /**
@@ -217,7 +218,11 @@ public class ChrChecklistPersistenceService {
 
     saveContacts(chrChecklist, resource, userId);
     saveFeatures(chrChecklist, resource, userId);
-    savePictures(chrChecklist, resource, userId);
+    // Photos are deliberately NOT written here. They are independent resources managed by
+    // addPhoto/deletePhoto below; a checklist save must not touch them. The previous
+    // savePictures(...) call reconciled the whole picture set, so a payload without pictures — which
+    // is every payload now — deleted every photo row and every stored object. See
+    // ChrChecklistPersistenceServiceTest#aChecklistSaveDoesNotDeleteExistingPhotoRows.
 
     entityManager.flush();
     resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
@@ -269,12 +274,6 @@ public class ChrChecklistPersistenceService {
     entityManager.clear();
   }
 
-  public void savePicturesSection(CheckList resource, String userId) {
-    ChrChecklist chrChecklist = loadChecklistForSave(resource);
-    chrChecklist.setDeviceCheckoutGuid(null);
-    savePictures(chrChecklist, resource, userId);
-    finishSectionSave(chrChecklist, resource, userId);
-  }
 
   private ChrChecklist loadChecklistForSave(CheckList resource) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, Long.parseLong(resource.getChecklistID()));
@@ -457,70 +456,193 @@ public class ChrChecklistPersistenceService {
     }
   }
 
-  private void savePictures(ChrChecklist chrChecklist, CheckList resource, String userId) {
-    if (resource.getPictures() == null) {
-      resource.setPictures(new ArrayList<>());
+
+  /**
+   * Attach one photo to a checklist: metadata row plus the stored object. Deliberately
+   * <b>token-neutral</b> — it does not stamp or flush the parent checklist, so a photo upload never
+   * advances the shared {@code revision_count} and can't make a client's in-flight checklist edit
+   * conflict. The checklist save stays the only writer of that token.
+   *
+   * <p>If the object-storage write fails the metadata row is removed again, so a failed upload can't
+   * leave a row pointing at bytes that were never stored (mirrors the Biodiversity attachment path).
+   *
+   * @param featureId optional — the feature this photo documents. Must be a feature of this same
+   *                  checklist; anything else is rejected as a bad request rather than left to the
+   *                  FK, which would accept another checklist's feature and reject a bogus id with
+   *                  a raw constraint violation.
+   */
+  public ChrChecklistAttachment addPhoto(
+      long checklistId, String fileName, String description, String fileDate, Long featureId,
+      String mimeTypeCode, byte[] content, String userId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    assertFeatureOnChecklist(chrChecklist, checklistId, featureId);
+    String mimeType = deriveMimeType(mimeTypeCode).toUpperCase();
+
+    ChrChecklistAttachment attachment = new ChrChecklistAttachment();
+    attachment.setChrChecklist(chrChecklist);
+    attachment.setChrFeatureId(featureId);
+    attachment.setMimeTypeCode(mimeType);
+    attachment.setDescription(description);
+    attachment.setFileName(FilenameUtils.removeExtension(fileName) + "." + mimeType);
+    attachment.setFileDate(parseDate(fileDate));
+    attachment.setEntryTimestamp(new Date());
+    attachment.setEntryUserid(userId);
+    attachment.setUpdateTimestamp(new Date());
+    attachment.setUpdateUserid(userId);
+    entityManager.persist(attachment);
+    // Flush to get the sequence-generated id, which the object key is built from. This writes only
+    // the attachment row; no checklist column is touched.
+    entityManager.flush();
+    // Keeps the loaded collection consistent within this transaction. Note that this alone used to
+    // bump the checklist's @Version: Hibernate increments the owner's version whenever an owned
+    // collection is dirty, no column change required. ChrChecklist.chrChecklistAttachments is
+    // @OptimisticLock(excluded = true) precisely so this line stays token-neutral.
+    chrChecklist.getChrChecklistAttachments().add(attachment);
+
+    try {
+      objectStorageService.putObject(
+          photoObjectKey(checklistId, attachment), mimeTypeCode, content);
+    } catch (RuntimeException ex) {
+      entityManager.remove(attachment);
+      chrChecklist.getChrChecklistAttachments().remove(attachment);
+      entityManager.flush();
+      throw new FrepApiRuntimeException(
+          "Could not store photo " + fileName + "; nothing was saved.", ex);
+    }
+    return attachment;
+  }
+
+  /**
+   * A photo may only point at a feature of its own checklist. The FK to CHR_FEATURE_DETAIL is
+   * satisfied by <em>any</em> existing feature, so without this a caller could hang a photo off
+   * another checklist's feature — and a non-existent id would surface as an Oracle constraint
+   * violation rather than a 400.
+   */
+  private void assertFeatureOnChecklist(ChrChecklist chrChecklist, long checklistId,
+      Long featureId) {
+    if (featureId == null) {
+      return;
+    }
+    // The mapped collection is a raw Set (legacy mapping), so iterate and cast rather than stream.
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      if (featureId.equals(((ChrFeatureIdentity) candidate).getChrFeatureId())) {
+        return;
+      }
+    }
+    throw new InvalidParameterException(
+        "Feature " + featureId + " is not a feature of checklist " + checklistId + ".");
+  }
+
+  /** Feature id → label for this checklist, so photo metadata can name the feature it points at. */
+  private Map<Long, String> featureLabelsById(ChrChecklist chrChecklist) {
+    Map<Long, String> labels = new HashMap<>();
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      ChrFeatureIdentity feature = (ChrFeatureIdentity) candidate;
+      labels.put(feature.getChrFeatureId(), feature.getFeatureLabel());
+    }
+    return labels;
+  }
+
+  /**
+   * The checklist's photo metadata — no bytes, no object-storage reads. Used by submit validation,
+   * which must check what the record actually holds rather than what the client sent.
+   */
+  public List<Picture> getPhotoMetadata(long checklistId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      return List.of();
+    }
+    // Newest first, by creation time, with the id as tiebreaker.
+    //
+    // Descending is a UX decision, not an arbitrary one: with ascending order a newly uploaded photo
+    // lands on the *last* page, so a user sitting on page 1 sees nothing change after uploading and
+    // reasonably concludes it failed. Newest-first puts it where they are looking.
+    //
+    // The tiebreaker is required, not cosmetic — entry_timestamp is an Oracle DATE (second
+    // precision), so photos added in the same second would otherwise page non-deterministically,
+    // repeating on one page and vanishing from another. The mapped collection is an unordered Set,
+    // so the sort happens here rather than in a query.
+    List<ChrChecklistAttachment> ordered = new ArrayList<>();
+    for (Object candidate : chrChecklist.getChrChecklistAttachments()) {
+      ordered.add((ChrChecklistAttachment) candidate);
+    }
+    ordered.sort(Comparator
+        .comparing(ChrChecklistAttachment::getEntryTimestamp,
+            Comparator.nullsLast(Comparator.reverseOrder()))
+        .thenComparing(ChrChecklistAttachment::getChrchecklistAttachmentId,
+            Comparator.nullsLast(Comparator.reverseOrder())));
+
+    Map<Long, String> featureLabels = featureLabelsById(chrChecklist);
+    List<Picture> pictures = new ArrayList<>();
+    for (ChrChecklistAttachment attachment : ordered) {
+      Picture picture = new Picture();
+      picture.setId(String.valueOf(attachment.getChrchecklistAttachmentId()));
+      picture.setDescription(attachment.getDescription());
+      picture.setFileName(attachment.getFileName());
+      picture.setMimeTypeCode("image/" + attachment.getMimeTypeCode().toLowerCase());
+      if (attachment.getChrFeatureId() != null) {
+        picture.setFeatureId(String.valueOf(attachment.getChrFeatureId()));
+        // Null when the feature was deleted out from under the photo — the id still round-trips.
+        picture.setFeatureLabel(featureLabels.get(attachment.getChrFeatureId()));
+      }
+      try {
+        picture.setDate(ChrDateUtils.formatDate(attachment.getFileDate()));
+      } catch (ParseException ex) {
+        // A malformed stored date must not block submit, which validates descriptions only.
+        log.warn("Could not format file date for photo {}",
+            attachment.getChrchecklistAttachmentId(), ex);
+      }
+      pictures.add(picture);
+    }
+    return pictures;
+  }
+
+  /** Remove one photo: its metadata row and its stored object. Token-neutral, as {@link #addPhoto}. */
+  public void deletePhoto(long checklistId, long photoId, String userId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    // The eager collection is a raw Set (legacy mapping), so iterate and cast rather than stream.
+    ChrChecklistAttachment attachment = null;
+    for (Object candidate : chrChecklist.getChrChecklistAttachments()) {
+      ChrChecklistAttachment existing = (ChrChecklistAttachment) candidate;
+      if (Long.valueOf(photoId).equals(existing.getChrchecklistAttachmentId())) {
+        attachment = existing;
+        break;
+      }
+    }
+    if (attachment == null) {
+      // Scoped to the checklist on purpose: a photo id from another checklist is a not-found here,
+      // not a licence to delete someone else's row.
+      throw new EntityNotFoundException(
+          "Photo " + photoId + " was not found on checklist " + checklistId + ".");
     }
 
-    // Remove attachments no longer in the payload. Iterate a copy and also drop the row from the
-    // checklist's eager chrChecklistAttachments set, otherwise the managed checklist still
-    // references the removed row at flush time and Hibernate raises a TransientObjectException.
-    for (Object attachmentObj : new ArrayList<>(chrChecklist.getChrChecklistAttachments())) {
-      ChrChecklistAttachment attachment = (ChrChecklistAttachment) attachmentObj;
-      boolean exists = resource.getPictures().stream()
-          .anyMatch(p -> ChrStringUtils.hasAValue(p.getId())
-              && Long.parseLong(p.getId()) == attachment.getChrchecklistAttachmentId());
-      if (!exists) {
-        chrChecklist.getChrChecklistAttachments().remove(attachment);
-        entityManager.remove(attachment);
-      }
+    String key = photoObjectKey(checklistId, attachment);
+    chrChecklist.getChrChecklistAttachments().remove(attachment);
+    entityManager.remove(attachment);
+    entityManager.flush();
+    // Best-effort: a stray object with no row is invisible to the app, whereas failing here would
+    // leave the row behind after the user was told the photo was deleted.
+    try {
+      objectStorageService.deleteObject(key);
+    } catch (RuntimeException ex) {
+      log.warn("Removed photo {} from checklist {} but could not delete object {}",
+          photoId, checklistId, key, ex);
     }
+  }
 
-    List<PhotoUpload> uploads = new ArrayList<>();
-    for (Picture picture : resource.getPictures()) {
-      ChrChecklistAttachment attachment;
-      boolean newAttachment = !ChrStringUtils.hasAValue(picture.getId());
-      if (!newAttachment) {
-        attachment = entityManager.find(ChrChecklistAttachment.class, Long.parseLong(picture.getId()));
-      } else {
-        attachment = new ChrChecklistAttachment();
-        attachment.setChrChecklist(chrChecklist);
-        attachment.setEntryTimestamp(new Date());
-        attachment.setEntryUserid(userId);
-      }
-
-      if (ChrStringUtils.hasAValue(picture.getMimeTypeCode())
-          && !picture.getMimeTypeCode().contains("image/")) {
-        picture.setMimeTypeCode("image/" + picture.getMimeTypeCode().toLowerCase());
-      }
-
-      String mimeType = deriveMimeType(picture.getMimeTypeCode()).toUpperCase();
-      attachment.setMimeTypeCode(mimeType);
-      attachment.setDescription(picture.getDescription());
-      String fileNameWithoutExt = FilenameUtils.removeExtension(picture.getFileName());
-      attachment.setFileName(fileNameWithoutExt + "." + mimeType);
-      attachment.setFileDate(parseDate(picture.getDate()));
-      attachment.setUpdateTimestamp(new Date());
-      attachment.setUpdateUserid(userId);
-      entityManager.persist(attachment);
-      if (newAttachment) {
-        chrChecklist.getChrChecklistAttachments().add(attachment);
-      }
-      picture.setId(attachment.getChrchecklistAttachmentId().toString());
-
-      if (ChrStringUtils.hasAValue(picture.getCode())) {
-        byte[] decoded = Base64.getDecoder().decode(picture.getCode());
-        // Scan the decoded photo bytes before upload — a hit throws VirusDetectedException (→ 422).
-        virusScanner.scanOrThrow(decoded, attachment.getFileName());
-        uploads.add(new PhotoUpload(
-            picture.getId() + "." + deriveMimeType(picture.getMimeTypeCode()),
-            picture.getMimeTypeCode(),
-            decoded
-        ));
-      }
-    }
-
-    objectStorageService.syncChecklistPhotos(resource.getChecklistID(), uploads);
+  /**
+   * Object key for a stored photo: {@code {checklistId}-{attachmentId}.{ext}} — the same key
+   * {@code populatePhotoBytes} reads back with.
+   */
+  private String photoObjectKey(long checklistId, ChrChecklistAttachment attachment) {
+    return checklistId + "-" + attachment.getChrchecklistAttachmentId() + "."
+        + deriveMimeType(attachment.getMimeTypeCode());
   }
 
   /**

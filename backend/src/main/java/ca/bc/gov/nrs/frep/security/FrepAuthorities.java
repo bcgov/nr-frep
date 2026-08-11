@@ -25,11 +25,17 @@ public final class FrepAuthorities {
   public static final String ADMIN = "hasAuthority('FREP_ADMIN')";
 
   /**
-   * CHR checklist edit/submit: {@code FREP_ADMIN} or any per-district CHR editor role
-   * ({@code FREP_CHR_EDITOR_DISTRICT_*}). A global {@code FREP_EDITOR} (Biodiversity) is intentionally
-   * excluded — CHR access is district-scoped. This is the coarse gate; the specific district is
-   * enforced in the service layer against the checklist's org unit. Evaluated via the {@code @auth}
-   * bean ({@link LoggedUserHelper}).
+   * Coarse "may this caller touch CHR at all" gate: {@code FREP_ADMIN} or any per-district CHR editor
+   * role ({@code FREP_CHR_EDITOR_DISTRICT_*}). A global {@code FREP_EDITOR} (Biodiversity) is
+   * intentionally excluded — CHR access is district-scoped. Evaluated via the {@code @auth} bean
+   * ({@link LoggedUserHelper}).
+   *
+   * <p><b>Not sufficient on its own for any endpoint that resolves a specific checklist.</b> CHR is
+   * strictly district-scoped, and there is no service-layer district check to fall back on — the
+   * per-district rule lives entirely on the annotation. Endpoints that take a checklist id must use
+   * {@code @PreAuthorize("@chrAuth.canEditChecklist(#id)")} ({@link ChrChecklistAuthorizer}), which
+   * resolves the checklist's org unit and checks it against the caller's districts. This constant is
+   * for id-less surfaces only.
    */
   public static final String CHR_EDIT = "@auth.canAnyChr()";
 
@@ -38,4 +44,12 @@ public final class FrepAuthorities {
    * (Biodiversity) reads (writes use {@link #CONTENT_EDIT}, which is equivalent).
    */
   public static final String FREP_EDIT = "hasAnyAuthority('FREP_ADMIN','FREP_EDITOR')";
+
+  /**
+   * Site Details resource editing (FREP110): {@code FREP_ADMIN}, {@code FREP_EDITOR}, <em>or</em> any
+   * per-district CHR editor. Broader than {@link #CONTENT_EDIT} because site records are shared
+   * across protocols — see {@link LoggedUserHelper#canEditSite()}. Creating a targeted site (FREP200)
+   * remains {@link #CONTENT_EDIT}.
+   */
+  public static final String SITE_EDIT = "@auth.canEditSite()";
 }

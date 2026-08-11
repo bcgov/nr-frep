@@ -1,5 +1,5 @@
 import { Download, TrashCan, Upload } from '@carbon/icons-react';
-import { Button, SkeletonText, TextArea } from '@carbon/react';
+import { Button, Pagination, SkeletonText, TextArea } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
@@ -31,8 +31,11 @@ const DESCRIPTION_LIMIT = 2000;
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
- * list, download, upload, and delete file attachments. Bytes move as base64 JSON (mirroring the
- * CHR photo flow) so the standard authenticated API client handles auth + CSRF.
+ * list, download, upload, and delete file attachments. Uploads are `multipart/form-data`: the raw
+ * `File` goes on the wire, so there's no base64 inflation and the server can spool it to disk
+ * instead of holding it in heap. Auth + CSRF still ride on the standard API client.
+ *
+ * Downloads are still base64 JSON — the read path is a separate piece of work.
  */
 
 type Props = {
@@ -73,30 +76,42 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
 ];
 const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
+// Keep in step with spring.servlet.multipart.max-file-size (application.yml).
+const MAX_ATTACHMENT_MB = 15;
+const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+const formatMb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+
+const PAGE_SIZES = [10, 25, 50];
+
+/**
+ * Above this, an image is listed with a placeholder instead of a thumbnail.
+ *
+ * Thumbnails are built by downloading the *whole* file — there is no thumbnail endpoint — so a page
+ * of large images would pull tens of MB through the browser and the server's heap just to render
+ * previews. New uploads are bounded by the 15 MB cap, but attachments predating it are not.
+ */
+const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+
 // True when an attachment is an image we can preview as a thumbnail.
+//
+// TIFF is deliberately excluded even though it's an allowed attachment type: no mainstream browser
+// renders it in an <img>, so treating it as previewable meant downloading the whole file (TIFFs are
+// the largest, least compressible type here), base64-ing it into a data URL, and silently falling
+// back to the placeholder when it failed to decode.
 function isImage(row: AttachmentRow): boolean {
   const mime = (row.mimeTypeCode || '').toLowerCase();
+  if (mime.includes('tif')) return false;
   if (mime.includes('image')) return true;
-  return /\.(jpe?g|png|gif|bmp|tiff?|webp)$/.test((row.fileName || '').toLowerCase());
-}
-
-// Read a File as base64 (without the data: prefix).
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result);
-      resolve(result.slice(result.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
-    reader.readAsDataURL(file);
-  });
+  return /\.(jpe?g|png|gif|bmp|webp)$/.test((row.fileName || '').toLowerCase());
 }
 
 const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) => {
   const { display } = useNotification();
   const confirm = useConfirm();
   const [rows, setRows] = useState<AttachmentRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   // attachmentId -> data-URL thumbnail, fetched lazily for image attachments.
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
@@ -121,13 +136,47 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     [display],
   );
 
+  // Upload and delete respond 204, so the list is re-read after every mutation rather than being
+  // patched from a response body — one source of truth for what the server holds.
+  const refreshRows = useCallback(
+    async (targetPage = page, targetSize = pageSize) => {
+      let landedPage = targetPage;
+      let result = await API.protocolChecklist.getAttachments(
+        protocol,
+        checklistId,
+        landedPage,
+        targetSize,
+      );
+      // Deleting the last row on the last page leaves the client asking for a page that no longer
+      // exists: the response is empty while totalCount is still non-zero. Re-read the last page
+      // that does exist, rather than showing an empty table under a pager insisting there are
+      // items. Bounded to one extra request — the recomputed page is always in range.
+      if (result.attachments.length === 0 && result.totalCount > 0 && landedPage > 0) {
+        landedPage = Math.max(0, Math.ceil(result.totalCount / targetSize) - 1);
+        result = await API.protocolChecklist.getAttachments(
+          protocol,
+          checklistId,
+          landedPage,
+          targetSize,
+        );
+      }
+      setRows(result.attachments);
+      setTotalCount(result.totalCount);
+      setPage(landedPage);
+      setPageSize(targetSize);
+    },
+    [protocol, checklistId, page, pageSize],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     API.protocolChecklist
-      .getAttachments(protocol, checklistId)
-      .then((list) => {
-        if (!cancelled) setRows(list);
+      .getAttachments(protocol, checklistId, 0, PAGE_SIZES[0])
+      .then((result) => {
+        if (cancelled) return;
+        setRows(result.attachments);
+        setTotalCount(result.totalCount);
       })
       .catch((err: unknown) => {
         if (!cancelled) reportError("We couldn't load the attachments", err);
@@ -145,7 +194,15 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   useEffect(() => {
     let cancelled = false;
     const pending = rows.filter(
-      (r) => r.checklistAttachmentId && isImage(r) && !thumbs[r.checklistAttachmentId],
+      (r) =>
+        r.checklistAttachmentId &&
+        isImage(r) &&
+        !thumbs[r.checklistAttachmentId] &&
+        // Size comes from object storage (the DB column is derived from an empty BLOB and always
+        // reads 0). Unknown size is treated as too large — better a placeholder than an unbounded
+        // download.
+        Number(r.fileSize) > 0 &&
+        Number(r.fileSize) <= MAX_THUMBNAIL_BYTES,
     );
     if (pending.length === 0) return;
     void Promise.all(
@@ -176,7 +233,33 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     };
   }, [rows, thumbs, protocol, checklistId]);
 
-  const handleUpload = async (file: File) => {
+  /**
+   * Reject a file before it is sent, or return null if it's fine. The server re-checks all three
+   * (413 / 400) — these exist so the user isn't left waiting for an upload that can't succeed.
+   */
+  const rejectionReason = (file: File): string | null => {
+    const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+      return ext ? `".${ext}" is not a supported type` : 'has no file extension';
+    }
+    if (file.size === 0) return 'is empty';
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      return `is ${formatMb(file.size)} MB (max ${MAX_ATTACHMENT_MB} MB)`;
+    }
+    return null;
+  };
+
+  /**
+   * Upload one or more files under the description entered above.
+   *
+   * The description is shared across the batch, mirroring CHR photos. Uploads run **sequentially**:
+   * each one holds its bytes in server heap for the scan and the store, so several large files in
+   * flight at once is exactly the pressure the 15 MB cap was sized against. Sequential also means a
+   * failure part-way through doesn't cost the files that already landed — they are reported, kept,
+   * and only the failures are named.
+   */
+  const handleUpload = async (files: File[]) => {
+    if (files.length === 0) return;
     // Legacy FREP303 requires a description before an attachment can be saved — surface it as
     // inline field validation rather than blocking the Browse button.
     if (!description.trim()) {
@@ -186,30 +269,64 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     // Over-length is reported by the field's own counter; just don't start an upload that the
     // database would reject at the end of it.
     if (descLimitError) return;
-    const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
-    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
-      const unsupported = ext ? `".${ext}" is not supported. ` : '';
-      const allowed = ALLOWED_ATTACHMENT_EXTENSIONS.join(', ').toUpperCase();
+
+    const rejected = files
+      .map((file) => ({ file, reason: rejectionReason(file) }))
+      .filter((r): r is { file: File; reason: string } => r.reason !== null);
+    const accepted = files.filter((file) => rejectionReason(file) === null);
+
+    if (rejected.length > 0) {
       display({
         kind: 'error',
-        title: 'Unsupported file type',
-        subtitle: `${unsupported}Allowed types: ${allowed}.`,
-        timeout: 8000,
+        title: rejected.length === 1 ? "Can't upload that file" : `Skipped ${rejected.length} files`,
+        subtitle: rejected.map((r) => `"${r.file.name}" ${r.reason}`).join('; '),
+        timeout: 9000,
       });
-      return;
     }
+    if (accepted.length === 0) return;
+
     setBusy(true);
+    const failed: string[] = [];
+    let uploaded = 0;
     try {
-      const data = await toBase64(file);
-      const updated = await API.protocolChecklist.uploadAttachment(protocol, checklistId, {
-        fileName: file.name,
-        description: description.trim(),
-        contentType: file.type,
-        data,
-      });
-      setRows(updated);
-      setDescription('');
-      display({ kind: 'success', title: 'Attachment uploaded', timeout: 4000 });
+      for (const file of accepted) {
+        try {
+          await API.protocolChecklist.uploadAttachment(
+            protocol,
+            checklistId,
+            file,
+            description.trim(),
+          );
+          uploaded += 1;
+        } catch {
+          failed.push(file.name);
+        }
+      }
+      // One refresh for the whole batch, not one per file.
+      await refreshRows();
+      if (uploaded > 0) setDescription('');
+
+      if (failed.length === 0) {
+        display({
+          kind: 'success',
+          title: uploaded === 1 ? 'Attachment uploaded' : `${uploaded} attachments uploaded`,
+          timeout: 4000,
+        });
+      } else if (uploaded > 0) {
+        display({
+          kind: 'warning',
+          title: `Uploaded ${uploaded}, failed ${failed.length}`,
+          subtitle: `Could not upload: ${failed.join(', ')}. The others were saved.`,
+          timeout: 9000,
+        });
+      } else {
+        display({
+          kind: 'error',
+          title: 'Upload failed',
+          subtitle: `Could not upload: ${failed.join(', ')}.`,
+          timeout: 9000,
+        });
+      }
     } catch (err) {
       reportError('Upload failed', err);
     } finally {
@@ -252,12 +369,8 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       return;
     setBusy(true);
     try {
-      const updated = await API.protocolChecklist.deleteAttachment(
-        protocol,
-        checklistId,
-        row.checklistAttachmentId,
-      );
-      setRows(updated);
+      await API.protocolChecklist.deleteAttachment(protocol, checklistId, row.checklistAttachmentId);
+      await refreshRows();
       display({ kind: 'success', title: 'Attachment removed', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -348,9 +461,36 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         </table>
       )}
 
+      {/*
+        Shown whenever the checklist has attachments — including when they all fit on one page, so
+        the count and the page-size selector stay available. It was previously gated on
+        `totalCount > PAGE_SIZES[0]`, which hid both below 10 rows; that guard also compared against
+        the literal PAGE_SIZES[0] rather than the current pageSize, so it never tracked the
+        selection it was meant to reflect.
+
+        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
+        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
+        re-read that follows a delete. `loading` early-returns a skeleton above, so this never
+        renders before the first count arrives.
+      */}
+      {totalCount > 0 && (
+        <Pagination
+          page={page + 1}
+          pageSize={pageSize}
+          pageSizes={PAGE_SIZES}
+          totalItems={totalCount}
+          disabled={busy}
+          onChange={({ page: nextPage, pageSize: nextSize }) => {
+            // Carbon's page is 1-based, the API 0-based. A page-size change resets to the first
+            // page so the offset stays valid.
+            void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+          }}
+        />
+      )}
+
       {canManage && (
         <div className="attach-card">
-          <div className="attach-card__header">Upload file</div>
+          <div className="attach-card__header">Upload files</div>
           <div className="attach-card__body">
             <div className="frep-field attach-card__desc">
               <TextArea
@@ -390,14 +530,17 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                const file = e.dataTransfer.files?.[0];
-                if (file && !busy) void handleUpload(file);
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length > 0 && !busy) void handleUpload(files);
               }}
             >
               <span className="attach-drop__icon">
                 <Upload size={24} />
               </span>
-              <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
+              <p className="attach-drop__text">
+                Select or drag and drop files to upload. The description above applies to every file
+                in the batch.
+              </p>
               <Button
                 kind="primary"
                 size="lg"
@@ -410,10 +553,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                 ref={fileInputRef}
                 type="file"
                 accept={ALLOWED_ATTACHMENT_ACCEPT}
+                multiple
                 hidden
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleUpload(file);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) void handleUpload(files);
                   e.target.value = '';
                 }}
               />

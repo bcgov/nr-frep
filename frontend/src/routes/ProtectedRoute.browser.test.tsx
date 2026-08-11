@@ -31,12 +31,12 @@ describe('ProtectedRoute', () => {
 
   it('redirects to /unauthorized if user lacks required role', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
-      user: { roles: ['user'] },
+      user: { roles: ['FREP_VIEW_ONLY'] },
     });
 
     const { container } = render(
       <MemoryRouter initialEntries={['/admin']}>
-        <ProtectedRoute roles={['admin']}>
+        <ProtectedRoute roles={['FREP_ADMIN']}>
           <div>Admin Content</div>
         </ProtectedRoute>
       </MemoryRouter>,
@@ -46,12 +46,12 @@ describe('ProtectedRoute', () => {
 
   it('renders children if user is authenticated and has required role', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
-      user: { roles: ['admin', 'user'] },
+      user: { roles: ['FREP_ADMIN', 'FREP_VIEW_ONLY'] },
     });
 
     const { getByText } = render(
       <MemoryRouter initialEntries={['/admin']}>
-        <ProtectedRoute roles={['admin']}>
+        <ProtectedRoute roles={['FREP_ADMIN']}>
           <div>Admin Content</div>
         </ProtectedRoute>
       </MemoryRouter>,

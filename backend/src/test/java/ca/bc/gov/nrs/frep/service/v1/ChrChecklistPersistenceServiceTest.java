@@ -3,6 +3,7 @@ package ca.bc.gov.nrs.frep.service.v1;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -14,6 +15,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
+import ca.bc.gov.nrs.frep.entity.ChrChecklistAttachment;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
+import java.time.Instant;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
@@ -26,11 +32,13 @@ import ca.bc.gov.nrs.frep.entity.ChrFeatureTypeXref;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValue;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +53,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ChrChecklistPersistenceServiceTest {
 
   private EntityManager entityManager;
+  private ObjectStorageService objectStorage;
+  private ChrChecklist checklist;
   private ChrChecklistPersistenceService service;
   private final List<Object> persisted = new ArrayList<>();
 
@@ -52,13 +62,12 @@ class ChrChecklistPersistenceServiceTest {
   @SuppressWarnings("unchecked")
   void setUp() {
     entityManager = mock(EntityManager.class);
-    ObjectStorageService objectStorage = mock(ObjectStorageService.class);
-    VirusScanner virusScanner = mock(VirusScanner.class);
-    service = new ChrChecklistPersistenceService(objectStorage, virusScanner);
+    objectStorage = mock(ObjectStorageService.class);
+    service = new ChrChecklistPersistenceService(objectStorage);
     ReflectionTestUtils.setField(service, "entityManager", entityManager);
 
     // Managed checklist returned by find(...).
-    ChrChecklist checklist = new ChrChecklist();
+    checklist = new ChrChecklist();
     checklist.setChrChecklistId(1001L);
     FrepResourceValueStatCode statCode = new FrepResourceValueStatCode();
     statCode.setFrepResourceValueStatCode("ACC");
@@ -250,5 +259,238 @@ class ChrChecklistPersistenceServiceTest {
     when(entityManager.createQuery(anyString(), eq(ChrAssociatedFeatureXref.class))).thenReturn(q);
     lenient().when(q.setParameter(anyString(), any())).thenReturn(q);
     when(q.getResultList()).thenReturn(result);
+  }
+
+  // ── Photos must survive a checklist save (regression) ────────────────
+  //
+  // The photo write path is being split out to dedicated per-photo endpoints. Until this test
+  // passed, savePictures ran inside every checklist save and reconciled the *whole* picture set:
+  // rows absent from the payload were deleted, and an empty upload list made syncChecklistPhotos
+  // delete every object under the checklist's S3 prefix. Once photo metadata left the JSON contract
+  // the save would carry no pictures — so an ordinary save, an offline check-in, or a submit would
+  // silently destroy every photo, DB row and stored bytes alike, with no way to recover the bytes.
+  //
+  // Submit and offline check-in both funnel through this same persistence-level saveChecklist, so
+  // one invariant covers all three entry points: a checklist save must not touch photos at all.
+
+  /** Give the managed checklist one existing photo, as a save would find in the database. */
+  private ChrChecklistAttachment givenAnExistingPhoto() {
+    ChrChecklistAttachment photo = new ChrChecklistAttachment();
+    photo.setChrchecklistAttachmentId(77L);
+    photo.setFileName("site.JPG");
+    photo.setDescription("Existing site photo");
+    photo.setChrChecklist(checklist);
+    checklist.getChrChecklistAttachments().add(photo);
+    return photo;
+  }
+
+  private static CheckList aChecklistSaveWithNoPictures() {
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    return resource; // pictures == null, exactly what a post-split payload carries
+  }
+
+  @Test
+  void aChecklistSaveDoesNotDeleteExistingPhotoRows() {
+    ChrChecklistAttachment photo = givenAnExistingPhoto();
+
+    service.saveChecklist(aChecklistSaveWithNoPictures(), "IDIR\\tester");
+
+    verify(entityManager, never()).remove(photo);
+    assertTrue(checklist.getChrChecklistAttachments().contains(photo),
+        "the photo must still be attached to the checklist after an unrelated save");
+  }
+
+  @Test
+  void aChecklistSaveDoesNotTouchObjectStorage() {
+    givenAnExistingPhoto();
+
+    service.saveChecklist(aChecklistSaveWithNoPictures(), "IDIR\\tester");
+
+    // Photo bytes are written and deleted only by the dedicated photo endpoints. A checklist save
+    // reaching object storage at all is the bug: the delete is out-of-transaction and unrecoverable.
+    verifyNoInteractions(objectStorage);
+  }
+
+  // ── Photo operations must not advance the checklist's optimistic-lock token ──
+  //
+  // revision_count is a JPA @Version shared by every tab. If a photo upload stamped or flushed the
+  // checklist entity, a user editing another tab would have their next save rejected as "modified by
+  // another user" purely because they added a photo. The checklist save stays the sole token writer.
+
+  @Test
+  void addingAPhotoDoesNotStampTheChecklist() {
+    Date before = new Date(0);
+    checklist.setUpdateTimestamp(before);
+    checklist.setUpdateUserid("ORIGINAL");
+
+    service.addPhoto(1001L, "site.jpg", "A description", null, null, "image/jpeg",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    assertEquals(before, checklist.getUpdateTimestamp(),
+        "a photo upload must not restamp the parent checklist");
+    assertEquals("ORIGINAL", checklist.getUpdateUserid());
+  }
+
+  @Test
+  void deletingAPhotoDoesNotStampTheChecklist() {
+    ChrChecklistAttachment photo = givenAnExistingPhoto();
+    photo.setMimeTypeCode("JPG");
+    Date before = new Date(0);
+    checklist.setUpdateTimestamp(before);
+    checklist.setUpdateUserid("ORIGINAL");
+
+    service.deletePhoto(1001L, photo.getChrchecklistAttachmentId(), "IDIR\\tester");
+
+    assertEquals(before, checklist.getUpdateTimestamp());
+    assertEquals("ORIGINAL", checklist.getUpdateUserid());
+  }
+
+  @Test
+  void deletingAPhotoRemovesItsStoredObjectByExactKey() {
+    // The key must match what populatePhotoBytes reads back with. A prefix-based delete is what made
+    // the old syncChecklistPhotos able to take out a neighbouring checklist's photos.
+    ChrChecklistAttachment photo = givenAnExistingPhoto();
+    photo.setMimeTypeCode("JPG");
+
+    service.deletePhoto(1001L, photo.getChrchecklistAttachmentId(), "IDIR\\tester");
+
+    verify(objectStorage).deleteObject("1001-77.jpg");
+  }
+
+  // ── Photo ordering ───────────────────────────────────────────────────
+  //
+  // Newest first: with ascending order a newly uploaded photo lands on the last page, so a user on
+  // page 1 sees nothing change after uploading. The mapped collection is an unordered Set, so this
+  // ordering is imposed here and is what the pager slices.
+
+  private ChrChecklistAttachment photoAddedAt(long id, String isoInstant) {
+    ChrChecklistAttachment photo = new ChrChecklistAttachment();
+    photo.setChrchecklistAttachmentId(id);
+    photo.setFileName("p" + id + ".JPG");
+    photo.setMimeTypeCode("JPG");
+    photo.setDescription("Photo " + id);
+    photo.setEntryTimestamp(Date.from(Instant.parse(isoInstant)));
+    photo.setChrChecklist(checklist);
+    checklist.getChrChecklistAttachments().add(photo);
+    return photo;
+  }
+
+  @Test
+  void photoMetadataIsNewestFirst() {
+    photoAddedAt(1L, "2026-08-01T10:00:00Z");
+    photoAddedAt(2L, "2026-08-03T10:00:00Z");
+    photoAddedAt(3L, "2026-08-02T10:00:00Z");
+
+    List<Picture> photos = service.getPhotoMetadata(1001L);
+
+    assertEquals(List.of("2", "3", "1"), photos.stream().map(Picture::getId).toList());
+  }
+
+  // ── The photo → feature association (CHR_FEATURE_ID) ─────────────────
+  //
+  // An optional FK to CHR_FEATURE_DETAIL: which feature the photo documents. Written once at upload
+  // and read back with the metadata; there is no edit path, which is why photo rows need no
+  // optimistic lock.
+
+  private ChrFeatureIdentity featureOnTheChecklist(long featureId, String label) {
+    ChrFeatureIdentity feature = new ChrFeatureIdentity();
+    feature.setChrFeatureId(featureId);
+    feature.setFeatureLabel(label);
+    feature.setChrChecklist(checklist);
+    checklist.getChrFeatureIdentities().add(feature);
+    return feature;
+  }
+
+  @Test
+  void addPhotoRecordsTheFeatureItDocuments() {
+    featureOnTheChecklist(5001L, "3");
+
+    service.addPhoto(1001L, "site.jpg", "A description", null, 5001L, "image/jpeg",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = persisted.stream()
+        .filter(ChrChecklistAttachment.class::isInstance)
+        .map(ChrChecklistAttachment.class::cast)
+        .findFirst().orElseThrow();
+    assertEquals(5001L, stored.getChrFeatureId());
+  }
+
+  @Test
+  void addPhotoLeavesTheFeatureUnsetWhenNoneIsGiven() {
+    // The association is optional — the column is nullable and the upload UI need not supply one.
+    service.addPhoto(1001L, "site.jpg", "A description", null, null, "image/jpeg",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = persisted.stream()
+        .filter(ChrChecklistAttachment.class::isInstance)
+        .map(ChrChecklistAttachment.class::cast)
+        .findFirst().orElseThrow();
+    assertNull(stored.getChrFeatureId());
+  }
+
+  @Test
+  void addPhotoRejectsAFeatureBelongingToAnotherChecklist() {
+    // The FK is satisfied by any existing feature, so without this check a photo could be hung off
+    // another checklist's feature. Nothing may be persisted or written to object storage.
+    featureOnTheChecklist(5001L, "3");
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, "site.jpg", "A description", null, 9999L, "image/jpeg",
+            new byte[] {1, 2, 3}, "IDIR\\tester"));
+
+    assertTrue(ex.getMessage().contains("9999"));
+    verify(entityManager, never()).persist(any(ChrChecklistAttachment.class));
+    verifyNoInteractions(objectStorage);
+  }
+
+  @Test
+  void photoMetadataCarriesTheFeatureIdAndItsLabel() {
+    featureOnTheChecklist(5001L, "3");
+    photoAddedAt(1L, "2026-08-01T10:00:00Z").setChrFeatureId(5001L);
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertEquals("5001", picture.getFeatureId());
+    assertEquals("3", picture.getFeatureLabel(),
+        "the label is resolved on read so a client can name the feature without a second lookup");
+  }
+
+  @Test
+  void photoMetadataOmitsTheFeatureWhenThePhotoHasNone() {
+    photoAddedAt(1L, "2026-08-01T10:00:00Z");
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertNull(picture.getFeatureId());
+    assertNull(picture.getFeatureLabel());
+  }
+
+  @Test
+  void photoMetadataKeepsTheFeatureIdWhenTheFeatureIsGone() {
+    // Deleting a feature does not clear the photo's column, so the id must still round-trip; only
+    // the label is unresolvable.
+    photoAddedAt(1L, "2026-08-01T10:00:00Z").setChrFeatureId(5001L);
+
+    Picture picture = service.getPhotoMetadata(1001L).getFirst();
+
+    assertEquals("5001", picture.getFeatureId());
+    assertNull(picture.getFeatureLabel());
+  }
+
+  @Test
+  void photosAddedInTheSameSecondFallBackToIdDescending() {
+    // entry_timestamp is an Oracle DATE (second precision), so same-second photos are common. Without
+    // a tiebreaker the page boundary would be non-deterministic: a row could repeat on one page and
+    // vanish from another.
+    photoAddedAt(10L, "2026-08-01T10:00:00Z");
+    photoAddedAt(12L, "2026-08-01T10:00:00Z");
+    photoAddedAt(11L, "2026-08-01T10:00:00Z");
+
+    List<Picture> photos = service.getPhotoMetadata(1001L);
+
+    assertEquals(List.of("12", "11", "10"), photos.stream().map(Picture::getId).toList());
   }
 }

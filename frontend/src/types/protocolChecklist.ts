@@ -228,6 +228,12 @@ export type RiparianNotes = {
 };
 
 /** Metadata for one checklist attachment (legacy Attachments tab). */
+/** One page of attachment metadata; bytes are fetched separately. */
+export type AttachmentPageResponse = {
+  attachments: AttachmentRow[];
+  totalCount: number;
+};
+
 export type AttachmentRow = {
   checklistAttachmentId?: string;
   fileName?: string;
@@ -244,12 +250,6 @@ export type AttachmentContent = {
 };
 
 /** Upload payload — {@code data} is base64-encoded file bytes. */
-export type AttachmentUploadRequest = {
-  fileName?: string;
-  description?: string;
-  contentType?: string;
-  data?: string;
-};
 
 export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {
   biodiversity: 'bio',

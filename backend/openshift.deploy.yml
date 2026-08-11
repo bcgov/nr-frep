@@ -38,6 +38,13 @@ parameters:
     value: "200m"
   - name: MIN_MEM
     value: "500Mi"
+  # Container timezone. Drives the JVM default zone, which the log pattern
+  # (%d in logging.pattern.console) renders against — OpenShift containers are
+  # UTC by default, which puts every log line 7-8 hours off the BC business
+  # day. A named zone resolves from the tzdb bundled in the JDK, so no OS
+  # tzdata package is required on the Alpine base image.
+  - name: TZ
+    value: America/Vancouver
   - name: APP_LOG_LEVEL
     value: INFO
   - name: SPRING_SECURITY_LOG_LEVEL
@@ -161,6 +168,8 @@ objects:
                 - containerPort: 8080
                   protocol: TCP
               env:
+                - name: TZ
+                  value: ${TZ}
                 - name: SERVER_PORT
                   value: "8080"
                 - name: AWS_COGNITO_ISSUER_URI
@@ -266,6 +275,11 @@ objects:
                   mountPath: /logs
                 - name: app-storage
                   mountPath: /temp
+                # Load-bearing, do not remove: the container runs with readOnlyRootFilesystem, so
+                # this emptyDir is the only place the JVM can write. Spring spools every
+                # multipart/form-data upload to a temp file here (file-size-threshold=0) instead of
+                # buffering it in heap — without the mount, attachment/photo uploads fail outright.
+                # emptyDir usage counts against the pod's ephemeral-storage limit below.
                 - name: tmp-storage
                   mountPath: /tmp
               securityContext:
@@ -389,9 +403,16 @@ objects:
         - Ingress
 
   # ── NetworkPolicy: permit-all egress (DB, object storage, Cognito, and the shared ClamAV
-  #    service in the tools namespace). Explicit permit-all — nr-frep relies on default-allow
-  #    egress today; this documents intent without restricting existing traffic. The tools-side
-  #    ingress policy that lets this pod reach clamd:3310 is applied MANUALLY (out of band). ──
+  #    service). Explicit permit-all — nr-frep relies on default-allow egress today; this
+  #    documents intent without restricting existing traffic.
+  #
+  #    ClamAV is NOT in a tools namespace, and not in this app's project set either. FREP runs
+  #    in c2d443-{dev,test,prod}; clamd runs in bd657f-{dev,test,prod} — a different project
+  #    set. CLAMAV_HOST must therefore be a fully-qualified cross-namespace service name
+  #    (…​.bd657f-<env>.svc.cluster.local), and the ingress policy in the bd657f namespace that
+  #    lets this pod reach clamd:3310 is applied MANUALLY, out of band. If uploads start
+  #    failing after a namespace or plate change, check that ingress rule first — nothing in
+  #    this repo creates or validates it. ──
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     metadata:

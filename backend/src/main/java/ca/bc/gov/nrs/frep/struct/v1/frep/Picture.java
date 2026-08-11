@@ -23,6 +23,10 @@ public class Picture {
   private String code;
   @JsonProperty("mimeTypeCode")
   private String mimeTypeCode;
+  /** The feature this photo documents (CHR_CHECKLIST_ATTACHMENT.CHR_FEATURE_ID); null if none. */
+  @JsonProperty("featureId")
+  private String featureId;
+  /** That feature's label, resolved on read so a client can name it without a second lookup. */
   @JsonProperty("featureLabel")
   private String featureLabel;
   @JsonProperty("fileName")
@@ -80,6 +84,14 @@ public class Picture {
 
   public void setMimeTypeCode(String mimeTypeCode) {
     this.mimeTypeCode = mimeTypeCode;
+  }
+
+  public String getFeatureId() {
+    return featureId;
+  }
+
+  public void setFeatureId(String featureId) {
+    this.featureId = featureId;
   }
 
   public String getFeatureLabel() {

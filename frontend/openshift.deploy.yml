@@ -15,24 +15,20 @@ parameters:
   - name: ZONE
     description: PR number, 'test', or 'prod'
     required: true
-  # SLOT decouples the public-facing Route hostname from the OpenShift object
-  # names so per-PR previews can share a fixed pool of Cognito callback URIs.
-  # AWS Cognito user pool app clients don't accept wildcards in CallbackURLs;
-  # we pre-register 50 URIs (nr-frep-0…nr-frep-49.apps.gold.devops.gov.bc.ca)
-  # and bucket PRs into them via PR % 50.
-  # pr-open.yml computes SLOT = PR % 50; merge.yml passes SLOT = ZONE = test/prod.
-  - name: SLOT
-    description: Route hostname slot — PR % 50 for previews, or test/prod for those targets
-    required: true
+  # NOTE: SLOT and DOMAIN used to live here, but they only ever fed the Route
+  # hostname. The Route moved to openshift.route.yml / openshift.vanity-route.yml,
+  # so both parameters moved with it — don't re-add them here.
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
   - name: REGISTRY
     description: Image registry path (no tag)
     value: ghcr.io/bcgov/nr-frep/frontend
-  - name: DOMAIN
-    description: Cluster apps domain (do not include leading dot)
-    value: apps.gold.devops.gov.bc.ca
+  - name: REPLICAS
+    description: |
+      Frontend pod count. "2" preserves the value that was hardcoded here
+      before parameterization; reusable-deploy.yml raises it for PROD.
+    value: "2"
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   # Runtime VITE_* config (rendered into /srv/config.js by the entrypoint).
@@ -54,6 +50,13 @@ parameters:
     value: /api
   - name: VITE_APP_NAME
     value: FREP IMS
+  # Base URL for SILVA deep links from Opening ID (see frontend/src/utils/silva.ts). Held as a
+  # deployment parameter so a SILVA hostname change is a GitHub variable edit plus a redeploy,
+  # not a code change. The entrypoint substitutes this default when the variable is unset, so an
+  # empty vars.VITE_SILVA_BASE_URL degrades to production rather than producing a broken link.
+  - name: VITE_SILVA_BASE_URL
+    description: SILVA base URL for Opening ID deep links (no trailing slash)
+    value: https://silva.nrs.gov.bc.ca
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
@@ -71,7 +74,9 @@ objects:
         app.kubernetes.io/name: ${NAME}-frontend
         app.kubernetes.io/instance: ${ZONE}
     spec:
-      replicas: 2
+      # ${{...}} (not ${...}) so the value is emitted as a JSON number —
+      # replicas must not be a quoted string.
+      replicas: ${{REPLICAS}}
       selector:
         matchLabels:
           app: ${NAME}-frontend-${ZONE}
@@ -141,6 +146,8 @@ objects:
                   value: ${VITE_BACKEND_URL}
                 - name: VITE_APP_NAME
                   value: ${VITE_APP_NAME}
+                - name: VITE_SILVA_BASE_URL
+                  value: ${VITE_SILVA_BASE_URL}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
               volumeMounts:
@@ -199,23 +206,13 @@ objects:
           targetPort: 3000
 
   # ── Route ─────────────────────────────────────────────────
-  - apiVersion: route.openshift.io/v1
-    kind: Route
-    metadata:
-      name: ${NAME}-frontend-${ZONE}
-      labels:
-        app: ${NAME}-frontend-${ZONE}
-        app.kubernetes.io/instance: ${ZONE}
-    spec:
-      host: ${NAME}-${SLOT}.${DOMAIN}
-      to:
-        kind: Service
-        name: ${NAME}-frontend-${ZONE}
-      port:
-        targetPort: http
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
+  # Deliberately NOT here. The frontend Route lives in its own template so it
+  # can be applied per environment: openshift.route.yml (default cluster
+  # hostname) for TEST and PR previews, openshift.vanity-route.yml
+  # (frep.nrs.gov.bc.ca) for PROD only. `oc process` emits every object in a
+  # template, so a Route defined here would be created in every environment —
+  # which is exactly what we need to avoid to keep PROD on a single URL.
+  # See the two route templates and the deploy steps in reusable-deploy.yml.
 
   # ── NetworkPolicy: ingress from OpenShift router ───────────
   - apiVersion: networking.k8s.io/v1

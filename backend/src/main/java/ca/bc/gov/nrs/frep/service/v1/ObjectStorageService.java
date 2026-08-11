@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.service.v1;
 
 import java.net.URI;
-import java.util.List;
 
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import org.springframework.stereotype.Service;
@@ -12,11 +11,8 @@ import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Object;
 
 @Service
 public class ObjectStorageService {
@@ -27,34 +23,6 @@ public class ObjectStorageService {
     this.properties = properties;
   }
 
-  public void syncChecklistPhotos(String checklistId, List<PhotoUpload> photos) {
-    if (photos == null || photos.isEmpty()) {
-      deleteObjectsWithPrefix(checklistId);
-      return;
-    }
-
-    boolean filesExist = hasObjectsWithPrefix(checklistId);
-    if (filesExist) {
-      for (S3Object summary : listObjectsWithPrefix(checklistId)) {
-        copyObject(summary.key(), "temp-" + summary.key());
-        deleteObject(summary.key());
-      }
-    }
-
-    for (PhotoUpload photo : photos) {
-      if (photo.content() == null || photo.content().length == 0) {
-        continue;
-      }
-      String key = checklistId + "-" + photo.fileName();
-      putObject(key, photo.contentType(), photo.content());
-    }
-
-    if (filesExist) {
-      for (S3Object summary : listObjectsWithPrefix("temp-")) {
-        deleteObject(summary.key());
-      }
-    }
-  }
 
   public byte[] getObjectBytes(String key) {
     try (S3Client client = client()) {
@@ -72,9 +40,25 @@ public class ObjectStorageService {
   }
 
   /**
+   * The stored size of {@code key} in bytes, or {@code -1} when the object is missing.
+   *
+   * <p>A HEAD per object, called only for the rows on the page being returned. Deliberately not a
+   * prefix listing: Biodiversity keys are flat ({@code slr/<id>}) so a prefix would sweep every
+   * checklist's attachments, and the listing API caps at 1000 keys per response.
+   */
+  public long getObjectSize(String key) {
+    try (S3Client client = client()) {
+      return client.headObject(builder -> builder.bucket(properties.bucket()).key(key))
+          .contentLength();
+    } catch (Exception ex) {
+      return -1;
+    }
+  }
+
+  /**
    * Store {@code content} at {@code key} in the shared bucket. Generic key-based op — CHR photos use it
-   * via {@link #syncChecklistPhotos}; Biodiversity attachments call it directly with an
-   * {@code slr/<attachmentId>} key (see the bio-attachments object-storage migration).
+   * with a {@code {checklistId}-{attachmentId}.{ext}} key; Biodiversity attachments use
+   * {@code slr/<attachmentId>}.
    */
   public void putObject(String key, String contentType, byte[] content) {
     try (S3Client client = client()) {
@@ -89,19 +73,9 @@ public class ObjectStorageService {
     }
   }
 
-  private void copyObject(String sourceKey, String destinationKey) {
-    try (S3Client client = client()) {
-      client.copyObject(CopyObjectRequest.builder()
-          .sourceBucket(properties.bucket())
-          .sourceKey(sourceKey)
-          .destinationBucket(properties.bucket())
-          .destinationKey(destinationKey)
-          .build());
-    }
-  }
 
-  /** Delete the object at {@code key} (no-op if absent). Generic — used by CHR prefix cleanup and by
-   * Biodiversity attachment delete ({@code slr/<attachmentId>}). */
+  /** Delete the object at {@code key} (no-op if absent). Used by the CHR photo and Biodiversity
+   * attachment delete paths, each with its own exact key. */
   public void deleteObject(String key) {
     try (S3Client client = client()) {
       client.deleteObject(DeleteObjectRequest.builder()
@@ -111,25 +85,8 @@ public class ObjectStorageService {
     }
   }
 
-  private void deleteObjectsWithPrefix(String prefix) {
-    for (S3Object summary : listObjectsWithPrefix(prefix)) {
-      deleteObject(summary.key());
-    }
-  }
 
-  private boolean hasObjectsWithPrefix(String prefix) {
-    return !listObjectsWithPrefix(prefix).isEmpty();
-  }
 
-  private List<S3Object> listObjectsWithPrefix(String prefix) {
-    try (S3Client client = client()) {
-      return client.listObjectsV2(ListObjectsV2Request.builder()
-              .bucket(properties.bucket())
-              .prefix(prefix)
-              .build())
-          .contents();
-    }
-  }
 
   private S3Client client() {
     return S3Client.builder()
@@ -148,5 +105,4 @@ public class ObjectStorageService {
         .build();
   }
 
-  public record PhotoUpload(String fileName, String contentType, byte[] content) {}
 }

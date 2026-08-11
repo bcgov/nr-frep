@@ -1,8 +1,8 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentPageResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
-import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentUploadRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Read + edit/submit API for protocol checklists. Mappings declared on
@@ -137,8 +138,12 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   }
 
   @Override
-  public ResponseEntity<List<AttachmentRow>> getAttachments(String protocol, String checklistId) {
-    return ResponseEntity.ok(protocolChecklistService.getAttachments(protocol, checklistId));
+  public ResponseEntity<AttachmentPageResponse> getAttachments(
+      String protocol, String checklistId, int page, int size) {
+    ProtocolChecklistService.AttachmentPage result =
+        protocolChecklistService.getAttachments(protocol, checklistId, page, size);
+    return ResponseEntity.ok(
+        new AttachmentPageResponse(result.attachments(), result.totalCount()));
   }
 
   @Override
@@ -149,17 +154,16 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   }
 
   @Override
-  public ResponseEntity<List<AttachmentRow>> uploadAttachment(
-      String protocol, String checklistId, AttachmentUploadRequest request) {
-    return ResponseEntity.ok(protocolChecklistService.saveAttachment(
-        protocol, checklistId, request.fileName(), request.description(), request.contentType(),
-        request.data() == null ? new byte[0] : request.data()));
+  public ResponseEntity<Void> uploadAttachment(
+      String protocol, String checklistId, MultipartFile file, String description) {
+    protocolChecklistService.saveAttachment(protocol, checklistId, file, description);
+    return ResponseEntity.noContent().build();
   }
 
   @Override
-  public ResponseEntity<List<AttachmentRow>> deleteAttachment(
+  public ResponseEntity<Void> deleteAttachment(
       String protocol, String checklistId, String attachmentId) {
-    return ResponseEntity.ok(
-        protocolChecklistService.deleteAttachment(protocol, checklistId, attachmentId));
+    protocolChecklistService.deleteAttachment(protocol, checklistId, attachmentId);
+    return ResponseEntity.noContent().build();
   }
 }

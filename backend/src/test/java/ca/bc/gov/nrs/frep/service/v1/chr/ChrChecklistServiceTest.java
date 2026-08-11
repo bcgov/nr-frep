@@ -27,6 +27,13 @@ import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
+import org.mockito.InOrder;
+import org.springframework.mock.web.MockMultipartFile;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import java.util.ArrayList;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -47,6 +54,8 @@ class ChrChecklistServiceTest {
   private LoggedUserHelper loggedUserHelper;
   @Mock
   private ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService famUserDirectoryService;
+  @Mock
+  private ca.bc.gov.nrs.frep.service.v1.VirusScanner virusScanner;
 
   private ChrChecklistService service;
 
@@ -59,7 +68,8 @@ class ChrChecklistServiceTest {
         objectStorageService,
         new ObjectStorageProperties("http://s3", "bucket", "key", "secret"),
         loggedUserHelper,
-        famUserDirectoryService
+        famUserDirectoryService,
+        virusScanner
     );
   }
 
@@ -152,39 +162,242 @@ class ChrChecklistServiceTest {
   }
 
   @Test
-  void savePicturesSectionRejectsNewPhotoWithBlankDescription() {
-    Picture newPhoto = new Picture();
-    newPhoto.setDescription("");
-    newPhoto.setMimeTypeCode("image/jpeg");
-    CheckList checklist = new CheckList();
-    checklist.setChecklistID("1001");
-    checklist.setPictures(List.of(newPhoto));
+  void addPhotoRejectsABlankDescription() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    MockMultipartFile photo =
+        new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
-    InvalidParameterException ex =
-        assertThrows(InvalidParameterException.class, () -> service.savePicturesSection(checklist));
-    assertTrue(ex.getMessage().contains("missing mandatory descriptions"));
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, photo, "  ", null, null, null));
+
+    assertTrue(ex.getMessage().contains("description is required"));
+    verifyNoInteractions(virusScanner);
   }
 
   @Test
-  void savePicturesSectionAllowsExistingPhotoWithBlankDescription() {
-    // A legacy photo (has an id) with a blank description must not block a section save (add/delete);
-    // only new photos are validated. Validation passes here, so the save fails the status gate instead
-    // — proving it didn't trip the photo-description check.
-    Picture existing = new Picture();
-    existing.setId("p1");
-    existing.setDescription("");
-    CheckList checklist = new CheckList();
-    checklist.setChecklistID("1001");
-    checklist.setPictures(List.of(existing));
+  void addPhotoRejectsANonImageFile() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    MockMultipartFile notAnImage =
+        new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[] {1, 2, 3});
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, notAnImage, "A description", null, null, null));
+
+    assertTrue(ex.getMessage().contains("Only image files"));
+  }
+
+  @Test
+  void addPhotoRejectsAnEmptyFile() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    MockMultipartFile empty = new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[0]);
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, empty, "A description", null, null, null));
+    verifyNoInteractions(virusScanner);
+  }
+
+  @Test
+  void addPhotoScansBeforePersisting() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\tester");
+    byte[] content = {1, 2, 3};
+    MockMultipartFile photo = new MockMultipartFile("file", "site.jpg", "image/jpeg", content);
+
+    service.addPhoto(1001L, photo, " A description ", "2026-05-01", 42L, null);
+
+    InOrder order = inOrder(virusScanner, persistenceService);
+    order.verify(virusScanner).scanOrThrow(content, "site.jpg");
+    order.verify(persistenceService).addPhoto(
+        eq(1001L), eq("site.jpg"), eq("A description"), eq("2026-05-01"), eq(42L), eq("image/jpeg"),
+        eq(content), eq("IDIR\\tester"));
+  }
+
+  @Test
+  void photoOperationsAreAllowedOnACheckedOutChecklistWithTheMatchingToken() {
+    // RDO must be editable or offline check-in cannot work: photos are flushed BEFORE the document
+    // save, and the RDO → ACT flip happens inside that save — so the checklist is still checked out
+    // when the flush runs. An ACT-only guard failed every offline photo upload.
+    UUID guid = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getDeviceCheckoutGuid(1001L)).thenReturn(guid);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\tester");
+    MockMultipartFile photo =
+        new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
+
+    assertDoesNotThrow(
+        () -> service.addPhoto(1001L, photo, "A description", null, null, guid.toString()));
+    assertDoesNotThrow(() -> service.deletePhoto(1001L, 7L, guid.toString()));
+  }
+
+  @Test
+  void photoOperationsAreRefusedOnACheckedOutChecklistFromAnotherDevice() {
+    // Allowing RDO must not mean "anyone may edit a checked-out checklist" — only the device holding
+    // the checkout. Same rule releaseCheckout and uploadChecklist apply.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getDeviceCheckoutGuid(1001L))
+        .thenReturn(UUID.fromString("11111111-2222-3333-4444-555555555555"));
+    MockMultipartFile photo =
+        new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
+
+    InvalidParameterException wrongToken = assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, photo, "A description", null, null, "not-my-checkout"));
+    assertTrue(wrongToken.getMessage().contains("checked out on another device"));
+
+    // A caller with no token at all is refused the same way.
+    assertThrows(InvalidParameterException.class,
+        () -> service.deletePhoto(1001L, 7L, null));
+    verifyNoInteractions(persistenceService);
+  }
+
+  @Test
+  void photoOperationsAreRefusedOnASubmittedChecklist() {
+    // The photo endpoints are token-neutral leaves, so they bypass the section-save status gate —
+    // the check has to be applied explicitly or a submitted checklist stays editable.
     when(checklistRepository.getChecklistStatus(1001L))
         .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+    MockMultipartFile photo =
+        new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
 
-    InvalidParameterException ex =
-        assertThrows(InvalidParameterException.class, () -> service.savePicturesSection(checklist));
-    assertFalse(ex.getMessage().contains("missing mandatory descriptions"));
+    assertThrows(InvalidParameterException.class,
+        () -> service.addPhoto(1001L, photo, "A description", null, null, null));
+    assertThrows(InvalidParameterException.class, () -> service.deletePhoto(1001L, 7L, null));
+    verifyNoInteractions(persistenceService);
+  }
+
+  @Test
+  void submitValidatesThePhotosOnTheRecordNotTheOnesInThePayload() {
+    // Photos are independent resources now, so a caller could submit with pictures omitted (or
+    // fabricated) and skip the per-photo checks. Submit must read them from the record.
+    Picture onTheRecord = new Picture();
+    onTheRecord.setId("77");
+    onTheRecord.setDescription("");             // blank — must reach the validator
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(List.of(onTheRecord));
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(submitValidationService.validateBeforeSubmit(any())).thenReturn(List.of());
+
+    ChrChecklist entity = new ChrChecklist();
+    entity.setChrChecklistId(1001L);
+    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(entity);
+
+    CheckList payload = new CheckList();
+    payload.setChecklistID("1001");
+    payload.setStatus(ChrConstants.FrepChecklistStatusCode.ACT);
+    payload.setRevisionCount("1");
+    payload.setPictures(new ArrayList<>());     // client claims there are no photos
+
+    assertThrows(FrepApiRuntimeException.class, () -> service.submitChecklist(1001L, payload));
+
+    ArgumentCaptor<CheckList> validated = ArgumentCaptor.forClass(CheckList.class);
+    verify(submitValidationService).validateBeforeSubmit(validated.capture());
+    assertEquals(1, validated.getValue().getPictures().size(),
+        "the record's photos must be validated, not the payload's");
+    assertEquals("77", validated.getValue().getPictures().get(0).getId());
+  }
+
+  @Test
+  void submitDoesNotDeletePhotos() {
+    // Submit funnels through the same full-document save as an ordinary save and an offline check-in,
+    // and used to reconcile the whole picture set on the way through. Photos must survive it.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(submitValidationService.validateBeforeSubmit(any())).thenReturn(List.of());
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(List.of());
+    ChrChecklist entity = new ChrChecklist();
+    entity.setChrChecklistId(1001L);
+    when(persistenceService.getAcceptedSiteForChr(1001L)).thenReturn(entity);
+
+    CheckList payload = new CheckList();
+    payload.setChecklistID("1001");
+    payload.setStatus(ChrConstants.FrepChecklistStatusCode.ACT);
+    payload.setRevisionCount("1");
+
+    assertThrows(FrepApiRuntimeException.class, () -> service.submitChecklist(1001L, payload));
+
+    // Object storage is reached only by the photo endpoints; a submit touching it is the bug.
+    verifyNoInteractions(objectStorageService);
+  }
+
+  @Test
+  void theOfflineCheckInSequenceIsAcceptedServerSide() {
+    // The server half of the check-in seam: photos are flushed while the checklist is still RDO,
+    // because the RDO -> ACT flip happens inside the document save that follows. An ACT-only guard
+    // rejected every one of these calls.
+    UUID guid = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.RDO);
+    when(checklistRepository.getDeviceCheckoutGuid(1001L)).thenReturn(guid);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\tester");
+    MockMultipartFile photo =
+        new MockMultipartFile("file", "site.jpg", "image/jpeg", new byte[] {1, 2, 3});
+
+    // 1. delete a photo removed offline, 2. upload one captured offline — both still RDO
+    assertDoesNotThrow(() -> service.deletePhoto(1001L, 7L, guid.toString()));
+    assertDoesNotThrow(() -> service.addPhoto(1001L, photo, "Captured offline", null, null, guid.toString()));
+
+    // 3. the document save then performs the RDO -> ACT check-in
+    CheckList payload = new CheckList();
+    payload.setChecklistID("1001");
+    payload.setStatus(ChrConstants.FrepChecklistStatusCode.RDO);
+    payload.setDeviceCheckoutGuid(guid.toString());
+
+    service.saveChecklist(payload);
+
+    verify(persistenceService).uploadChecklist(payload, "IDIR\\tester");
   }
 
   // Authorization is enforced entirely by @PreAuthorize on ChrChecklistApiEndpoint: reads via the
   // coarse CHR_EDIT, writes via the per-district @chrAuth.canEditChecklist(...) — see
   // ApiAuthorizationSecurityTest / ChrChecklistAuthorizerTest.
+
+  /** 250 photos, so a request for more than the 100-row cap has something to over-read. */
+  private static List<Picture> photos(int count) {
+    List<Picture> all = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      Picture p = new Picture();
+      p.setId(String.valueOf(i));
+      all.add(p);
+    }
+    return all;
+  }
+
+  @Test
+  void getPhotosClampsPageSizeToTheCap() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    ChrChecklistService.PhotoPage page = service.getPhotos(1001L, 0, 5000);
+
+    assertEquals(100, page.photos().size(), "size must be capped at MAX_PAGE_SIZE");
+    assertEquals(250, page.totalCount(), "totalCount still reports the full set");
+  }
+
+  @Test
+  void getPhotosFloorsNegativePageAndSize() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    ChrChecklistService.PhotoPage page = service.getPhotos(1001L, -3, -10);
+
+    // size < 1 becomes 1, page < 0 becomes 0 — so this is the first row, not an exception.
+    assertEquals(1, page.photos().size());
+    assertEquals("0", page.photos().get(0).getId());
+  }
+
+  @Test
+  void getPhotosDoesNotOverflowOnAHugePageNumber() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    // page * size overflows int (2^31-1 * 100); the offset is computed as a long, so this is an
+    // empty page past the end rather than a negative index into subList().
+    ChrChecklistService.PhotoPage page =
+        assertDoesNotThrow(() -> service.getPhotos(1001L, Integer.MAX_VALUE, 100));
+
+    assertTrue(page.photos().isEmpty());
+    assertEquals(250, page.totalCount());
+  }
 }

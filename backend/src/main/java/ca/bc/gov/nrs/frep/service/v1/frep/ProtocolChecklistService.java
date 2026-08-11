@@ -20,9 +20,11 @@ import ca.bc.gov.nrs.frep.repository.v1.bean.ChecklistSectionData;
 import ca.bc.gov.nrs.frep.repository.v1.CodeListRepository;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
+import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,11 +38,13 @@ import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -60,12 +64,36 @@ public class ProtocolChecklistService {
       "BMP, CSV, DOC, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, RPT, RTF, TIF, TXT, "
           + "WAV, XLD, XLS, XML, ZIP";
 
+  // Numeric-format guards for user-supplied field values.
+  //
+  // Written as an explicit alternation rather than the more obvious
+  // `[-+]?\d*\.?\d+`. In that form `\d*` and `\d+` overlap with only an optional
+  // `\.?` between them, so a long run of digits that ultimately FAILS to match
+  // (e.g. 20k digits then a letter) makes the engine retry every split point —
+  // quadratic backtracking, and these values are attacker-controlled with no
+  // upstream length cap. Measured on the old form: 16k chars ≈ 0.9s of CPU per
+  // call, scaling 4x per doubling. The alternation below cannot overlap, so it
+  // is linear, and it accepts/rejects exactly the same strings.
+  //
+  // Both accept: 123, 1.5, .5 (and a leading sign, where allowed). Both reject:
+  // "1." (trailing dot), "", ".", "1e5", "1..2".
+  // Keep these as the single source of truth — the old inline form previously
+  // existed at four separate call sites and static analysis only caught two.
+  private static final Pattern SIGNED_DECIMAL =
+      Pattern.compile("[-+]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)");
+  private static final Pattern UNSIGNED_DECIMAL =
+      Pattern.compile("(?:\\d+(?:\\.\\d+)?|\\.\\d+)");
+
+  /** Hard cap on attachment rows returned per call; matches SearchService / OpeningTargetService. */
+  private static final int MAX_PAGE_SIZE = 100;
+
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
   private final FamUserDirectoryService famUserDirectoryService;
   private final VirusScanner virusScanner;
+  private final ObjectStorageService objectStorage;
 
   public ProtocolChecklistService(
       ChecklistRepository checklistRepository,
@@ -73,7 +101,8 @@ public class ProtocolChecklistService {
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
       FamUserDirectoryService famUserDirectoryService,
-      VirusScanner virusScanner
+      VirusScanner virusScanner,
+      ObjectStorageService objectStorage
   ) {
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
@@ -81,6 +110,7 @@ public class ProtocolChecklistService {
     this.loggedUserHelper = loggedUserHelper;
     this.famUserDirectoryService = famUserDirectoryService;
     this.virusScanner = virusScanner;
+    this.objectStorage = objectStorage;
   }
 
   /** Submit a protocol checklist (server-side DB validation + status to SUB). */
@@ -230,7 +260,7 @@ public class ProtocolChecklistService {
       return;
     }
     String text = value.trim();
-    if (!text.matches("[-+]?\\d*\\.?\\d+")) {
+    if (!SIGNED_DECIMAL.matcher(text).matches()) {
       errors.add("FREP gross area override must be a number.");
       return;
     }
@@ -379,7 +409,7 @@ public class ProtocolChecklistService {
   }
 
   private static boolean isNumeric(String value) {
-    return StringUtils.isNotBlank(value) && value.trim().matches("[-+]?\\d*\\.?\\d+");
+    return StringUtils.isNotBlank(value) && SIGNED_DECIMAL.matcher(value.trim()).matches();
   }
 
   private static boolean isIntInRange(String value, int min, int max) {
@@ -395,7 +425,7 @@ public class ProtocolChecklistService {
   }
 
   private static boolean isNumInRange(String value, double min, double max) {
-    if (!value.matches("[-+]?\\d*\\.?\\d+")) {
+    if (!SIGNED_DECIMAL.matcher(value).matches()) {
       return false;
     }
     double n = Double.parseDouble(value);
@@ -661,7 +691,7 @@ public class ProtocolChecklistService {
       return;
     }
     String text = value.trim();
-    if (!text.matches("\\d*\\.?\\d+")) {
+    if (!UNSIGNED_DECIMAL.matcher(text).matches()) {
       errors.add(label + " must be a number.");
       return;
     }
@@ -703,9 +733,43 @@ public class ProtocolChecklistService {
         loggedUserHelper.getLoggedUserId());
   }
 
-  public List<AttachmentRow> getAttachments(String protocol, String checklistId) {
-    return writeRepository.getAttachments(checklistId, checklistRepository.resolveResourceType(checklistId));
+  /**
+   * One page of attachment metadata, with each row's real size read from object storage.
+   *
+   * <p>The size cannot come from the database: {@code file_size} there is derived from the Oracle
+   * BLOB, which Biodiversity deliberately leaves empty, so it always reads 0.00. A HEAD per row on
+   * the page is exact and bounded; a prefix listing is not an option because the keys are flat
+   * ({@code slr/<id>}) and would sweep every checklist's attachments.
+   *
+   * <p>{@code size} is clamped to {@link #MAX_PAGE_SIZE} (and at least 1) and {@code page} floored
+   * at 0, matching SearchService / OpeningTargetService. The cap matters more here than on a plain
+   * query: the loop below issues one object-storage HEAD <em>per row</em>, so an unclamped
+   * {@code ?size=} would turn a single request into that many sequential remote calls. A negative
+   * page would reach Oracle as a negative OFFSET.
+   */
+  public AttachmentPage getAttachments(String protocol, String checklistId, int page, int size) {
+    int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+    int safePage = Math.max(0, page);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    List<AttachmentRow> rows =
+        writeRepository.getAttachments(checklistId, resourceType, safePage, safeSize);
+    List<AttachmentRow> withSizes = rows.stream()
+        .map(row -> {
+          long bytes = objectStorage.getObjectSize(bioObjectKey(row.checklistAttachmentId()));
+          return new AttachmentRow(row.checklistAttachmentId(), row.fileName(), row.description(),
+              row.mimeTypeCode(), bytes < 0 ? null : String.valueOf(bytes));
+        })
+        .toList();
+    return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
+
+  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  private static String bioObjectKey(String attachmentId) {
+    return "slr/" + attachmentId;
+  }
+
+  /** A page of attachment metadata plus the total, for the pager. */
+  public record AttachmentPage(List<AttachmentRow> attachments, int totalCount) {}
 
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {
@@ -713,16 +777,36 @@ public class ProtocolChecklistService {
         checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
   }
 
-  public List<AttachmentRow> saveAttachment(
-      String protocol, String checklistId, String fileName, String description, String mimeType,
-      byte[] bytes) {
+  /**
+   * Store one uploaded attachment. Multipart spools the body to a temp file, so the only point the
+   * whole file is in heap is the {@code byte[]} below — read <b>once</b> and reused for the scan and
+   * the write, since {@link MultipartFile#getBytes()} allocates a fresh array on every call.
+   */
+  public void saveAttachment(
+      String protocol, String checklistId, MultipartFile file, String description) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "The selected file is empty. Choose a file with content and try again.");
+    }
+    String fileName = file.getOriginalFilename();
     validateAttachmentType(fileName);
+    byte[] bytes = readBytes(file, fileName);
     // Scan the raw bytes before any persistence — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(bytes, fileName);
-    String resourceType = checklistRepository.resolveResourceType(checklistId);
-    writeRepository.saveAttachment(checklistId, resourceType, fileName, description, mimeType, bytes,
-        loggedUserHelper.getLoggedUserId());
-    return writeRepository.getAttachments(checklistId, resourceType);
+    // Resource type comes from the record, not the {protocol} path segment (SLB legacy / SLR
+    // go-forward) — see the section comment above.
+    writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
+        fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+  }
+
+  /** Pull the spooled upload into heap, turning the I/O failure into a clean 400 rather than a 500. */
+  private static byte[] readBytes(MultipartFile file, String fileName) {
+    try {
+      return file.getBytes();
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Could not read the uploaded file" + (fileName == null ? "" : " " + fileName) + ".", ex);
+    }
   }
 
   /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
@@ -737,12 +821,10 @@ public class ProtocolChecklistService {
     }
   }
 
-  public List<AttachmentRow> deleteAttachment(
-      String protocol, String checklistId, String attachmentId) {
+  public void deleteAttachment(String protocol, String checklistId, String attachmentId) {
     String resourceType = checklistRepository.resolveResourceType(checklistId);
     assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
-    return writeRepository.getAttachments(checklistId, resourceType);
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */

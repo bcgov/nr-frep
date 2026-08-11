@@ -22,6 +22,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import { ATTACHMENT_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
 import { overLimitError } from '@/utils/textLimits';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, dataUrlByteLength, formatMb } from '@/utils/uploadLimits';
 
 /**
  * Build a displayable src from a picture's own `code`, when it has one.
@@ -239,9 +240,35 @@ const Photos: FC<{
         date: date.trim(),
       })),
     );
+
+    // Size is checked AFTER the downscale, not on the picked file: a 12 MP phone photo is routinely
+    // 10-15 MB and resizes to well under 1 MB, so rejecting on the original would block the normal
+    // case. What this catches is processFile's fallback — a non-image, a browser that can't decode
+    // the format, or a missing canvas context all return the ORIGINAL bytes untouched, and nothing
+    // downstream bounded them. Those went out full-size and failed at the WAF or the backend
+    // mid-upload, with no message naming the file.
+    const sized = additions.map((picture) => ({
+      picture,
+      bytes: dataUrlByteLength(picture.code),
+    }));
+    const withinLimit = sized.filter((s) => s.bytes <= MAX_UPLOAD_BYTES).map((s) => s.picture);
+    const tooLarge = sized.filter((s) => s.bytes > MAX_UPLOAD_BYTES);
+    if (tooLarge.length > 0) {
+      const names = tooLarge
+        .map((s) => `${s.picture.fileName} (${formatMb(s.bytes)} MB)`)
+        .join(', ');
+      display({
+        kind: 'error',
+        title: tooLarge.length === 1 ? 'Photo is too large' : 'Some photos are too large',
+        subtitle: `Maximum ${MAX_UPLOAD_MB} MB per photo. Skipped: ${names}.`,
+        timeout: 9000,
+      });
+    }
+    if (withinLimit.length === 0) return;
+
     // Only the new photos are sent: each is created individually by the photo endpoint, so the
     // existing set is never resubmitted (and so can never be deleted by omission).
-    if (await onAdd(additions)) {
+    if (await onAdd(withinLimit)) {
       setDescription('');
       setDate('');
     }

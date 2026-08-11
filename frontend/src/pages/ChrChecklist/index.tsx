@@ -31,6 +31,7 @@ import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
@@ -54,6 +55,7 @@ import {
 } from '@/types/chrChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
 import { pictureToFile } from '@/utils/pictureFile';
+import { silvaOpeningUrl } from '@/utils/silva';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 
@@ -155,6 +157,7 @@ const ChrChecklistPage: FC = () => {
   const confirm = useConfirm();
   const { display } = useNotification();
   const { canPerformSysAdminActions, canChr } = useAuthorization();
+  const { user } = useAuth();
   const online = useOnlineStatus();
 
   const [checkList, setCheckList] = useState<CheckList | null>(null);
@@ -445,9 +448,18 @@ const ChrChecklistPage: FC = () => {
         setPhotoPageSize(targetSize);
         return;
       }
-      const result = await API.chrChecklist.getPhotos(id, targetPage, targetSize);
+      let landedPage = targetPage;
+      let result = await API.chrChecklist.getPhotos(id, landedPage, targetSize);
+      // Deleting the last row on the last page leaves the client asking for a page that no longer
+      // exists: the response is empty while totalCount is still non-zero. Re-read the last page
+      // that does exist, rather than showing an empty tab under a pager insisting there are items.
+      // Bounded to one extra request — the recomputed page is always in range.
+      if (result.photos.length === 0 && result.totalCount > 0 && landedPage > 0) {
+        landedPage = Math.max(0, Math.ceil(result.totalCount / targetSize) - 1);
+        result = await API.chrChecklist.getPhotos(id, landedPage, targetSize);
+      }
       setPhotoTotal(result.totalCount);
-      setPhotoPage(targetPage);
+      setPhotoPage(landedPage);
       setPhotoPageSize(targetSize);
       setCheckList((prev) => (prev ? { ...prev, pictures: result.photos } : prev));
     },
@@ -460,23 +472,34 @@ const ChrChecklistPage: FC = () => {
    * Offline there is nothing to POST: the photo is appended to the locally stored checklist with its
    * base64 intact, and the check-in flush uploads it later.
    */
-  // The checklist GET no longer carries photos, so the tab loads its own first page once the
-  // checklist is available. Offline copies already hold everything locally.
+  // The tab loads its own first page of photo metadata once the checklist is available. Offline
+  // copies already hold everything locally.
+  //
+  // Depend on the BOOLEAN, not on `checkList` itself. The guard below needs a loaded checklist, but
+  // `checkList` is null on mount while its own GET is in flight — so keying the effect on `id` alone
+  // meant it ran once, bailed at the guard, and never ran again: getPhotos was never called at all,
+  // leaving photoTotal at 0 while the table rendered the pictures the checklist GET returned.
+  // Depending on `checkList` directly would loop, because this effect calls setCheckList. The
+  // boolean flips false -> true exactly once and then stays true, which fires the fetch on arrival
+  // without re-triggering on the update it performs itself.
+  const hasChecklist = Boolean(checkList);
   useEffect(() => {
-    if (!checkList || isOfflineCopy) return;
+    if (!hasChecklist || isOfflineCopy) return;
     void API.chrChecklist
       .getPhotos(id, 0, photoPageSize)
       .then((result) => {
         setPhotoTotal(result.totalCount);
         setCheckList((prev) => (prev ? { ...prev, pictures: result.photos } : prev));
       })
-      .catch(() => {
-        /* a failed photo page must not block the rest of the checklist */
+      .catch((err: unknown) => {
+        // A failed photo page must not block the rest of the checklist, but it must not be silent
+        // either — swallowing it entirely is what made the missing call above invisible.
+        reportError("We couldn't load the photos", err);
       });
-    // Deliberately keyed on the checklist id only: re-running on every checkList change would loop,
-    // since this sets checkList.
+    // photoPageSize is deliberately omitted: a page-size change is handled by loadPhotos, and
+    // including it here would fire a second, competing fetch for the same page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isOfflineCopy]);
+  }, [id, isOfflineCopy, hasChecklist]);
 
   const addPhotos = useCallback(
     async (additions: Picture[]): Promise<boolean> => {
@@ -564,7 +587,11 @@ const ChrChecklistPage: FC = () => {
         setCheckList(toSubmit);
       }
       const saved = await API.chrChecklist.submit(id, prepareForServerSave(toSubmit));
-      setCheckList(saved);
+      // Photos are a separate paged resource, so a checklist response carries no `pictures`.
+      // Replacing state wholesale would blank the Photos tab; a status change doesn't touch photos,
+      // so carry the loaded page over. (A check-in flips isOfflineCopy, which re-runs the photo
+      // effect — these online status changes don't, so they must preserve it here.)
+      setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
     } catch (err) {
       const validation = extractValidationErrors(err);
@@ -584,7 +611,8 @@ const ChrChecklistPage: FC = () => {
     setErrors([]);
     try {
       const saved = await API.chrChecklist.unsubmit(id);
-      setCheckList(saved);
+      // Carry the photo page over — see the note in handleSubmit.
+      setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
       display({ kind: 'success', title: 'Checklist reopened for editing', timeout: 5000 });
     } catch (err) {
       reportError('Unsubmit failed', err);
@@ -614,7 +642,8 @@ const ChrChecklistPage: FC = () => {
     setBusy(true);
     try {
       const saved = await API.chrChecklist.activate(id);
-      setCheckList(saved);
+      // Carry the photo page over — see the note in handleSubmit.
+      setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
       display({ kind: 'success', title: 'Checklist reactivated', timeout: 4000 });
     } catch (err) {
       reportError('Reactivate failed', err);
@@ -734,6 +763,26 @@ const ChrChecklistPage: FC = () => {
       <span>{value || '—'}</span>
     </div>
   );
+
+  // Opening ID deep-links into SILVA, carrying an idp_hint for the provider the user signed in
+  // with so they land on the opening without a second login. New tab (the checklist may hold
+  // unsaved edits) with rel="noopener noreferrer" so the opened page gets no handle on this window.
+  // Rendered as plain text when offline or when the record has no opening id — this screen works
+  // offline, and a link to a corporate app that cannot load is worse than no link.
+  const openingIdCell = (value?: string) => {
+    const href = online ? silvaOpeningUrl(value, user?.idpProvider) : null;
+    if (!href) return headerCell('Opening ID', value);
+    return (
+      <div key="Opening ID">
+        <span className="protocol-checklist__label">Opening ID</span>
+        <span>
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {value}
+          </a>
+        </span>
+      </div>
+    );
+  };
   const orgUnit = [checkList.orgUnitCode, checkList.orgUnitName].filter(Boolean).join(' - ');
 
   return (
@@ -821,7 +870,7 @@ const ChrChecklistPage: FC = () => {
             {headerCell('Client number', checkList.client)}
             {headerCell('Client name', checkList.clientName)}
             {headerCell('Opening number', checkList.openingNumber)}
-            {headerCell('Opening ID', checkList.openingID)}
+            {openingIdCell(checkList.openingID)}
             {headerCell('Licence', checkList.licensee)}
             {headerCell('Cutting permit', checkList.cuttingPermit)}
             {headerCell('Cut block', checkList.block)}

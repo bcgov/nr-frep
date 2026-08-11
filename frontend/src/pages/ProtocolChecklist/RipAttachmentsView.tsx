@@ -142,15 +142,32 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   // Upload and delete respond 204, so the list is re-read after every mutation rather than being
   // patched from a response body — one source of truth for what the server holds.
   const refreshRows = useCallback(
-    (targetPage = page, targetSize = pageSize) =>
-      API.protocolChecklist
-        .getAttachments(protocol, checklistId, targetPage, targetSize)
-        .then((result) => {
-          setRows(result.attachments);
-          setTotalCount(result.totalCount);
-          setPage(targetPage);
-          setPageSize(targetSize);
-        }),
+    async (targetPage = page, targetSize = pageSize) => {
+      let landedPage = targetPage;
+      let result = await API.protocolChecklist.getAttachments(
+        protocol,
+        checklistId,
+        landedPage,
+        targetSize,
+      );
+      // Deleting the last row on the last page leaves the client asking for a page that no longer
+      // exists: the response is empty while totalCount is still non-zero. Re-read the last page
+      // that does exist, rather than showing an empty table under a pager insisting there are
+      // items. Bounded to one extra request — the recomputed page is always in range.
+      if (result.attachments.length === 0 && result.totalCount > 0 && landedPage > 0) {
+        landedPage = Math.max(0, Math.ceil(result.totalCount / targetSize) - 1);
+        result = await API.protocolChecklist.getAttachments(
+          protocol,
+          checklistId,
+          landedPage,
+          targetSize,
+        );
+      }
+      setRows(result.attachments);
+      setTotalCount(result.totalCount);
+      setPage(landedPage);
+      setPageSize(targetSize);
+    },
     [protocol, checklistId, page, pageSize],
   );
 
@@ -448,25 +465,31 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       )}
 
       {/*
-        Rendered unconditionally. It was previously gated on `totalCount > PAGE_SIZES[0]`, which hid
-        the page-size selector whenever the list fit in the smallest page — so the row count was
-        invisible below 10 items and the user could not pre-select 25/50. The guard also compared
-        against PAGE_SIZES[0] rather than the current pageSize, so it did not track the selection it
-        was meant to reflect. `loading` early-returns a skeleton above, so this never renders before
-        the first count arrives.
+        Shown whenever the checklist has attachments — including when they all fit on one page, so
+        the count and the page-size selector stay available. It was previously gated on
+        `totalCount > PAGE_SIZES[0]`, which hid both below 10 rows; that guard also compared against
+        the literal PAGE_SIZES[0] rather than the current pageSize, so it never tracked the
+        selection it was meant to reflect.
+
+        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
+        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
+        re-read that follows a delete. `loading` early-returns a skeleton above, so this never
+        renders before the first count arrives.
       */}
-      <Pagination
-        page={page + 1}
-        pageSize={pageSize}
-        pageSizes={PAGE_SIZES}
-        totalItems={totalCount}
-        disabled={busy}
-        onChange={({ page: nextPage, pageSize: nextSize }) => {
-          // Carbon's page is 1-based, the API 0-based. A page-size change resets to the first
-          // page so the offset stays valid.
-          void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
-        }}
-      />
+      {totalCount > 0 && (
+        <Pagination
+          page={page + 1}
+          pageSize={pageSize}
+          pageSizes={PAGE_SIZES}
+          totalItems={totalCount}
+          disabled={busy}
+          onChange={({ page: nextPage, pageSize: nextSize }) => {
+            // Carbon's page is 1-based, the API 0-based. A page-size change resets to the first
+            // page so the offset stays valid.
+            void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+          }}
+        />
+      )}
 
       {canManage && (
         <div className="attach-card">

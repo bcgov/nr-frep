@@ -57,12 +57,18 @@ public class ProtocolChecklistService {
   // Allowed attachment types = the codes in THE.MIME_TYPE_CODE (keyed by file extension). The
   // FREP_CHECKLIST_ATTACHMENTS proc stores only these and rejects anything else with an ORA-01400
   // (NULL mime_type_code). Guard here so an unsupported type is a clean 400 instead of a 500.
+  // ⚠️ DOCX/XLSX/PPTX/TIFF/WEBP REQUIRE THE COLUMN-WIDENING MIGRATION. The extension is stored
+  // verbatim as MIME_TYPE_CODE, which was VARCHAR2(3 BYTE); a nr-mof-db migration widens it to 6
+  // (on THE.MIME_TYPE_CODE *and* on BIODIVERSITY_CHKLST_ATTACH / CHR_CHECKLIST_ATTACHMENT) and
+  // seeds the five codes. Until that DDL is deployed to the target environment these five uploads
+  // fail — ORA-12899 if the child column is still 3, ORA-02291 if the code row is missing.
   private static final Set<String> ALLOWED_ATTACHMENT_TYPES = Set.of(
-      "BMP", "CSV", "DOC", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "OBD", "PDF", "PNG",
-      "PPS", "PPT", "RPT", "RTF", "TIF", "TXT", "WAV", "XLD", "XLS", "XML", "ZIP");
+      "BMP", "CSV", "DOC", "DOCX", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "OBD", "PDF",
+      "PNG", "PPS", "PPT", "PPTX", "RPT", "RTF", "TIF", "TIFF", "TXT", "WAV", "WEBP", "XLD", "XLS",
+      "XLSX", "XML", "ZIP");
   private static final String ALLOWED_ATTACHMENT_TYPES_DISPLAY =
-      "BMP, CSV, DOC, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, RPT, RTF, TIF, TXT, "
-          + "WAV, XLD, XLS, XML, ZIP";
+      "BMP, CSV, DOC, DOCX, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, PPTX, RPT, "
+          + "RTF, TIF, TIFF, TXT, WAV, WEBP, XLD, XLS, XLSX, XML, ZIP";
 
   // Numeric-format guards for user-supplied field values.
   //

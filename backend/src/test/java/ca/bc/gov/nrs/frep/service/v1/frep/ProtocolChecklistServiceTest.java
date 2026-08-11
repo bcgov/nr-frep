@@ -40,6 +40,8 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -549,6 +551,31 @@ class ProtocolChecklistServiceTest {
 
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     verifyNoInteractions(virusScanner);
+  }
+
+  // The modern Office formats and the four-letter image spellings. These are the only allowed
+  // extensions longer than three characters, and MIME_TYPE_CODE is VARCHAR2(3 BYTE) — the write
+  // path maps them down (EXTENSION_MIME_CODE), so accepting them here must stay paired with that.
+  @ParameterizedTest
+  @ValueSource(strings = {"report.docx", "data.xlsx", "deck.pptx", "scan.tiff", "photo.webp"})
+  void acceptsTheFourCharacterExtensions(String fileName) {
+    assertDoesNotThrow(
+        () -> service.saveAttachment("bio", "1", upload(fileName, new byte[] {1, 2, 3}), "desc"));
+  }
+
+  @Test
+  void listsTheNewTypesInTheRejectionMessageSoTheUserCanSeeThemAllowed() {
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+
+    String reason = String.valueOf(ex.getReason());
+    // The display string is maintained separately from the enforcing Set; if they drift, the error
+    // tells the user a type is unsupported while the validator happily accepts it.
+    assertTrue(reason.contains("DOCX"), reason);
+    assertTrue(reason.contains("XLSX"), reason);
+    assertTrue(reason.contains("PPTX"), reason);
+    assertTrue(reason.contains("TIFF"), reason);
+    assertTrue(reason.contains("WEBP"), reason);
   }
 
   @Test

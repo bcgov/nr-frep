@@ -48,10 +48,15 @@ type Props = {
 // Allowed attachment extensions = the codes in THE.MIME_TYPE_CODE (keyed by extension). The
 // FREP_CHECKLIST_ATTACHMENTS proc rejects anything else (ORA-01400), so guard here for a friendly
 // message + native picker filter. The backend re-validates authoritatively.
+// docx/xlsx/pptx/tiff/webp depend on the nr-mof-db migration that widens MIME_TYPE_CODE from 3 to
+// 6 (on the code table and on BIODIVERSITY_CHKLST_ATTACH) and seeds those codes — offering them in
+// the picker before that DDL is deployed just moves the failure to the end of the upload. Keep in
+// step with ALLOWED_ATTACHMENT_TYPES in ProtocolChecklistService.
 const ALLOWED_ATTACHMENT_EXTENSIONS = [
   'bmp',
   'csv',
   'doc',
+  'docx',
   'gif',
   'htm',
   'ifm',
@@ -64,13 +69,17 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
   'png',
   'pps',
   'ppt',
+  'pptx',
   'rpt',
   'rtf',
   'tif',
+  'tiff',
   'txt',
   'wav',
+  'webp',
   'xld',
   'xls',
+  'xlsx',
   'xml',
   'zip',
 ];

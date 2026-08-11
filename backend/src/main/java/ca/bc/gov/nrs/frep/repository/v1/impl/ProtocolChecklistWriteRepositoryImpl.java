@@ -1169,7 +1169,29 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         });
   }
 
-  /** A short stored mime-type code derived from the file extension (no reference table). */
+  /**
+   * Width of {@code MIME_TYPE_CODE} on the attachment tables.
+   *
+   * <p>⚠️ REQUIRES THE COLUMN-WIDENING MIGRATION. This was {@code VARCHAR2(3 BYTE)}; a nr-mof-db
+   * migration widens it to 6 on {@code THE.MIME_TYPE_CODE} and on the child tables FREP writes —
+   * {@code BIODIVERSITY_CHKLST_ATTACH} and {@code CHR_CHECKLIST_ATTACHMENT} — and seeds DOCX, XLSX,
+   * PPTX, TIFF and WEBP. Widening the parent code table alone is not enough: the insert goes into
+   * the child, so a child still at 3 rejects a four-character code with ORA-12899.
+   *
+   * <p><b>This value is only correct once that migration has been deployed to the target
+   * environment.</b> Shipping it ahead of the DDL turns every .docx/.xlsx/.pptx/.tiff/.webp upload
+   * into an ORA-12899. The code must also exist in THE.MIME_TYPE_CODE (NOT NULL FK) or the insert
+   * fails with ORA-02291 instead.
+   */
+  private static final int MIME_TYPE_CODE_WIDTH = 6;
+
+  /**
+   * The stored mime-type code for an upload, derived from its file extension and uppercased.
+   *
+   * <p>Stored verbatim — the extension IS the code (JPG, PDF, DOCX, WEBP …). Truncation is a
+   * backstop only: {@link ProtocolChecklistService} rejects unknown extensions before this runs,
+   * so anything reaching here is already on the allow-list and within the column width.
+   */
   private static String mimeTypeCode(String fileName) {
     if (fileName == null) {
       return null;
@@ -1179,7 +1201,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       return null;
     }
     String ext = fileName.substring(dot + 1).toUpperCase();
-    return ext.length() > 20 ? ext.substring(0, 20) : ext;
+    return ext.length() > MIME_TYPE_CODE_WIDTH ? ext.substring(0, MIME_TYPE_CODE_WIDTH) : ext;
   }
 
   /** Null for a blank string, so empty values are not passed to NUMBER struct attrs (ORA-17059). */

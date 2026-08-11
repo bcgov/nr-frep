@@ -340,23 +340,29 @@ const Photos: FC<{
       )}
 
       {/*
-        Rendered unconditionally, matching the Biodiversity Attachments tab. It was gated on
-        `totalCount > pageSize`, which hid the row count and the 10/25/50 selector whenever the list
-        fit on one page — so a user with fewer than 10 photos could not see how many there were, nor
-        pre-select a larger page size before uploading more. The parent early-returns a skeleton
-        while the checklist loads, so this never renders before the first count arrives.
+        Shown whenever the checklist has photos — including when they all fit on one page, so the
+        count and the 10/25/50 selector stay available. Deliberately NOT gated on
+        `totalCount > pageSize`: that hid both from anyone with fewer than 10 photos, leaving no way
+        to pre-select a larger page size before uploading more.
+
+        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
+        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
+        re-read that follows a delete. The parent early-returns a skeleton while the checklist
+        loads, so this never renders before the first count arrives.
       */}
-      <Pagination
-        page={page + 1}
-        pageSize={pageSize}
-        pageSizes={[10, 25, 50]}
-        totalItems={totalCount}
-        disabled={busy}
-        onChange={({ page: nextPage, pageSize: nextSize }) => {
-          // Carbon is 1-based, the API 0-based; a size change resets to the first page.
-          onPageChange(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
-        }}
-      />
+      {totalCount > 0 && (
+        <Pagination
+          page={page + 1}
+          pageSize={pageSize}
+          pageSizes={[10, 25, 50]}
+          totalItems={totalCount}
+          disabled={busy}
+          onChange={({ page: nextPage, pageSize: nextSize }) => {
+            // Carbon is 1-based, the API 0-based; a size change resets to the first page.
+            onPageChange(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+          }}
+        />
+      )}
 
       {!readOnly && (
         <div className="attach-card">

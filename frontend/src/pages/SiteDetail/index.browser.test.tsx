@@ -28,6 +28,12 @@ vi.mock('@/hooks/useAuthorization', () => ({
   useAuthorization: () => ({ canEdit: true, canEditSite: true }),
 }));
 
+// The header reads the signed-in user's identity provider to build the SILVA Opening ID deep link;
+// these tests render the page outside an AuthProvider, so stub the hook rather than wrap each case.
+vi.mock('@/context/auth/useAuth', () => ({
+  useAuth: () => ({ user: { idpProvider: 'IDIR', privileges: {} } }),
+}));
+
 // Stable display reference — the page's load effect depends on it, so a fresh fn per render churns.
 const { display } = vi.hoisted(() => ({ display: vi.fn() }));
 vi.mock('@/context/notification/useNotification', () => ({

@@ -27,12 +27,14 @@ import OpeningMapModal from '@/components/OpeningMapModal';
 import type { MasterListYear, OrgUnit } from '@/types/configuration';
 import type { RandomListSite, RandomListSummary } from '@/types/randomList';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { randomListCsvFilename } from '@/pages/RandomList/randomListCsvFilename';
 import API from '@/services/APIs';
 import { requestRandomListCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 import './randomList.scss';
 
@@ -82,6 +84,7 @@ function toTableRows(sites: RandomListSite[]) {
 
 const RandomListPage: FC = () => {
   const { display } = useNotification();
+  const { user } = useAuth();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
@@ -196,10 +199,11 @@ const RandomListPage: FC = () => {
   );
 
   // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
-  // (DataTable render-prop → rows.map → cells.map → onClick). Opening links to site-detail, the
-  // review flag renders a tag, and the map cell opens the in-app opening map.
-  // TODO(frep-external-links): legacy linked Opening ID to the external openings viewer (ECAS) and
-  // Licence to FTA; those corporate integrations aren't wired yet, so they render as plain text.
+  // (DataTable render-prop → rows.map → cells.map → onClick). Opening number links to site-detail,
+  // Opening ID out to SILVA, the review flag renders a tag, and the map cell opens the in-app
+  // opening map.
+  // TODO(frep-external-links): legacy also linked Licence to FTA; that corporate integration isn't
+  // wired yet, so Licence still renders as plain text.
   const renderCell = (
     cell: { id: string; value: string; info: { header: string } },
     meta: { id: string } | undefined,
@@ -208,6 +212,22 @@ const RandomListPage: FC = () => {
       return (
         <TableCell key={cell.id}>
           <RouterLink to={`/site-detail/${meta.id}`}>{cell.value}</RouterLink>
+        </TableCell>
+      );
+    }
+    // Opening ID deep-links into SILVA with an idp_hint for the signed-in provider, so the user
+    // lands on the opening without a second login. Rows without an opening id stay plain text.
+    if (cell.info.header === 'openingId') {
+      const href = silvaOpeningUrl(cell.value, user?.idpProvider);
+      return (
+        <TableCell key={cell.id}>
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+              {cell.value}
+            </a>
+          ) : (
+            cell.value
+          )}
         </TableCell>
       );
     }

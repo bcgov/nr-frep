@@ -36,6 +36,7 @@ import { formatSubmitValidation } from './submitValidation';
 
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
@@ -43,6 +44,7 @@ import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolC
 import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 import './protocolChecklist.scss';
 
@@ -84,6 +86,7 @@ const ProtocolChecklistPage: FC = () => {
   const navigate = useNavigate();
   const { display } = useNotification();
   const { canEdit } = useAuthorization();
+  const { user } = useAuth();
 
   const [checklist, setChecklist] = useState<ProtocolChecklist | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,6 +166,25 @@ const ProtocolChecklistPage: FC = () => {
         <span>{value ?? ''}</span>
       </div>
     ) : null;
+
+  // Opening ID deep-links into SILVA, carrying an idp_hint for the provider the user signed in
+  // with so they land on the opening without a second login. Opens in a new tab — the checklist
+  // may hold unsaved edits — with rel="noopener noreferrer" so the opened page gets no handle on
+  // this window. Falls back to the plain cell when the record has no opening id.
+  const openingIdCell = (value: string | undefined) => {
+    const href = silvaOpeningUrl(value, user?.idpProvider);
+    if (!href) return headerCell('Opening ID', value);
+    return (
+      <div key="Opening ID">
+        <span className="protocol-checklist__label">Opening ID</span>
+        <span>
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {value}
+          </a>
+        </span>
+      </div>
+    );
+  };
 
   const handleSubmit = async () => {
     if (!backendCode) return;
@@ -291,7 +313,7 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Client number', headerExtras['Client'])}
                 {headerCell('Client name', headerExtras['Client name'])}
                 {headerCell('Opening number', checklist.openingNumber, true)}
-                {headerCell('Opening ID', headerExtras['Opening ID'])}
+                {openingIdCell(headerExtras['Opening ID'])}
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}
                 {headerCell('Cut block', headerExtras['Cut block'])}

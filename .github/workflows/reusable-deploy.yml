@@ -230,6 +230,7 @@ jobs:
             -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_APP_NAME="${{ vars.VITE_APP_NAME }}"
+            -p VITE_SILVA_BASE_URL="${{ vars.VITE_SILVA_BASE_URL }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
           triggers: ${{ inputs.triggers }}
 

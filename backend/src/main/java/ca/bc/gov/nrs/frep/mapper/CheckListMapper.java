@@ -2,7 +2,6 @@ package ca.bc.gov.nrs.frep.mapper;
 
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
-import ca.bc.gov.nrs.frep.entity.ChrChecklistAttachment;
 import ca.bc.gov.nrs.frep.entity.ChrChecklistParticipation;
 import ca.bc.gov.nrs.frep.entity.ChrFeatWindthrTreatXref;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureAgeXref;
@@ -19,7 +18,6 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
-import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
 import ca.bc.gov.nrs.frep.util.UuidUtils;
 import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
@@ -343,20 +341,19 @@ public final class CheckListMapper extends FrepMapper {
 			}
 		}
 
-// photos
-		LinkedHashSet<ChrChecklistAttachment> hsetChrChecklistAttachment =
-				new LinkedHashSet<>(chrChecklist.getChrChecklistAttachments());
-		Iterator<ChrChecklistAttachment> itrChrChecklistAttachment = hsetChrChecklistAttachment.iterator();
-		while (itrChrChecklistAttachment.hasNext()) {
-			ChrChecklistAttachment cChecklistAttachment = (ChrChecklistAttachment) itrChrChecklistAttachment.next();
-			Picture picture = new Picture();
-			picture.setId(cChecklistAttachment.getChrchecklistAttachmentId().toString());
-			picture.setDescription(cChecklistAttachment.getDescription());
-			picture.setMimeTypeCode("image/" + cChecklistAttachment.getMimeTypeCode().toLowerCase());
-			picture.setFileName(cChecklistAttachment.getFileName());
-			picture.setDate(ChrDateUtils.formatDate(cChecklistAttachment.getFileDate()));
-			resource.getPictures().add(picture);
-		}
+		// Photos are deliberately NOT mapped here. They are an independent, paged resource served by
+		// GET /chr/checklists/{id}/photos, and that endpoint is the single source of truth for the
+		// Photos tab. Populating `pictures` here as well returned every photo's metadata unpaged on
+		// every checklist read, and gave the client two sources that could disagree — the tab
+		// rendered rows from this list while the pager's count came from the paged endpoint, so a
+		// failure to call that endpoint showed rows alongside "0 of 0 items".
+		//
+		// Nothing else depends on this list being populated:
+		//   - submit validation re-reads it authoritatively (ChrChecklistService calls
+		//     setPictures(persistenceService.getPhotoMetadata(id)) before validating);
+		//   - a checklist save ignores inbound `pictures` entirely;
+		//   - the offline copy hydrates its own photos via getPhotos (chrOfflineRepo).
+		// `pictures` therefore serialises as an empty list, not a missing field.
 
 		return resource;
 	}

@@ -50,6 +50,13 @@ parameters:
     value: /api
   - name: VITE_APP_NAME
     value: FREP IMS
+  # Base URL for SILVA deep links from Opening ID (see frontend/src/utils/silva.ts). Held as a
+  # deployment parameter so a SILVA hostname change is a GitHub variable edit plus a redeploy,
+  # not a code change. The entrypoint substitutes this default when the variable is unset, so an
+  # empty vars.VITE_SILVA_BASE_URL degrades to production rather than producing a broken link.
+  - name: VITE_SILVA_BASE_URL
+    description: SILVA base URL for Opening ID deep links (no trailing slash)
+    value: https://silva.nrs.gov.bc.ca
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
@@ -139,6 +146,8 @@ objects:
                   value: ${VITE_BACKEND_URL}
                 - name: VITE_APP_NAME
                   value: ${VITE_APP_NAME}
+                - name: VITE_SILVA_BASE_URL
+                  value: ${VITE_SILVA_BASE_URL}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
               volumeMounts:

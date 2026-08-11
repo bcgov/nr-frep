@@ -25,11 +25,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { RejectionReason } from '@/types/configuration';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
+import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
+import { silvaOpeningUrl } from '@/utils/silva';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
 import './siteDetail.scss';
@@ -270,10 +272,23 @@ function validateResources(rows: SiteResource[]): RowErrors[] {
   });
 }
 
-const HeaderRow: FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
+const HeaderRow: FC<{
+  label: string;
+  value: string | null | undefined;
+  /** When set (and there is a value), the value renders as an external link — see Opening ID. */
+  href?: string | null;
+}> = ({ label, value, href }) => (
   <div className="site-detail__field">
     <span className="site-detail__field-label">{label}</span>
-    <span className="site-detail__field-value">{value ?? '—'}</span>
+    <span className="site-detail__field-value">
+      {value && href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {value}
+        </a>
+      ) : (
+        (value ?? '—')
+      )}
+    </span>
   </div>
 );
 
@@ -283,6 +298,7 @@ const SiteDetailPage: FC = () => {
   const navigate = useNavigate();
   const { display } = useNotification();
   const { canEditSite } = useAuthorization();
+  const { user } = useAuth();
 
   // "Add Target Site" create mode: no selected site yet, loaded by opening (FREP200 → SIL56 picker).
   // On save the proc creates the site + checklists, then we redirect to the real /site-detail/:id.
@@ -497,7 +513,13 @@ const SiteDetailPage: FC = () => {
                 <HeaderRow label="Client" value={detail.client} />
                 <HeaderRow label="Client name" value={detail.clientName} />
                 <HeaderRow label="Opening" value={detail.opening} />
-                <HeaderRow label="Opening ID" value={detail.openingId} />
+                {/* Opening ID deep-links into SILVA with an idp_hint for the signed-in
+                    provider, so the user lands on the opening without a second login. */}
+                <HeaderRow
+                  label="Opening ID"
+                  value={detail.openingId}
+                  href={silvaOpeningUrl(detail.openingId, user?.idpProvider)}
+                />
                 <HeaderRow label="Licence" value={detail.licenceNo} />
                 <HeaderRow label="Cutting Permit" value={detail.cuttingPermitId} />
                 <HeaderRow label="Cut block" value={detail.cutBlockId} />

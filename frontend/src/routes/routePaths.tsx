@@ -35,6 +35,7 @@ import AddTargetSitePage from '@/pages/AddTargetSite';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
 import ChrChecklistPage from '@/pages/ChrChecklist';
 import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
+import BioOfflineListPage from '@/pages/ProtocolChecklist/OfflineList';
 import DashboardPage from '@/pages/Dashboard';
 import GlobalErrorPage from '@/pages/GlobalError';
 import LandingPage from '@/pages/Landing';
@@ -209,6 +210,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     roles: ['FREP_ADMIN', 'FREP_CHR_EDITOR'],
   },
   {
+    path: '/protocol-checklists/offline',
+    id: 'Offline SLR Checklists',
+    icon: CloudOffline,
+    element: (
+      <Layout>
+        <BioOfflineListPage />
+      </Layout>
+    ),
+    isSideMenu: true,
+    // Same gate as the SLR checklist pages themselves.
+    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+  },
+  {
     path: '/chr/offline',
     id: 'Offline Checklists',
     icon: CloudOffline,
@@ -293,7 +307,12 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
  * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
  * These carry no role restriction, so they render as-is (Layout-wrapped).
  */
-const OFFLINE_PATHS = new Set(['/chr/offline', '/protocol-checklists/chr/:id']);
+const OFFLINE_PATHS = new Set([
+  '/chr/offline',
+  '/protocol-checklists/chr/:id',
+  '/protocol-checklists/offline',
+  '/protocol-checklists/:protocolType/:checklistId',
+]);
 export const getOfflineRoutes = (): RouteDescription[] => [
   {
     path: '/',

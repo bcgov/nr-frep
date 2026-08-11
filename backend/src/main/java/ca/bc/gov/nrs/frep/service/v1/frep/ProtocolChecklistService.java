@@ -4,6 +4,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioCwdRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStandRow;
@@ -976,6 +977,25 @@ public class ProtocolChecklistService {
         return all;
       }
     }
+  }
+
+  /**
+   * Whether the calling device still holds this checklist's checkout.
+   *
+   * <p>Exists so an offline copy can be told it has been superseded <em>before</em> the user spends
+   * a check-in finding out. Status alone is not enough: the common case is an admin activating a
+   * stranded checkout, which leaves the checklist {@code ACT} and the device's copy unsyncable.
+   *
+   * <p>Returns a boolean rather than the server's token — see {@link BioCheckoutState}.
+   */
+  public BioCheckoutState getCheckoutState(String checklistId, String deviceCheckoutGuid) {
+    String status = checklistRepository.getBioChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      return new BioCheckoutState(checklistId, status, false);
+    }
+    UUID serverToken = checklistRepository.getBioDeviceCheckoutGuid(checklistId);
+    boolean held = serverToken != null && serverToken.toString().equals(deviceCheckoutGuid);
+    return new BioCheckoutState(checklistId, status, held);
   }
 
   /**

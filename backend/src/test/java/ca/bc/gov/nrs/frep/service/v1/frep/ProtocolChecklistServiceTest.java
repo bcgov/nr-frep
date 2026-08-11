@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.service.v1.frep;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -113,6 +114,39 @@ class ProtocolChecklistServiceTest {
 
   private BioStratum aStratum() {
     return stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+  }
+
+  // ── Checkout state read (Track A addendum) ───────────────────────────
+
+  @Test
+  void checkoutStateSaysHeldForTheDeviceThatHoldsIt() {
+    givenCheckedOutToThisDevice();
+
+    var state = service.getCheckoutState("9001", CHECKOUT_TOKEN.toString());
+
+    assertTrue(state.heldByThisDevice());
+    assertEquals("RDO", state.statusCode());
+  }
+
+  @Test
+  void checkoutStateSaysNotHeldForAnotherDevice() {
+    // The reclaimed case the offline list needs to warn about before a check-in is attempted.
+    givenCheckedOutToThisDevice();
+
+    assertFalse(service.getCheckoutState("9001", "not-my-checkout").heldByThisDevice());
+  }
+
+  @Test
+  void checkoutStateSaysNotHeldWhenTheChecklistIsNotCheckedOut() {
+    when(checklistRepository.getBioChecklistStatus("9001"))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+
+    var state = service.getCheckoutState("9001", CHECKOUT_TOKEN.toString());
+
+    assertFalse(state.heldByThisDevice());
+    assertEquals("ACT", state.statusCode());
+    // Not checked out ⇒ no reason to read the token at all.
+    verify(checklistRepository, never()).getBioDeviceCheckoutGuid(any());
   }
 
   // ── Snapshot check-in (BE-5) ─────────────────────────────────────────

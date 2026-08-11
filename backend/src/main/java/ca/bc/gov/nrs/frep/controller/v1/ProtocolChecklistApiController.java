@@ -8,6 +8,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
@@ -74,6 +75,13 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   @Override
   public ResponseEntity<BioCheckout> uploadSnapshot(String checklistId, BioSnapshotUpload upload) {
     return ResponseEntity.ok(protocolChecklistService.uploadSnapshot(checklistId, upload));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckoutState> getCheckoutState(
+      String checklistId, String deviceCheckoutGuid) {
+    return ResponseEntity.ok(
+        protocolChecklistService.getCheckoutState(checklistId, deviceCheckoutGuid));
   }
 
   @Override

@@ -8,6 +8,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
@@ -83,6 +84,20 @@ public interface ProtocolChecklistApiEndpoint {
       @RequestBody BioSnapshotUpload upload);
 
   // ── Offline checkout (SLR only) ──────────────────────────────────────
+
+  /**
+   * Whether the calling device still holds this checklist's checkout, so an offline copy can be
+   * flagged as superseded before the user attempts a check-in.
+   *
+   * <p>The device sends its own token and gets back a boolean — the server's token is never
+   * returned, because it is the credential the write guards accept.
+   */
+  @PreAuthorize(FrepAuthorities.FREP_EDIT)
+  @GetMapping("/protocol-checklists/bio/{checklistId}/checkout")
+  ResponseEntity<BioCheckoutState> getCheckoutState(
+      @PathVariable String checklistId,
+      @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
+
 
   /**
    * Check this SLR checklist out to a field device (ACT → RDO) and return the token the device must

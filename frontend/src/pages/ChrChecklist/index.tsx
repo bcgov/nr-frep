@@ -43,7 +43,7 @@ import {
   isStale,
   stalenessBanner,
   type StalenessVerdict,
-} from '@/services/offline/chrStaleness';
+} from '@/services/offline/staleness';
 import {
   CHR_STATUS,
   type CheckList,

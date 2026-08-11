@@ -22,7 +22,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
-import { classifyStaleness, isStale, type StalenessVerdict } from '@/services/offline/chrStaleness';
+import { classifyStaleness, isStale, type StalenessVerdict } from '@/services/offline/staleness';
 import { apiErrorMessage } from '@/utils/apiError';
 
 // All offline records come from the CHR store (chrOfflineRepo / the "frep-chr" IndexedDB).

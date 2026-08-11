@@ -447,20 +447,26 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         </table>
       )}
 
-      {totalCount > PAGE_SIZES[0] && (
-        <Pagination
-          page={page + 1}
-          pageSize={pageSize}
-          pageSizes={PAGE_SIZES}
-          totalItems={totalCount}
-          disabled={busy}
-          onChange={({ page: nextPage, pageSize: nextSize }) => {
-            // Carbon's page is 1-based, the API 0-based. A page-size change resets to the first
-            // page so the offset stays valid.
-            void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
-          }}
-        />
-      )}
+      {/*
+        Rendered unconditionally. It was previously gated on `totalCount > PAGE_SIZES[0]`, which hid
+        the page-size selector whenever the list fit in the smallest page — so the row count was
+        invisible below 10 items and the user could not pre-select 25/50. The guard also compared
+        against PAGE_SIZES[0] rather than the current pageSize, so it did not track the selection it
+        was meant to reflect. `loading` early-returns a skeleton above, so this never renders before
+        the first count arrives.
+      */}
+      <Pagination
+        page={page + 1}
+        pageSize={pageSize}
+        pageSizes={PAGE_SIZES}
+        totalItems={totalCount}
+        disabled={busy}
+        onChange={({ page: nextPage, pageSize: nextSize }) => {
+          // Carbon's page is 1-based, the API 0-based. A page-size change resets to the first
+          // page so the offset stays valid.
+          void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+        }}
+      />
 
       {canManage && (
         <div className="attach-card">

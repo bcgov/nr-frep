@@ -51,6 +51,9 @@ public class ChrChecklistService {
   // maps have a real fidelity argument; it has none for a site photo.
   private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP");
 
+  /** Hard cap on photo rows returned per call; matches SearchService / OpeningTargetService. */
+  private static final int MAX_PAGE_SIZE = 100;
+
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
   private final ChrSubmitValidationService submitValidationService;
@@ -408,9 +411,13 @@ public class ChrChecklistService {
    * photos added in the same second would otherwise page non-deterministically.
    */
   public PhotoPage getPhotos(long checklistId, int page, int size) {
+    int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+    int safePage = Math.max(0, page);
     List<Picture> all = persistenceService.getPhotoMetadata(checklistId);
-    int from = Math.min(page * size, all.size());
-    int to = Math.min(from + size, all.size());
+    // Offset computed as a long before narrowing: safePage is only floored at 0, not capped, so
+    // `safePage * safeSize` on an int would overflow to a negative and blow up subList().
+    int from = (int) Math.min((long) safePage * safeSize, all.size());
+    int to = Math.min(from + safeSize, all.size());
     return new PhotoPage(all.subList(from, to), all.size());
   }
 

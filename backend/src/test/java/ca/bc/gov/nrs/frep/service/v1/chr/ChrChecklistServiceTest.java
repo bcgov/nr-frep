@@ -355,4 +355,49 @@ class ChrChecklistServiceTest {
   // Authorization is enforced entirely by @PreAuthorize on ChrChecklistApiEndpoint: reads via the
   // coarse CHR_EDIT, writes via the per-district @chrAuth.canEditChecklist(...) — see
   // ApiAuthorizationSecurityTest / ChrChecklistAuthorizerTest.
+
+  /** 250 photos, so a request for more than the 100-row cap has something to over-read. */
+  private static List<Picture> photos(int count) {
+    List<Picture> all = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      Picture p = new Picture();
+      p.setId(String.valueOf(i));
+      all.add(p);
+    }
+    return all;
+  }
+
+  @Test
+  void getPhotosClampsPageSizeToTheCap() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    ChrChecklistService.PhotoPage page = service.getPhotos(1001L, 0, 5000);
+
+    assertEquals(100, page.photos().size(), "size must be capped at MAX_PAGE_SIZE");
+    assertEquals(250, page.totalCount(), "totalCount still reports the full set");
+  }
+
+  @Test
+  void getPhotosFloorsNegativePageAndSize() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    ChrChecklistService.PhotoPage page = service.getPhotos(1001L, -3, -10);
+
+    // size < 1 becomes 1, page < 0 becomes 0 — so this is the first row, not an exception.
+    assertEquals(1, page.photos().size());
+    assertEquals("0", page.photos().get(0).getId());
+  }
+
+  @Test
+  void getPhotosDoesNotOverflowOnAHugePageNumber() {
+    when(persistenceService.getPhotoMetadata(1001L)).thenReturn(photos(250));
+
+    // page * size overflows int (2^31-1 * 100); the offset is computed as a long, so this is an
+    // empty page past the end rather than a negative index into subList().
+    ChrChecklistService.PhotoPage page =
+        assertDoesNotThrow(() -> service.getPhotos(1001L, Integer.MAX_VALUE, 100));
+
+    assertTrue(page.photos().isEmpty());
+    assertEquals(250, page.totalCount());
+  }
 }

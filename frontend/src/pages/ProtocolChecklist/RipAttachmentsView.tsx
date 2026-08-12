@@ -65,6 +65,7 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
   'jpk',
   'mdb',
   'mde',
+  'mp4',
   'obd',
   'pdf',
   'png',
@@ -85,6 +86,16 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
   'zip',
 ];
 const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
+
+/**
+ * Extensions that get the "trim or compress" hint when they exceed the size cap.
+ *
+ * The 15 MB cap is deliberate for video: an untrimmed phone clip is roughly ten seconds of 1080p
+ * (two of 4K), so the limit is expected to bite and the intent is to push users to compress before
+ * attaching — not to be raised. Raising it isn't a config change anyway: the scan, the
+ * object-storage write and the BLOB path each hold the whole file as a byte[] on a 400 MB heap.
+ */
+const VIDEO_EXTENSIONS = ['mp4'];
 
 // Shared with CHR photos so the two screens can't drift; see utils/uploadLimits for how this
 // relates to max-file-size, max-request-size and the Coraza body limit.
@@ -254,7 +265,14 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     }
     if (file.size === 0) return 'is empty';
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      return `is ${formatMb(file.size)} MB (max ${MAX_ATTACHMENT_MB} MB)`;
+      const over = `is ${formatMb(file.size)} MB (max ${MAX_ATTACHMENT_MB} MB)`;
+      // Video is the one type where the cap is routinely hit and the fix isn't obvious: an
+      // untouched phone clip is ~10s of 1080p at this size, so "too big" alone reads as a defect.
+      // The cap is deliberate — it exists to push compression rather than to be raised — so say
+      // what to do about it. Every other type is either already small or obviously trimmable.
+      return VIDEO_EXTENSIONS.includes(ext)
+        ? `${over}. Trim or compress the video and try again`
+        : over;
     }
     return null;
   };

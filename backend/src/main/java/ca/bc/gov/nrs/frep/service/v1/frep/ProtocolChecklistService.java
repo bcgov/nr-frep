@@ -62,13 +62,24 @@ public class ProtocolChecklistService {
   // (on THE.MIME_TYPE_CODE *and* on BIODIVERSITY_CHKLST_ATTACH / CHR_CHECKLIST_ATTACHMENT) and
   // seeds the five codes. Until that DDL is deployed to the target environment these five uploads
   // fail — ORA-12899 if the child column is still 3, ORA-02291 if the code row is missing.
+  // MP4 is accepted for short, compressed clips. The 15 MB cap is expected to bite on video — an
+  // untrimmed phone recording is roughly ten seconds of 1080p, two of 4K — and that is deliberate:
+  // the cap is the forcing function that keeps users compressing before they attach, so do NOT
+  // raise it in response to "the video is too big". The client names the fix in its rejection
+  // message (VIDEO_EXTENSIONS in RipAttachmentsView).
+  //
+  // It could not safely be raised regardless: the ClamAV scan, the object-storage write and the
+  // BLOB path each hold the whole file as a byte[] on a 400 MB heap under
+  // -XX:+ExitOnOutOfMemoryError, so a larger cap trades a rejected upload for a killed pod — one
+  // that takes out every other user's request, not just the uploader's. Lifting it would mean
+  // streaming (scan(InputStream) + RequestBody.fromInputStream), which is a different piece of work.
   private static final Set<String> ALLOWED_ATTACHMENT_TYPES = Set.of(
-      "BMP", "CSV", "DOC", "DOCX", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "OBD", "PDF",
-      "PNG", "PPS", "PPT", "PPTX", "RPT", "RTF", "TIF", "TIFF", "TXT", "WAV", "WEBP", "XLD", "XLS",
-      "XLSX", "XML", "ZIP");
+      "BMP", "CSV", "DOC", "DOCX", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "MP4", "OBD",
+      "PDF", "PNG", "PPS", "PPT", "PPTX", "RPT", "RTF", "TIF", "TIFF", "TXT", "WAV", "WEBP", "XLD",
+      "XLS", "XLSX", "XML", "ZIP");
   private static final String ALLOWED_ATTACHMENT_TYPES_DISPLAY =
-      "BMP, CSV, DOC, DOCX, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, PPTX, RPT, "
-          + "RTF, TIF, TIFF, TXT, WAV, WEBP, XLD, XLS, XLSX, XML, ZIP";
+      "BMP, CSV, DOC, DOCX, GIF, HTM, IFM, JPG, JPK, MDB, MDE, MP4, OBD, PDF, PNG, PPS, PPT, PPTX, "
+          + "RPT, RTF, TIF, TIFF, TXT, WAV, WEBP, XLD, XLS, XLSX, XML, ZIP";
 
   // Numeric-format guards for user-supplied field values.
   //

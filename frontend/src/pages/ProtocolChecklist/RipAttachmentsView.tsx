@@ -12,6 +12,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits';
 
 /**
  * Byte limit of the attachment description column.
@@ -79,10 +80,10 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
 ];
 const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
-// Keep in step with spring.servlet.multipart.max-file-size (application.yml).
-const MAX_ATTACHMENT_MB = 15;
-const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
-const formatMb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+// Shared with CHR photos so the two screens can't drift; see utils/uploadLimits for how this
+// relates to max-file-size, max-request-size and the Coraza body limit.
+const MAX_ATTACHMENT_MB = MAX_UPLOAD_MB;
+const MAX_ATTACHMENT_BYTES = MAX_UPLOAD_BYTES;
 
 const PAGE_SIZES = [10, 25, 50];
 

@@ -34,6 +34,11 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Errors stay hidden until a save is attempted, matching the other tabs.
+  const [showErrors, setShowErrors] = useState(false);
+  // The note as it stands on the server. `data` is mutated as the user types, so it can't answer
+  // "was there a note before this edit?" — which is what separates an empty save from a deletion.
+  const [stored, setStored] = useState('');
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -52,7 +57,10 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
       API.protocolChecklist
         .getNotes(protocol, checklistId)
         .then((d) => {
-          if (!signal?.cancelled) setData(d);
+          if (!signal?.cancelled) {
+            setData(d);
+            setStored(d?.noteDescription ?? '');
+          }
         })
         .catch((err: unknown) => {
           if (!signal?.cancelled) reportError("We couldn't load the notes", err);
@@ -73,11 +81,15 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
   }, [loadData]);
 
   const handleSave = async () => {
-    if (!data || limitError) return;
+    if (!data) return;
+    // First point the user has asked for the note to be saved — reveal the error now.
+    setShowErrors(true);
+    if (limitError || blankError) return;
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveNotes(protocol, checklistId, data);
       setData(saved);
+      setStored(saved?.noteDescription ?? '');
       setEditing(false);
       display({ kind: 'success', title: 'Notes saved', timeout: 4000 });
     } catch (err) {
@@ -97,6 +109,8 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
     try {
       const fresh = await API.protocolChecklist.getNotes(protocol, checklistId);
       setData(fresh);
+      setStored(fresh?.noteDescription ?? '');
+      setShowErrors(false);
       setEditing(true);
     } catch (err) {
       reportError("We couldn't load the notes", err);
@@ -107,6 +121,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
 
   const cancel = () => {
     loadData();
+    setShowErrors(false);
     setEditing(false);
   };
 
@@ -119,6 +134,11 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
   // Checked here rather than left to the database: note_description is byte-limited, so an
   // over-long note used to surface only as a failed save.
   const limitError = overLimitError(note, NOTE_LIMIT);
+  // An empty box with no note already stored is nothing to save. The save would send NULL, report
+  // "Notes saved", and bump biodiversity_checklist.revision_count — which the Opening and
+  // Administration tabs share, so it also invalidates their lock tokens for no change. Clearing an
+  // existing note is a real edit, so that case is deliberately still allowed through.
+  const blankError = !note.trim() && !stored.trim();
 
   const readOnlyNote = note ? (
     <div className="protocol-checklist__field">
@@ -163,8 +183,8 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
             labelText="Notes"
             rows={10}
             value={note}
-            invalid={Boolean(limitError)}
-            invalidText={limitError}
+            invalid={Boolean(limitError) || (showErrors && blankError)}
+            invalidText={limitError || 'Enter a note before saving.'}
             onChange={(e) =>
               setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
             }

@@ -103,24 +103,24 @@ public class ChrSubmitValidationService {
   private void validateChecklistLevel(CheckList c, List<ValidationError> errors) {
     String ref = c.getChecklistID();
     req(errors, ref, "evaluationDate", c.getEvaluationDate(),
-        "Please enter the date the evaluation occurred.");
+        "Enter the date the evaluation occurred.");
     req(errors, ref, "yearOfHarvest", c.getYearOfHarvest(),
-        "Please confirm the Harvest Completion Year.");
+        "Confirm the Harvest Completion Year.");
     req(errors, ref, "generalLocation", c.getGeneralLocation(),
-        "Please provide a general location name.");
+        "Provide a general location name.");
     req(errors, ref, "assessedBy", c.getAssessedBy(),
-        "Please save the opening info so the Evaluator field is populated.");
-    req(errors, ref, "rating", c.getRating(), "Please provide a Rating in Block summary.");
+        "Save the opening info so the Evaluator field is populated.");
+    req(errors, ref, "rating", c.getRating(), "Provide a Rating in Block summary.");
 
     conditional(errors, ref, "q8Comments",
         c.getQ8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock(),
-        c.getQ8Comments(), "Please provide a description.");
+        c.getQ8Comments(), "Provide a description.");
     conditional(errors, ref, "q9Comments",
         c.getQ9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues(),
-        c.getQ9Comments(), "Please provide a description.");
+        c.getQ9Comments(), "Provide a description.");
     conditional(errors, ref, "q10Comments",
         c.getQ10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock(),
-        c.getQ10Comments(), "Please provide a description.");
+        c.getQ10Comments(), "Provide a description.");
   }
 
   // --- composite ---
@@ -135,8 +135,8 @@ public class ChrSubmitValidationService {
     if (members < 2) {
       errors.add(err(ref(c, feature), "composite",
           "A composite feature must include at least two features. To add one, open another feature, "
-              + "check “Composite feature”, and set its “Composite of (feature label)” "
-              + "to this feature’s label."));
+              + "check \"Composite feature\", and set its \"Composite of (feature label)\" "
+              + "to this feature's label."));
     }
   }
 
@@ -163,9 +163,9 @@ public class ChrSubmitValidationService {
     // Non-composite features require a description code + information source.
     if ("false".equals(feature.getCompositeFeatureInd())) {
       req(errors, ref, "featureDescriptionCode", feature.getFeatureDescriptionCode(),
-          "Please provide a Description Code.");
+          "Provide a Description Code.");
       req(errors, ref, "featureInfoSourceCode", feature.getFeatureInfoSourceCode(),
-          "Please provide an Information Source Code.");
+          "Provide an Information Source Code.");
     }
 
     // Members of a composite skip the per-tab validation (validated via their parent).
@@ -183,69 +183,69 @@ public class ChrSubmitValidationService {
   private void validateDescriptionTab(CheckList c, Feature f, List<ValidationError> errors) {
     String ref = ref(c, f);
     conditional(errors, ref, "ofCMTsNumber", f.getOfCMTs(), f.getOfCMTsNumber(),
-        "Please enter the number of CMT(s) included in the feature.");
+        "Enter the number of CMT(s) included in the feature.");
     conditional(errors, ref, "standofMonumentalCedar", f.getOfMonumentalCedars(),
         f.getStandofMonumentalCedar(),
-        "Please enter the number of Monumental Cedar(s) included in the feature.");
+        "Enter the number of Monumental Cedar(s) included in the feature.");
     conditional(errors, ref, "otherDescription", f.getOther(), f.getOtherDescription(),
-        "Please provide a description of the feature.");
+        "Provide a description of the feature.");
     integer(errors, ref, "ofCMTsNumber", f.getOfCMTsNumber(),
-        "Please enter a valid number of CMT(s) included in the feature.");
+        "Enter a valid number of CMT(s) included in the feature.");
     integer(errors, ref, "standofMonumentalCedar", f.getStandofMonumentalCedar(),
-        "Please enter a valid number of Monumental Cedar(s) included in the feature.");
+        "Enter a valid number of Monumental Cedar(s) included in the feature.");
 
     if (!anyTrue(values(f, FEATURE_TYPE_FIELDS))) {
       errors.add(err(ref, "siteFeatureDescription",
-          "Please ensure at least one feature description has been selected."));
+          "Ensure at least one feature description has been selected."));
     }
 
     if (isTrue(f.getChrRegisteredSite()) && ChrStringUtils.hasAValue(f.getBorden())
         && !f.getBorden().matches(BORDEN_REGEX)) {
       errors.add(err(ref, "borden",
-          "Please provide a Borden # in one of the formats AaBb-0, AaBb-00, AaBb-000, or AaBb-0000."));
+          "Provide a Borden # in one of the formats AaBb-0, AaBb-00, AaBb-000, or AaBb-0000."));
     }
   }
 
   private void validateLocationAgeTab(CheckList c, Feature f, List<ValidationError> errors) {
     String ref = ref(c, f);
     conditional(errors, ref, "locationOtherDescription", f.getLocationOther(),
-        f.getLocationOtherDescription(), "Please provide a description of the location if Other.");
+        f.getLocationOtherDescription(), "Provide a description of the location if Other.");
     conditional(errors, ref, "locationReservetype", f.getInReserve(), f.getLocationReservetype(),
-        "Please provide the In Reserve \"Type\".");
+        "Provide the In Reserve \"Type\".");
     if (!anyTrue(values(f, AGE_FIELDS))) {
-      errors.add(err(ref, "age", "Please select at least one item for the Age of this feature."));
+      errors.add(err(ref, "age", "Select at least one item for the Age of this feature."));
     }
   }
 
   private void validatePlanningTab(CheckList c, Feature f, List<ValidationError> errors) {
     String ref = ref(c, f);
     planningDetail(errors, ref, f.getRetainBufferFN(), f.getBufferLengthFN(), "bufferLengthFN",
-        "Please provide the buffer size in metres.");
+        "Provide the buffer size in metres.");
     planningDetail(errors, ref, f.getRetainBufferAIA(), f.getBufferLengthAIA(), "bufferLengthAIA",
-        "Please provide the buffer size in metres.");
+        "Provide the buffer size in metres.");
     planningDetail(errors, ref, f.getRetainBufferSP(), f.getBufferLengthSP(), "bufferLengthSP",
-        "Please provide the buffer size in metres.");
+        "Provide the buffer size in metres.");
     planningDetail(errors, ref, f.getConserveinRotationalReserveFN(),
         f.getConserveRotationalReserveTypeFN(), "conserveRotationalReserveTypeFN",
-        "Please provide the Rotational Reserve \"Type\".");
+        "Provide the Rotational Reserve \"Type\".");
     planningDetail(errors, ref, f.getConserveinRotationalReserveAIA(),
         f.getConserveRotationalReserveTypeAIA(), "conserveRotationalReserveTypeAIA",
-        "Please provide the Rotational Reserve \"Type\".");
+        "Provide the Rotational Reserve \"Type\".");
     planningDetail(errors, ref, f.getConserveinRotationalReserveSP(),
         f.getConserveRotationalReserveTypeSP(), "conserveRotationalReserveTypeSP",
-        "Please provide the Rotational Reserve \"Type\".");
+        "Provide the Rotational Reserve \"Type\".");
     planningDetail(errors, ref, f.getPermanentReserveFN(), f.getTemporaryRetentionTypeFN(),
-        "temporaryRetentionTypeFN", "Please provide the Temporary Reserve Area \"Type\".");
+        "temporaryRetentionTypeFN", "Provide the Temporary Reserve Area \"Type\".");
     planningDetail(errors, ref, f.getPermanentReserveAIA(), f.getTemporaryRetentionTypeAIA(),
-        "temporaryRetentionTypeAIA", "Please provide the Temporary Reserve Area \"Type\".");
+        "temporaryRetentionTypeAIA", "Provide the Temporary Reserve Area \"Type\".");
     planningDetail(errors, ref, f.getPermanentReserveSP(), f.getTemporaryRetentionTypeSP(),
-        "temporaryRetentionTypeSP", "Please provide the Temporary Reserve Area \"Type\".");
+        "temporaryRetentionTypeSP", "Provide the Temporary Reserve Area \"Type\".");
     integer(errors, ref, "bufferLengthFN", f.getBufferLengthFN(),
-        "Please provide a valid buffer size in metres.");
+        "Provide a valid buffer size in metres.");
     integer(errors, ref, "bufferLengthAIA", f.getBufferLengthAIA(),
-        "Please provide a valid buffer size in metres.");
+        "Provide a valid buffer size in metres.");
     integer(errors, ref, "bufferLengthSP", f.getBufferLengthSP(),
-        "Please provide a valid buffer size in metres.");
+        "Provide a valid buffer size in metres.");
 
     validateOtherStrategy(c, f, errors);
 
@@ -255,81 +255,85 @@ public class ChrSubmitValidationService {
     if (isTrue(f.getManagementStrategyFN())
         && !(anyTrue(values(f, FN_STRATEGY_FIELDS)) || otherFn)) {
       errors.add(err(ref, "recommendationsProvided",
-          "First Nations recommendations is toggled 'ON' but no related management strategies are entered. "
-              + "Please input related management strategies OR unselect \"Recommendations Provided\"."));
+          "\"FN management recommendations provided\" is checked, but no related management strategies "
+              + "are entered. Add at least one, or uncheck \"FN management recommendations "
+              + "provided\"."));
     }
     if (isTrue(f.getSitePermitIssued())) {
       req(errors, ref, "permit", f.getPermit(),
-          "SAP is toggled 'ON' but no Site Alteration Permit number has been entered OR unselect \"SAP Issued\".");
+          "\"AIA / site-alteration permit issued\" is checked, but no permit number has been entered. "
+            + "Enter the number, or uncheck \"AIA / site-alteration permit issued\".");
     }
     if (isTrue(f.getManagementStrategySP())
         && !(anyTrue(values(f, SP_STRATEGY_FIELDS)) || otherSp)) {
       errors.add(err(ref, "strategyProvided",
-          "Site plan recommendations is toggled 'ON' but no related management strategies are entered. "
-              + "Please input related management strategies OR unselect \"Recommendations Provided\"."));
+          "\"Site plan strategies noted\" is checked, but no related management strategies are entered. "
+              + "Add at least one, or uncheck \"Site plan strategies noted\"."));
     }
   }
 
   private void validateEffectivenessTab(CheckList c, Feature f, List<ValidationError> errors) {
     String ref = ref(c, f);
     conditional(errors, ref, "bufferWidthMeter", f.getRetainabuffer(), f.getBufferWidthMeter(),
-        "Please provide the buffer size in metres.");
+        "Provide the buffer size in metres.");
     conditional(errors, ref, "partiallytemporaryreservetype", f.getPartiallytemporaryreserve(),
-        f.getPartiallytemporaryreservetype(), "Please provide the Temporary Reserve \"Type\".");
+        f.getPartiallytemporaryreservetype(), "Provide the Temporary Reserve \"Type\".");
     conditional(errors, ref, "fullytemporaryreserve", f.getFullyconservedintemporaryreserve(),
-        f.getFullytemporaryreserve(), "Please provide the Temporary Reserve \"Type\".");
+        f.getFullytemporaryreserve(), "Provide the Temporary Reserve \"Type\".");
     conditional(errors, ref, "partiallyconservedinpermanentreserveType",
         f.getPartiallyconservedinpermanentreserve(), f.getPartiallyconservedinpermanentreserveType(),
-        "Please provide the Permanent Reserve \"Type\".");
+        "Provide the Permanent Reserve \"Type\".");
     conditional(errors, ref, "fullyconservedinpermanentreserveType",
         f.getFullyconservedinpermanentreserve(), f.getFullyconservedinpermanentreserveType(),
-        "Please provide the Permanent Reserve \"Type\".");
+        "Provide the Permanent Reserve \"Type\".");
     conditional(errors, ref, "ifotherpleasedescribeOtherQ2",
         f.getOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause(),
         f.getIfotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause(),
-        "Please provide a description for \"Other\" Damage Cause.");
+        "Provide a description for \"Other\" Damage Cause.");
     conditional(errors, ref, "ifotherpleasedescribe", f.getOtherTechnique(),
         f.getIfotherpleasedescribe(),
-        "Please provide a description for \"Other\" Windthrow Management Technique.");
+        "Provide a description for \"Other\" Windthrow Management Technique.");
     conditional(errors, ref, "trailLength", f.getIsthereevidenceofdamage(), f.getTrailLength(),
-        "Please provide an estimated percentage of the trail length affected.");
+        "Provide an estimated percentage of the trail length affected.");
     integer(errors, ref, "bufferWidthMeter", f.getBufferWidthMeter(),
-        "Please provide a valid buffer size in metres.");
+        "Provide a valid buffer size in metres.");
     integer(errors, ref, "trailLength", f.getTrailLength(),
-        "Please provide a valid estimated percentage of the trail length affected.");
+        "Provide a valid estimated percentage of the trail length affected.");
 
     if (isTrue(f.getNoManagement()) && anyTrue(values(f, USED_STRATEGY_FIELDS))) {
       errors.add(err(ref, "noManagement",
-          "Please unselect any selected Management Strategies OR unselect \"No Management of the Site or feature\"."));
+          "Management strategies are selected while \"No management applied\" is checked. Clear the "
+              + "strategies, or uncheck \"No management applied\"."));
     }
     if (isTrue(f.getQ1Isthereevidenceofdamagetothesiteorfeature())
         && !anyTrue(values(f, Q2_CAUSE_FIELDS))) {
-      errors.add(err(ref, "q2MostLikelyCause", "Please provide at least one answer in Q2 if Q1 is selected."));
+      errors.add(err(ref, "q2MostLikelyCause", "Provide at least one answer in Q2 if Q1 is selected."));
     }
     if (isTrue(f.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse())
         && !anyTrue(values(f, Q2_CAUSE_FIELDS))) {
-      errors.add(err(ref, "q2MostLikelyCause", "Please provide at least one answer in Q2 if Q3 is selected."));
+      errors.add(err(ref, "q2MostLikelyCause", "Provide at least one answer in Q2 if Q3 is selected."));
     }
     if (isTrue(f.getWindthrowManagement()) && isTrue(f.getWindthrowTechniqueNone())
         && anyTrue(values(f, WINDTHROW_OTHER_FIELDS))) {
       errors.add(err(ref, "windthrowNone",
-          "Please unselect any selected Windthrow Management Techniques OR unselect \"None\"."));
+          "Windthrow Management Techniques are selected while \"None\" is checked. Clear the techniques, "
+              + "or uncheck \"None\"."));
     }
   }
 
   private void validateSummaryTab(CheckList c, Feature f, List<ValidationError> errors) {
     String ref = ref(c, f);
     req(errors, ref, "featureRating", f.getFeatureRating(),
-        "Please provide a Rating in Feature Summary.");
+        "Provide a Rating in Feature Summary.");
     conditional(errors, ref, "q4Description",
         f.getQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature(),
-        f.getQ4Description(), "Please provide a description in Feature Summary.");
+        f.getQ4Description(), "Provide a description in Feature Summary.");
     conditional(errors, ref, "q5Description",
         f.getQ5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective(),
-        f.getQ5Description(), "Please provide a description in Feature Summary.");
+        f.getQ5Description(), "Provide a description in Feature Summary.");
     conditional(errors, ref, "q6Description",
         f.getQ6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature(),
-        f.getQ6Description(), "Please provide a description in Feature Summary.");
+        f.getQ6Description(), "Provide a description in Feature Summary.");
   }
 
   /** Other-planned-strategy rules: description required, must have a source, descriptions unique. */
@@ -345,7 +349,7 @@ public class ChrSubmitValidationService {
       if (!ChrStringUtils.hasAValue(strategy.getOtherStrategy())) {
         if (!reportedBlank) {
           errors.add(err(ref, "otherPlanningStrategy",
-              "Please provide a description for any management strategies defined as 'Other'."));
+              "Provide a description for any management strategies defined as 'Other'."));
           reportedBlank = true;
         }
         continue;

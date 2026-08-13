@@ -8,6 +8,7 @@ import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
@@ -131,7 +132,7 @@ public class ChrChecklistService {
 
   @Transactional
   public CheckList saveContactsSection(CheckList checklist) {
-    return saveSection(checklist, persistenceService::saveContactsSection, null);
+    return saveSection(checklist, persistenceService::saveContactsSection, this::validateContacts);
   }
 
   @Transactional
@@ -428,6 +429,74 @@ public class ChrChecklistService {
     // Pictures are not validated here: a checklist save no longer persists them at all (they are
     // added and removed through the photo endpoints), so anything in the payload is ignored.
     validateFeatures(checklist);
+  }
+
+  /**
+   * Contacts section validation. Nothing about a contact is <em>required</em> — every column this
+   * section writes on {@code CHR_CHECKLIST_PARTICIPANT} / {@code CHR_CHECKLIST_PARTICIPATION} is
+   * nullable, and neither legacy nor {@link ChrSubmitValidationService} has ever required a contact —
+   * so this only rejects values the database or the date parser would mishandle:
+   *
+   * <ul>
+   *   <li><b>Lengths.</b> {@code FIRST_NAME}/{@code LAST_NAME} are {@code VARCHAR2(40 BYTE)} and
+   *       {@code ORGANIZATION_NAME} is {@code VARCHAR2(60 BYTE)}, and nothing between the request and
+   *       the flush truncates or checks. The web form's {@code maxLength} caps typing and paste, but
+   *       an offline check-in or a direct API call can exceed it — which surfaced as a raw
+   *       {@code ORA-12899} at flush rather than a usable error. Measured in <em>bytes</em>, since
+   *       that is what the column counts: an accented or syllabic character costs more than one.</li>
+   *   <li><b>Contacted date.</b> Previously an unparseable date was caught and logged at debug in
+   *       {@code ChrChecklistPersistenceService.saveContacts}, so the save reported success with the
+   *       date silently dropped. Parsing is also strict here: {@code SimpleDateFormat} is lenient by
+   *       default, so {@code 2026-02-31} would have rolled forward to March 3 rather than failing.</li>
+   * </ul>
+   *
+   * <p>Only the section save runs this (same as {@link #validateFeatures}); the whole-checklist and
+   * offline-upload paths keep the persistence-layer catch as their backstop.
+   */
+  private void validateContacts(CheckList checklist) {
+    if (checklist.getContacts() == null) {
+      return;
+    }
+    int position = 0;
+    for (Contact contact : checklist.getContacts()) {
+      position++;
+      String who = contactLabel(contact, position);
+      assertMaxBytes(contact.getFirstName(), 40, "First name", who);
+      assertMaxBytes(contact.getLastName(), 40, "Last name", who);
+      assertMaxBytes(contact.getOrganization(), 60, "Organization", who);
+      // The date is only persisted when the contact is marked as contacted; it is discarded
+      // otherwise, so validating it in that case would reject a value that never reaches the column.
+      if ("true".equals(contact.getContactedInd())
+          && ChrStringUtils.hasAValue(contact.getContactedDate())
+          && !ChrDateUtils.isStrictDate(contact.getContactedDate())) {
+        throw new InvalidParameterException(
+            who + ": Contacted date must be a real calendar date in YYYY-MM-DD format.");
+      }
+    }
+  }
+
+  /** Name a contact in an error message, falling back to its position when it has no name yet. */
+  private String contactLabel(Contact contact, int position) {
+    String name = ((contact.getFirstName() == null ? "" : contact.getFirstName().trim())
+        + " "
+        + (contact.getLastName() == null ? "" : contact.getLastName().trim())).trim();
+    return ChrStringUtils.hasAValue(name) ? "Contact " + name : "Contact " + position;
+  }
+
+  /**
+   * Reject a value longer than the column allows. Byte length in the database charset, not character
+   * count, because the columns are declared {@code BYTE}.
+   */
+  private void assertMaxBytes(String value, int maxBytes, String field, String who) {
+    if (value == null) {
+      return;
+    }
+    int length = value.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+    if (length > maxBytes) {
+      throw new InvalidParameterException(
+          who + ": " + field + " is too long — " + length + " bytes, limit " + maxBytes
+              + " (an accented character can count as more than one).");
+    }
   }
 
   private void validateFeatures(CheckList checklist) {

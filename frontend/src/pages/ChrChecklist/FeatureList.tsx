@@ -39,6 +39,8 @@ const FeatureList: FC<{
   const [selected, setSelected] = useState<number | null>(null);
   // The full feature array as it was when the editor opened, restored on Cancel.
   const snapshot = useRef<Feature[] | null>(null);
+  // Errors stay hidden until a save is attempted on the open feature.
+  const [showErrors, setShowErrors] = useState(false);
 
   const nextLabel = (): string => {
     const numbers = features.map((f) => Number(f.featureLabel)).filter((n) => Number.isFinite(n));
@@ -47,6 +49,7 @@ const FeatureList: FC<{
   };
 
   const add = () => {
+    setShowErrors(false);
     snapshot.current = features;
     const feature: Feature = { featureLabel: nextLabel(), compositeFeatureInd: 'false' };
     onChange([...features, feature]);
@@ -54,18 +57,22 @@ const FeatureList: FC<{
   };
 
   const openEdit = (index: number) => {
+    setShowErrors(false);
     snapshot.current = features;
     setSelected(index);
   };
 
   const cancel = () => {
+    setShowErrors(false);
     if (snapshot.current) onChange(snapshot.current);
     snapshot.current = null;
     setSelected(null);
   };
 
   const save = async () => {
-    // Errors are shown inline on the feature fields; just block the save while any remain.
+    // First point the user has asked for the feature to be complete — reveal the errors now, then
+    // block the save while any remain.
+    setShowErrors(true);
     const editing = selected === null ? undefined : features[selected];
     if (editing && featureHasErrors(editing)) return;
     if (await onSave(features)) {
@@ -151,6 +158,7 @@ const FeatureList: FC<{
           feature={current}
           onPatch={patchSelected}
           readOnly={readOnly}
+          showErrors={showErrors}
           siblingLabels={siblingLabels}
           compositeCandidateLabels={compositeCandidateLabels}
           onToggleAssociated={toggleAssociated}

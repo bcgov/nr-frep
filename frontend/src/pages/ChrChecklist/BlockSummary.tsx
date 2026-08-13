@@ -163,6 +163,8 @@ const BlockSummary: FC<{
   busy: boolean;
 }> = ({ value, onSave, readOnly, busy }) => {
   const [editing, setEditing] = useState(false);
+  // Errors stay hidden until a save is attempted on this edit.
+  const [showErrors, setShowErrors] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
   // While editing, preview the MRVA off the edited rating so it updates live with the Rating select
   // (features aren't editable here); otherwise show the saved value.
@@ -185,12 +187,19 @@ const BlockSummary: FC<{
       rating: value.rating,
       ratingRationale: value.ratingRationale,
     });
+    setShowErrors(false);
     setEditing(true);
   };
-  // Live inline validation off the draft (like the Biodiversity tabs); Save blocks while any remain.
-  const fieldErrors: Record<string, string> = editing ? blockSummaryErrors(draft) : {};
-  const hasErrors = Object.keys(fieldErrors).length > 0;
+  // Validation runs live off the draft, but is only *displayed* once a save has been attempted —
+  // opening an incomplete tab should not greet the user with errors they have not been asked to fix
+  // yet (same gate as the Biodiversity tabs). `allErrors` drives the save guard, `fieldErrors` the
+  // rendering, so every call site below is gated at once.
+  const allErrors: Record<string, string> = editing ? blockSummaryErrors(draft) : {};
+  const hasErrors = Object.keys(allErrors).length > 0;
+  const fieldErrors = showErrors ? allErrors : {};
   const save = async () => {
+    // First point the user has asked for the tab to be complete — reveal the errors now.
+    setShowErrors(true);
     if (hasErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
@@ -256,7 +265,15 @@ const BlockSummary: FC<{
         )}
         {editing && (
           <>
-            <Button kind="ghost" size="lg" disabled={busy} onClick={() => setEditing(false)}>
+            <Button
+              kind="ghost"
+              size="lg"
+              disabled={busy}
+              onClick={() => {
+                setShowErrors(false);
+                setEditing(false);
+              }}
+            >
               Cancel
             </Button>
             <Button size="lg" disabled={busy} onClick={() => void save()}>

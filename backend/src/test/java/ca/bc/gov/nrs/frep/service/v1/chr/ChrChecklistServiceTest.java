@@ -20,6 +20,7 @@ import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Picture;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
@@ -399,5 +400,107 @@ class ChrChecklistServiceTest {
 
     assertTrue(page.photos().isEmpty());
     assertEquals(250, page.totalCount());
+  }
+
+  // --- Contacts section validation ---
+
+  private static CheckList checklistWithContact(Contact contact) {
+    CheckList checklist = new CheckList();
+    checklist.setChecklistID("1001");
+    checklist.setRevisionCount("1");
+    checklist.setContacts(List.of(contact));
+    return checklist;
+  }
+
+  @Test
+  void saveContactsSectionRejectsAnOverlongName() {
+    Contact contact = new Contact();
+    contact.setFirstName("a".repeat(41)); // FIRST_NAME is VARCHAR2(40 BYTE)
+    contact.setLastName("Smith");
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(contact)));
+
+    // Names the contact and the field, so the user knows which row and which input to shorten.
+    assertTrue(ex.getMessage().contains("First name is too long"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("limit 40"), ex.getMessage());
+  }
+
+  @Test
+  void saveContactsSectionMeasuresNameLengthInBytesNotCharacters() {
+    Contact contact = new Contact();
+    // 21 two-byte characters = 42 bytes: under the 40-character limit but over the 40-BYTE column.
+    contact.setOrganization("é".repeat(21));
+
+    // Organization is VARCHAR2(60 BYTE), so 42 bytes still fits — reaching the (unstubbed) status
+    // check rather than a length error proves it was accepted.
+    InvalidParameterException fits = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(contact)));
+    assertEquals(ChrConstants.RestMessages.ERROR_CHANGE_STATUS, fits.getMessage());
+
+    Contact tooLong = new Contact();
+    tooLong.setOrganization("é".repeat(31)); // 62 bytes > 60
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(tooLong)));
+    assertTrue(ex.getMessage().contains("Organization is too long"), ex.getMessage());
+  }
+
+  @Test
+  void saveContactsSectionRejectsAnImpossibleContactedDate() {
+    Contact contact = new Contact();
+    contact.setLastName("Smith");
+    contact.setContactedInd("true");
+    contact.setContactedDate("2026-02-31"); // lenient parsing would have stored 2026-03-03
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(contact)));
+
+    assertTrue(ex.getMessage().contains("Contacted date"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("Contact Smith"), ex.getMessage());
+  }
+
+  @Test
+  void saveContactsSectionIgnoresTheContactedDateWhenTheContactWasNotContacted() {
+    Contact contact = new Contact();
+    contact.setLastName("Smith");
+    contact.setContactedInd("false");
+    contact.setContactedDate("nonsense"); // discarded on save, so it must not block the save
+
+    // Validation runs before the status check, so getting as far as the status failure (the status
+    // is unstubbed, hence not ACT) proves the contact itself was accepted.
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(contact)));
+    assertEquals(ChrConstants.RestMessages.ERROR_CHANGE_STATUS, ex.getMessage());
+  }
+
+  @Test
+  void saveContactsSectionAcceptsAValidContact() {
+    Contact contact = new Contact();
+    contact.setFirstName("Jane");
+    contact.setLastName("Smith");
+    contact.setOrganization("Example Nation");
+    contact.setContactedInd("true");
+    contact.setContactedDate("2026-08-13");
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklistWithContact(contact)));
+    assertEquals(ChrConstants.RestMessages.ERROR_CHANGE_STATUS, ex.getMessage());
+  }
+
+  @Test
+  void saveContactsSectionLabelsAnUnnamedContactByItsPosition() {
+    Contact named = new Contact();
+    named.setLastName("Smith");
+    Contact unnamed = new Contact();
+    unnamed.setOrganization("o".repeat(61));
+
+    CheckList checklist = new CheckList();
+    checklist.setChecklistID("1001");
+    checklist.setRevisionCount("1");
+    checklist.setContacts(List.of(named, unnamed));
+
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> service.saveContactsSection(checklist));
+    assertTrue(ex.getMessage().startsWith("Contact 2:"), ex.getMessage());
   }
 }

@@ -140,6 +140,16 @@
     gap: 0.75rem;
   }
 
+  // Form-level error shown above a detail form's fields when the form as a whole is invalid and no
+  // single input is at fault (Contacts: "enter a name, role, or organization"). Sits inside the
+  // fieldset so the message lands next to the inputs rather than in a corner toast.
+  &__form-error {
+    margin-bottom: 1rem;
+    color: var(--cds-text-error, #da1e28);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
   // Required-field error shown under "Assessed by" when the user saves without assigning one.
   &__assessed-by__error {
     color: var(--cds-text-error, #da1e28);

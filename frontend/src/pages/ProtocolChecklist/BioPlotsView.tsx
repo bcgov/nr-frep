@@ -145,6 +145,9 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   const [stratumId, setStratumId] = useState('');
   const [rows, setRows] = useState<BioPlotRow[]>([]);
   const [current, setCurrent] = useState<BioPlot | null>(null);
+  // Errors stay hidden until a save is attempted on the open plot; reset when another plot is
+  // opened or a new one is added.
+  const [showErrors, setShowErrors] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -296,6 +299,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     setBusy(true);
     try {
       setCurrent(await API.protocolChecklist.getBioPlot(plotId));
+      setShowErrors(false);
     } catch (err) {
       reportError('Could not load the plot', err);
     } finally {
@@ -304,6 +308,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   };
 
   const addPlot = () => {
+    setShowErrors(false);
     setCurrent({
       stratumId,
       // Default "Evaluated by" to the checklist's Evaluator; claimable via "Assign it to me".
@@ -332,17 +337,24 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
   // moment it's invalid and clears when fixed. plotFieldError is a lookup into the header-error map;
   // standError / cwdError look up a sub-table cell. The Save handler blocks while any remain — no toast.
   const stratumType = selectedStratum?.strataTypeCode ?? '';
+  // Errors are computed live but only *displayed* once a save has been attempted (see the same gate
+  // in BioOpeningView). `headerErrors` still drives the save guard; the three lookups below are what
+  // the UI renders, so every call site is gated at once — header fields and sub-table cells alike.
   const headerErrors: Record<string, string> =
     current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
-  const plotFieldError = (key: string): string => headerErrors[key] ?? '';
+  const plotFieldError = (key: string): string => (showErrors ? (headerErrors[key] ?? '') : '');
   const standError = (index: number, colKey: string): string =>
-    standRowErrors(
-      ((current?.standTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
-    )[colKey] ?? '';
+    showErrors
+      ? (standRowErrors(
+          ((current?.standTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
+        )[colKey] ?? '')
+      : '';
   const cwdError = (index: number, colKey: string): string =>
-    cwdRowErrors(((current?.cwdTable ?? [])[index] ?? {}) as Record<string, string | undefined>)[
-      colKey
-    ] ?? '';
+    showErrors
+      ? (cwdRowErrors(
+          ((current?.cwdTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
+        )[colKey] ?? '')
+      : '';
 
   // Blocks Save while any header/sub-table error remains (incl. the legacy "Trees exist ⇒ ≥1 stand
   // row" consistency check). See plotHasBlockingErrors.
@@ -350,7 +362,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
   const handleSave = async () => {
     if (!current) return;
-    // Errors are already shown inline; just block the save while any remain (no error toast).
+    // First point the user has asked for the plot to be complete — reveal the errors now.
+    setShowErrors(true);
     if (hasErrors) return;
     setBusy(true);
     try {
@@ -573,7 +586,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
             </Button>
           )}
         </span>
-        {error !== '' && <div className="rip-field-grid__cell-error">{error}</div>}
+        {error !== '' && <div className="protocol-checklist__field-error">{error}</div>}
       </div>
     );
   };

@@ -26,6 +26,32 @@ public final class ChrDateUtils {
     return new SimpleDateFormat(DATE_PATTERN).parse(value.trim());
   }
 
+  /**
+   * True when {@code value} is a real calendar date in {@code yyyy-MM-dd}. Strict on purpose:
+   * {@link SimpleDateFormat} is lenient by default, so {@link #getDate} silently rolls
+   * {@code 2026-02-31} forward to March 3 rather than rejecting it. Blank is treated as valid —
+   * callers decide whether an absent date is allowed.
+   */
+  public static boolean isStrictDate(String value) {
+    if (StringUtils.isBlank(value)) {
+      return true;
+    }
+    // Shape first: a non-lenient parse still accepts trailing garbage ("2026-08-13xyz" stops at the
+    // first bad character and succeeds) and an unpadded month, so the regex is what makes the
+    // "YYYY-MM-DD" contract true. The strict parse then rejects impossible days (2026-02-31).
+    if (!value.trim().matches("\\d{4}-\\d{2}-\\d{2}")) {
+      return false;
+    }
+    SimpleDateFormat format = new SimpleDateFormat(DATE_PATTERN);
+    format.setLenient(false);
+    try {
+      format.parse(value.trim());
+      return true;
+    } catch (ParseException ex) {
+      return false;
+    }
+  }
+
   public static String formatDate(Date date) throws ParseException {
     if (date == null) {
       return null;

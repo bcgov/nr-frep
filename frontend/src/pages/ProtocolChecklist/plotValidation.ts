@@ -81,7 +81,11 @@ const bearingErrors = (e: Record<string, string>, g: Getter): void => {
 };
 
 const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
-  if (isBlank(g('assessorName'))) e.assessorName = 'Evaluated by is required.';
+  // Matches the Opening tab's Evaluator error: name the remedy, since this field is read-only and
+  // "Evaluated by is required" gives no hint that "Assign it to me" is how you fill it.
+  if (isBlank(g('assessorName'))) {
+    e.assessorName = 'An evaluator is required — use "Assign it to me".';
+  }
   // FREP_212_BIOPLOT.save_plot rejects a blank plot number (sil.error.usr.isrequired:Plot Number),
   // so enforce it here too; otherwise validate the range when present.
   if (isBlank(g('plotNumber'))) {

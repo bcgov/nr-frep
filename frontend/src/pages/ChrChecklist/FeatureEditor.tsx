@@ -216,6 +216,10 @@ const FeatureEditor: FC<{
   feature: Feature;
   onPatch: PatchFn;
   readOnly: boolean;
+  // Errors are computed live but only shown once a save has been attempted — FeatureList owns the
+  // flag because it owns the Save button. Also gates the section error badges and the auto-open
+  // effect below, so an untouched feature opens fully collapsed and quiet.
+  showErrors?: boolean;
   siblingLabels?: string[];
   // Other features eligible to be this feature's composite anchor (excludes siblings already in a
   // composite). Defaults to all siblings when not supplied.
@@ -225,6 +229,7 @@ const FeatureEditor: FC<{
   feature,
   onPatch,
   readOnly,
+  showErrors = false,
   siblingLabels = [],
   compositeCandidateLabels = siblingLabels,
   onToggleAssociated,
@@ -271,8 +276,8 @@ const FeatureEditor: FC<{
   // submit). Empty when read-only. Save is blocked in FeatureList while any error remains. Memoised
   // on the feature so the auto-open effect below only re-runs when the data actually changes.
   const fieldErrors: Record<string, string> = useMemo(
-    () => (readOnly ? {} : featureErrors(feature)),
-    [readOnly, feature],
+    () => (readOnly || !showErrors ? {} : featureErrors(feature)),
+    [readOnly, showErrors, feature],
   );
   const err = (key: string): string | undefined => fieldErrors[key];
 

@@ -7,7 +7,8 @@ describe('formatSubmitValidation', () => {
     expect(formatSubmitValidation('frep.submit.biodiversity.plot.notrees:1,av13')).toEqual({
       title: 'Plots tab',
       detail:
-        'Plot 1 in stratum av13 needs trees entered in the stand table, or change the indicator.',
+        'Plot 1 in stratum av13 has "Trees exist" checked but no stand-table rows. Add at least ' +
+        'one row, or uncheck "Trees exist".',
     });
   });
 
@@ -29,9 +30,11 @@ describe('formatSubmitValidation', () => {
   });
 
   it('handles a bare code with no colon', () => {
+    // The tab is "Opening info" — this message used to name an "Opening tab" that does not exist,
+    // and the title is parsed straight from that prefix.
     expect(formatSubmitValidation('frep.submit.biodiversity.opening')).toEqual({
-      title: 'Opening tab',
-      detail: 'Enter a Location description and save the Opening tab.',
+      title: 'Opening info tab',
+      detail: 'Enter a Location description and save the tab.',
     });
   });
 

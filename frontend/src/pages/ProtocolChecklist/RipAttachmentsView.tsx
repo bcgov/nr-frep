@@ -3,6 +3,7 @@ import { Button, Pagination, SkeletonText, TextArea } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
+import UploadHelp from '@/components/core/UploadHelp';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { AttachmentRow } from '@/types/protocolChecklist';
@@ -391,6 +392,92 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
 
   return (
     <div className="rip-form">
+      {/* Upload card sits ABOVE the list: the tab is entered to add a file far more often than
+          to browse existing ones, and with a full page of attachments the upload controls were
+          below the fold. Keep the order — the list and its pager follow. */}
+      {canManage && (
+        <div className="attach-card">
+          <div className="attach-card__header">Upload files</div>
+          <div className="attach-card__body">
+            <div className="frep-field attach-card__desc">
+              <TextArea
+                id="attach-description"
+                labelText={requiredLabel('Description', true)}
+                rows={3}
+                required
+                invalid={descInvalid || Boolean(descLimitError)}
+                invalidText={descLimitError || 'The description field must be entered.'}
+                value={description}
+                disabled={busy}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (e.target.value.trim()) setDescInvalid(false);
+                }}
+              />
+              <div className="frep-field__footer">
+                <span
+                  className={
+                    descLimitError
+                      ? 'frep-field__counter frep-field__counter--over'
+                      : 'frep-field__counter'
+                  }
+                  aria-live="polite"
+                >
+                  {byteLength(description)} / {DESCRIPTION_LIMIT}
+                </span>
+              </div>
+            </div>
+            <div
+              className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!busy) setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length > 0 && !busy) void handleUpload(files);
+              }}
+            >
+              <span className="attach-drop__icon">
+                <Upload size={24} />
+              </span>
+              <div className="attach-drop__copy">
+                <p className="attach-drop__text">
+                  Select or drag and drop files to upload. The description above applies to every
+                  file in the batch.
+                </p>
+                {/* Driven by the same constants rejectionReason validates against, so the help
+                    can't claim a format or size the uploader would then refuse. */}
+                <UploadHelp maxMb={MAX_ATTACHMENT_MB} formats={ALLOWED_ATTACHMENT_EXTENSIONS} />
+              </div>
+              <Button
+                kind="primary"
+                size="lg"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse files
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ALLOWED_ATTACHMENT_ACCEPT}
+                multiple
+                hidden
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) void handleUpload(files);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <table className="rip-field-grid">
           <thead>
@@ -399,7 +486,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
               <th scope="col">File</th>
               <th scope="col">Description</th>
               <th scope="col">Type</th>
-              <th scope="col" aria-label="Actions" />
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -490,84 +577,6 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             void refreshRows(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
           }}
         />
-      )}
-
-      {canManage && (
-        <div className="attach-card">
-          <div className="attach-card__header">Upload files</div>
-          <div className="attach-card__body">
-            <div className="frep-field attach-card__desc">
-              <TextArea
-                id="attach-description"
-                labelText={requiredLabel('Description', true)}
-                rows={3}
-                required
-                invalid={descInvalid || Boolean(descLimitError)}
-                invalidText={descLimitError || 'The description field must be entered.'}
-                value={description}
-                disabled={busy}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  if (e.target.value.trim()) setDescInvalid(false);
-                }}
-              />
-              <div className="frep-field__footer">
-                <span
-                  className={
-                    descLimitError
-                      ? 'frep-field__counter frep-field__counter--over'
-                      : 'frep-field__counter'
-                  }
-                  aria-live="polite"
-                >
-                  {byteLength(description)} / {DESCRIPTION_LIMIT}
-                </span>
-              </div>
-            </div>
-            <div
-              className={`attach-drop${dragOver ? ' attach-drop--over' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!busy) setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                const files = Array.from(e.dataTransfer.files ?? []);
-                if (files.length > 0 && !busy) void handleUpload(files);
-              }}
-            >
-              <span className="attach-drop__icon">
-                <Upload size={24} />
-              </span>
-              <p className="attach-drop__text">
-                Select or drag and drop files to upload. The description above applies to every file
-                in the batch.
-              </p>
-              <Button
-                kind="primary"
-                size="lg"
-                disabled={busy}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Browse files
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={ALLOWED_ATTACHMENT_ACCEPT}
-                multiple
-                hidden
-                onChange={(e) => {
-                  const files = Array.from(e.target.files ?? []);
-                  if (files.length > 0) void handleUpload(files);
-                  e.target.value = '';
-                }}
-              />
-            </div>
-          </div>
-        </div>
       )}
 
       {preview && (

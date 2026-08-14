@@ -57,15 +57,23 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Whether a save has been attempted on this edit. Errors stay hidden until then — see below.
+  const [showErrors, setShowErrors] = useState(false);
 
-  // Inline validation runs live off the edited data (like SiteDetail): a field's error shows the
-  // moment it's invalid and clears as soon as it's fixed. The Save handler just blocks while any
-  // remain — no separate error toast.
-  const fieldErrors = useMemo<Record<string, string>>(
+  // Validation runs live off the edited data, but is only *displayed* once the user has tried to
+  // save. Opening a record that is merely incomplete (no evaluation date, no location description)
+  // would otherwise greet the user with a wall of red before they have typed anything.
+  //
+  // `allErrors` drives the save guard, `fieldErrors` drives the rendering. Keeping the rendered
+  // name unchanged means every `invalid` / `invalidText` site below is gated automatically, with no
+  // chance of one being missed. After the first save attempt the errors are live again, so each
+  // clears the moment it is fixed.
+  const allErrors = useMemo<Record<string, string>>(
     () => (editing && data ? validateOpening(data) : {}),
     [editing, data],
   );
-  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const hasErrors = Object.keys(allErrors).length > 0;
+  const fieldErrors = showErrors ? allErrors : {};
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -137,7 +145,9 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const handleSave = async () => {
     if (!data) return;
-    // Errors are already shown inline; just block the save while any remain (no error toast).
+    // Reveal any errors now: this is the first point the user has asked for the form to be
+    // complete. Blocks the save while any remain — no error toast, they are shown inline.
+    setShowErrors(true);
     if (hasErrors) return;
     setBusy(true);
     try {
@@ -161,6 +171,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       const fresh = await API.protocolChecklist.getBiodiversityOpening(checklistId);
       setData(fresh);
+      setShowErrors(false);
       setEditing(true);
     } catch (err) {
       reportError("We couldn't load the opening", err);
@@ -171,6 +182,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const cancel = () => {
     loadData();
+    setShowErrors(false);
     setEditing(false);
   };
 
@@ -280,9 +292,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           )}
         </span>
         {fieldErrors.teamLeadNameId && (
-          <span style={{ color: 'var(--cds-text-error)', fontSize: '0.75rem' }}>
-            {fieldErrors.teamLeadNameId}
-          </span>
+          <div className="protocol-checklist__field-error">{fieldErrors.teamLeadNameId}</div>
         )}
       </div>
     );

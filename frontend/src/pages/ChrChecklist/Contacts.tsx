@@ -15,7 +15,6 @@ import { CodeSelect, DateField, IndicatorCheckbox, TextField } from '@/pages/Chr
 import type { Contact } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
-import { useNotification } from '@/context/notification/useNotification';
 import { CONTACT_ROLE_CODES } from '@/pages/ChrChecklist/codeLists';
 
 const roleLabel = (code?: string) =>
@@ -38,33 +37,38 @@ const Contacts: FC<{
   busy: boolean;
 }> = ({ contacts, onSave, readOnly, busy }) => {
   const confirm = useConfirm();
-  const { display } = useNotification();
   const [form, setForm] = useState<FormState | null>(null);
+  // Errors stay hidden until a save is attempted, matching the other CHR tabs.
+  const [showErrors, setShowErrors] = useState(false);
 
-  const openAdd = () =>
+  const openAdd = () => {
+    setShowErrors(false);
     setForm({ index: null, draft: { contactedInd: 'false', attendingOnSiteInd: 'false' } });
-  const openEdit = (index: number) => setForm({ index, draft: { ...contacts[index] } });
+  };
+  const openEdit = (index: number) => {
+    setShowErrors(false);
+    setForm({ index, draft: { ...contacts[index] } });
+  };
   const setField = (patch: Partial<Contact>) =>
     setForm((f) => (f ? { ...f, draft: { ...f.draft, ...patch } } : f));
+
+  // Nothing meaningful entered — don't persist a blank contact. No field is individually required
+  // (every column on CHR_CHECKLIST_PARTICIPANT/_PARTICIPATION that this form writes is nullable, and
+  // neither the section save nor submit validation requires a contact at all), so this is the one
+  // rule the form has, and it is form-level rather than per-field: marking any single input invalid
+  // would name the wrong culprit.
+  const isEmpty = (draft: Contact): boolean =>
+    !draft.firstName?.trim() &&
+    !draft.lastName?.trim() &&
+    !draft.roleCode?.trim() &&
+    !draft.organization?.trim();
 
   const save = async () => {
     if (!form) return;
     const { draft } = form;
-    // Nothing meaningful entered — don't persist a blank contact (mirrors SiteDetail's guard).
-    const isEmpty =
-      !draft.firstName?.trim() &&
-      !draft.lastName?.trim() &&
-      !draft.roleCode?.trim() &&
-      !draft.organization?.trim();
-    if (isEmpty) {
-      display({
-        kind: 'info',
-        title: 'Nothing to save',
-        subtitle: 'Enter a name, role, or organization before saving the contact.',
-        timeout: 6000,
-      });
-      return;
-    }
+    // First point the user has asked for the contact to be complete — reveal the error now.
+    setShowErrors(true);
+    if (isEmpty(draft)) return;
     const next =
       form.index === null
         ? [...contacts, draft]
@@ -94,12 +98,25 @@ const Contacts: FC<{
               Save
             </Button>
           )}
-          <Button kind="ghost" size="lg" disabled={busy} onClick={() => setForm(null)}>
+          <Button
+            kind="ghost"
+            size="lg"
+            disabled={busy}
+            onClick={() => {
+              setShowErrors(false);
+              setForm(null);
+            }}
+          >
             Cancel
           </Button>
         </div>
         <fieldset className="rip-form__group">
           <legend>{form.index === null ? 'New contact' : 'Edit contact'}</legend>
+          {showErrors && isEmpty(draft) && (
+            <p className="chr-checklist__form-error">
+              Enter a name, role, or organization before saving the contact.
+            </p>
+          )}
           <div className="rip-form__grid chr-checklist__contacts-grid">
             <TextField
               id="contact-first"

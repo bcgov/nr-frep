@@ -94,7 +94,7 @@ describe('BioStratumView', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
-  it('shows a live inline error for a 0-plot non-patch stratum and blocks save', async () => {
+  it('hides the 0-plot error until Save is clicked, then shows it and blocks the save', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.getBioStratum.mockResolvedValue({
       stratumId: 'S1',
@@ -114,11 +114,15 @@ describe('BioStratumView', () => {
     render(<BioStratumView checklistId="9001" canEdit submitted={false} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    // The error appears live on entering edit (before any Save click).
+    // The form opens clean: an incomplete record must not greet the user with errors it has not
+    // been asked to fix yet.
+    expect(screen.queryByText('A stratum with 0 plots must be a patch stratum type.')).toBeNull();
+
+    // Save is the point the user asserts the form is complete — errors surface then, and block it.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(
       await screen.findByText('A stratum with 0 plots must be a patch stratum type.'),
     ).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioStratum).not.toHaveBeenCalled();
   });
 

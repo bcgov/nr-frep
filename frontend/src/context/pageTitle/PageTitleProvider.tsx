@@ -2,14 +2,13 @@ import { useState, useEffect, type ReactNode, useCallback } from 'react';
 
 import { PageTitleContext } from './PageTitleContext';
 
-import { env } from '@/env';
+import { APP_NAME } from '@/constants/appName';
 
 export const PageTitleProvider = ({ children }: { children: ReactNode }) => {
   const [pageTitle, setPageTitleState] = useState(document.title);
   const [currentHierarchy, setCurrentHierarchy] = useState(0);
 
-  const resolveName = (title: string) =>
-    [env.VITE_APP_NAME, title].join(' - ') ?? env.VITE_APP_NAME;
+  const resolveName = (title: string) => [APP_NAME, title].join(' - ');
 
   const setPageTitle = useCallback(
     (title: string, hierarchy?: 1 | 2 | 3) => {

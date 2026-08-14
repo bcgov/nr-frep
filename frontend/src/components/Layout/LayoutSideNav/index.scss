@@ -36,3 +36,27 @@
     fill: var(--#{vars.$bcgov-prefix}-link-primary);
   }
 }
+
+// Support block pinned to the bottom of the nav. The drawer and its item list are flex columns so
+// `margin-block-start: auto` on the heading pushes it (and the link under it) down, regardless of
+// how many role-dependent entries render above.
+.side-nav-drawer.#{vars.$bcgov-prefix}--side-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.side-nav-drawer .#{vars.$bcgov-prefix}--side-nav__items {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+// padding-inline-start matches Carbon's 2rem link indent, so the heading lines up with the labels
+// above it rather than with the icons.
+.side-nav-support-heading {
+  margin-block-start: auto;
+  padding-block: 0 0.25rem;
+  padding-inline: 2rem 1rem;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+  @include type.type-style('label-01');
+}

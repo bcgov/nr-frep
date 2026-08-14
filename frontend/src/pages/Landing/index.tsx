@@ -12,6 +12,7 @@ import useBreakpoint from '@/hooks/useBreakpoint';
 import type { BreakpointType } from '@/hooks/useBreakpoint/types';
 import type { FC } from 'react';
 
+import { APP_NAME } from '@/constants/appName';
 import { useAuth } from '@/context/auth/useAuth';
 import { useTheme } from '@/context/theme/useTheme';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -61,7 +62,7 @@ const LandingPage: FC = () => {
             </div>
 
             <h1 data-testid="landing-title" className="landing-title">
-              FREP IMS
+              {APP_NAME}
             </h1>
 
             <h2 data-testid="landing-subtitle" className="landing-subtitle">

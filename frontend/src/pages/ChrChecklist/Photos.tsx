@@ -12,6 +12,13 @@ import type { Picture } from '@/types/chrChecklist';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { ATTACHMENT_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import {
+  ALLOWED_ATTACHMENT_ACCEPT,
+  ALLOWED_ATTACHMENT_EXTENSIONS,
+  isAllowedAttachmentExtension,
+  isPreviewableFile,
+  isPreviewableRecord,
+} from '@/utils/attachmentTypes';
 import { formatShortDate } from '@/utils/date';
 import { overLimitError } from '@/utils/textLimits';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, dataUrlByteLength, formatMb } from '@/utils/uploadLimits';
@@ -27,9 +34,13 @@ const photoSrc = (picture: Picture): string | undefined => {
   const code = picture.code;
   if (!code) return undefined;
   if (code.startsWith('data:')) return code;
-  const mime = picture.mimeTypeCode?.includes('image/')
-    ? picture.mimeTypeCode
-    : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`;
+  // mediaType is the real one; mimeTypeCode keeps its legacy "image/<code>" shape because the
+  // object-storage key is derived from it. Fall back for offline copies written before mediaType.
+  const mime =
+    picture.mediaType ||
+    (picture.mimeTypeCode?.includes('image/')
+      ? picture.mimeTypeCode
+      : `image/${(picture.mimeTypeCode || 'jpeg').toLowerCase()}`);
   return `data:${mime};base64,${code}`;
 };
 
@@ -38,17 +49,6 @@ const photoSrc = (picture: Picture): string | undefined => {
 const MAX_WIDTH = 800;
 const MAX_HEIGHT = 1200;
 const JPEG_QUALITY = 0.7;
-
-/**
- * Photo formats CHR accepts, as extensions (for the help text) and MIME types (the picker's
- * `accept`). One source for both, so the help can't advertise a format the picker won't offer.
- *
- * Mirrors ALLOWED_IMAGE_CODES server-side. TIFF is absent deliberately: browsers can't decode it,
- * so the downscale below would silently keep the full-resolution original and no thumbnail would
- * ever render.
- */
-const PHOTO_EXTENSIONS = ['jpg', 'png', 'gif', 'bmp'] as const;
-const PHOTO_ACCEPT = 'image/jpeg,image/png,image/gif,image/bmp';
 
 const readDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -75,7 +75,10 @@ const processFile = async (
   file: File,
 ): Promise<{ code: string; mimeTypeCode: string; fileName: string }> => {
   const original = await readDataUrl(file);
-  if (!file.type.startsWith('image/')) {
+  // Gate on the extension, not file.type: a TIFF reports image/tiff and would reach the canvas, fail
+  // to decode, and fall through the catch below having read the whole file for nothing. Everything
+  // not previewable is stored as uploaded — which is the correct behaviour for a document anyway.
+  if (!isPreviewableFile(file.name)) {
     return { code: original, mimeTypeCode: file.type, fileName: file.name };
   }
   try {
@@ -165,7 +168,11 @@ const Photos: FC<{
   }, []);
 
   useEffect(() => {
-    const pending = pictures.filter((p) => p.id && !p.code && !requested.current.has(p.id));
+    // Only for files a browser can render: fetching a 40 MB TIFF or a PDF to build a thumbnail that
+    // can never display is pure waste, and it is what the Biodiversity tab has always avoided.
+    const pending = pictures.filter(
+      (p) => p.id && !p.code && isPreviewableRecord(p) && !requested.current.has(p.id),
+    );
     if (pending.length === 0) return;
     pending.forEach((p) => requested.current.add(p.id as string));
 
@@ -198,7 +205,9 @@ const Photos: FC<{
 
   /** A photo's src: its own bytes when it has them, otherwise the fetched object URL. */
   const resolveSrc = (picture: Picture): string | undefined =>
-    photoSrc(picture) ?? (picture.id ? fetched[picture.id] : undefined);
+    isPreviewableRecord(picture)
+      ? (photoSrc(picture) ?? (picture.id ? fetched[picture.id] : undefined))
+      : undefined;
 
   const [description, setDescription] = useState('');
   const [descriptionInvalid, setDescriptionInvalid] = useState(false);
@@ -219,19 +228,26 @@ const Photos: FC<{
     // database would reject at the end of it.
     if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description)) return;
     setDescriptionInvalid(false);
-    // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
-    // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
-    // accept={PHOTO_ACCEPT}, but drag-and-drop bypasses it — so re-check here.
-    // TIFF is excluded: browsers can't decode it, so the downscale below would silently keep the
-    // full-resolution original and it could never render. Matches ALLOWED_IMAGE_CODES server-side.
-    const images = files.filter(
-      (file) => file.type.startsWith('image/') && !file.type.includes('tif'),
-    );
+    // Photos are image-only. The database used to enforce this as well (a 3-char MIME_TYPE_CODE with
+    // a FK to the shared code table, so a non-image failed on save); that FK is gone, so the app is
+    // the only guard. The native picker uses an accept list, but drag-and-drop bypasses it — the
+    // drop handler feeds this function directly — so re-check here for a friendly message.
+    //
+    // Checked by EXTENSION against the same configured list Biodiversity attachments use, mirroring
+    // the server's AttachmentTypes.isAllowed. The previous check tested file.type instead, which was
+    // wrong twice over: file.type is empty for some drag sources, so real files were silently
+    // skipped; and startsWith('image/') admitted formats the server rejected.
+    const images = files.filter((file) => {
+      const ext = file.name.includes('.') ? file.name.split('.').pop()! : '';
+      return isAllowedAttachmentExtension(ext);
+    });
     if (images.length < files.length) {
       display({
         kind: 'error',
-        title: 'Only image files can be uploaded',
-        subtitle: 'Photos must be image files (JPG, PNG, GIF, BMP). Other files were skipped.',
+        title: 'Some files were not uploaded',
+        subtitle:
+          `Allowed types: ${ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => e.toUpperCase()).join(', ')}. ` +
+          'Other files were skipped.',
         timeout: 8000,
       });
     }
@@ -262,8 +278,8 @@ const Photos: FC<{
         .join(', ');
       display({
         kind: 'error',
-        title: tooLarge.length === 1 ? 'Photo is too large' : 'Some photos are too large',
-        subtitle: `Maximum ${MAX_UPLOAD_MB} MB per photo. Skipped: ${names}.`,
+        title: tooLarge.length === 1 ? 'File is too large' : 'Some files are too large',
+        subtitle: `Maximum ${MAX_UPLOAD_MB} MB per file. Skipped: ${names}.`,
         timeout: 9000,
       });
     }
@@ -280,8 +296,8 @@ const Photos: FC<{
   const removeAt = async (index: number) => {
     if (
       !(await confirm({
-        title: 'Delete photo?',
-        message: "Delete this photo? This can't be undone.",
+        title: 'Delete attachment?',
+        message: "Delete this attachment? This can't be undone.",
       }))
     )
       return;
@@ -293,7 +309,7 @@ const Photos: FC<{
     if (!src) return;
     const link = document.createElement('a');
     link.href = src;
-    link.download = picture.fileName || `photo-${picture.id ?? ''}`;
+    link.download = picture.fileName || `attachment-${picture.id ?? ''}`;
     link.click();
   };
 
@@ -330,7 +346,7 @@ const Photos: FC<{
                   disabled={busy}
                   limit={ATTACHMENT_TEXT_LIMITS.description}
                   invalid={descriptionInvalid}
-                  invalidText="Enter a description before uploading a photo."
+                  invalidText="Enter a description before uploading a file."
                   onChange={(v) => {
                     setDescription(v);
                     if (v.trim()) setDescriptionInvalid(false);
@@ -359,7 +375,7 @@ const Photos: FC<{
                 <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
                 {/* Driven by the same constants the picker and the size guard use, so the help
                     can't claim a format or size the upload would then refuse. */}
-                <UploadHelp maxMb={MAX_UPLOAD_MB} formats={PHOTO_EXTENSIONS} />
+                <UploadHelp maxMb={MAX_UPLOAD_MB} formats={ALLOWED_ATTACHMENT_EXTENSIONS} />
               </div>
               <Button
                 kind="primary"
@@ -372,7 +388,7 @@ const Photos: FC<{
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={PHOTO_ACCEPT}
+                accept={ALLOWED_ATTACHMENT_ACCEPT}
                 capture="environment"
                 multiple
                 hidden
@@ -413,19 +429,20 @@ const Photos: FC<{
                         onClick={() =>
                           setPreview({
                             src,
-                            alt: picture.description || picture.fileName || `Photo ${index + 1}`,
+                            alt:
+                              picture.description || picture.fileName || `Attachment ${index + 1}`,
                           })
                         }
                       >
                         <img
                           className="chr-checklist__thumb image-thumb--clickable"
                           src={src}
-                          alt={picture.description || picture.fileName || `Photo ${index + 1}`}
+                          alt={picture.description || picture.fileName || `Attachment ${index + 1}`}
                         />
                       </button>
                     ) : (
                       <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
-                        {picture.fileName || 'Saved photo'}
+                        {picture.fileName || 'Saved file'}
                       </span>
                     )}
                   </td>

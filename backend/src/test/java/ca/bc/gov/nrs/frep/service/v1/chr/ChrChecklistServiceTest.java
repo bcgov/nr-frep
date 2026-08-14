@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
@@ -63,6 +64,9 @@ class ChrChecklistServiceTest {
   @BeforeEach
   void setUp() {
     service = new ChrChecklistService(
+        new AttachmentTypes(
+            "BMP,CSV,DOC,DOCX,GIF,HTM,IFM,JPG,JPK,MDB,MDE,MP4,OBD,PDF,PNG,PPS,PPT,PPTX,RPT,RTF,TIF,"
+                + "TIFF,TXT,WAV,WEBP,XLD,XLS,XLSX,XML,ZIP"),
         persistenceService,
         checklistRepository,
         submitValidationService,
@@ -177,16 +181,60 @@ class ChrChecklistServiceTest {
   }
 
   @Test
-  void addPhotoRejectsANonImageFile() {
+  void addPhotoRejectsAFileTypeThatIsNotOnTheConfiguredList() {
+    // "Not an image" is no longer the rule — CHR takes the same list as Biodiversity attachments —
+    // but a type that is on neither is still refused, and the message names what is allowed.
     when(checklistRepository.getChecklistStatus(1001L))
         .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
-    MockMultipartFile notAnImage =
-        new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[] {1, 2, 3});
+    MockMultipartFile executable =
+        new MockMultipartFile("file", "tool.exe", "application/octet-stream", new byte[] {1, 2, 3});
 
     InvalidParameterException ex = assertThrows(InvalidParameterException.class,
-        () -> service.addPhoto(1001L, notAnImage, "A description", null, null, null));
+        () -> service.addPhoto(1001L, executable, "A description", null, null, null));
 
-    assertTrue(ex.getMessage().contains("Only image files"));
+    assertTrue(ex.getMessage().contains("Unsupported file type .exe"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("Allowed types:"), ex.getMessage());
+  }
+
+  @Test
+  void addPhotoJudgesTheFileByItsExtensionNotTheBrowsersContentTypeClaim() {
+    // The previous check tested file.type, which is empty for some drag sources and for formats the
+    // OS has no mapping for — so a perfectly good photo was silently refused. The extension is also
+    // what gets stored as MIME_TYPE_CODE, so it is the value that actually has to be legal.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    MockMultipartFile noContentType =
+        new MockMultipartFile("file", "site.jpg", "", new byte[] {1, 2, 3});
+
+    assertDoesNotThrow(
+        () -> service.addPhoto(1001L, noContentType, "A photo", "2026-08-14", null, null));
+  }
+
+  @Test
+  void addPhotoAcceptsAnImageFormatEnabledByTheSharedVariable() {
+    // CHR photos draw from the same ATTACHMENT_ALLOWED_TYPES list as Biodiversity attachments, so
+    // enabling WEBP there enables it here — no second list to update.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    MockMultipartFile webp =
+        new MockMultipartFile("file", "site.webp", "image/webp", new byte[] {1, 2, 3});
+
+    assertDoesNotThrow(() -> service.addPhoto(1001L, webp, "A photo", "2026-08-14", null, null));
+  }
+
+  @Test
+  void addPhotoAcceptsTheSameTypesAsBiodiversityAttachments() {
+    // One ATTACHMENT_ALLOWED_TYPES list, no per-protocol subset. TIFF and PDF upload here exactly as
+    // they do on the attachments tab; whether they can be *previewed* is a separate question the
+    // client answers, and neither can be.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+
+    for (String name : new String[] {"scan.tiff", "permit.pdf", "survey.zip", "clip.mp4"}) {
+      MockMultipartFile file = new MockMultipartFile("file", name, "", new byte[] {1, 2, 3});
+      assertDoesNotThrow(() -> service.addPhoto(1001L, file, "A file", "2026-08-14", null, null),
+          name + " should be accepted");
+    }
   }
 
   @Test

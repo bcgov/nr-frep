@@ -23,6 +23,17 @@ public class Picture {
   private String code;
   @JsonProperty("mimeTypeCode")
   private String mimeTypeCode;
+
+  /**
+   * The real media type, e.g. {@code image/jpeg} or {@code application/pdf}.
+   *
+   * <p>Separate from {@link #mimeTypeCode}, which stays {@code "image/" + <stored code>} for
+   * compatibility: the object-storage key is derived from it by stripping that prefix, so changing
+   * its shape would make every photo's bytes unfindable. A CHR photo can now be any allowed type,
+   * and {@code image/pdf} is not a media type — the client builds its data: URLs from this field.
+   */
+  @JsonProperty("mediaType")
+  private String mediaType;
   /** The feature this photo documents (CHR_CHECKLIST_ATTACHMENT.CHR_FEATURE_ID); null if none. */
   @JsonProperty("featureId")
   private String featureId;
@@ -80,6 +91,14 @@ public class Picture {
 
   public String getMimeTypeCode() {
     return mimeTypeCode;
+  }
+
+  public String getMediaType() {
+    return mediaType;
+  }
+
+  public void setMediaType(String mediaType) {
+    this.mediaType = mediaType;
   }
 
   public void setMimeTypeCode(String mimeTypeCode) {

@@ -12,6 +12,11 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import {
+  ALLOWED_ATTACHMENT_ACCEPT,
+  ALLOWED_ATTACHMENT_EXTENSIONS,
+  isAllowedAttachmentExtension,
+} from '@/utils/attachmentTypes';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits';
 
@@ -46,47 +51,6 @@ type Props = {
   canEdit: boolean;
   submitted: boolean;
 };
-
-// Allowed attachment extensions = the codes in THE.MIME_TYPE_CODE (keyed by extension). The
-// FREP_CHECKLIST_ATTACHMENTS proc rejects anything else (ORA-01400), so guard here for a friendly
-// message + native picker filter. The backend re-validates authoritatively.
-// docx/xlsx/pptx/tiff/webp depend on the nr-mof-db migration that widens MIME_TYPE_CODE from 3 to
-// 6 (on the code table and on BIODIVERSITY_CHKLST_ATTACH) and seeds those codes — offering them in
-// the picker before that DDL is deployed just moves the failure to the end of the upload. Keep in
-// step with ALLOWED_ATTACHMENT_TYPES in ProtocolChecklistService.
-const ALLOWED_ATTACHMENT_EXTENSIONS = [
-  'bmp',
-  'csv',
-  'doc',
-  'docx',
-  'gif',
-  'htm',
-  'ifm',
-  'jpg',
-  'jpk',
-  'mdb',
-  'mde',
-  'mp4',
-  'obd',
-  'pdf',
-  'png',
-  'pps',
-  'ppt',
-  'pptx',
-  'rpt',
-  'rtf',
-  'tif',
-  'tiff',
-  'txt',
-  'wav',
-  'webp',
-  'xld',
-  'xls',
-  'xlsx',
-  'xml',
-  'zip',
-];
-const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
 /**
  * Extensions that get the "trim or compress" hint when they exceed the size cap.
@@ -261,8 +225,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
    */
   const rejectionReason = (file: File): string | null => {
     const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
-    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
-      return ext ? `".${ext}" is not a supported type` : 'has no file extension';
+    // An extensionless file is refused whatever the configured list says — the extension IS the
+    // stored MIME_TYPE_CODE, and the column is NOT NULL, so it could never be saved.
+    if (!ext) return 'has no file extension';
+    if (!isAllowedAttachmentExtension(ext)) {
+      return `".${ext}" is not a supported type`;
     }
     if (file.size === 0) return 'is empty';
     if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -307,7 +274,8 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     if (rejected.length > 0) {
       display({
         kind: 'error',
-        title: rejected.length === 1 ? "Can't upload that file" : `Skipped ${rejected.length} files`,
+        title:
+          rejected.length === 1 ? "Can't upload that file" : `Skipped ${rejected.length} files`,
         subtitle: rejected.map((r) => `"${r.file.name}" ${r.reason}`).join('; '),
         timeout: 9000,
       });
@@ -398,7 +366,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       return;
     setBusy(true);
     try {
-      await API.protocolChecklist.deleteAttachment(protocol, checklistId, row.checklistAttachmentId);
+      await API.protocolChecklist.deleteAttachment(
+        protocol,
+        checklistId,
+        row.checklistAttachmentId,
+      );
       await refreshRows();
       display({ kind: 'success', title: 'Attachment removed', timeout: 4000 });
     } catch (err) {

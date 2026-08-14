@@ -22,6 +22,7 @@ import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.io.IOException;
@@ -54,18 +55,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ProtocolChecklistService {
 
-  // Allowed attachment types = the codes in THE.MIME_TYPE_CODE (keyed by file extension). The
-  // FREP_CHECKLIST_ATTACHMENTS proc stores only these and rejects anything else with an ORA-01400
-  // (NULL mime_type_code). Guard here so an unsupported type is a clean 400 instead of a 500.
-  // ⚠️ DOCX/XLSX/PPTX/TIFF/WEBP REQUIRE THE COLUMN-WIDENING MIGRATION. The extension is stored
-  // verbatim as MIME_TYPE_CODE, which was VARCHAR2(3 BYTE); a nr-mof-db migration widens it to 6
-  // (on THE.MIME_TYPE_CODE *and* on BIODIVERSITY_CHKLST_ATTACH / CHR_CHECKLIST_ATTACHMENT) and
-  // seeds the five codes. Until that DDL is deployed to the target environment these five uploads
-  // fail — ORA-12899 if the child column is still 3, ORA-02291 if the code row is missing.
-  // MP4 is accepted for short, compressed clips. The 15 MB cap is expected to bite on video — an
-  // untrimmed phone recording is roughly ten seconds of 1080p, two of 4K — and that is deliberate:
-  // the cap is the forcing function that keeps users compressing before they attach, so do NOT
-  // raise it in response to "the video is too big". The client names the fix in its rejection
+  // Which file types FREP accepts is CONFIGURATION, not code — see AttachmentTypes, bound from
+  // frep.attachments.allowed-types (env ATTACHMENT_ALLOWED_TYPES, set from a GitHub variable).
+  // Adding a format is a variable edit and a redeploy: there is no database change (FREP no longer
+  // validates the type against THE.MIME_TYPE_CODE — the extension we send is stored verbatim) and
+  // no code change. The frontend picker reads the same list via VITE_ATTACHMENT_TYPES.
+  //
+  // MP4 is on the shipped list for short, compressed clips. The 15 MB cap is expected to bite on
+  // video — an untrimmed phone recording is roughly ten seconds of 1080p, two of 4K — and that is
+  // deliberate: the cap is the forcing function that keeps users compressing before they attach, so
+  // do NOT raise it in response to "the video is too big". The client names the fix in its rejection
   // message (VIDEO_EXTENSIONS in RipAttachmentsView).
   //
   // It could not safely be raised regardless: the ClamAV scan, the object-storage write and the
@@ -73,13 +72,6 @@ public class ProtocolChecklistService {
   // -XX:+ExitOnOutOfMemoryError, so a larger cap trades a rejected upload for a killed pod — one
   // that takes out every other user's request, not just the uploader's. Lifting it would mean
   // streaming (scan(InputStream) + RequestBody.fromInputStream), which is a different piece of work.
-  private static final Set<String> ALLOWED_ATTACHMENT_TYPES = Set.of(
-      "BMP", "CSV", "DOC", "DOCX", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "MP4", "OBD",
-      "PDF", "PNG", "PPS", "PPT", "PPTX", "RPT", "RTF", "TIF", "TIFF", "TXT", "WAV", "WEBP", "XLD",
-      "XLS", "XLSX", "XML", "ZIP");
-  private static final String ALLOWED_ATTACHMENT_TYPES_DISPLAY =
-      "BMP, CSV, DOC, DOCX, GIF, HTM, IFM, JPG, JPK, MDB, MDE, MP4, OBD, PDF, PNG, PPS, PPT, PPTX, "
-          + "RPT, RTF, TIF, TIFF, TXT, WAV, WEBP, XLD, XLS, XLSX, XML, ZIP";
 
   // Numeric-format guards for user-supplied field values.
   //
@@ -104,6 +96,7 @@ public class ProtocolChecklistService {
   /** Hard cap on attachment rows returned per call; matches SearchService / OpeningTargetService. */
   private static final int MAX_PAGE_SIZE = 100;
 
+  private final AttachmentTypes attachmentTypes;
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
@@ -113,6 +106,7 @@ public class ProtocolChecklistService {
   private final ObjectStorageService objectStorage;
 
   public ProtocolChecklistService(
+      AttachmentTypes attachmentTypes,
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
@@ -121,6 +115,7 @@ public class ProtocolChecklistService {
       VirusScanner virusScanner,
       ObjectStorageService objectStorage
   ) {
+    this.attachmentTypes = attachmentTypes;
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
@@ -788,10 +783,42 @@ public class ProtocolChecklistService {
   /** A page of attachment metadata plus the total, for the pager. */
   public record AttachmentPage(List<AttachmentRow> attachments, int totalCount) {}
 
+  /**
+   * One attachment's bytes, with its media type resolved here rather than trusted from the database.
+   *
+   * <p>The proc's {@code p_mime_type} out-parameter comes from an OUTER join to
+   * {@code THE.MIME_TYPE_CODE}, which FREP no longer populates, so it is NULL for any type added
+   * after the decoupling. {@link AttachmentTypes} is the source of truth; the stored value is used
+   * only as a fallback for a row whose format is no longer on the configured list.
+   */
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {
-    return writeRepository.getAttachmentContent(
+    AttachmentContent content = writeRepository.getAttachmentContent(
         checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
+    return new AttachmentContent(
+        content.fileName(), mediaTypeFor(content.fileName(), content.mimeType()), content.data());
+  }
+
+  /**
+   * The media type to label a download with: the extension's registered type, else whatever the
+   * database held, else a generic binary type — never null, since the client builds a data URL from
+   * this and a null there yields an undecodable {@code data:WEBP;base64,...}.
+   */
+  private String mediaTypeFor(String fileName, String storedMimeType) {
+    String extension = extensionOf(fileName);
+    if (attachmentTypes.isAllowed(extension)) {
+      return attachmentTypes.mediaType(extension);
+    }
+    // Not a currently-allowed type: an older row whose format has since been removed from the list.
+    // Keep whatever the database held rather than mislabelling it, and only invent a type when it
+    // has none — the client cannot build a data: URL from null.
+    return StringUtils.isBlank(storedMimeType) ? "application/octet-stream" : storedMimeType;
+  }
+
+  /** Uppercased extension of {@code fileName}, or "" when it has none. */
+  private static String extensionOf(String fileName) {
+    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
+    return dot < 0 || dot == fileName.length() - 1 ? "" : fileName.substring(dot + 1).toUpperCase();
   }
 
   /**
@@ -812,8 +839,14 @@ public class ProtocolChecklistService {
     virusScanner.scanOrThrow(bytes, fileName);
     // Resource type comes from the record, not the {protocol} path segment (SLB legacy / SLR
     // go-forward) — see the section comment above.
+    // Our media type, not file.getContentType(). The browser's claim varies by OS and browser for
+    // the same format (and is blank for the legacy MoF types), so storing it made the object's
+    // Content-Type inconsistent across uploads of the same extension — and it is client-supplied.
+    // This value is what object storage records, so anything reading the bucket directly gets a
+    // correct type without a database or a lookup table in the path.
     writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
-        fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+        fileName, description, attachmentTypes.mediaType(extensionOf(fileName)), bytes,
+        loggedUserHelper.getLoggedUserId());
   }
 
   /** Pull the spooled upload into heap, turning the I/O failure into a clean 400 rather than a 500. */
@@ -826,15 +859,13 @@ public class ProtocolChecklistService {
     }
   }
 
-  /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
-  private static void validateAttachmentType(String fileName) {
-    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
-    String ext = (dot < 0 || dot == fileName.length() - 1)
-        ? "" : fileName.substring(dot + 1).toUpperCase();
-    if (!ALLOWED_ATTACHMENT_TYPES.contains(ext)) {
+  /** Reject file types that are not on the configured allow-list (see {@link AttachmentTypes}). */
+  private void validateAttachmentType(String fileName) {
+    String ext = extensionOf(fileName);
+    if (!attachmentTypes.isAllowed(ext)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "Unsupported file type" + (ext.isEmpty() ? "" : " ." + ext.toLowerCase())
-              + ". Allowed types: " + ALLOWED_ATTACHMENT_TYPES_DISPLAY + ".");
+              + ". Allowed types: " + attachmentTypes.display() + ".");
     }
   }
 

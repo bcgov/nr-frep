@@ -45,6 +45,18 @@ parameters:
   # tzdata package is required on the Alpine base image.
   - name: TZ
     value: America/Vancouver
+  # File types accepted as Biodiversity attachments — a comma-separated extension list, e.g.
+  # "BMP,CSV,PDF,PNG,WEBP". Held as a deployment parameter so adding a format is a GitHub variable
+  # edit plus a redeploy rather than a code change; there is no database side to it since FREP no
+  # longer validates the type against THE.MIME_TYPE_CODE.
+  #
+  # REQUIRED, with no default anywhere: the GitHub variable is the single source of truth. An unset
+  # or empty vars.ATTACHMENT_ALLOWED_TYPES fails here at `oc process`, before anything is rolled out,
+  # which is the earliest and least damaging place to catch it — the running pods keep running. The
+  # backend also refuses to start on a blank value, in case a Deployment is edited by hand.
+  - name: ATTACHMENT_ALLOWED_TYPES
+    description: Comma-separated attachment extensions, e.g. BMP,CSV,PDF,PNG,WEBP
+    required: true
   - name: APP_LOG_LEVEL
     value: INFO
   - name: SPRING_SECURITY_LOG_LEVEL
@@ -192,6 +204,8 @@ objects:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: DATABASE_PASSWORD
+                - name: ATTACHMENT_ALLOWED_TYPES
+                  value: ${ATTACHMENT_ALLOWED_TYPES}
                 - name: APP_LOG_LEVEL
                   value: ${APP_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY

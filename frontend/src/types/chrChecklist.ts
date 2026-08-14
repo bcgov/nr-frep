@@ -24,7 +24,8 @@ export type Picture = {
   date?: string;
   description?: string;
   code?: string; // base64 (no data-URL prefix on save)
-  mimeTypeCode?: string;
+  mimeTypeCode?: string; // legacy "image/<code>" shape; the object-storage key derives from it
+  mediaType?: string; // the real media type, e.g. image/jpeg or application/pdf
   /** The feature this photo documents, if any. Set once at upload; the server resolves the label. */
   featureId?: string;
   featureLabel?: string;

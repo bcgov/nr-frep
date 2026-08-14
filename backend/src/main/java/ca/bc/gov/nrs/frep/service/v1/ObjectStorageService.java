@@ -11,6 +11,7 @@ import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -30,12 +31,21 @@ public class ObjectStorageService {
     }
   }
 
-  public boolean objectExists(String key) {
+  /**
+   * The object's bytes, or {@code null} when the key does not exist.
+   *
+   * <p>Replaces an {@code objectExists} HEAD followed by a GET: one round trip instead of two, and
+   * — more importantly — only a genuine {@code NoSuchKey} is treated as "not there". The HEAD it
+   * replaces caught every exception, so a transient storage failure looked identical to a
+   * not-yet-migrated attachment and silently served the empty Oracle BLOB in its place, handing the
+   * user a 0-byte file. Anything that is not NoSuchKey now propagates.
+   */
+  public byte[] getObjectBytesIfPresent(String key) {
     try (S3Client client = client()) {
-      client.headObject(builder -> builder.bucket(properties.bucket()).key(key));
-      return true;
-    } catch (Exception ex) {
-      return false;
+      return client.getObjectAsBytes(builder -> builder.bucket(properties.bucket()).key(key))
+          .asByteArray();
+    } catch (NoSuchKeyException ex) {
+      return null;
     }
   }
 

@@ -68,8 +68,11 @@ class RestExceptionHandlerTest {
   }
 
   @Test
-  void unrecognisedProcMessageKeepsRawTextAtInternalServerError() {
-    // Fail-safe: an unmapped key must not be swallowed or downgraded to a business rule.
+  void unrecognisedProcMessageIsAGenericFiveHundredWithTheDetailKeptOffScreen() {
+    // Fail-safe: an unmapped key must not be swallowed or downgraded to a business rule — it stays a
+    // 500. What changed is what the evaluator reads: proc names and message keys are internal
+    // vocabulary they can do nothing with, so the raw string is kept for support (debugMessage and
+    // the log) and never shown.
     StoredProcedureException ex = new StoredProcedureException(
         "frep_210_bio_opening", "SAVE", "frep.some.unmapped.key:9;");
 
@@ -77,13 +80,20 @@ class RestExceptionHandlerTest {
 
     assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
     ApiError body = (ApiError) response.getBody();
-    assertTrue(body.getMessage().contains("frep.some.unmapped.key:9;"));
-    assertTrue(body.getMessage().contains("help desk"));
+    assertEquals(
+        "The request could not be completed. If this problem persists please contact the FREP help "
+            + "desk.",
+        body.getMessage());
+    assertFalse(body.getMessage().contains("frep.some.unmapped.key"), body.getMessage());
+    assertFalse(body.getMessage().contains("frep_210_bio_opening"), body.getMessage());
+    // Support still has all of it.
+    assertTrue(body.getDebugMessage().contains("frep.some.unmapped.key:9;"), body.getDebugMessage());
   }
 
   @Test
   void partiallyRecognisedProcMessageIsNotPartlySwallowed() {
-    // All-or-nothing: one unknown segment means the whole raw string is surfaced.
+    // All-or-nothing: one unknown segment must not be reported as though only the known half
+    // happened. It falls to the 500, and the whole raw string is preserved for support.
     StoredProcedureException ex = new StoredProcedureException(
         "frep_checklist_cost_resources", "delete_team_member",
         "frep.evaluatorinfo.delete.evaluator:1,NAR1;frep.brand.new.key;");
@@ -91,7 +101,46 @@ class RestExceptionHandlerTest {
     ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
 
     assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
-    assertTrue(((ApiError) response.getBody()).getMessage().contains("frep.brand.new.key"));
+    ApiError body = (ApiError) response.getBody();
+    assertFalse(body.getMessage().contains("still assigned to this evaluator"), body.getMessage());
+    assertTrue(body.getDebugMessage().contains("frep.brand.new.key"), body.getDebugMessage());
+  }
+
+  @Test
+  void columnOverflowInsideAProcIsA400NotA500() {
+    // The legacy packages wrap their inserts in `EXCEPTION WHEN OTHERS`, which swallows the Oracle
+    // error and hands it back as p_error_message text — so an ORA-12899 written through a proc never
+    // becomes a SQLException and never reaches the generic handlers. SQLERRM is embedded in that
+    // text, which is what makes it recognisable here. Before this, the user got a 500 quoting raw
+    // Oracle at them.
+    StoredProcedureException ex = new StoredProcedureException(
+        "FREP_CHECKLIST_ATTACHMENTS", "GET_BLOB_FOR_UPDATE",
+        "sil.web.usr.database.unexpected:FREP_Checklist_Attachments,GET_BLOB_FOR_UPDATE,-12899,"
+            + "ORA-12899: value too large for column "
+            + "\"THE\".\"BIODIVERSITY_CHKLST_ATTACH\".\"MIME_TYPE_CODE\" (actual: 11, maximum: 10);");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
+    ApiError body = (ApiError) response.getBody();
+    assertTrue(body.getMessage().contains("too long"), body.getMessage());
+    assertTrue(body.getMessage().contains("10"), body.getMessage());
+    assertTrue(body.getMessage().contains("11"), body.getMessage());
+    // Raw Oracle text and the help-desk suffix are both wrong here: the user can fix this themselves.
+    assertFalse(body.getMessage().contains("ORA-12899"), body.getMessage());
+    assertFalse(body.getMessage().contains("help desk"), body.getMessage());
+  }
+
+  @Test
+  void aProcRuleIsStillResolvedWhenThereIsNoOverflow() {
+    // The overflow check runs first, so prove it does not shadow the business-rule path.
+    StoredProcedureException ex = new StoredProcedureException(
+        "frep_210_bio_opening", "SAVE", "frep.web.usr.database.record.modified2;");
+
+    ResponseEntity<Object> response = handler.handleStoredProcedure(ex);
+
+    assertEquals(HttpStatus.CONFLICT.value(), response.getStatusCode().value());
+    assertTrue(((ApiError) response.getBody()).getMessage().contains("Someone else changed"));
   }
 
   @Test

@@ -57,6 +57,14 @@ parameters:
   - name: VITE_SILVA_BASE_URL
     description: SILVA base URL for Opening ID deep links (no trailing slash)
     value: https://silva.nrs.gov.bc.ca
+  # File types offered in the attachment picker — the SAME GitHub variable the backend reads as
+  # ATTACHMENT_ALLOWED_TYPES, so the picker and the server-side allow-list cannot drift. Comma
+  # separated extensions ("BMP,CSV,PDF"). Required for the same reason as the backend parameter:
+  # there is no in-code
+  # default, so an unset variable must fail the deploy rather than ship a picker with no filter.
+  - name: VITE_ATTACHMENT_TYPES
+    description: Comma-separated attachment extensions, e.g. BMP,CSV,PDF,PNG,WEBP
+    required: true
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
@@ -148,6 +156,8 @@ objects:
                   value: ${VITE_APP_NAME}
                 - name: VITE_SILVA_BASE_URL
                   value: ${VITE_SILVA_BASE_URL}
+                - name: VITE_ATTACHMENT_TYPES
+                  value: ${VITE_ATTACHMENT_TYPES}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
               volumeMounts:

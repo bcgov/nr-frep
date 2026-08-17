@@ -1,0 +1,13 @@
+// Type-ahead client picker. The spinner lives inside the label so it can appear and disappear on
+// every keystroke without shifting the input below it.
+.client-combo__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.client-combo__spinner {
+  // Carbon's small Loading is 16px; match the label's line so the row height never changes.
+  width: 1rem;
+  height: 1rem;
+}

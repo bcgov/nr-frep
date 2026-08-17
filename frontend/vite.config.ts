@@ -93,7 +93,6 @@ export default defineConfig(({ mode }) => {
         'aws-amplify/auth/cognito',
         'aws-amplify/utils',
         'react-dom/client',
-        '@tanstack/react-query-devtools',
         'aws-amplify/auth',
       ],
     },

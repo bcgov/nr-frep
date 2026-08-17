@@ -12,7 +12,6 @@ const FILTER_LABELS = [
   'Cut block',
   'Opening ID',
   'Licensee opening ID',
-  'Client',
   'Block status',
   'Open category',
   'Opening status',
@@ -29,6 +28,9 @@ test.describe('Add Target Site (opening search)', () => {
     for (const label of FILTER_LABELS) {
       await expect(page.getByLabel(label, { exact: true })).toBeVisible();
     }
+    // Located by role, not by label: Carbon's ComboBox labels both the input and its listbox with
+    // the same element, so getByLabel matches two nodes and trips strict mode.
+    await expect(page.getByRole('combobox', { name: 'Client' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
     await expectNoGlobalError(page);
@@ -46,15 +48,12 @@ test.describe('Add Target Site (opening search)', () => {
     await expectNoGlobalError(page);
   });
 
-  test('the client lookup modal opens and closes', async ({ page }) => {
+  test('the client picker is a type-ahead, not a lookup dialog', async ({ page }) => {
+    // Same combo box as Checklist Search — see that spec for the reasoning.
     await gotoProtected(page, URL);
 
-    await page.getByRole('button', { name: 'Look up client' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Client Search' });
-    await expect(dialog).toBeVisible();
-
-    await dialog.getByRole('button', { name: 'Close' }).click();
-    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('combobox', { name: 'Client' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Look up client' })).toHaveCount(0);
     await expectNoGlobalError(page);
   });
 

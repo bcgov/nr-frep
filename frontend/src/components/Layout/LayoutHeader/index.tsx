@@ -7,8 +7,8 @@ import { LayoutSideNav } from '@/components/Layout/LayoutSideNav';
 
 import LayoutHeaderGlobalBar from './LayoutHeaderGlobalBar';
 
+import { APP_NAME } from '@/constants/appName';
 import { useLayout } from '@/context/layout/useLayout';
-import { env } from '@/env';
 
 import './index.scss';
 
@@ -23,7 +23,7 @@ export const LayoutHeader: FC = () => {
     }
   };
 
-  const appName = env.VITE_APP_NAME;
+  const appName = APP_NAME;
 
   return (
     <Header aria-label={appName} className="bc-header" data-testid="bc-header__header">

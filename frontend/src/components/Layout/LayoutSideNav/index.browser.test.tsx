@@ -6,6 +6,10 @@ import { AuthProvider } from '@/context/auth/AuthProvider';
 
 import { LayoutSideNav } from './index';
 
+// Mutable so each case can set (or clear) the support address; the component reads it per render.
+const { envMock } = vi.hoisted(() => ({ envMock: {} as Record<string, string> }));
+vi.mock('@/env', () => ({ env: envMock }));
+
 vi.mock('@/context/layout/useLayout', () => ({
   useLayout: () => ({ isSideNavExpanded: true, closeSideNav: () => {} }),
 }));
@@ -64,5 +68,31 @@ describe('LayoutSideNav', () => {
     await renderWithProviders('/settings/profile');
     const profileLink = screen.getByText('Profile').closest('a');
     expect(profileLink).toHaveClass('cds--side-nav__link--current');
+  });
+
+  it('offers "Report an issue" when a support mailbox is configured', async () => {
+    // The app tells users to contact the FREP help desk when something fails; this is the how.
+    envMock.VITE_SUPPORT_EMAIL = 'frep@gov.bc.ca';
+    await renderWithProviders();
+
+    const link = screen.getByTestId('side-nav-link-email-support');
+    expect(link.getAttribute('href')).toBe('mailto:frep@gov.bc.ca');
+    expect(screen.getByText('Support')).toBeTruthy();
+  });
+
+  it('hides the link when no mailbox is configured', async () => {
+    // Better no link than a mailto: that goes nowhere — there is no in-code default address.
+    delete envMock.VITE_SUPPORT_EMAIL;
+    await renderWithProviders();
+
+    expect(screen.queryByTestId('side-nav-link-email-support')).toBeNull();
+    expect(screen.queryByText('Support')).toBeNull();
+  });
+
+  it('ignores a whitespace-only value', async () => {
+    envMock.VITE_SUPPORT_EMAIL = '   ';
+    await renderWithProviders();
+
+    expect(screen.queryByTestId('side-nav-link-email-support')).toBeNull();
   });
 });

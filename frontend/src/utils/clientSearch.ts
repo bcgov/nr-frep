@@ -9,6 +9,21 @@ export const MIN_CLIENT_TERM_LENGTH = 3;
 const CLIENT_NUMBER_LENGTH = 8;
 
 /**
+ * Widths of the matching attributes on `THE.FREP_CLIENT_SEARCH_VW_OBJECT`, the object the criteria
+ * are passed in.
+ *
+ * <p>These are hard limits, not preferences: the driver pickles the criteria into the object before
+ * the call, so an over-long value fails at bind time with ORA-17072 ("Inserted value too large for
+ * column") and never reaches the proc. `CLIENT_NAME` is `VARCHAR2(200)`, but the acronym and number
+ * are only `VARCHAR2(8)` — so a term as ordinary as "lakeside pacific" used to 500 the acronym arm
+ * on every keystroke. A term longer than the column cannot match a value stored in it anyway, so
+ * the arm is skipped rather than truncated: truncating would invent matches the user never asked
+ * for.
+ */
+const CLIENT_ACRONYM_LENGTH = 8;
+const CLIENT_NAME_LENGTH = 200;
+
+/**
  * Label for a client suggestion: `Name (ACRONYM) · 00012345`, absent parts dropped.
  *
  * <p>Built here rather than taken from the proc because `FREP_410_CLIENT_SEARCH` composes its
@@ -46,9 +61,17 @@ export const searchClientsAuto = async (term: string): Promise<ClientSearchResul
   const trimmed = term.trim();
   if (trimmed.length < MIN_CLIENT_TERM_LENGTH) return [];
 
-  const queries = /^\d+$/.test(trimmed)
-    ? [{ clientNumber: trimmed.padStart(CLIENT_NUMBER_LENGTH, '0') }]
-    : [{ clientName: trimmed }, { clientAcronym: trimmed }];
+  const queries: Array<Record<string, string>> = [];
+  if (/^\d+$/.test(trimmed)) {
+    // Longer than the stored width is not a client number at all, so there is nothing to pad.
+    if (trimmed.length <= CLIENT_NUMBER_LENGTH) {
+      queries.push({ clientNumber: trimmed.padStart(CLIENT_NUMBER_LENGTH, '0') });
+    }
+  } else {
+    if (trimmed.length <= CLIENT_NAME_LENGTH) queries.push({ clientName: trimmed });
+    if (trimmed.length <= CLIENT_ACRONYM_LENGTH) queries.push({ clientAcronym: trimmed });
+  }
+  if (queries.length === 0) return [];
 
   const responses = await Promise.all(
     queries.map((query) => API.search.searchClients(query).catch(() => null)),
@@ -69,3 +92,25 @@ export const searchClientsAuto = async (term: string): Promise<ClientSearchResul
   }
   return unique;
 };
+
+/**
+ * True when the client field holds text the user never resolved to an actual client.
+ *
+ * <p>The combo box only yields a client number when a suggestion is *picked*. Typing a term that
+ * matches nothing — or editing the text after picking — leaves the number unset, so the search ran
+ * with no client filter at all while the field still showed the term: searching "lakepaced"
+ * returned every checklist in the system rather than none. Callers use this to refuse the search
+ * and mark the field, instead of quietly answering a different question.
+ */
+export const isClientTermUnresolved = (
+  term: string,
+  selectedLabel: string,
+  clientNumber?: string,
+): boolean => {
+  const trimmed = term.trim();
+  if (!trimmed) return false;
+  return !clientNumber || trimmed !== selectedLabel.trim();
+};
+
+/** Shown on the field when {@link isClientTermUnresolved} holds. */
+export const CLIENT_UNRESOLVED_MESSAGE = 'Select a client from the list of suggestions.';

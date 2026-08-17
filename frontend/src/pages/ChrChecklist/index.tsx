@@ -54,10 +54,10 @@ import {
   type ValidationError,
 } from '@/types/chrChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
-import { pictureToFile } from '@/utils/pictureFile';
-import { silvaOpeningUrl } from '@/utils/silva';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { pictureToFile } from '@/utils/pictureFile';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 // Reuse the Biodiversity checklist form primitives (rip-form / rip-form__group / rip-form__grid /
 // protocol-checklist__field) so CHR tab content is structured the same way.
@@ -517,7 +517,13 @@ const ChrChecklistPage: FC = () => {
           const file = pictureToFile(picture);
           if (!file) continue;
           await API.chrChecklist.addPhoto(
-            id, file, picture.description ?? '', picture.date, undefined, picture.featureId);
+            id,
+            file,
+            picture.description ?? '',
+            picture.date,
+            undefined,
+            picture.featureId,
+          );
         }
         await loadPhotos();
         display({ kind: 'success', title: 'Photo saved', timeout: 4000 });

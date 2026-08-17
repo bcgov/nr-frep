@@ -33,6 +33,7 @@ import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
 import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
+import { CLIENT_UNRESOLVED_MESSAGE, isClientTermUnresolved } from '@/utils/clientSearch';
 import { formatShortDate } from '@/utils/date';
 import { buildExportFilename } from '@/utils/exportFilename';
 import { silvaOpeningUrl } from '@/utils/silva';
@@ -147,6 +148,9 @@ const ChecklistSearchPage: FC = () => {
   // The lookup returns a label the query does not carry, so it rides in the URL too — otherwise a
   // restored search shows a client filter with an empty name field.
   const [clientName, setClientName] = useState(() => searchParams.get('clientName') ?? '');
+  // Raw text in the client field, and whether the user has tried to search with it unresolved.
+  const [clientTerm, setClientTerm] = useState(() => searchParams.get('clientName') ?? '');
+  const [showClientError, setShowClientError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +223,19 @@ const ChecklistSearchPage: FC = () => {
     params.set('page', String(targetPage));
     params.set('size', String(targetSize));
     return params;
+  };
+
+  /**
+   * Refuses to search while the client field holds an unresolved term. Without this the filter was
+   * simply absent and the user got every checklist back, which reads as "your search matched a lot"
+   * rather than "that client does not exist".
+   */
+  const handleSearch = () => {
+    if (isClientTermUnresolved(clientTerm, clientName, filters.clientNumber)) {
+      setShowClientError(true);
+      return;
+    }
+    void runSearch(0);
   };
 
   const runSearch = async (
@@ -410,11 +427,18 @@ const ChecklistSearchPage: FC = () => {
               onSelect={(clientNumber, selectedClientName) => {
                 updateFilter('clientNumber', clientNumber || undefined);
                 setClientName(selectedClientName);
+                setShowClientError(false);
               }}
+              onTermChange={(term) => {
+                setClientTerm(term);
+                if (showClientError) setShowClientError(false);
+              }}
+              invalid={showClientError}
+              invalidText={CLIENT_UNRESOLVED_MESSAGE}
             />
           </div>
           <div className="checklist-search__actions">
-            <Button onClick={() => void runSearch(0)} disabled={loading}>
+            <Button onClick={handleSearch} disabled={loading}>
               Search
             </Button>
             <Button
@@ -422,6 +446,8 @@ const ChecklistSearchPage: FC = () => {
               onClick={() => {
                 setFilters({});
                 setClientName('');
+                setClientTerm('');
+                setShowClientError(false);
                 setSearchParams(new URLSearchParams(), { replace: true });
                 void runSearch(0, pageSize, {});
               }}

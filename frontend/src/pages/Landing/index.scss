@@ -31,8 +31,12 @@
         }
 
         .landing-subtitle {
-          @include type.type-style('fluid-paragraph-01', true);
+          // Declared before the include: type-style's fluid variant emits nested @media rules, and
+          // a declaration sitting after those is the `mixed-decls` deprecation — Sass currently
+          // hoists it above them but will stop doing so. Neither order changes the result here
+          // (type-style sets no colour), so this just states the intended one.
           color: var(--#{vars.$bcgov-prefix}-text-secondary);
+          @include type.type-style('fluid-paragraph-01', true);
         }
       }
 

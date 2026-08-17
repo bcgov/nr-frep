@@ -194,7 +194,11 @@ describe('ChrChecklistPage', () => {
       ...sampleChecklist,
       status: 'RDO',
       pictures: [
-        { description: 'Captured offline', mimeTypeCode: 'image/png', code: 'data:image/png;base64,iVBOR' },
+        {
+          description: 'Captured offline',
+          mimeTypeCode: 'image/png',
+          code: 'data:image/png;base64,iVBOR',
+        },
       ],
     },
     dirty: true,
@@ -229,7 +233,9 @@ describe('ChrChecklistPage', () => {
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
     // Same guid on both sides, so the copy classifies as CURRENT — a stale one hides Sync/Submit.
     api.getChecklist.mockResolvedValue({
-      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+      ...sampleChecklist,
+      status: 'RDO',
+      deviceCheckoutGuid: 'guid',
     });
 
     renderPage();
@@ -249,7 +255,9 @@ describe('ChrChecklistPage', () => {
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
     repo.remove.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({
-      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+      ...sampleChecklist,
+      status: 'RDO',
+      deviceCheckoutGuid: 'guid',
     });
 
     renderPage();
@@ -270,7 +278,9 @@ describe('ChrChecklistPage', () => {
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockRejectedValue(new Error('conflict'));
     api.getChecklist.mockResolvedValue({
-      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+      ...sampleChecklist,
+      status: 'RDO',
+      deviceCheckoutGuid: 'guid',
     });
 
     renderPage();
@@ -291,7 +301,9 @@ describe('ChrChecklistPage', () => {
     repo.remove.mockResolvedValue(undefined);
     api.submit.mockResolvedValue({ ...sampleChecklist, status: 'SUB' });
     api.getChecklist.mockResolvedValue({
-      ...sampleChecklist, status: 'RDO', deviceCheckoutGuid: 'guid',
+      ...sampleChecklist,
+      status: 'RDO',
+      deviceCheckoutGuid: 'guid',
     });
 
     renderPage();

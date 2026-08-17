@@ -14,7 +14,17 @@ package ca.bc.gov.nrs.frep.struct.v1.frep;
  */
 public record ClientSearchResult(
     String clientAcronym,
+    /**
+     * The real 8-character {@code FOREST_CLIENT.CLIENT_NUMBER} — what every downstream filter needs.
+     * Never the acronym: the checklist search matches {@code client_number = LPAD(:clientNumber, 8,
+     * '0')}, so an acronym here becomes '000ARDEW' and matches nothing.
+     */
     String clientNumber,
+    /**
+     * What the legacy screens showed in the "client number" column: {@code NVL(acronym, number)}.
+     * Kept separate from {@link #clientNumber} because it is a display value, not an identifier.
+     */
+    String displayClientNumber,
     String clientLocnCode,
     String clientName,
     String clientLocnName,

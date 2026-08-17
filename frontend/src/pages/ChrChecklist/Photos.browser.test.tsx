@@ -57,7 +57,11 @@ describe('Photos display', () => {
   // be a ref: `fetched` state only lands after the response, so anything that re-renders during the
   // in-flight window would see the photo as un-fetched and request it again.
 
-  const serverPhoto = (id: string) => ({ id, description: `photo ${id}`, mimeTypeCode: 'image/png' });
+  const serverPhoto = (id: string) => ({
+    id,
+    description: `photo ${id}`,
+    mimeTypeCode: 'image/png',
+  });
 
   it('fetches each photo exactly once', async () => {
     const fetchContent = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
@@ -79,18 +83,30 @@ describe('Photos display', () => {
     // The real trigger: `fetchContent` was an inline arrow in the parent's JSX, so every render gave
     // the effect a new dependency identity and started another round before the first had resolved.
     let release: (blob: Blob) => void = () => {};
-    const spy = vi
-      .fn()
-      .mockReturnValue(new Promise<Blob>((resolve) => { release = resolve; }));
+    const spy = vi.fn().mockReturnValue(
+      new Promise<Blob>((resolve) => {
+        release = resolve;
+      }),
+    );
     // Wrapped in a fresh arrow each render, exactly as the parent's JSX used to do: the identity
     // changes every time, but every call funnels to the one spy so a refetch is visible.
     const { rerender } = render(
-      <Photos {...baseProps} fetchContent={(pid) => spy(pid)} totalCount={1} pictures={[serverPhoto('91')]} />,
+      <Photos
+        {...baseProps}
+        fetchContent={(pid) => spy(pid)}
+        totalCount={1}
+        pictures={[serverPhoto('91')]}
+      />,
     );
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
 
     rerender(
-      <Photos {...baseProps} fetchContent={(pid) => spy(pid)} totalCount={1} pictures={[serverPhoto('91')]} />,
+      <Photos
+        {...baseProps}
+        fetchContent={(pid) => spy(pid)}
+        totalCount={1}
+        pictures={[serverPhoto('91')]}
+      />,
     );
     release(new Blob(['x'], { type: 'image/png' }));
 
@@ -108,12 +124,22 @@ describe('Photos display', () => {
       .mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
 
     const { rerender } = render(
-      <Photos {...baseProps} fetchContent={fetchContent} totalCount={1} pictures={[serverPhoto('91')]} />,
+      <Photos
+        {...baseProps}
+        fetchContent={fetchContent}
+        totalCount={1}
+        pictures={[serverPhoto('91')]}
+      />,
     );
     await waitFor(() => expect(fetchContent).toHaveBeenCalledTimes(1));
 
     rerender(
-      <Photos {...baseProps} fetchContent={fetchContent} totalCount={1} pictures={[serverPhoto('91')]} />,
+      <Photos
+        {...baseProps}
+        fetchContent={fetchContent}
+        totalCount={1}
+        pictures={[serverPhoto('91')]}
+      />,
     );
 
     await waitFor(() => expect(fetchContent).toHaveBeenCalledTimes(2));

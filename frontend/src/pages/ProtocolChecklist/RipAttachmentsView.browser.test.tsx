@@ -33,9 +33,7 @@ const api = API.protocolChecklist as unknown as {
 };
 
 const renderView = () =>
-  render(
-    <RipAttachmentsView protocol="bio" checklistId="1001" canEdit submitted={false} />,
-  );
+  render(<RipAttachmentsView protocol="bio" checklistId="1001" canEdit submitted={false} />);
 
 /**
  * Type a description, then pick `files` through the (hidden) file input.

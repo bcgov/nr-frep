@@ -32,6 +32,7 @@ import type { CodeOption } from '@/types/configuration';
 import { useAuth } from '@/context/auth/useAuth';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { CLIENT_UNRESOLVED_MESSAGE, isClientTermUnresolved } from '@/utils/clientSearch';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 type Filters = {
@@ -179,6 +180,9 @@ const AddTargetSitePage: FC = () => {
   // The lookup returns a label the query does not carry, so it rides in the URL too — otherwise a
   // restored search shows a client filter with an empty name field.
   const [clientName, setClientName] = useState(() => searchParams.get('clientName') ?? '');
+  // Raw text in the client field, and whether the user has tried to search with it unresolved.
+  const [clientTerm, setClientTerm] = useState(() => searchParams.get('clientName') ?? '');
+  const [showClientError, setShowClientError] = useState(false);
 
   // Load the dropdown code lists on mount. Each loads independently so one failure doesn't block the
   // others. No mount-guard ref: it interacts badly with StrictMode's mount/unmount/remount, which
@@ -213,6 +217,8 @@ const AddTargetSitePage: FC = () => {
   const reset = () => {
     setFilters(EMPTY_FILTERS);
     setClientName('');
+    setClientTerm('');
+    setShowClientError(false);
     setResults(null);
     setPage(0);
     setPageSize(DEFAULT_PAGE_SIZE);
@@ -295,6 +301,18 @@ const AddTargetSitePage: FC = () => {
   };
 
   // Fetch one page. Search resets to page 0; the Pagination control passes the target page/size.
+  /**
+   * Refuses to search while the client field holds an unresolved term — see the same guard on
+   * Checklist Search. An absent filter silently widens the search rather than narrowing it.
+   */
+  const handleSearch = () => {
+    if (isClientTermUnresolved(clientTerm, clientName, filters.clientNumber)) {
+      setShowClientError(true);
+      return;
+    }
+    void runSearch(0);
+  };
+
   const runSearch = async (targetPage: number, targetSize = pageSize) => {
     setLoading(true);
     setError(null);
@@ -406,7 +424,14 @@ const AddTargetSitePage: FC = () => {
               onSelect={(clientNumber, selectedClientName) => {
                 setField({ clientNumber });
                 setClientName(selectedClientName);
+                setShowClientError(false);
               }}
+              onTermChange={(term) => {
+                setClientTerm(term);
+                if (showClientError) setShowClientError(false);
+              }}
+              invalid={showClientError}
+              invalidText={CLIENT_UNRESOLVED_MESSAGE}
             />
           </div>
           <Select
@@ -536,7 +561,7 @@ const AddTargetSitePage: FC = () => {
         </div>
 
         <div className="opening-search__actions">
-          <Button onClick={() => void runSearch(0)} disabled={loading}>
+          <Button onClick={handleSearch} disabled={loading}>
             Search
           </Button>
           <Button kind="ghost" onClick={reset} disabled={loading}>

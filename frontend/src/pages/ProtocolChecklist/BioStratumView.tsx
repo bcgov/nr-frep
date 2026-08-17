@@ -22,6 +22,8 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
+
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
@@ -208,19 +210,6 @@ const ECO_CHECKBOX_KEYS = [
   'activeWltCwdFeedingInd',
   'uncommonTreeSpeciesInd',
 ];
-// Full groups the legacy enable/disable cascade clears when a group is turned off.
-/**
- * Byte limits for the stratum's free-text fields, keyed by field — the same numbers
- * checkStratumLengths enforces, shared with the counter so display and validation can't drift
- * apart. Bytes, not characters: the columns are byte-semantic (`BIODIVERSITY_STRATUM.
- * OTHER_CONSTRAINT VARCHAR2(50 BYTE)` and friends, nr-mof-db V2.00406__BIODIVERSITY_STRATUM.sql).
- */
-const STRATUM_TEXT_LIMITS: Record<string, number> = {
-  otherConstraint: 50,
-  otherEcoAnchorDesc: 30,
-  patchGeneralComment: 2000,
-};
-
 /**
  * Free-text fields rendered as a multi-line box rather than a single-line input. Only the general
  * comment earns it — the other two limited fields are short labels ("Other constraint" at 50,
@@ -228,6 +217,7 @@ const STRATUM_TEXT_LIMITS: Record<string, number> = {
  */
 const MULTILINE_KEYS = new Set(['patchGeneralComment']);
 
+// Full groups the legacy enable/disable cascade clears when a group is turned off.
 const CONSTRAINT_KEYS = [...CONSTRAINT_PCT_KEYS, 'otherConstraint', 'constrainedTotal'];
 const ECO_KEYS = [...ECO_COUNT_KEYS, 'otherEcoAnchorDesc', ...ECO_CHECKBOX_KEYS];
 const PATCH_KEYS = [
@@ -933,6 +923,9 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       id: `stratum-${key}`,
       labelText: lbl,
       value: get(key),
+      // Undefined for anything not in the map — notably patchGeneralComment, which uses the byte
+      // counter below instead. A field takes one mechanism or the other, never both.
+      maxLength: STRATUM_FIELD_MAX[key],
       disabled,
       invalid: Boolean(fieldErrors[key]),
       invalidText: fieldErrors[key],
@@ -1239,6 +1232,11 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
                             labelText="Other constraint"
                             hideLabel
                             size="sm"
+                            // Rendered raw rather than through `textField`, so it gets neither the
+                            // byte counter nor a visible error: invalidText collapses to zero
+                            // height in a size="sm" table cell. The length rule above still blocks
+                            // the save, but the user would see no reason why — so cap the input.
+                            maxLength={STRATUM_TEXT_LIMITS.otherConstraint}
                             value={get('otherConstraint')}
                             disabled={disabledKey('otherConstraint')}
                             onChange={(e) => set('otherConstraint', e.target.value)}
@@ -1264,6 +1262,10 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
                             labelText="Other eco anchor"
                             hideLabel
                             size="sm"
+                            // Same as otherConstraint above — raw table cell, no counter or visible
+                            // error, so the cap is the only feedback. 30 bytes is the tightest
+                            // free-text column in either protocol.
+                            maxLength={STRATUM_TEXT_LIMITS.otherEcoAnchorDesc}
                             value={get('otherEcoAnchorDesc')}
                             disabled={disabledKey('otherEcoAnchorDesc')}
                             onChange={(e) => set('otherEcoAnchorDesc', e.target.value)}
@@ -1298,6 +1300,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
               key={c.key}
               id={`bec-${c.key}`}
               labelText={c.label}
+              maxLength={BEC_SEARCH_MAX[c.key]}
               value={becCriteria[c.key] ?? ''}
               onChange={(e) => setBecCriteria((prev) => ({ ...prev, [c.key]: e.target.value }))}
             />

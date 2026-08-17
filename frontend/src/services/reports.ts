@@ -1,6 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-import { ensureSessionFresh } from '@/context/auth/refreshSession';
+import { ensureSessionFresh, handleUnauthorized } from '@/context/auth/refreshSession';
 import { BackendApiConfig } from '@/services/APIs';
 
 /**
@@ -99,6 +99,8 @@ const postReport = async (
   });
 
   if (!response.ok) {
+    // Same session handling as the generated client: a 401 ends the session and redirects.
+    if (response.status === 401) void handleUnauthorized();
     const detail = await response.text().catch(() => '');
     throw new Error(`Report request failed (${response.status})${detail ? `: ${detail}` : ''}`);
   }
@@ -127,6 +129,8 @@ const getReportFile = async (
   });
 
   if (!response.ok) {
+    // Same session handling as the generated client: a 401 ends the session and redirects.
+    if (response.status === 401) void handleUnauthorized();
     const detail = await response.text().catch(() => '');
     throw new Error(`Report request failed (${response.status})${detail ? `: ${detail}` : ''}`);
   }

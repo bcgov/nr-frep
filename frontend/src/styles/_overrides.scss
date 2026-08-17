@@ -156,25 +156,15 @@ input[type="number"] {
 }
 
 /* ------------------ Time Picker ---------------------------
-- Border-radius: 4px on left top corner and right top corners, no border-radius in the middle
+Removed. The three rules here were written as selector lists whose later members began with a bare
+`>` ("> .cds--text-input"), which is invalid CSS at the top level: one invalid member invalidates
+the whole list, so every browser discarded these rules entirely — they never styled anything. One
+of them also carried a bare `:last-child`, which would have applied a border radius to every
+last-child element on the page had the rule ever been valid.
+
+Deleting rather than repairing them because the app renders no TimePicker at all. Sass still
+compiled them with a bogus-combinators deprecation, which becomes a hard error in Dart Sass 2.0.0.
 ----------------------------------------------------------------- */
-.#{variables.$bcgov-prefix}--time-picker__input,
-> .#{variables.$bcgov-prefix}--text-input {
-  border-top-left-radius: 0.25rem;
-  border-top-right-radius: 0;
-}
-
-.#{variables.$bcgov-prefix}--time-picker__select,
-> .#{variables.$bcgov-prefix}--select-input {
-  border-radius: 0;
-}
-
-.#{variables.$bcgov-prefix}--time-picker,
-  :last-child,
-  > .#{variables.$bcgov-prefix}--select-input {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0.25rem;
-}
 
 /* --------------- Search ------------------------------
 - Border-radius: 4px top corners

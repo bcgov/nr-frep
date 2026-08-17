@@ -48,3 +48,33 @@ export const NOTES_TEXT_LIMITS: Record<string, number> = {
 export const ATTACHMENT_TEXT_LIMITS: Record<string, number> = {
   description: 2000, // CHR_CHECKLIST_ATTACHMENT.DESCRIPTION
 };
+
+/**
+ * Single-line CHR text fields, keyed by the `Feature` draft field.
+ *
+ * <p>Applied as Carbon's `maxLength`, which stops typing and truncates paste at the given number of
+ * **characters** — unlike the byte-counted `limit` used for the multi-line boxes above. The two are
+ * deliberately different: a paragraph silently losing its tail is a real data loss, so long free
+ * text gets a counter and a blocked Save instead; these fields are short and mostly codes or
+ * identifiers, where a hard stop at the limit is what the user expects.
+ *
+ * <p>The consequence is that a value of accented or syllabic characters can still exceed the byte
+ * limit at this character count. That is not silent: the insert raises ORA-12899, which
+ * `ColumnOverflow` turns into a 400 naming the field. The cap removes the ordinary case; the
+ * backend still covers the multi-byte one.
+ *
+ * <p>Widths are the deployed ones — base DDL in nr-mof-db `scripts/THE/TABLES/`, with no pending
+ * widening migration against any of these columns (unlike BLOCK_COMMENTS / EVALUATION_RATING_
+ * RATIONALE / CHR_FEATURE_IDENTITY.COMMENTS above, whose widenings are not yet merged to main).
+ */
+export const FEATURE_SINGLE_LINE_MAX: Record<string, number> = {
+  featureLabel: 5, // CHR_FEATURE_IDENTITY.FEATURE_LABEL
+  permit: 50, // CHR_FEATURE_DETAIL.PERMIT_NUMBER
+  otherdescription: 200, // CHR_FEATURE_TYPE_XREF.OTHER_DESCRIPTION
+  locationOtherDescription: 200, // CHR_FEATURE_LOCATION_DETAIL.OTHER_DESCRIPTION
+  otherStrategy: 200, // CHR_MGMT_STRATEGY_PLANNED.OTHER_STRATEGY
+  otherActivities: 200, // CHR_MGMT_STRATEGY_USED.OTHER_STRATEGY
+  ifotherpleasedescribe: 200, // CHR_FEAT_WINDTHR_TREAT_XREF.OTHER_DESCRIPTION
+  ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause: 200,
+  // ^ CHR_FEATURE_DAMAGE_AGENT_XREF.OTHER_DESCRIPTION
+};

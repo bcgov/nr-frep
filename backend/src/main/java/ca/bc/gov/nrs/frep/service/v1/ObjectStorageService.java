@@ -10,6 +10,8 @@ import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -17,6 +19,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Service
 public class ObjectStorageService {
+
+  private static final Logger log = LoggerFactory.getLogger(ObjectStorageService.class);
 
   private final ObjectStorageProperties properties;
 
@@ -60,7 +64,12 @@ public class ObjectStorageService {
     try (S3Client client = client()) {
       return client.headObject(builder -> builder.bucket(properties.bucket()).key(key))
           .contentLength();
+    } catch (NoSuchKeyException ex) {
+      return -1;
     } catch (Exception ex) {
+      // -1 renders as a blank size in the attachments table. Without this the only symptom of a
+      // storage problem was a column full of blanks and no explanation anywhere.
+      log.error("Object storage size lookup failed for key :: {}", key, ex);
       return -1;
     }
   }

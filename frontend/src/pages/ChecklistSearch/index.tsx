@@ -1,4 +1,3 @@
-import { Close, Search as SearchIcon } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -19,9 +18,9 @@ import {
   TextInput,
 } from '@carbon/react';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
-import ClientSearchModal from '@/components/core/ClientSearchModal';
+import ClientCombo from '@/components/core/ClientCombo';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
 
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
@@ -34,6 +33,7 @@ import API from '@/services/APIs';
 import { requestChecklistSearchCsv, triggerBrowserDownload } from '@/services/reports';
 import { apiErrorMessage } from '@/utils/apiError';
 import { STATUS_LABELS, statusLabel, statusTagType } from '@/utils/checklistStatus';
+import { CLIENT_UNRESOLVED_MESSAGE, isClientTermUnresolved } from '@/utils/clientSearch';
 import { formatShortDate } from '@/utils/date';
 import { buildExportFilename } from '@/utils/exportFilename';
 import { silvaOpeningUrl } from '@/utils/silva';
@@ -49,11 +49,43 @@ const TABLE_HEADERS = [
   { key: 'licenceId', header: 'Licence' },
   { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut block' },
-  { key: 'openingId', header: 'Opening' },
+  { key: 'openingId', header: 'Opening ID' },
   { key: 'clientNumber', header: 'Client #' },
   { key: 'evaluationDate', header: 'Evaluation date' },
   { key: 'evaluatorName', header: 'Evaluator' },
 ] as const;
+
+/**
+ * The URL carries the whole search, not just the page.
+ *
+ * <p>Opening a checklist from the results navigates away, and Back lands here again. Holding the
+ * filters in component state meant that remount produced an empty form and no rows — the user had to
+ * re-enter and re-run a search they had already done. Reading them back out of the query string
+ * restores the page as they left it, and makes a search shareable and survivable across a refresh.
+ */
+const FILTER_KEYS = [
+  'effectiveYear',
+  'orgUnit',
+  'protocolType',
+  'licenceId',
+  'cuttingPermitId',
+  'cutBlockId',
+  'openingId',
+  'clientNumber',
+  'checklistStatusCode',
+  'checklistId',
+  'evaluationDateFrom',
+  'evaluationDateTo',
+] as const;
+
+const filtersFromParams = (params: URLSearchParams): ChecklistSearchQuery => {
+  const next: ChecklistSearchQuery = {};
+  for (const key of FILTER_KEYS) {
+    const value = params.get(key);
+    if (value) next[key] = value;
+  }
+  return next;
+};
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Any status' },
@@ -85,13 +117,17 @@ const ChecklistSearchPage: FC = () => {
   const { display } = useNotification();
   const { canEdit, canAnyChr, chrDistricts } = useAuthorization();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [masterListYears, setMasterListYears] = useState<MasterListYear[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
 
-  const [filters, setFilters] = useState<ChecklistSearchQuery>({});
+  // Lazy initialisers: the URL is the source of truth on mount, so Back restores the search.
+  const [filters, setFilters] = useState<ChecklistSearchQuery>(() =>
+    filtersFromParams(searchParams),
+  );
   // The filters that produced the currently-displayed results. Export uses this (not the live
   // `filters`) so a CSV always matches the visible table even if the user edited a filter without
   // re-searching.
@@ -99,16 +135,22 @@ const ChecklistSearchPage: FC = () => {
   const [results, setResults] = useState<ChecklistSearchResult[]>([]);
   // Server-side paging: page is 0-based (matches the backend); totalElements is the true match count
   // (no 5000 VARRAY cap), so every page is reachable.
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(() => Number(searchParams.get('page') ?? 0));
+  const [pageSize, setPageSize] = useState(
+    () => Number(searchParams.get('size') ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE,
+  );
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [clientLookupOpen, setClientLookupOpen] = useState(false);
   // The checklist search filters by client NUMBER (legacy frep_checklist_search.search), but we
   // display the client NAME selected from the lookup — mirroring the legacy FREP400 screen where
   // "Client Name" is a read-only display populated by the FREP410 client picker.
-  const [clientName, setClientName] = useState('');
+  // The lookup returns a label the query does not carry, so it rides in the URL too — otherwise a
+  // restored search shows a client filter with an empty name field.
+  const [clientName, setClientName] = useState(() => searchParams.get('clientName') ?? '');
+  // Raw text in the client field, and whether the user has tried to search with it unresolved.
+  const [clientTerm, setClientTerm] = useState(() => searchParams.get('clientName') ?? '');
+  const [showClientError, setShowClientError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +207,37 @@ const ChecklistSearchPage: FC = () => {
 
   // Fetches one page. Search/Clear reset to page 0; the Pagination control passes the target page.
   // queryFilters lets Clear search with the reset filters without waiting for the state update.
+  /** The current search as query params: non-empty filters plus the page. */
+  const searchToParams = (
+    queryFilters: ChecklistSearchQuery,
+    targetPage: number,
+    targetSize: number,
+  ): URLSearchParams => {
+    const params = new URLSearchParams();
+    for (const key of FILTER_KEYS) {
+      const value = queryFilters[key];
+      // Only what the user actually set — an empty filter in the URL is noise.
+      if (value) params.set(key, value);
+    }
+    if (clientName) params.set('clientName', clientName);
+    params.set('page', String(targetPage));
+    params.set('size', String(targetSize));
+    return params;
+  };
+
+  /**
+   * Refuses to search while the client field holds an unresolved term. Without this the filter was
+   * simply absent and the user got every checklist back, which reads as "your search matched a lot"
+   * rather than "that client does not exist".
+   */
+  const handleSearch = () => {
+    if (isClientTermUnresolved(clientTerm, clientName, filters.clientNumber)) {
+      setShowClientError(true);
+      return;
+    }
+    void runSearch(0);
+  };
+
   const runSearch = async (
     targetPage = page,
     targetSize = pageSize,
@@ -183,6 +256,11 @@ const ChecklistSearchPage: FC = () => {
       setTotalElements(data.totalElements);
       setPage(data.pageNumber);
       setPageSize(data.pageSize);
+      // `replace`, not push: a search is not a navigation step. Pushing would make the browser Back
+      // button walk backwards through every search the user ran before opening a checklist.
+      setSearchParams(searchToParams(queryFilters, data.pageNumber, data.pageSize), {
+        replace: true,
+      });
     } catch (err) {
       display({
         kind: 'error',
@@ -227,7 +305,9 @@ const ChecklistSearchPage: FC = () => {
   const initialSearchDone = useRef(false);
   useEffect(() => {
     // Run the first search only after config (incl. the defaulted latest year) has loaded, so the
-    // initial results match the selected year.
+    // initial results match the selected year. This doubles as the Back restore: `filters`, `page`
+    // and `pageSize` are hydrated from the URL, so a search carried in the query string re-runs here
+    // exactly as the user left it — no separate restore effect, and no double fetch.
     if (configLoading || initialSearchDone.current) return;
     initialSearchDone.current = true;
     void runSearch();
@@ -340,41 +420,25 @@ const ChecklistSearchPage: FC = () => {
             onChange={(e) => updateFilter('openingId', e.target.value || undefined)}
           />
           <div className="checklist-search__client">
-            <TextInput
+            <ClientCombo
               id="checklist-search-client"
-              labelText="Client name"
-              placeholder="Use the lookup to select a client"
-              readOnly
-              value={clientName}
+              titleText="Client name"
+              selectedLabel={clientName}
+              onSelect={(clientNumber, selectedClientName) => {
+                updateFilter('clientNumber', clientNumber || undefined);
+                setClientName(selectedClientName);
+                setShowClientError(false);
+              }}
+              onTermChange={(term) => {
+                setClientTerm(term);
+                if (showClientError) setShowClientError(false);
+              }}
+              invalid={showClientError}
+              invalidText={CLIENT_UNRESOLVED_MESSAGE}
             />
-            <div className="checklist-search__client-buttons">
-              <Button
-                hasIconOnly
-                kind="tertiary"
-                size="md"
-                renderIcon={SearchIcon}
-                iconDescription="Look up client"
-                tooltipPosition="top"
-                onClick={() => setClientLookupOpen(true)}
-              />
-              {filters.clientNumber && (
-                <Button
-                  hasIconOnly
-                  kind="ghost"
-                  size="md"
-                  renderIcon={Close}
-                  iconDescription="Clear client"
-                  tooltipPosition="top"
-                  onClick={() => {
-                    setClientName('');
-                    updateFilter('clientNumber', undefined);
-                  }}
-                />
-              )}
-            </div>
           </div>
           <div className="checklist-search__actions">
-            <Button onClick={() => void runSearch(0)} disabled={loading}>
+            <Button onClick={handleSearch} disabled={loading}>
               Search
             </Button>
             <Button
@@ -382,6 +446,9 @@ const ChecklistSearchPage: FC = () => {
               onClick={() => {
                 setFilters({});
                 setClientName('');
+                setClientTerm('');
+                setShowClientError(false);
+                setSearchParams(new URLSearchParams(), { replace: true });
                 void runSearch(0, pageSize, {});
               }}
             >
@@ -532,15 +599,6 @@ const ChecklistSearchPage: FC = () => {
           </DataTable>
         )}
       </Column>
-
-      <ClientSearchModal
-        open={clientLookupOpen}
-        onClose={() => setClientLookupOpen(false)}
-        onSelect={(clientNumber, selectedClientName) => {
-          updateFilter('clientNumber', clientNumber || undefined);
-          setClientName(selectedClientName);
-        }}
-      />
     </Grid>
   );
 };

@@ -12,6 +12,16 @@ import {
 import type { OnCancel } from './CancelablePromise';
 import type { AxiosInstance, AxiosResponse } from 'axios';
 
+// The 401 branch calls into the auth module; mock it so the branch is observable and no redirect is
+// attempted in the test environment.
+const { handleUnauthorizedMock } = vi.hoisted(() => ({
+  handleUnauthorizedMock: vi.fn().mockResolvedValue(true),
+}));
+vi.mock('@/context/auth/refreshSession', () => ({
+  handleUnauthorized: handleUnauthorizedMock,
+  ensureSessionFresh: vi.fn(),
+}));
+
 const validConfig: APIConfig = {
   BASE: 'http://api',
   VERSION: 'v1',
@@ -179,7 +189,10 @@ describe('getHeaders edge cases', () => {
     expect(headers['Content-Type']).toBeUndefined();
   });
   it('still sets JSON for an ordinary object body', async () => {
-    const headers = await requestModule.getHeaders(validConfig, { ...validOptions, body: { a: 1 } });
+    const headers = await requestModule.getHeaders(validConfig, {
+      ...validOptions,
+      body: { a: 1 },
+    });
     expect(headers['Content-Type']).toBe('application/json');
   });
 });
@@ -358,6 +371,27 @@ describe('catchErrorCodes', () => {
     const result = { status: 200, ok: true, url: '', statusText: '', body: '' };
     expect(() => requestModule.catchErrorCodes(validOptions, result)).not.toThrow();
   });
+
+  it('ends the session on a 401, and still throws so the caller can react', () => {
+    // ensureSessionFresh is proactive and cannot catch a token the SERVER rejects — clock skew, a
+    // revoked session, a rotated key. Without this the user got a generic error toast and sat on a
+    // dead page.
+    handleUnauthorizedMock.mockClear();
+    const result = { status: 401, ok: false, url: '', statusText: '', body: '' };
+
+    expect(() => requestModule.catchErrorCodes(validOptions, result)).toThrow(ApiError);
+    expect(handleUnauthorizedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves other error codes alone', () => {
+    // A 403 is an authorization problem, not an expired session — signing the user out would be
+    // wrong, and would hide the real message.
+    handleUnauthorizedMock.mockClear();
+    const result = { status: 403, ok: false, url: '', statusText: '', body: '' };
+
+    expect(() => requestModule.catchErrorCodes(validOptions, result)).toThrow(ApiError);
+    expect(handleUnauthorizedMock).not.toHaveBeenCalled();
+  });
 });
 
 // Regression: getHeaders deleting Content-Type is not enough on its own. Axios merges instance
@@ -378,4 +412,3 @@ describe('HttpClient axios instance', () => {
     expect(client.axiosInstance.defaults.headers?.['X-Test']).toBe('1');
   });
 });
-

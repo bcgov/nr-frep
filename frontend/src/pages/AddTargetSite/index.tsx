@@ -1,4 +1,4 @@
-import { Add, ArrowLeft, Close, Search } from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Checkbox,
@@ -19,18 +19,21 @@ import {
   TableRow,
   TextInput,
 } from '@carbon/react';
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useRef, useState, type FC } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import './addTargetSite.scss';
 
-import ClientSearchModal from '@/components/core/ClientSearchModal';
+import ClientCombo from '@/components/core/ClientCombo';
 
 import type { OpeningSearchQuery, OpeningSearchResult } from '@/types/acceptedSite';
 import type { CodeOption } from '@/types/configuration';
 
+import { useAuth } from '@/context/auth/useAuth';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { CLIENT_UNRESOLVED_MESSAGE, isClientTermUnresolved } from '@/utils/clientSearch';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 type Filters = {
   forestFileId: string;
@@ -115,6 +118,34 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100];
 const DEFAULT_PAGE_SIZE = 100;
 
 /**
+ * The URL carries the whole search, not just the targeting context.
+ *
+ * <p>Adding a site navigates away to the create flow, and Back lands here again. Holding the filters
+ * in component state meant that remount produced an empty form and no results — the user had to
+ * re-enter and re-run a search they had already done. Reading them back out of the query string
+ * restores the page as they left it, and makes a search shareable and survivable across a refresh.
+ *
+ * <p>`orgUnit`, `orgUnitName` and `year` are the targeting context and are NOT filters; they arrive
+ * from Accepted Sites and are preserved untouched.
+ */
+const CONTEXT_PARAMS = ['orgUnit', 'orgUnitName', 'year'] as const;
+
+const filtersFromParams = (params: URLSearchParams): Filters => {
+  const next = { ...EMPTY_FILTERS };
+  for (const key of Object.keys(EMPTY_FILTERS) as (keyof Filters)[]) {
+    const value = params.get(key);
+    if (value === null) continue;
+    if (key === 'includeAllP87Ind') next.includeAllP87Ind = value === 'true';
+    else (next[key] as string) = value;
+  }
+  return next;
+};
+
+/** True when the URL carries a search to restore, as opposed to just the targeting context. */
+const hasSearchInParams = (params: URLSearchParams): boolean =>
+  (Object.keys(EMPTY_FILTERS) as (keyof Filters)[]).some((key) => params.get(key) !== null);
+
+/**
  * "Add target site" page — a full port of the legacy SIL56 Opening Tenure Search. Reached from the
  * Accepted Sites page (which supplies the district context via query params). Searches the opening
  * inventory by tenure / opening number / status / dates / client, then validates a chosen opening for
@@ -122,16 +153,21 @@ const DEFAULT_PAGE_SIZE = 100;
  * create flow.
  */
 const AddTargetSitePage: FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  // Only for the SILVA deep link's idp_hint, so the user lands on the opening without a second login.
+  const { user } = useAuth();
   const orgUnit = searchParams.get('orgUnit') ?? '';
   const orgUnitName = searchParams.get('orgUnitName') ?? '';
   const year = searchParams.get('year') ?? '';
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  // Lazy initialisers: the URL is the source of truth on mount, so Back restores the search.
+  const [filters, setFilters] = useState<Filters>(() => filtersFromParams(searchParams));
   const [results, setResults] = useState<OpeningSearchResult[] | null>(null);
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(() => Number(searchParams.get('page') ?? 0));
+  const [pageSize, setPageSize] = useState(
+    () => Number(searchParams.get('size') ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE,
+  );
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,8 +177,12 @@ const AddTargetSitePage: FC = () => {
   const [openCategories, setOpenCategories] = useState<CodeOption[]>([]);
   const [openingStatuses, setOpeningStatuses] = useState<CodeOption[]>([]);
   // Client filter: searched by name via the lookup, which fills the client number used by the query.
-  const [clientLookupOpen, setClientLookupOpen] = useState(false);
-  const [clientName, setClientName] = useState('');
+  // The lookup returns a label the query does not carry, so it rides in the URL too — otherwise a
+  // restored search shows a client filter with an empty name field.
+  const [clientName, setClientName] = useState(() => searchParams.get('clientName') ?? '');
+  // Raw text in the client field, and whether the user has tried to search with it unresolved.
+  const [clientTerm, setClientTerm] = useState(() => searchParams.get('clientName') ?? '');
+  const [showClientError, setShowClientError] = useState(false);
 
   // Load the dropdown code lists on mount. Each loads independently so one failure doesn't block the
   // others. No mount-guard ref: it interacts badly with StrictMode's mount/unmount/remount, which
@@ -164,9 +204,21 @@ const AddTargetSitePage: FC = () => {
     };
   }, []);
 
+  // Restore the results for a search carried in the URL — the Back case. Runs once: `runSearch`
+  // rewrites the params, so depending on them would loop.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !hasSearchInParams(searchParams)) return;
+    restored.current = true;
+    void runSearch(page, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const reset = () => {
     setFilters(EMPTY_FILTERS);
     setClientName('');
+    setClientTerm('');
+    setShowClientError(false);
     setResults(null);
     setPage(0);
     setPageSize(DEFAULT_PAGE_SIZE);
@@ -174,6 +226,12 @@ const AddTargetSitePage: FC = () => {
     setError(null);
     setValidatingKey(null);
     setValidationErrors(null);
+    const context = new URLSearchParams();
+    for (const key of CONTEXT_PARAMS) {
+      const value = searchParams.get(key);
+      if (value) context.set(key, value);
+    }
+    setSearchParams(context, { replace: true });
   };
 
   const setField = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
@@ -224,7 +282,37 @@ const AddTargetSitePage: FC = () => {
     };
   };
 
+  /** The current search as query params: targeting context, non-empty filters, and the page. */
+  const searchToParams = (targetPage: number, targetSize: number): URLSearchParams => {
+    const params = new URLSearchParams();
+    for (const key of CONTEXT_PARAMS) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    for (const [key, value] of Object.entries(filters)) {
+      // Only what the user actually set — an empty filter in the URL is noise, and `false` for the
+      // checkbox is its default.
+      if (value !== '' && value !== false) params.set(key, String(value));
+    }
+    if (clientName) params.set('clientName', clientName);
+    params.set('page', String(targetPage));
+    params.set('size', String(targetSize));
+    return params;
+  };
+
   // Fetch one page. Search resets to page 0; the Pagination control passes the target page/size.
+  /**
+   * Refuses to search while the client field holds an unresolved term — see the same guard on
+   * Checklist Search. An absent filter silently widens the search rather than narrowing it.
+   */
+  const handleSearch = () => {
+    if (isClientTermUnresolved(clientTerm, clientName, filters.clientNumber)) {
+      setShowClientError(true);
+      return;
+    }
+    void runSearch(0);
+  };
+
   const runSearch = async (targetPage: number, targetSize = pageSize) => {
     setLoading(true);
     setError(null);
@@ -235,6 +323,9 @@ const AddTargetSitePage: FC = () => {
       setTotalElements(data.totalElements);
       setPage(data.pageNumber);
       setPageSize(data.pageSize);
+      // `replace`, not push: a search is not a navigation step. Pushing would make the browser Back
+      // button walk backwards through every search the user ran before leaving the page.
+      setSearchParams(searchToParams(data.pageNumber, data.pageSize), { replace: true });
     } catch (err) {
       setResults(null);
       setError(apiErrorMessage(err, 'The opening search failed. Please try again.'));
@@ -326,38 +417,22 @@ const AddTargetSitePage: FC = () => {
             onChange={(e) => setField({ licenseeOpeningId: e.target.value })}
           />
           <div className="opening-search__client">
-            <TextInput
+            <ClientCombo
               id="opening-search-client"
-              labelText="Client"
-              placeholder="Use the lookup to search by client name"
-              readOnly
-              value={clientName}
+              titleText="Client"
+              selectedLabel={clientName}
+              onSelect={(clientNumber, selectedClientName) => {
+                setField({ clientNumber });
+                setClientName(selectedClientName);
+                setShowClientError(false);
+              }}
+              onTermChange={(term) => {
+                setClientTerm(term);
+                if (showClientError) setShowClientError(false);
+              }}
+              invalid={showClientError}
+              invalidText={CLIENT_UNRESOLVED_MESSAGE}
             />
-            <div className="opening-search__client-buttons">
-              <Button
-                hasIconOnly
-                kind="tertiary"
-                size="md"
-                renderIcon={Search}
-                iconDescription="Look up client"
-                tooltipPosition="top"
-                onClick={() => setClientLookupOpen(true)}
-              />
-              {filters.clientNumber && (
-                <Button
-                  hasIconOnly
-                  kind="ghost"
-                  size="md"
-                  renderIcon={Close}
-                  iconDescription="Clear client"
-                  tooltipPosition="top"
-                  onClick={() => {
-                    setClientName('');
-                    setField({ clientNumber: '' });
-                  }}
-                />
-              )}
-            </div>
           </div>
           <Select
             id="opening-search-block-status"
@@ -453,13 +528,13 @@ const AddTargetSitePage: FC = () => {
           {/* Shown always; the dates only filter once a Date type is chosen. */}
           <DateBox
             id="opening-search-date-from"
-            labelText="From (YYYY-MM-DD)"
+            labelText="From"
             value={filters.dateFrom}
             onChange={(v) => setField({ dateFrom: v })}
           />
           <DateBox
             id="opening-search-date-to"
-            labelText="To (YYYY-MM-DD)"
+            labelText="To"
             value={filters.dateTo}
             onChange={(v) => setField({ dateTo: v })}
           />
@@ -472,23 +547,26 @@ const AddTargetSitePage: FC = () => {
             <SelectItem value="O" text="Opening" />
             <SelectItem value="L" text="Licence" />
           </Select>
+          {/* A filter like any other, so it sits in the grid rather than beside the buttons. The
+              wrapper gives it the same top offset as a labelled field, so it lines up with the
+              inputs on its row instead of with their labels. */}
+          <div className="opening-search__checkbox">
+            <Checkbox
+              id="opening-search-p87"
+              labelText="Include all P87's"
+              checked={filters.includeAllP87Ind}
+              onChange={(_evt, { checked }) => setField({ includeAllP87Ind: checked })}
+            />
+          </div>
         </div>
 
         <div className="opening-search__actions">
-          <Checkbox
-            id="opening-search-p87"
-            labelText="Include all P87's"
-            checked={filters.includeAllP87Ind}
-            onChange={(_evt, { checked }) => setField({ includeAllP87Ind: checked })}
-          />
-          <div className="opening-search__action-buttons">
-            <Button onClick={() => void runSearch(0)} disabled={loading}>
-              Search
-            </Button>
-            <Button kind="ghost" onClick={reset} disabled={loading}>
-              Clear
-            </Button>
-          </div>
+          <Button onClick={handleSearch} disabled={loading}>
+            Search
+          </Button>
+          <Button kind="ghost" onClick={reset} disabled={loading}>
+            Clear
+          </Button>
         </div>
 
         {error && (
@@ -521,6 +599,7 @@ const AddTargetSitePage: FC = () => {
           <Table size="sm" className="opening-search__table">
             <TableHead>
               <TableRow>
+                <TableHeader>Opening ID</TableHeader>
                 <TableHeader>Opening</TableHeader>
                 <TableHeader>Licence</TableHeader>
                 <TableHeader>Cutting permit</TableHeader>
@@ -529,33 +608,46 @@ const AddTargetSitePage: FC = () => {
                 <TableHeader>Category</TableHeader>
                 <TableHeader>Status</TableHeader>
                 <TableHeader>Gross area (ha)</TableHeader>
-                <TableHeader className="opening-search__col-actions">Actions</TableHeader>
+                {/* No visible header — the row action speaks for itself. aria-label keeps the
+                    column announced, matching the other action columns in the app. */}
+                <TableHeader className="opening-search__col-actions" aria-label="Actions" />
               </TableRow>
             </TableHead>
             <TableBody>
-              {results.map((opening) => (
-                <TableRow key={rowKey(opening)}>
-                  <TableCell>{opening.openingNumber || opening.openingId}</TableCell>
-                  <TableCell>{opening.forestFileId || '—'}</TableCell>
-                  <TableCell>{opening.cuttingPermitId || '—'}</TableCell>
-                  <TableCell>{opening.timberMark || '—'}</TableCell>
-                  <TableCell>{opening.cutBlockId || '—'}</TableCell>
-                  <TableCell>{labelFor(openCategories, opening.openCategoryCode)}</TableCell>
-                  <TableCell>{labelFor(openingStatuses, opening.openingStatusCode)}</TableCell>
-                  <TableCell>{opening.grossArea || '—'}</TableCell>
-                  <TableCell className="opening-search__col-actions">
-                    {validatingKey === rowKey(opening) ? (
-                      <InlineLoading description="Checking…" />
-                    ) : (
-                      <Button kind="ghost" size="sm" onClick={() => void target(opening)}>
-                        <span className="opening-search__add-label">
-                          <Add /> Add
-                        </span>
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {results.map((opening) => {
+                // Null when there is no opening id to link to; the cell then shows plain text.
+                const silvaHref = silvaOpeningUrl(opening.openingId, user?.idpProvider);
+                return (
+                  <TableRow key={rowKey(opening)}>
+                    <TableCell>
+                      {silvaHref ? (
+                        <a href={silvaHref} target="_blank" rel="noopener noreferrer">
+                          {opening.openingId}
+                        </a>
+                      ) : (
+                        opening.openingId || '—'
+                      )}
+                    </TableCell>
+                    <TableCell>{opening.openingNumber || '—'}</TableCell>
+                    <TableCell>{opening.forestFileId || '—'}</TableCell>
+                    <TableCell>{opening.cuttingPermitId || '—'}</TableCell>
+                    <TableCell>{opening.timberMark || '—'}</TableCell>
+                    <TableCell>{opening.cutBlockId || '—'}</TableCell>
+                    <TableCell>{labelFor(openCategories, opening.openCategoryCode)}</TableCell>
+                    <TableCell>{labelFor(openingStatuses, opening.openingStatusCode)}</TableCell>
+                    <TableCell>{opening.grossArea || '—'}</TableCell>
+                    <TableCell className="opening-search__col-actions">
+                      {validatingKey === rowKey(opening) ? (
+                        <InlineLoading description="Checking…" />
+                      ) : (
+                        <Button kind="ghost" size="sm" onClick={() => void target(opening)}>
+                          Add
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -579,15 +671,6 @@ const AddTargetSitePage: FC = () => {
           />
         )}
       </Column>
-
-      <ClientSearchModal
-        open={clientLookupOpen}
-        onClose={() => setClientLookupOpen(false)}
-        onSelect={(clientNumber, selectedClientName) => {
-          setField({ clientNumber });
-          setClientName(selectedClientName);
-        }}
-      />
     </Grid>
   );
 };

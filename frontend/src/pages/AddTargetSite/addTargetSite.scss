@@ -31,12 +31,26 @@
   margin-bottom: 1rem;
 }
 
+// Four filters per row, matching Checklist search. Stepped down at the Carbon lg and md breakpoints
+// so a column never gets narrower than roughly 13rem.
+//
+// Top-aligned, not bottom-aligned: every field is label-then-input, so aligning the tops lines the
+// inputs up. Bottom-aligning did not, because the client picker carries helper text under its input
+// and that extra height pushed its input above its row-mates'.
 .opening-search__filters {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
-  align-items: end;
+  align-items: start;
   margin-bottom: 1.5rem;
+
+  @media (max-width: 1055px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 671px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 // Opening-number field: a standard label over four mapsheet segment boxes that share the grid cell.
@@ -55,39 +69,34 @@
   }
 }
 
+// Search / Clear on their own row, right-aligned — matching Checklist search. The "Include all
+// P87's" checkbox that used to share this row is a filter, so it moved into the grid above.
 .opening-search__actions {
   display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
   margin-bottom: 1.5rem;
 }
 
-.opening-search__action-buttons {
-  display: flex;
-  gap: 0.5rem;
+// The checkbox has no label above it, so in a top-aligned grid row it would sit level with its
+// neighbours' LABELS rather than their inputs. Nudge it down by one label line.
+.opening-search__checkbox {
+  padding-top: 1.5rem;
 }
 
-// Client lookup field: read-only name display + lookup/clear icon buttons aligned to its baseline.
+// Client lookup field: same two-column span as the Checklist search picker, for the same reason —
+// the helper text and a selected client's full label need more than one column of a five-column
+// grid. Single column below the Carbon medium breakpoint.
 .opening-search__client {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.25rem;
+  grid-column: span 2;
 
-  > .cds--form-item,
-  > .cds--text-input-wrapper {
-    flex: 1 1 auto;
+  .cds--list-box__wrapper {
+    width: 100%;
   }
 
-  // Carbon clears the field background for read-only inputs; restore white to match the other fields.
-  .cds--text-input {
-    background-color: var(--cds-field, #ffffff);
+  @media (max-width: 671px) {
+    grid-column: auto;
   }
-}
-
-.opening-search__client-buttons {
-  display: flex;
 }
 
 .opening-search__empty {
@@ -107,9 +116,3 @@
   }
 }
 
-// "+ Add" target button: icon before the label.
-.opening-search__add-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}

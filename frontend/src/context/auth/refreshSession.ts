@@ -16,9 +16,16 @@ const MIN_REFRESH_GAP_MS = 5_000;
 
 let refreshInFlight = false;
 let lastRefreshTime = 0;
+/**
+ * Set once a sign-out redirect is under way. A page typically has several requests in flight, so
+ * without this every one of them would fire its own signOut() and its own location assignment.
+ */
+let endingSession = false;
 
 /** Sign out and hard-redirect to the app root (re-entering the IDIR login flow). */
 async function signOutAndRedirect(): Promise<void> {
+  if (endingSession) return;
+  endingSession = true;
   try {
     await signOut();
   } catch {
@@ -26,6 +33,34 @@ async function signOutAndRedirect(): Promise<void> {
   }
   const basePath = (env.VITE_BASE_PATH ?? '').replace(/\/$/, '');
   window.location.href = window.location.origin + (basePath || '/');
+}
+
+/**
+ * React to a 401 from the API: end the session and send the user back through login.
+ *
+ * <p>{@link ensureSessionFresh} is proactive — it inspects the token before a request goes out — so
+ * it cannot catch a token the SERVER rejects while the client still believes it is valid: clock
+ * skew, a revoked session, a rotated signing key, or simply a token with more than
+ * {@link REFRESH_MARGIN_SECONDS} left that the backend refuses. Without this, those surfaced as an
+ * ordinary error toast and the user sat on a dead page with no hint to sign in again.
+ *
+ * <p>Does nothing when there is no session to end. That case is not a timeout — it is an
+ * unauthenticated call from a signed-out user, and redirecting would bounce them to the root they
+ * are already on, potentially in a loop if that page calls the API too. The error surfaces normally
+ * instead.
+ *
+ * @returns true when the session was ended and a redirect is under way.
+ */
+export async function handleUnauthorized(): Promise<boolean> {
+  if (endingSession) return true;
+  try {
+    const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {};
+    if (!tokens?.accessToken) return false;
+  } catch {
+    return false;
+  }
+  await signOutAndRedirect();
+  return true;
 }
 
 /**

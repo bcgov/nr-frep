@@ -1,15 +1,11 @@
 import { act, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { PageTitleProvider } from './PageTitleProvider';
 import { usePageTitle } from './usePageTitle';
 
-// The component reads env.VITE_APP_NAME and joins it with the page title.
-// vite.config's `test.env` doesn't propagate into project-scoped browser
-// tests, so we mock the env module to provide a deterministic value.
-vi.mock('@/env', () => ({
-  env: { VITE_APP_NAME: 'FREP' },
-}));
+// The app name is a constant now, not configuration — assert against the real value.
+import { APP_NAME } from '@/constants/appName';
 
 describe('PageTitleProvider', () => {
   function TestComponent() {
@@ -38,7 +34,7 @@ describe('PageTitleProvider', () => {
       </PageTitleProvider>,
     );
     await act(async () => screen.getByText('Set Title').click());
-    expect(screen.getByTestId('page-title').textContent).toBe('FREP - New Title');
+    expect(screen.getByTestId('page-title').textContent).toBe(`${APP_NAME} - New Title`);
   });
 
   it('shares the page title across multiple consumers', async () => {
@@ -53,7 +49,7 @@ describe('PageTitleProvider', () => {
       </PageTitleProvider>,
     );
     await act(async () => screen.getByText('Set Title').click());
-    expect(screen.getByTestId('another-title').textContent).toBe('FREP - New Title');
+    expect(screen.getByTestId('another-title').textContent).toBe(`${APP_NAME} - New Title`);
   });
 
   it('should fail if no provider is present', () => {

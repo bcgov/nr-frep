@@ -29,10 +29,17 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits'
  * package's shared cursor record borrows its types from `riparian_checklist_attach` regardless of
  * protocol — that record is not the target table.
  *
- * <p>The column was `VARCHAR2(120 BYTE)` (matching the legacy UI's `maxlength="120"` in
- * `checklistAttachment.jsp:62`) and is widened to 2000 by migration `V202608051100.3` in nr-mof-db.
- * **This value is only correct once that migration has been deployed to the target environment** —
- * shipping it ahead of the DDL lets the UI accept descriptions the insert will reject.
+ * <p>The base column is `VARCHAR2(120 BYTE)` — `BIODIVERSITY_CHKLST_ATTACH.DESCRIPTION` in nr-mof-db
+ * `scripts/THE/TABLES/V2.00400__BIODIVERSITY_CHKLST_ATTACH.sql`. That 120 matched the legacy UI,
+ * which capped this input at `maxlength="120"` (`checklistAttachment.jsp:62`) on the one screen it
+ * used for every protocol. Note the table carries no `FREP_` prefix, unlike the
+ * `FREP_CHECKLIST_ATTACHMENTS` package that writes it — looking for the prefixed name finds nothing
+ * and reads as "the DDL isn't in the repo".
+ *
+ * <p>Migration `V202608051100.3` widens it to 2000, which is what this constant assumes.
+ * **The value is only correct once that migration has been deployed to the target environment** —
+ * shipping it ahead of the DDL lets the UI accept descriptions the insert will reject with an
+ * ORA-12899. If that migration is still pending anywhere this deploys, drop this back to 120.
  */
 const DESCRIPTION_LIMIT = 2000;
 

@@ -89,12 +89,18 @@ describe('ProtocolChecklistPage submit', () => {
 
   it('renders a historical SLB record read-only with no submit/unsubmit controls', async () => {
     // SLB is the legacy biodiversity code — view-only in the new app (SLR is go-forward).
-    api.getChecklist.mockResolvedValue({ ...activeChecklist, protocolType: 'SLB', statusCode: 'SUB' });
+    api.getChecklist.mockResolvedValue({
+      ...activeChecklist,
+      protocolType: 'SLB',
+      statusCode: 'SUB',
+    });
 
     renderPage();
 
     expect(
-      await screen.findByText('This is a historical Stand Level Retention (SLB) record and is read-only.'),
+      await screen.findByText(
+        'This is a historical Stand Level Retention (SLB) record and is read-only.',
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Unsubmit' })).toBeNull();

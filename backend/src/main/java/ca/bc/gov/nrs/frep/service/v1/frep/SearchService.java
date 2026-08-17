@@ -197,6 +197,11 @@ public class SearchService {
       String legalFirstName,
       String legalMiddleName
   ) {
+    assertCriteriaFits("client number", clientNumber, 8);
+    assertCriteriaFits("client acronym", clientAcronym, 8);
+    assertCriteriaFits("client name", clientName, 200);
+    assertCriteriaFits("legal first name", legalFirstName, 30);
+    assertCriteriaFits("legal middle name", legalMiddleName, 30);
     try {
       return searchRepository.searchClients(new ClientSearchCriteria(
           trimToNull(clientNumber),
@@ -209,6 +214,24 @@ public class SearchService {
           .toList();
     } catch (DataAccessException ex) {
       throw translateTooManyResults(ex);
+    }
+  }
+
+  /**
+   * Rejects a criterion too long for the attribute it binds to on
+   * {@code THE.FREP_CLIENT_SEARCH_VW_OBJECT}.
+   *
+   * <p>The driver pickles the criteria into the object before the call, so an over-long value fails
+   * at bind time with ORA-17072 and surfaces as an uncategorized 500 with a full stack — the
+   * acronym and number attributes are only {@code VARCHAR2(8)}, so an ordinary long search term was
+   * enough to trigger it. ColumnOverflow does not catch this: it matches ORA-12899, which is
+   * a different, server-side error carrying the column name. A value longer than the column cannot
+   * match anything stored in it, so this is a bad request, not a server fault.
+   */
+  private static void assertCriteriaFits(String label, String value, int maxLength) {
+    if (value != null && value.trim().length() > maxLength) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "The %s search term is too long (maximum %d characters).".formatted(label, maxLength));
     }
   }
 
@@ -267,11 +290,17 @@ public class SearchService {
   }
 
   static ClientSearchResult toClientSearchResult(ClientSearchRow row) {
+    // The proc's display_client_number is NVL(acronym, number), so for any client WITH an acronym it
+    // is the acronym. It used to be returned as `clientNumber`, which silently discarded the real
+    // one — and the caller feeds that straight into the checklist-search filter, which matches
+    // client_number = LPAD(:clientNumber, 8, '0'). 'ARDEW' padded to 8 is '000ARDEW', so picking any
+    // client with an acronym returned no rows at all. Keep both, and keep them in the right slots.
     String displayNumber = row.displayClientNumber().isBlank()
         ? row.clientNumber()
         : row.displayClientNumber();
     return new ClientSearchResult(
         row.clientAcronym(),
+        row.clientNumber(),
         displayNumber,
         row.clientLocnCode(),
         row.clientName(),

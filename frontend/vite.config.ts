@@ -65,6 +65,14 @@ export default defineConfig(({ mode }) => {
         workbox: {
           navigateFallback: '/index.html',
           globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // config.js is generated per-container at start-up by docker-entrypoint.sh — it is the
+          // ONLY file whose contents differ between environments and deploys. Precaching it froze
+          // the runtime config: Workbox fetches a precached URL once at service-worker install and
+          // keys it by a build-time revision hash, and that hash comes from the static placeholder
+          // in public/config.js, which never changes. So the copy cached on a user's first visit
+          // was served forever, and every later deploy's values — backend URL, logout endpoints,
+          // support mailbox, allowed attachment types — were silently ignored.
+          globIgnores: ['config.js'],
           // The bundled app (Carbon + Amplify) exceeds Workbox's 2 MiB default; raise the
           // precache ceiling so the full app shell is cached for offline field use.
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
@@ -76,6 +84,23 @@ export default defineConfig(({ mode }) => {
               method: 'GET',
               handler: 'NetworkFirst',
               options: { cacheName: 'frep-api-get', networkTimeoutSeconds: 5 },
+            },
+            {
+              // Network first, cache as the offline fallback.
+              //
+              // NOT precached (see globIgnores): a precached config.js is keyed by a build-time
+              // revision hash taken from the static placeholder, so it never changes and the copy
+              // fetched on a user's first visit is served forever — every later deploy's backend
+              // URL, logout endpoints and feature config silently ignored.
+              //
+              // NOT NetworkOnly either: window.config is defined BY this file, so a failed offline
+              // fetch leaves it undefined, env falls back to build-time vars the container image
+              // does not carry, and Amplify.configure gets an undefined user pool — breaking the
+              // offline CHR editor exactly when it is needed. NetworkFirst gives a fresh config
+              // whenever the network answers and the last-known-good one when it does not.
+              urlPattern: ({ url }) => url.pathname === '/config.js',
+              handler: 'NetworkFirst',
+              options: { cacheName: 'frep-runtime-config', networkTimeoutSeconds: 3 },
             },
           ],
         },
@@ -93,7 +118,6 @@ export default defineConfig(({ mode }) => {
         'aws-amplify/auth/cognito',
         'aws-amplify/utils',
         'react-dom/client',
-        '@tanstack/react-query-devtools',
         'aws-amplify/auth',
       ],
     },

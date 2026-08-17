@@ -161,6 +161,9 @@ public class ChrChecklistService {
     persistenceService.addPhoto(
         checklistId, file.getOriginalFilename(), description.trim(), fileDate, featureId,
         file.getContentType(), content, loggedUserHelper.getLoggedUserId());
+    log.info("Added attachment :: {} ({} bytes) to CHR checklist :: {} by user :: {}",
+        file.getOriginalFilename(), content.length, checklistId,
+        loggedUserHelper.getLoggedUserId());
   }
 
   /** Remove one photo. Leaf operation, same guarantees as {@link #addPhoto}. */
@@ -168,6 +171,8 @@ public class ChrChecklistService {
   public void deletePhoto(long checklistId, long photoId, String deviceCheckoutGuid) {
     assertPhotoEditable(checklistId, deviceCheckoutGuid);
     persistenceService.deletePhoto(checklistId, photoId, loggedUserHelper.getLoggedUserId());
+    log.info("Deleted attachment :: {} from CHR checklist :: {} by user :: {}", photoId,
+        checklistId, loggedUserHelper.getLoggedUserId());
   }
 
   /**
@@ -280,11 +285,17 @@ public class ChrChecklistService {
     checklist.setPictures(persistenceService.getPhotoMetadata(checklistId));
     List<ValidationError> validationErrors = submitValidationService.validateBeforeSubmit(checklist);
     if (!validationErrors.isEmpty()) {
+      // Not an error: the user's data is incomplete. Logged so support can see how often submit is
+      // blocked and on how many rules, without needing the user to report it.
+      log.info("Submit blocked for CHR checklist :: {} by {} validation failure(s)", checklistId,
+          validationErrors.size());
       throw new ChrSubmitValidationException(validationErrors);
     }
 
     checklist.setStatus(ChrConstants.FrepChecklistStatusCode.SUB);
     persistenceService.saveChecklist(checklist, loggedUserHelper.getLoggedUserId());
+    log.info("Submitted CHR checklist :: {} by user :: {}", checklistId,
+        loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 
@@ -296,6 +307,8 @@ public class ChrChecklistService {
           "Activate failed. Checklist status is " + status + " when RDO is expected.");
     }
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
+    log.info("Activated CHR checklist :: {} by user :: {}", checklistId,
+        loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 
@@ -318,6 +331,8 @@ public class ChrChecklistService {
           "Release failed. This checklist is checked out on another device.");
     }
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
+    log.info("Released offline checkout of CHR checklist :: {} by user :: {}", checklistId,
+        loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 
@@ -334,6 +349,8 @@ public class ChrChecklistService {
       );
     }
     persistenceService.updateChecklistOffline(checklistId, loggedUserHelper.getLoggedUserId());
+    log.info("Took CHR checklist :: {} offline for user :: {}", checklistId,
+        loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 
@@ -345,6 +362,8 @@ public class ChrChecklistService {
           "Unsubmit failed. Checklist status is " + status + " when SUB is expected.");
     }
     persistenceService.unsubmitChecklist(checklistId, loggedUserHelper.getLoggedUserId());
+    log.info("Unsubmitted CHR checklist :: {} by user :: {}", checklistId,
+        loggedUserHelper.getLoggedUserId());
     return getChecklist(checklistId);
   }
 

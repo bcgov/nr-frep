@@ -49,7 +49,10 @@ export type ChecklistSearchPageQuery = ChecklistSearchQuery & {
 
 export type ClientSearchResult = {
   clientAcronym: string;
+  /** The real 8-character client number — what the checklist/opening filters match on. */
   clientNumber: string;
+  /** Display-only: NVL(acronym, number), as the legacy screens showed it. Never use as a filter. */
+  displayClientNumber?: string;
   clientLocnCode: string;
   clientName: string;
   clientLocnName: string;

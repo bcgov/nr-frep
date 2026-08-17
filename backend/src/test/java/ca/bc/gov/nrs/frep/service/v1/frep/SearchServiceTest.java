@@ -160,12 +160,28 @@ class SearchServiceTest {
     ));
 
     assertEquals("TOLKO", result.clientAcronym());
-    assertEquals("00010001", result.clientNumber());
+    assertEquals("10001", result.clientNumber());
+    assertEquals("00010001", result.displayClientNumber());
     assertEquals("01", result.clientLocnCode());
     assertEquals("TOLKO INDUSTRIES LTD.", result.clientName());
     assertEquals("VERNON OFFICE", result.clientLocnName());
     assertEquals("VERNON", result.city());
     assertEquals("ACT", result.clientStatus());
+  }
+
+  @Test
+  void toClientSearchResultKeepsTheRealNumberWhenTheClientHasAnAcronym() {
+    // The proc's display_client_number is NVL(acronym, number), so a client WITH an acronym returns
+    // the acronym there. Returning that as `clientNumber` discarded the real one, and the caller
+    // feeds it into the checklist-search filter, which matches client_number = LPAD(:n, 8, '0') —
+    // 'ARDEW' becomes '000ARDEW' and finds nothing. That is why picking a client returned no rows.
+    var result = SearchService.toClientSearchResult(new ClientSearchRow(
+        "00003680", "ARDEW", "ARDEW", "ARDEW WOOD PRODUCTS LTD.",
+        "00", "HEAD OFFICE", "PENTICTON", "ACT"
+    ));
+
+    assertEquals("00003680", result.clientNumber(), "the filter needs the real number");
+    assertEquals("ARDEW", result.displayClientNumber(), "the display value is kept separately");
   }
 
   @Test

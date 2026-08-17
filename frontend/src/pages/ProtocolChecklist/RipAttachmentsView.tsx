@@ -27,10 +27,12 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits'
  * <p>120 comes from the legacy UI, which capped this input at `maxlength="120"`
  * (`checklistAttachment.jsp:62`) on the one screen it used for every protocol; its validator only
  * checked the field was present. So 120 is the widest value the old app is known to have written
- * successfully, not necessarily the column width — the table DDL is not in this repo. If the column
- * is wider this can safely be raised:
- *   SELECT char_used, data_length FROM all_tab_columns
- *    WHERE table_name = 'BIODIVERSITY_CHKLST_ATTACH' AND column_name = 'DESCRIPTION';
+ * successfully, and it matches the column: `BIODIVERSITY_CHKLST_ATTACH.DESCRIPTION` is
+ * `VARCHAR2(120 BYTE)` (nr-mof-db `scripts/THE/TABLES/V2.00400__BIODIVERSITY_CHKLST_ATTACH.sql`).
+ *
+ * <p>The DDL *is* in nr-mof-db — under `BIODIVERSITY_CHKLST_ATTACH`, without the `FREP_` prefix the
+ * PL/SQL packages carry. `V999999999999.3` widens this to 2000, but that migration is not merged,
+ * so 120 remains the deployed width; raise this only once it ships.
  */
 const DESCRIPTION_LIMIT = 120;
 
@@ -283,7 +285,8 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     if (rejected.length > 0) {
       display({
         kind: 'error',
-        title: rejected.length === 1 ? "Can't upload that file" : `Skipped ${rejected.length} files`,
+        title:
+          rejected.length === 1 ? "Can't upload that file" : `Skipped ${rejected.length} files`,
         subtitle: rejected.map((r) => `"${r.file.name}" ${r.reason}`).join('; '),
         timeout: 9000,
       });
@@ -374,7 +377,11 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       return;
     setBusy(true);
     try {
-      await API.protocolChecklist.deleteAttachment(protocol, checklistId, row.checklistAttachmentId);
+      await API.protocolChecklist.deleteAttachment(
+        protocol,
+        checklistId,
+        row.checklistAttachmentId,
+      );
       await refreshRows();
       display({ kind: 'success', title: 'Attachment removed', timeout: 4000 });
     } catch (err) {

@@ -41,6 +41,8 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,8 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class ProtocolChecklistService {
+
+  private static final Logger log = LoggerFactory.getLogger(ProtocolChecklistService.class);
 
   // Allowed attachment types = the codes in THE.MIME_TYPE_CODE (keyed by file extension). The
   // FREP_CHECKLIST_ATTACHMENTS proc stores only these and rejects anything else with an ORA-01400
@@ -119,8 +123,16 @@ public class ProtocolChecklistService {
     assertEditable(resourceType);
     String error = writeRepository.submit(resourceType, checklistId, loggedUserHelper.getLoggedUserId());
     if (StringUtils.isNotBlank(error)) {
-      throw new ProtocolSubmitValidationException(splitValidationMessages(error));
+      // Not an error: the proc refused because the record is incomplete. Logged at info so support
+      // can see how often submit is blocked and on how many rules, without a user having to report
+      // it — the messages themselves stay out of the log, since they can name site data.
+      List<String> messages = splitValidationMessages(error);
+      log.info("Submit blocked for {} checklist :: {} by {} validation failure(s)", resourceType,
+          checklistId, messages.size());
+      throw new ProtocolSubmitValidationException(messages);
     }
+    log.info("Submitted {} checklist :: {} by user :: {}", resourceType, checklistId,
+        loggedUserHelper.getLoggedUserId());
   }
 
   /** Revert a submitted checklist to ACT. */
@@ -797,6 +809,8 @@ public class ProtocolChecklistService {
     // go-forward) — see the section comment above.
     writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
         fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+    log.info("Uploaded attachment :: {} ({} bytes) to checklist :: {} by user :: {}", fileName,
+        bytes.length, checklistId, loggedUserHelper.getLoggedUserId());
   }
 
   /** Pull the spooled upload into heap, turning the I/O failure into a clean 400 rather than a 500. */
@@ -825,6 +839,8 @@ public class ProtocolChecklistService {
     String resourceType = checklistRepository.resolveResourceType(checklistId);
     assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
+    log.info("Deleted attachment :: {} from {} checklist :: {} by user :: {}", attachmentId,
+        resourceType, checklistId, loggedUserHelper.getLoggedUserId());
   }
 
   /** Legacy returns validation failures as a {@code ;}-separated list of message codes. */

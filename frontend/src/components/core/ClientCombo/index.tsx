@@ -14,6 +14,16 @@ type Props = {
   selectedLabel: string;
   /** Number and display label of the picked client; both empty when the field is cleared. */
   onSelect: (clientNumber: string, clientName: string) => void;
+  /**
+   * The raw text in the field, reported on every keystroke.
+   *
+   * <p>Only a *selection* produces a client number to filter on, so typed text that matches no
+   * client would otherwise be silently dropped — and the caller would run an unfiltered search
+   * while the field still showed the term. Callers use this to notice that state and refuse.
+   */
+  onTermChange?: (term: string) => void;
+  invalid?: boolean;
+  invalidText?: string;
   disabled?: boolean;
 };
 
@@ -29,14 +39,26 @@ type Props = {
  * prefix is both useless and an error. The spinner sits in the label rather than over the field so
  * the input never jumps.
  */
-const ClientCombo: FC<Props> = ({ id, titleText, selectedLabel, onSelect, disabled }) => {
+const ClientCombo: FC<Props> = ({
+  id,
+  titleText,
+  selectedLabel,
+  onSelect,
+  onTermChange,
+  invalid,
+  invalidText,
+  disabled,
+}) => {
   const [term, setTerm] = useState('');
   const [items, setItems] = useState<ClientSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const trimmed = term.trim();
-    if (trimmed.length < MIN_CLIENT_TERM_LENGTH) {
+    // Selecting an item makes Carbon fire onInputChange with the item's own label, so without this
+    // every pick triggered a fresh search for "Name (ACRONYM) · 00002483" — a term that matches
+    // nothing and, before the width guards in searchClientsAuto, overflowed the acronym criteria.
+    if (trimmed.length < MIN_CLIENT_TERM_LENGTH || trimmed === selectedLabel.trim()) {
       setItems([]);
       setLoading(false);
       return;
@@ -63,13 +85,20 @@ const ClientCombo: FC<Props> = ({ id, titleText, selectedLabel, onSelect, disabl
       active = false;
       clearTimeout(handle);
     };
-  }, [term]);
+  }, [term, selectedLabel]);
 
   return (
     <ComboBox
       id={id}
       className="client-combo"
       disabled={disabled}
+      invalid={invalid}
+      invalidText={invalidText}
+      // Without this Carbon discards text that matches no suggestion the moment the field blurs —
+      // including the blur caused by clicking Search. The term the caller validates on would be
+      // gone before the click handler ran, and the field would silently empty itself under an
+      // error message. Keeping the text is also what makes "that client does not exist" legible.
+      allowCustomValue
       titleText={
         <span className="client-combo__label">
           {titleText}
@@ -91,7 +120,10 @@ const ClientCombo: FC<Props> = ({ id, titleText, selectedLabel, onSelect, disabl
       // suggestion list (the term has usually changed), so a lightweight stand-in carrying only the
       // label is enough for itemToString.
       selectedItem={selectedLabel ? ({ clientName: selectedLabel } as ClientSearchResult) : null}
-      onInputChange={(value: string) => setTerm(value ?? '')}
+      onInputChange={(value: string) => {
+        setTerm(value ?? '');
+        onTermChange?.(value ?? '');
+      }}
       onChange={({ selectedItem }: { selectedItem?: ClientSearchResult | null }) =>
         onSelect(
           selectedItem?.clientNumber?.trim() ?? '',

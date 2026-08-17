@@ -36,7 +36,7 @@ class SearchApiControllerTest {
   void returnsClientSearchResults() throws Exception {
     when(searchService.searchClients(eq("000100"), any(), any(), any(), any()))
         .thenReturn(List.of(new ClientSearchResult(
-            "GORMAN", "00010001", "01", "GORMAN BROS. LUMBER LTD.",
+            "GORMAN", "00010001", "GORMAN", "01", "GORMAN BROS. LUMBER LTD.",
             "Head Office", "Kelowna", "ACT")));
 
     mockMvc.perform(get("/api/v1/search/clients").param("clientNumber", "000100"))

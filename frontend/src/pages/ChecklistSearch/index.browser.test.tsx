@@ -106,16 +106,21 @@ describe('ChecklistSearch — the search survives leaving the page', () => {
 
   it('writes the search into the URL', async () => {
     renderAt();
-    // The arrival search fires first; the user's own search is the second call.
+    // Wait for the arrival search to SETTLE, not just to start: Search is disabled while loading, so
+    // clicking too early is a no-op.
     await waitFor(() => expect(search.searchChecklistsPaged).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
 
     await userEvent.type(screen.getByLabelText('Opening ID'), '115874');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    await waitFor(() => expect(search.searchChecklistsPaged).toHaveBeenCalledTimes(2));
-    const url = await screen.findByTestId('search');
-    expect(url.textContent).toContain('openingId=115874');
-    expect(url.textContent).toContain('page=0');
+    // Poll the URL rather than reading it once. findByTestId resolves the moment the probe exists —
+    // which is immediately — so a single read sees whatever the URL held at that instant, still the
+    // arrival search's params on a slower runner. That is what failed in CI and passed locally.
+    await waitFor(() => {
+      expect(screen.getByTestId('search').textContent).toContain('openingId=115874');
+    });
+    expect(screen.getByTestId('search').textContent).toContain('page=0');
   });
 
   it('re-runs a search carried in the URL — the Back case', async () => {

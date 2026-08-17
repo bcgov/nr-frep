@@ -21,8 +21,11 @@ import { env } from '@/env';
  * peeled off as the outer endpoint's own params (the bug that silently dropped
  * {@code post_logout_redirect_uri} at the logoff.cgi hop).
  *
- * @param appReturnUrl absolute URL the user lands on when fully logged out
- *   (must be a registered Cognito sign-out URL). Typically window.location.origin.
+ * @param appReturnUrl absolute URL the user lands on when fully logged out. Must be a registered
+ *   Cognito sign-out URL — Cognito matches them by EXACT string, trailing slash included, and
+ *   answers an unregistered value with a bare "Required parameters missing" error rather than
+ *   anything that names the real problem. The registered values are bare origins with NO trailing
+ *   slash, which is what {@code window.location.origin} produces — do not normalise or append to it.
  * @returns the chain URL to navigate to, or {@code null} when any required env
  *   piece is missing — callers then fall back to the plain Amplify sign-out.
  */

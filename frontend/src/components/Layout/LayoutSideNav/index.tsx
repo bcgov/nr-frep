@@ -1,3 +1,4 @@
+import { Email } from '@carbon/icons-react';
 import { SideNav, SideNavItems, SideNavLink, SideNavMenu, SideNavMenuItem } from '@carbon/react';
 import { type FC } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -6,11 +7,22 @@ import { getMenuEntries, getOfflineMenuEntries, type MenuItem } from '@/routes/r
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useLayout } from '@/context/layout/useLayout';
+import { env } from '@/env';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 import './index.scss';
 
 export const LayoutSideNav: FC = () => {
+  /**
+   * Shared mailbox behind "Report an issue". Configuration, not code: set from the SUPPORT_EMAIL
+   * GitHub variable via VITE_SUPPORT_EMAIL, so the address can change without a code change — and
+   * because there is no FREP support address in the codebase to hard-code. The link is hidden
+   * entirely when it is unset, rather than shipping a mailto: that goes nowhere.
+   *
+   * Read per render, not once at module load: `env` merges values injected into window.config at
+   * container start, and reading it here keeps the component testable without module resets.
+   */
+  const supportEmail = env.VITE_SUPPORT_EMAIL?.trim() ?? '';
   const { isSideNavExpanded } = useLayout();
   const location = useLocation();
   const { user, isLoggedIn } = useAuth();
@@ -81,6 +93,24 @@ export const LayoutSideNav: FC = () => {
       <SideNavItems>
         {menuEntries.map((route) =>
           route.children ? renderMenuItem(route) : renderMenuLink(route),
+        )}
+        {/* Support — pinned to the bottom of the nav regardless of how many role-dependent entries
+            render above it (see the flex rules in index.scss). A plain mailto: rather than a route:
+            it opens the user's own mail client with the shared mailbox pre-addressed. The app tells
+            users to "contact the FREP help desk" when something fails; this is the how. */}
+        {supportEmail && (
+          <>
+            <li className="side-nav-support-heading" aria-hidden="true">
+              Support
+            </li>
+            <SideNavLink
+              data-testid="side-nav-link-email-support"
+              href={`mailto:${supportEmail}`}
+              renderIcon={Email}
+            >
+              Report an issue
+            </SideNavLink>
+          </>
         )}
       </SideNavItems>
     </SideNav>

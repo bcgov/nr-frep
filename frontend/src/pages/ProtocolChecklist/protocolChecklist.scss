@@ -191,8 +191,16 @@
 }
 
 // FREP attachments upload card: header band + dashed drag-and-drop zone.
+//
+// Shared by the Biodiversity Attachments tab and the CHR Photos tab (chrChecklist imports this
+// stylesheet), so both get this spacing from one rule.
+//
+// margin-bottom matters as much as margin-top: the card used to render *below* the list, where a
+// bottom margin was pointless and its absence invisible. Now that it sits above, without one the
+// card's border sits flush against the table header with no gap at all.
 .attach-card {
   margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
   border: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
   border-radius: 6px;
   overflow: hidden;
@@ -207,6 +215,32 @@
 
 .attach-card__body {
   padding: 1.25rem;
+}
+
+// "What files can I upload?" disclosure at the top of the upload card. Deliberately the same
+// treatment as .chr-mrva-help (Block Summary) so the two read as one pattern: a small blue
+// summary line, closed by default, expanding to secondary-colour body text.
+.attach-help {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--cds-link-primary, #0f62fe);
+  }
+
+  p {
+    margin: 0.5rem 0;
+    color: var(--cds-text-secondary, #525252);
+  }
+
+  // The format list is long (~30 entries on Biodiversity); keep it readable rather than letting it
+  // run the full width of a wide screen.
+  max-width: 44rem;
+}
+
+.attach-help__label {
+  font-weight: 600;
 }
 
 .attach-card__desc {
@@ -255,6 +289,14 @@
   height: 3.5rem;
   border-radius: 50%;
   background: var(--#{vars.$bcgov-prefix}-layer-accent-01, #e0e0e0);
+}
+
+// The drop zone is a flex row (icon | copy | Browse button). This column keeps the prompt and the
+// "What files can I upload?" disclosure stacked together in the middle cell — appending the
+// disclosure straight into the row would make it a fourth column, squeezed against the button.
+.attach-drop__copy {
+  flex: 1;
+  min-width: 0;
 }
 
 .attach-drop__text {
@@ -488,6 +530,17 @@
     margin-top: 0.25rem;
     color: var(--cds-text-error, #da1e28);
   }
+}
+
+// Inline error under a stand-alone `.protocol-checklist__field` (Opening Evaluator, Plots
+// "Evaluated by") — as opposed to `.rip-field-grid__cell-error`, which is scoped INSIDE
+// `.rip-field-grid--inputs` and therefore silently unstyled anywhere else. Plots used that class
+// outside a table, so its error rendered as default body text: dark and full size, while the same
+// error on Opening was small and red.
+.protocol-checklist__field-error {
+  @include type.type-style('label-01');
+  margin-top: 0.25rem;
+  color: var(--cds-text-error, #da1e28);
 }
 
 // Riparian retention matrix (FREP230) — row labels + 4 measurement columns.

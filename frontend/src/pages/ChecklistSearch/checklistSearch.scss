@@ -17,37 +17,50 @@
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
+// Four filters per row. Fixed rather than auto-fit: auto-fit packed as many 13rem columns as
+// happened to fit, so the row count changed with the window and the fields never lined up with the
+// results table below. Stepped down at the Carbon lg and md breakpoints so the columns never get
+// narrower than roughly that same 13rem.
 .checklist-search__filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
-  align-items: end;
+  // Top-aligned, not bottom-aligned. Every field is label-then-input, so aligning the tops lines the
+  // inputs up; aligning the bottoms did not, because the client picker carries helper text under its
+  // input and that extra height pushed its input above Opening ID's on the same row.
+  align-items: start;
+
+  @media (max-width: 1055px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 671px) {
+    grid-template-columns: 1fr;
+  }
 }
 
+// Search / Clear sit on their own row, right-aligned. `1 / -1` spans every column at any breakpoint,
+// so they stay on a row of their own rather than filling whichever column happened to be free after
+// the last filter — which put them level with the Client name field and its helper text.
 .checklist-search__actions {
+  grid-column: 1 / -1;
   display: flex;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
-// Client name field (single grid column) with its lookup/clear buttons aligned to the input's
-// baseline.
+// Client name field. Spans two filter columns: at one column (13rem) the picker's helper text wraps
+// onto three lines and a selected client — "ACME LOGGING LTD (ABC) · 00066838" — is truncated well
+// before the acronym. Dropped back to a single column below the Carbon medium breakpoint, where the
+// grid itself is down to one or two columns and spanning two would overflow the row.
 .checklist-search__client {
-  display: flex;
-  align-items: end;
-  gap: 0.25rem;
+  grid-column: span 2;
 
-  .cds--text-input-wrapper {
-    flex: 1 1 auto;
+  .cds--list-box__wrapper {
+    width: 100%;
   }
 
-  // The read-only input renders with a transparent background by default; force the filled grey
-  // field background so it matches the other (editable) filters like Opening ID.
-  .cds--text-input {
-    background-color: var(--#{vars.$bcgov-prefix}-field);
-  }
-
-  .checklist-search__client-buttons {
-    display: flex;
-    gap: 0.25rem;
+  @media (max-width: 671px) {
+    grid-column: auto;
   }
 }

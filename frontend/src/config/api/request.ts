@@ -12,6 +12,7 @@ import {
   type ApiResult,
   type APIConfig,
 } from '@/config/api/types';
+import { handleUnauthorized } from '@/context/auth/refreshSession';
 
 export const isDefined = <T>(
   value: T | null | undefined,
@@ -297,6 +298,14 @@ export const catchErrorCodes = (options: ApiRequestOptions, result: ApiResult): 
     503: 'Service Unavailable',
     ...options.errors,
   };
+
+  // A 401 means the session is over as far as the server is concerned — end it here and send the
+  // user back through login. Fire-and-forget: the ApiError is still thrown so the caller's own
+  // error handling runs, while the redirect proceeds. handleUnauthorized no-ops when there is no
+  // session to end, so an unauthenticated call from a signed-out user does not bounce.
+  if (result.status === 401) {
+    void handleUnauthorized();
+  }
 
   const error = errors[result.status];
   if (error) {

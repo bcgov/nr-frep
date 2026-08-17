@@ -87,9 +87,10 @@ describe('FeatureEditor — Summary section stays open', () => {
 
   it('does not collapse the Summary section when the required Feature rating is filled', async () => {
     const onPatch = vi.fn();
-    // A bare feature has no Feature rating → a Summary error → the section auto-opens.
+    // A bare feature has no Feature rating → a Summary error → once errors are shown (i.e. after a
+    // save attempt) the section auto-opens.
     const { rerender } = render(
-      <FeatureEditor feature={baseFeature()} onPatch={onPatch} readOnly={false} />,
+      <FeatureEditor feature={baseFeature()} onPatch={onPatch} readOnly={false} showErrors />,
     );
     await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'true'));
 
@@ -99,11 +100,21 @@ describe('FeatureEditor — Summary section stays open', () => {
         feature={baseFeature({ featureRating: '2' })}
         onPatch={onPatch}
         readOnly={false}
+        showErrors
       />,
     );
 
     // The section must remain open (sticky), not snap shut now that the error is gone.
     await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'true'));
+  });
+
+  it('leaves the Summary section closed before a save is attempted', async () => {
+    // Opening a feature must not greet the user with auto-opened sections and error badges for
+    // fields they have not been asked to fill yet — errors surface only on Save (showErrors).
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByText('Feature rating is required.')).toBeNull();
   });
 });
 

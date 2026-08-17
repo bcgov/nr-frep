@@ -42,4 +42,28 @@ describe('buildFederatedLogoutUrl', () => {
     expect(cognito).toContain('https://cognito.example.com/logout?client_id=cognito-client');
     expect(cognito).toContain(`logout_uri=${encodeURIComponent('https://app/')}`);
   });
+
+  it('passes the return URL through byte-for-byte, trailing slash included', () => {
+    // Cognito matches allowed sign-out URLs by EXACT string and answers an unregistered value with
+    // "Required parameters missing" — the error that broke logout in TEST when the caller sent a
+    // bare window.location.origin while FAM had the trailing-slash form registered. Anything that
+    // normalises, trims or re-encodes this value reintroduces that bug.
+    setEnv(ALL_ENV);
+
+    /** Peel the two outer layers and read the logout_uri Cognito will actually receive. */
+    const logoutUriIn = (chain: string): string => {
+      const keycloak = decodeURIComponent(chain.split('returl=')[1]!);
+      const cognito = decodeURIComponent(keycloak.split('post_logout_redirect_uri=')[1]!);
+      return decodeURIComponent(cognito.split('logout_uri=')[1]!);
+    };
+
+    for (const appUrl of [
+      'https://app.example/',
+      'https://app.example',
+      'https://app.example/base/',
+      'http://localhost:3000/',
+    ]) {
+      expect(logoutUriIn(buildFederatedLogoutUrl(appUrl)!)).toBe(appUrl);
+    }
+  });
 });

@@ -48,8 +48,6 @@ parameters:
   - name: VITE_BACKEND_URL
     description: Browser-facing API base path; usually '/api'
     value: /api
-  - name: VITE_APP_NAME
-    value: FREP IMS
   # Base URL for SILVA deep links from Opening ID (see frontend/src/utils/silva.ts). Held as a
   # deployment parameter so a SILVA hostname change is a GitHub variable edit plus a redeploy,
   # not a code change. The entrypoint substitutes this default when the variable is unset, so an
@@ -57,6 +55,12 @@ parameters:
   - name: VITE_SILVA_BASE_URL
     description: SILVA base URL for Opening ID deep links (no trailing slash)
     value: https://silva.nrs.gov.bc.ca
+  # Shared mailbox behind the side nav's "Report an issue" link. Optional: an empty value hides the
+  # link entirely rather than shipping a mailto: that goes nowhere, so an environment with no support
+  # address simply doesn't offer one.
+  - name: VITE_SUPPORT_EMAIL
+    description: Support mailbox for "Report an issue"; empty hides the link
+    value: ""
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
@@ -144,10 +148,10 @@ objects:
                   value: ${VITE_LOGOUT_KEYCLOAK_CLIENT_ID}
                 - name: VITE_BACKEND_URL
                   value: ${VITE_BACKEND_URL}
-                - name: VITE_APP_NAME
-                  value: ${VITE_APP_NAME}
                 - name: VITE_SILVA_BASE_URL
                   value: ${VITE_SILVA_BASE_URL}
+                - name: VITE_SUPPORT_EMAIL
+                  value: ${VITE_SUPPORT_EMAIL}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
               volumeMounts:

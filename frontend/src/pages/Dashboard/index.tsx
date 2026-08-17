@@ -17,6 +17,8 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 import './dashboard.scss';
 
+import { APP_NAME } from '@/constants/appName';
+
 type ScreenTile = {
   title: string;
   description: string;
@@ -88,7 +90,7 @@ const DashboardPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid dashboard-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1 className="dashboard__title">FREP IMS</h1>
+        <h1 className="dashboard__title">{APP_NAME}</h1>
         <p className="dashboard__subtitle">Select a screen to begin.</p>
       </Column>
 

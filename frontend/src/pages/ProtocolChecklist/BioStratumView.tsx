@@ -561,6 +561,9 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
+  // Errors stay hidden until a save is attempted on the open stratum; reset whenever a different
+  // stratum is opened or a new one is added.
+  const [showErrors, setShowErrors] = useState(false);
   const [computed, setComputed] = useState<StratumComputed | null>(null);
   const [strataTypes, setStrataTypes] = useState<CodeOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -706,6 +709,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       ]);
       setCurrent(s);
       setComputed(c);
+      setShowErrors(false);
     } catch (err) {
       reportError('Could not load the stratum', err);
     } finally {
@@ -714,6 +718,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   };
 
   const addStratum = async () => {
+    setShowErrors(false);
     // The legacy `add_new` default was a sequence value that always failed its own
     // format validation, so we don't prefill the Stratum Id. Seed the full windthrow
     // code list (all unchecked) — SAVE_STRATUM loops the VARRAY and crashes on empty.
@@ -792,14 +797,18 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     return e;
   };
 
-  // Inline validation runs live off the edited stratum (like SiteDetail): a field's error shows the
-  // moment it's invalid and clears when fixed. The Save handler blocks while any remain — no toast.
-  const fieldErrors: Record<string, string> = current && !readOnly ? validate() : {};
-  const hasErrors = Object.keys(fieldErrors).length > 0;
+  // Validation runs live off the edited stratum, but is only *displayed* once a save has been
+  // attempted — opening an incomplete stratum should not greet the user with a wall of red. See the
+  // same gate in BioOpeningView. `allErrors` drives the save guard, `fieldErrors` the rendering, so
+  // every `invalid`/`invalidText` site below is gated without touching each one.
+  const allErrors: Record<string, string> = current && !readOnly ? validate() : {};
+  const hasErrors = Object.keys(allErrors).length > 0;
+  const fieldErrors = showErrors ? allErrors : {};
 
   const handleSave = async () => {
     if (!current) return;
-    // Errors are already shown inline; just block the save while any remain (no error toast).
+    // First point the user has asked for the form to be complete — reveal the errors now.
+    setShowErrors(true);
     if (hasErrors) return;
     setBusy(true);
     try {

@@ -1,17 +1,9 @@
 import { Download, TrashCan, Upload } from '@carbon/icons-react';
-import {
-  Button,
-  Pagination,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@carbon/react';
+import { Button, Pagination } from '@carbon/react';
 import { useEffect, useRef, useState, type FC } from 'react';
 
 import ImagePreviewModal from '@/components/core/ImagePreviewModal';
+import UploadHelp from '@/components/core/UploadHelp';
 import { DateField, TextAreaField } from '@/pages/ChrChecklist/fields';
 import { requiredLabel } from '@/utils/requiredLabel';
 
@@ -46,6 +38,17 @@ const photoSrc = (picture: Picture): string | undefined => {
 const MAX_WIDTH = 800;
 const MAX_HEIGHT = 1200;
 const JPEG_QUALITY = 0.7;
+
+/**
+ * Photo formats CHR accepts, as extensions (for the help text) and MIME types (the picker's
+ * `accept`). One source for both, so the help can't advertise a format the picker won't offer.
+ *
+ * Mirrors ALLOWED_IMAGE_CODES server-side. TIFF is absent deliberately: browsers can't decode it,
+ * so the downscale below would silently keep the full-resolution original and no thumbnail would
+ * ever render.
+ */
+const PHOTO_EXTENSIONS = ['jpg', 'png', 'gif', 'bmp'] as const;
+const PHOTO_ACCEPT = 'image/jpeg,image/png,image/gif,image/bmp';
 
 const readDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -218,7 +221,7 @@ const Photos: FC<{
     setDescriptionInvalid(false);
     // Photos are image-only: the attachment table stores a 3-char MIME_TYPE_CODE with a FK to the code
     // table, so a non-image would blow up on save (value-too-large / FK). The native picker uses
-    // accept="image/jpeg,image/png,image/gif,image/bmp", but drag-and-drop bypasses it — so re-check here.
+    // accept={PHOTO_ACCEPT}, but drag-and-drop bypasses it — so re-check here.
     // TIFF is excluded: browsers can't decode it, so the downscale below would silently keep the
     // full-resolution original and it could never render. Matches ALLOWED_IMAGE_CODES server-side.
     const images = files.filter(
@@ -296,101 +299,9 @@ const Photos: FC<{
 
   return (
     <div className="rip-form">
-      {pictures.length > 0 && (
-        <Table size="sm" className="bio-strata__table">
-          <TableHead>
-            <TableRow>
-              <TableHeader>Photo</TableHeader>
-              <TableHeader>Description</TableHeader>
-              <TableHeader>Date</TableHeader>
-              <TableHeader>Actions</TableHeader>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {pictures.map((picture, index) => {
-              const src = resolveSrc(picture);
-              return (
-                <TableRow key={picture.id ?? `photo-${index}`}>
-                  <TableCell>
-                    {src ? (
-                      <button
-                        type="button"
-                        className="image-thumb-button"
-                        onClick={() =>
-                          setPreview({
-                            src,
-                            alt: picture.description || picture.fileName || `Photo ${index + 1}`,
-                          })
-                        }
-                      >
-                        <img
-                          className="chr-checklist__thumb image-thumb--clickable"
-                          src={src}
-                          alt={picture.description || picture.fileName || `Photo ${index + 1}`}
-                        />
-                      </button>
-                    ) : (
-                      <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
-                        {picture.fileName || 'Saved photo'}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>{picture.description || '—'}</TableCell>
-                  <TableCell>{formatShortDate(picture.date) || '—'}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      hasIconOnly
-                      renderIcon={Download}
-                      iconDescription="Download"
-                      disabled={busy}
-                      onClick={() => download(picture)}
-                    />
-                    {!readOnly && (
-                      <Button
-                        kind="danger--ghost"
-                        size="sm"
-                        hasIconOnly
-                        renderIcon={TrashCan}
-                        iconDescription="Delete"
-                        disabled={busy}
-                        onClick={() => void removeAt(index)}
-                      />
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
-
-      {/*
-        Shown whenever the checklist has photos — including when they all fit on one page, so the
-        count and the 10/25/50 selector stay available. Deliberately NOT gated on
-        `totalCount > pageSize`: that hid both from anyone with fewer than 10 photos, leaving no way
-        to pre-select a larger page size before uploading more.
-
-        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
-        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
-        re-read that follows a delete. The parent early-returns a skeleton while the checklist
-        loads, so this never renders before the first count arrives.
-      */}
-      {totalCount > 0 && (
-        <Pagination
-          page={page + 1}
-          pageSize={pageSize}
-          pageSizes={[10, 25, 50]}
-          totalItems={totalCount}
-          disabled={busy}
-          onChange={({ page: nextPage, pageSize: nextSize }) => {
-            // Carbon is 1-based, the API 0-based; a size change resets to the first page.
-            onPageChange(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
-          }}
-        />
-      )}
-
+      {/* Upload card sits ABOVE the list, matching the Biodiversity Attachments tab: the tab is
+          entered to add a photo far more often than to browse existing ones, and with a full page
+          of photos the upload controls were below the fold. Keep the order — list and pager follow. */}
       {!readOnly && (
         <div className="attach-card">
           <div className="attach-card__header">Upload file</div>
@@ -444,7 +355,12 @@ const Photos: FC<{
               <span className="attach-drop__icon">
                 <Upload size={24} />
               </span>
-              <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
+              <div className="attach-drop__copy">
+                <p className="attach-drop__text">Select or drag and drop your file to upload.</p>
+                {/* Driven by the same constants the picker and the size guard use, so the help
+                    can't claim a format or size the upload would then refuse. */}
+                <UploadHelp maxMb={MAX_UPLOAD_MB} formats={PHOTO_EXTENSIONS} />
+              </div>
               <Button
                 kind="primary"
                 size="lg"
@@ -456,7 +372,7 @@ const Photos: FC<{
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/bmp"
+                accept={PHOTO_ACCEPT}
                 capture="environment"
                 multiple
                 hidden
@@ -469,6 +385,104 @@ const Photos: FC<{
             </div>
           </div>
         </div>
+      )}
+
+      {/* Plain table + rip-field-grid, matching the Biodiversity Attachments tab. Carbon's Table
+          renders a heavier header band (dark bold text on a solid grey fill), so the two tabs read
+          as different components when they are the same thing. */}
+      {pictures.length > 0 && (
+        <table className="rip-field-grid">
+          <thead>
+            <tr>
+              <th scope="col">Preview</th>
+              <th scope="col">Description</th>
+              <th scope="col">Date</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pictures.map((picture, index) => {
+              const src = resolveSrc(picture);
+              return (
+                <tr key={picture.id ?? `photo-${index}`}>
+                  <td>
+                    {src ? (
+                      <button
+                        type="button"
+                        className="image-thumb-button"
+                        onClick={() =>
+                          setPreview({
+                            src,
+                            alt: picture.description || picture.fileName || `Photo ${index + 1}`,
+                          })
+                        }
+                      >
+                        <img
+                          className="chr-checklist__thumb image-thumb--clickable"
+                          src={src}
+                          alt={picture.description || picture.fileName || `Photo ${index + 1}`}
+                        />
+                      </button>
+                    ) : (
+                      <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
+                        {picture.fileName || 'Saved photo'}
+                      </span>
+                    )}
+                  </td>
+                  <td>{picture.description || '—'}</td>
+                  <td>{formatShortDate(picture.date) || '—'}</td>
+                  <td>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      hasIconOnly
+                      renderIcon={Download}
+                      iconDescription="Download"
+                      disabled={busy}
+                      onClick={() => download(picture)}
+                    />
+                    {!readOnly && (
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        hasIconOnly
+                        renderIcon={TrashCan}
+                        iconDescription="Delete"
+                        disabled={busy}
+                        onClick={() => void removeAt(index)}
+                      />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {/*
+        Shown whenever the checklist has photos — including when they all fit on one page, so the
+        count and the 10/25/50 selector stay available. Deliberately NOT gated on
+        `totalCount > pageSize`: that hid both from anyone with fewer than 10 photos, leaving no way
+        to pre-select a larger page size before uploading more.
+
+        Hidden only at zero, where a pager reading "0–0 of 0 items" is noise above an empty tab.
+        Gated on totalCount rather than the rendered row count so it doesn't flicker off during the
+        re-read that follows a delete. The parent early-returns a skeleton while the checklist
+        loads, so this never renders before the first count arrives.
+      */}
+      {totalCount > 0 && (
+        <Pagination
+          page={page + 1}
+          pageSize={pageSize}
+          pageSizes={[10, 25, 50]}
+          totalItems={totalCount}
+          disabled={busy}
+          onChange={({ page: nextPage, pageSize: nextSize }) => {
+            // Carbon is 1-based, the API 0-based; a size change resets to the first page.
+            onPageChange(nextSize === pageSize ? nextPage - 1 : 0, nextSize);
+          }}
+        />
       )}
 
       {preview && (

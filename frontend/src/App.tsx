@@ -1,4 +1,3 @@
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { type FC } from 'react';
 
 import SessionTimeout from '@/components/SessionTimeout';
@@ -17,7 +16,6 @@ const App: FC = () => {
       {/* Inactivity auto-logout (warns first) — only runs while authenticated. */}
       {isLoggedIn && <SessionTimeout />}
       <AppRoutes />
-      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
     </>
   );
 };

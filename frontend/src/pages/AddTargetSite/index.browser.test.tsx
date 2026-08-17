@@ -100,16 +100,20 @@ describe('AddTargetSite — the search survives leaving the page', () => {
 
   it('writes the search into the URL, keeping the targeting context', async () => {
     renderAt(CONTEXT);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
 
     await userEvent.type(screen.getByLabelText('Licence'), 'A20015');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    await waitFor(() => expect(sites.searchOpenings).toHaveBeenCalledTimes(1));
-    const url = await screen.findByTestId('search');
-    // The filter is what makes Back restorable; the context must survive alongside it.
-    expect(url.textContent).toContain('forestFileId=A20015');
-    expect(url.textContent).toContain('orgUnit=DCC');
-    expect(url.textContent).toContain('year=2024');
+    // Poll the URL rather than reading it once. findByTestId resolves the moment the probe exists —
+    // which is immediately — so a single read sees whatever the URL held at that instant. That is
+    // what failed in CI and passed locally.
+    await waitFor(() => {
+      // The filter is what makes Back restorable; the context must survive alongside it.
+      expect(screen.getByTestId('search').textContent).toContain('forestFileId=A20015');
+    });
+    expect(screen.getByTestId('search').textContent).toContain('orgUnit=DCC');
+    expect(screen.getByTestId('search').textContent).toContain('year=2024');
   });
 
   it('re-runs a search carried in the URL — the Back case', async () => {
@@ -146,8 +150,10 @@ describe('AddTargetSite — the search survives leaving the page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
-    const url = await screen.findByTestId('search');
-    expect(url.textContent).not.toContain('forestFileId');
-    expect(url.textContent).toContain('orgUnit=DCC');
+    // Eventual, not point-in-time — same reason as the write test above.
+    await waitFor(() => {
+      expect(screen.getByTestId('search').textContent).not.toContain('forestFileId');
+    });
+    expect(screen.getByTestId('search').textContent).toContain('orgUnit=DCC');
   });
 });

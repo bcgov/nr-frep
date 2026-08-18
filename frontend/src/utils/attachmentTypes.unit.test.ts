@@ -1,4 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Pin the configured list instead of inheriting it.
+//
+// `ALLOWED_ATTACHMENT_EXTENSIONS` is computed once at module load from `env.VITE_ATTACHMENT_TYPES`,
+// which Vite fills from `.env` — a gitignored, developer-local file. So these tests passed on a
+// machine that happened to have it and failed everywhere that did not, CI included. The list below
+// is the one the deployments set; `parseAttachmentTypes` covers the unset case directly, so nothing
+// is lost by making the module-level constant deterministic here.
+vi.mock('@/env', () => ({
+  env: {
+    VITE_ATTACHMENT_TYPES:
+      'BMP,CSV,DOC,DOCX,GIF,JPEG,JPG,MP4,PDF,PNG,RTF,TIF,TIFF,TXT,WEBP,XLS,XLSX,ZIP',
+  },
+}));
 
 import {
   isAllowedAttachmentExtension,

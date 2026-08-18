@@ -220,13 +220,13 @@ export default defineConfig(({ mode }) => {
           // Pre-bundle these up front instead of letting Vite discover them mid-run.
           //
           // They arrive through the API client's auth chain, so only the tests that touch it pull
-          // them in. Discovering a new dependency makes Vite re-optimize and RELOAD THE PAGE; if
-          // that lands in the middle of a test, the module state goes with it and every spy reads
-          // zero calls — RipAttachmentsView failed exactly that way ("expected 3 times, got 0").
+          // them in. Discovering a dependency late makes Vite re-optimize and reload the page, and
+          // Vitest warns that this "may cause tests to fail, lead to flaky behaviour or duplicated
+          // test runs" — it names `optimizeDeps.include` as the fix.
           //
-          // A full run usually hides it: some earlier test imports Amplify first, so the reload
-          // happens between files. It surfaces when the order changes — a filtered run, a cold
-          // cache, or CI sharding — which is what makes it look intermittent rather than wrong.
+          // Precautionary, not a diagnosed failure: the reload was reproducible on a cold
+          // single-file run (every time), but no test was ever observed failing because of it.
+          // Listing the deps removes the warning and the race behind it.
           optimizeDeps: {
             include: [
               'aws-amplify',

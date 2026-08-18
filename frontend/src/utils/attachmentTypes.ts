@@ -27,7 +27,7 @@ export const parseAttachmentTypes = (configured: string | undefined): string[] =
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
-  return [...new Set(parsed)].sort();
+  return [...new Set(parsed)].sort((a, b) => a.localeCompare(b));
 };
 
 export const ALLOWED_ATTACHMENT_EXTENSIONS = parseAttachmentTypes(env.VITE_ATTACHMENT_TYPES);
@@ -61,17 +61,15 @@ export const ALLOWED_ATTACHMENT_ACCEPT =
  * type on the list), base64-ing it, and silently falling back to the placeholder anyway. Mirrors
  * `isImage` in RipAttachmentsView, which has always worked this way.
  */
-const PREVIEWABLE_EXTENSIONS = ['bmp', 'gif', 'heic', 'jpeg', 'jpg', 'png', 'webp'];
+const PREVIEWABLE_EXTENSIONS = new Set(['bmp', 'gif', 'heic', 'jpeg', 'jpg', 'png', 'webp']);
 
 /** Whether a file of this extension can be shown as an image rather than a type placeholder. */
 export const isPreviewableExtension = (extension: string | undefined): boolean =>
-  PREVIEWABLE_EXTENSIONS.includes((extension ?? '').toLowerCase());
+  PREVIEWABLE_EXTENSIONS.has((extension ?? '').toLowerCase());
 
 /** Whether `fileName`'s extension can be shown as an image. */
 export const isPreviewableFile = (fileName: string | undefined): boolean =>
-  isPreviewableExtension(
-    fileName && fileName.includes('.') ? fileName.split('.').pop() : undefined,
-  );
+  isPreviewableExtension(fileName?.includes('.') ? fileName.split('.').pop() : undefined);
 
 /**
  * Whether a stored item can be shown as an image, from whatever signals it carries.

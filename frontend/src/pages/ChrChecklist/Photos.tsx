@@ -204,10 +204,14 @@ const Photos: FC<{
   }, [pictures, fetchContent]);
 
   /** A photo's src: its own bytes when it has them, otherwise the fetched object URL. */
-  const resolveSrc = (picture: Picture): string | undefined =>
-    isPreviewableRecord(picture)
-      ? (photoSrc(picture) ?? (picture.id ? fetched[picture.id] : undefined))
-      : undefined;
+  const resolveSrc = (picture: Picture): string | undefined => {
+    if (!isPreviewableRecord(picture)) {
+      return undefined;
+    }
+    // Its own bytes win; the fetched object URL is the fallback for a record that carries only an id.
+    const fetchedSrc = picture.id ? fetched[picture.id] : undefined;
+    return photoSrc(picture) ?? fetchedSrc;
+  };
 
   const [description, setDescription] = useState('');
   const [descriptionInvalid, setDescriptionInvalid] = useState(false);

@@ -67,7 +67,7 @@ type Props = {
  * attaching — not to be raised. Raising it isn't a config change anyway: the scan, the
  * object-storage write and the BLOB path each hold the whole file as a byte[] on a 400 MB heap.
  */
-const VIDEO_EXTENSIONS = ['mp4'];
+const VIDEO_EXTENSIONS = new Set(['mp4']);
 
 // Shared with CHR photos so the two screens can't drift; see utils/uploadLimits for how this
 // relates to max-file-size, max-request-size and the Coraza body limit.
@@ -245,9 +245,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       // untouched phone clip is ~10s of 1080p at this size, so "too big" alone reads as a defect.
       // The cap is deliberate — it exists to push compression rather than to be raised — so say
       // what to do about it. Every other type is either already small or obviously trimmable.
-      return VIDEO_EXTENSIONS.includes(ext)
-        ? `${over}. Trim or compress the video and try again`
-        : over;
+      return VIDEO_EXTENSIONS.has(ext) ? `${over}. Trim or compress the video and try again` : over;
     }
     return null;
   };

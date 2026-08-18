@@ -217,6 +217,25 @@ export default defineConfig(({ mode }) => {
           // Vitest projects do not inherit the root-level `css` option; without this the Carbon
           // deprecation warnings silenced for the build reappear on every test run.
           css: { preprocessorOptions: { scss: { quietDeps: true } } },
+          // Pre-bundle these up front instead of letting Vite discover them mid-run.
+          //
+          // They arrive through the API client's auth chain, so only the tests that touch it pull
+          // them in. Discovering a new dependency makes Vite re-optimize and RELOAD THE PAGE; if
+          // that lands in the middle of a test, the module state goes with it and every spy reads
+          // zero calls — RipAttachmentsView failed exactly that way ("expected 3 times, got 0").
+          //
+          // A full run usually hides it: some earlier test imports Amplify first, so the reload
+          // happens between files. It surfaces when the order changes — a filtered run, a cold
+          // cache, or CI sharding — which is what makes it look intermittent rather than wrong.
+          optimizeDeps: {
+            include: [
+              'aws-amplify',
+              'aws-amplify/auth',
+              'aws-amplify/auth/cognito',
+              'aws-amplify/utils',
+              'react-dom/client',
+            ],
+          },
           test: {
             name: 'browser',
             setupFiles: [

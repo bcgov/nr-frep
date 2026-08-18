@@ -81,6 +81,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -96,7 +97,23 @@ META_TABLE = "THE.BIODIVERSITY_CHKLST_ATTACH"
 ID_COLUMN = "BIODIVERSITY_CHKLST_ATTACH_ID"
 BLOB_COLUMN = "ATTACHMENT_CONTENT"
 
-DEFAULT_MANIFEST = "/tmp/bio-attach-manifest.json"
+# The temp dir is where the manifest lands by default: in the migration pod it is the
+# only writable path under the restricted SCC's arbitrary UID. It is world-writable, so
+# the file is created 0600 and O_NOFOLLOW (see write_manifest) rather than trusting the
+# predictable name.
+DEFAULT_MANIFEST = os.path.join(tempfile.gettempdir(), "bio-attach-manifest.json")
+
+# S3-compatible gateway: the endpoint override does the routing, so the region is only a
+# signing input. Overridable for anyone pointing this at a different store.
+DEFAULT_REGION = os.environ.get("OBJECT_STORAGE_REGION") or "us-east-1"
+
+
+def write_manifest(path: str, payload: dict) -> None:
+    """Write the run manifest without following a symlink planted at a predictable name
+    in a world-writable directory, and keep it owner-only."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(path, flags, 0o600), "w") as handle:
+        json.dump(payload, handle, indent=2)
 
 
 # ── connections ────────────────────────────────────────────────────────────────
@@ -111,20 +128,20 @@ def require_env(name: str) -> str:
 def oracle_pool(size: int) -> oracledb.ConnectionPool:
     """A fixed-size pool: one connection per worker, so memory stays bounded at
     concurrency x file size rather than batch size x file size."""
-    kwargs = dict(
-        user=require_env("DATABASE_USER"),
-        password=require_env("DATABASE_PASSWORD"),
-        dsn=(
+    kwargs = {
+        "user": require_env("DATABASE_USER"),
+        "password": require_env("DATABASE_PASSWORD"),
+        "dsn": (
             f'(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)'
             f'(HOST={require_env("DATABASE_HOST")})'
             f'(PORT={os.environ.get("DATABASE_PORT", "1543")}))'
             f'(CONNECT_DATA=(SERVICE_NAME={require_env("DATABASE_SERVICE_NAME")})'
             f'(SERVER=DEDICATED)))'
         ),
-        min=size,
-        max=size,
-        increment=0,
-    )
+        "min": size,
+        "max": size,
+        "increment": 0,
+    }
     wallet = os.environ.get("ORACLE_WALLET_DIR")
     if wallet:
         kwargs["wallet_location"] = wallet
@@ -150,7 +167,7 @@ def s3_client():
         endpoint_url=require_env("OBJECT_STORAGE_HOST"),
         aws_access_key_id=require_env("OBJECT_STORAGE_ACCESS_KEY"),
         aws_secret_access_key=require_env("OBJECT_STORAGE_SECRET_KEY"),
-        region_name="us-east-1",
+        region_name=DEFAULT_REGION,
         config=Config(
             signature_version="s3v4",
             s3={"addressing_style": "path"},
@@ -362,8 +379,7 @@ def cmd_migrate(args, pool, s3, bucket):
         "skipped_existing": skipped_existing,
         "elapsed_seconds": round(time.monotonic() - started, 1),
     }
-    with open(args.manifest, "w") as handle:
-        json.dump(manifest, handle, indent=2)
+    write_manifest(args.manifest, manifest)
 
     print(f"\nmigrated {len(migrated)}, failed {len(failed)}, "
           f"skipped {skipped_existing} existing + {len(empties)} empty "

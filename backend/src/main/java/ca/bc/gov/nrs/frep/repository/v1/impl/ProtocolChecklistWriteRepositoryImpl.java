@@ -13,6 +13,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioWindthrowTreatment;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioAttachmentRef;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
@@ -1014,11 +1015,61 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   }
 
   /**
+   * One keyset page of every Biodiversity attachment, ascending by id — the scan behind the one-time
+   * BLOB → object-storage migration.
+   *
+   * <p>Deliberately reads {@code BIODIVERSITY_CHKLST_ATTACH} only, never
+   * {@code BIODIVERSITY_ATTACH_CONTENT}: the app holds {@code SELECT} on the former (granted when the
+   * attachment list went native, confirmed 2026-08-06) but has never needed it on the latter, because
+   * every content read goes through the definer-rights {@code FREP_CHECKLIST_ATTACHMENTS} package.
+   * Touching the content table directly here would need a new grant in every environment. The bytes
+   * come from {@code GET_BLOB} instead — see {@link #getAttachmentContentFromBlob}.
+   *
+   * <p>Keyset rather than OFFSET so batches stay cheap and a re-run can resume from {@code lastId}.
+   *
+   * <p>The resource type is joined in rather than assumed to be {@code SLB}: {@code GET_BLOB} takes it
+   * as a parameter and both {@code SLB} and {@code SLR} are live Biodiversity codes during the rename,
+   * so a constant would address the wrong protocol for any already-renamed row. This mirrors
+   * {@code ChecklistRepositoryImpl.resolveResourceType}, including its {@code SLB} default — and
+   * reuses the same two-table join, which is why no additional grant is needed.
+   *
+   * <p><b>LEFT JOIN deliberately.</b> An inner join would silently drop any attachment whose
+   * checklist or resource-value row is missing, and a row that never appears in the scan is a row
+   * that never migrates — invisible until its download 404s after the fallback is removed. That is
+   * exactly the failure mode the old {@code GET} package cursor hid.
+   */
+  @Override
+  public List<BioAttachmentRef> listBioAttachmentsForMigration(String afterId, int limit) {
+    String sql = """
+        SELECT bca.biodiversity_chklst_attach_id AS chklst_attach_id
+             , bca.biodiversity_checklist_id     AS checklist_id
+             , NVL(rv.frep_resource_value_type_code, 'SLB') AS resource_type
+          FROM THE.biodiversity_chklst_attach bca
+          LEFT JOIN THE.biodiversity_checklist bc
+                 ON bc.biodiversity_checklist_id = bca.biodiversity_checklist_id
+          LEFT JOIN THE.frep_resource_value rv
+                 ON rv.frep_resource_value_id = bc.frep_resource_value_id
+         WHERE bca.biodiversity_chklst_attach_id > ?
+         ORDER BY bca.biodiversity_chklst_attach_id
+         FETCH FIRST ? ROWS ONLY
+        """;
+    long after = StringUtils.isBlank(afterId) ? 0L : Long.parseLong(afterId.trim());
+    return jdbcTemplate.query(
+        sql,
+        (rs, n) -> new BioAttachmentRef(
+            trimNumericId(rs.getString("chklst_attach_id")),
+            trimNumericId(rs.getString("checklist_id")),
+            StringUtils.trimToEmpty(rs.getString("resource_type"))),
+        after, limit);
+  }
+
+  /**
    * The raw {@code GET_BLOB} read (10 params: id/checklist/type/name/desc/mime-code/mime-type IN OUT
    * 1-7, file_contents BLOB @8, userid @9, error @10) — returns metadata + whatever bytes are in the
    * Oracle BLOB (empty for a migrated BIO row).
    */
-  private AttachmentContent getAttachmentContentFromBlob(
+  @Override
+  public AttachmentContent getAttachmentContentFromBlob(
       String checklistId, String resourceType, String attachmentId) {
     return executeCall(
         callSql(ATTACH_PKG, "GET_BLOB", 10),

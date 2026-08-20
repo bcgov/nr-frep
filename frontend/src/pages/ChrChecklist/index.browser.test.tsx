@@ -180,6 +180,32 @@ describe('ChrChecklistPage', () => {
     expect(screen.queryByText('Required fields missing')).toBeNull();
   });
 
+  it('applies an edit made to a feature that has not been saved yet', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Age', exact: true }));
+
+    // Pending feature edits live outside `checkList` (see draftFeatures) — this is the round trip
+    // that proves the editor still sees its own writes: toggle a box, and the box is ticked.
+    const pre1846 = screen.getByRole('checkbox', { name: 'Pre-1846', exact: true });
+    await userEvent.click(pre1846);
+    expect((pre1846 as HTMLInputElement).checked).toBe(true);
+
+    // Age is single-select: the other three lock once one is chosen.
+    for (const label of ['Post-1846', 'Age unknown', 'Historical use']) {
+      expect(
+        (screen.getByRole('checkbox', { name: label, exact: true }) as HTMLInputElement).disabled,
+      ).toBe(true);
+    }
+  });
+
   it('blocks Submit before calling the API when a tab is incomplete', async () => {
     useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
     repo.load.mockResolvedValue(undefined);

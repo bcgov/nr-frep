@@ -513,10 +513,10 @@ export const featuresOutstanding = (checkList?: CheckList | null): string[] => {
 export const attachmentsOutstanding = (checkList?: CheckList | null): string[] =>
   (checkList?.pictures ?? [])
     .filter((picture: Picture) => !has(picture.description))
-    .map(
-      (picture: Picture, index: number) =>
-        `${picture.fileName || `Photo ${index + 1}`} — every photo requires a description.`,
-    );
+    .map((picture: Picture, index: number) => {
+      const name = picture.fileName || `Photo ${index + 1}`;
+      return `${name} — every photo requires a description.`;
+    });
 
 /**
  * Completion state for every CHR tab.

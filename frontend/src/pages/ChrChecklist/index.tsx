@@ -878,7 +878,7 @@ const ChrChecklistPage: FC = () => {
   const preflightTabNames = (() => {
     const names = TABS.filter((t) => preflight[t.key]?.length).map((t) => t.title);
     if (names.length <= 1) return names[0] ?? 'A tab';
-    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
   })();
 
   /** The per-tab "you can save this, but you can't submit it yet" banner. */

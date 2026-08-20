@@ -172,6 +172,31 @@ export const stratumStatus = (
 const hasUtm = (plot: BioPlot): boolean =>
   plot.utmSignal !== 'N' && has(plot.utmZone) && has(plot.utmEasting) && has(plot.utmNorthing);
 
+/**
+ * The rules that apply only once a plot records a full-count area: its area has to stay under the
+ * stratum size, and only the first such plot in a stratum may record trees. Split out of
+ * {@link plotItems} to keep each readable on its own.
+ */
+const fullCountItems = (
+  plot: BioPlot,
+  stratum: BioStratum,
+  label: string,
+  isFirstFullCount: boolean,
+  standRows: number,
+): string[] => {
+  if (!has(plot.fullCountArea)) return [];
+  if (!isFirstFullCount) {
+    return standRows > 0
+      ? [`${label} — only the first full-count plot in a stratum may record trees`]
+      : [];
+  }
+  const area = num(plot.fullCountArea);
+  const size = num(stratum.size);
+  return area != null && size != null && area > size
+    ? [`${label} — full-count area (${area} ha) is not under the stratum size (${size} ha)`]
+    : [];
+};
+
 /** Rules owed by one plot, named for the banner. */
 const plotItems = (
   plot: BioPlot,
@@ -198,19 +223,7 @@ const plotItems = (
   if (stratum.harvestAreaCode === 'HNR' && stand.length > 0) {
     items.push(`${label} — has stand-table rows, but its stratum has no retention`);
   }
-  if (has(plot.fullCountArea)) {
-    if (isFirstFullCount) {
-      const area = num(plot.fullCountArea);
-      const size = num(stratum.size);
-      if (area != null && size != null && area > size) {
-        items.push(
-          `${label} — full-count area (${area} ha) is not under the stratum size (${size} ha)`,
-        );
-      }
-    } else if (stand.length > 0) {
-      items.push(`${label} — only the first full-count plot in a stratum may record trees`);
-    }
-  }
+  items.push(...fullCountItems(plot, stratum, label, isFirstFullCount, stand.length));
   return items;
 };
 

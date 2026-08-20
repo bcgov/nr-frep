@@ -38,6 +38,9 @@ import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
+import ca.bc.gov.nrs.frep.entity.ChrFeatureClassCode;
+import ca.bc.gov.nrs.frep.entity.ChrSiteEvaluationCode;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -143,6 +146,59 @@ class ChrChecklistPersistenceServiceTest {
     assertTrue(persisted.stream().anyMatch(o -> o instanceof ChrFeatureTypeXref type
             && "BURIALSITE".equals(type.getId().getChrFeatureTypeCode())),
         "checked type BURIALSITE should create a type xref");
+  }
+
+  /**
+   * Regression for values that could be entered but never removed.
+   *
+   * <p>An existing feature's {@code CHR_FEATURE_DETAIL} row (and its identity row, and the checklist
+   * row) is loaded and updated in place rather than recreated, so a setter guarded by
+   * "only when the payload has a value" silently kept the previous value whenever the user cleared
+   * the field. The tab accepted the edit and the save reported success, but the old number or code
+   * came back on the next read. Every column involved is nullable, so a blank is written as NULL.
+   */
+  @Test
+  void clearingANumberOrCodeOnAnExistingFeatureWritesNullRatherThanKeepingTheOldValue() {
+    ChrFeatureIdentity existingIdentity = new ChrFeatureIdentity();
+    existingIdentity.setChrFeatureId(7001L);
+    existingIdentity.setChrFeatureClassCode(new ChrFeatureClassCode());
+    lenient().when(entityManager.find(eq(ChrFeatureIdentity.class), any()))
+        .thenReturn(existingIdentity);
+
+    ChrFeatureDetail existingDetail = new ChrFeatureDetail();
+    existingDetail.setAreaHectares(new BigDecimal("2.5000"));
+    existingDetail.setEstWindthrowPercent((short) 40);
+    existingDetail.setEstTrailDamagePercent((short) 15);
+    existingDetail.setChrSiteEvaluationCode(new ChrSiteEvaluationCode());
+    lenient().when(entityManager.find(eq(ChrFeatureDetail.class), any()))
+        .thenReturn(existingDetail);
+
+    // Everything the user could clear, cleared.
+    Feature feature = new Feature();
+    feature.setId("7001");
+    feature.setFeatureLabel("1");
+    feature.setCompositeFeatureInd("false");
+    feature.setFeatureDescriptionCode("");
+    feature.setAreaofFeature("");
+    feature.setEstwindthrow("");
+    feature.setTrailLength("");
+    feature.setFeatureRating("");
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setRating("");
+    resource.setFeatures(new ArrayList<>(List.of(feature)));
+
+    service.saveChecklist(resource, "IDIR\\tester");
+
+    assertNull(existingDetail.getAreaHectares(), "cleared area should be nulled");
+    assertNull(existingDetail.getEstWindthrowPercent(), "cleared windthrow % should be nulled");
+    assertNull(existingDetail.getEstTrailDamagePercent(), "cleared trail damage % should be nulled");
+    assertNull(existingDetail.getChrSiteEvaluationCode(), "cleared feature rating should be nulled");
+    assertNull(existingIdentity.getChrFeatureClassCode(), "cleared feature class should be nulled");
+    assertNull(checklist.getChrSiteEvaluationCode(), "cleared block rating should be nulled");
   }
 
   /**

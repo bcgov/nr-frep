@@ -37,20 +37,9 @@ const lower = (message: string): string =>
 
 const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
-/**
- * A comment that is required when its Yes/No indicator is 'Y', and is otherwise capped at
- * {@link COMMENT_MAX}. Returns the matching error message, or null when valid.
- */
-const validateConditionalComment = (
-  indicator: string | undefined,
-  comment: string | undefined,
-  requiredMessage: string,
-  lengthMessage: string,
-): string | null => {
-  if (indicator === 'Y' && isBlank(comment)) return requiredMessage;
-  if (byteLength(comment) > COMMENT_MAX) return lengthMessage;
-  return null;
-};
+/** A comment is required once its Yes/No indicator is set to 'Y'. */
+const conditionalCommentMissing = (indicator?: string, comment?: string): boolean =>
+  indicator === 'Y' && isBlank(comment);
 
 const validateOverride = (value: string | undefined): string | null => {
   if (isBlank(value)) return null;
@@ -69,37 +58,79 @@ const validateOverride = (value: string | undefined): string | null => {
 };
 
 /**
- * Field-level errors for the Biodiversity Opening, keyed by {@link BiodiversityOpening} key. An empty
- * object means the form is valid to save. Location, Evaluation date, Invasive plant?, Innovative
- * practice? and Rating are all required to save (Evaluation date moved here from the Administration
- * tab), plus the conditional comments and length/number limits.
+ * The fields an evaluator can actually edit on the Opening tab.
+ *
+ * The read-only RESULTS reference values (gross area, net area, harvest date) are deliberately
+ * excluded: they are populated for every record from `frep_selected_site`, so counting them would
+ * make an untouched tab look started.
  */
-export const validateOpening = (data: BiodiversityOpening): Record<string, string> => {
+const OPENING_EDITABLE_FIELDS: (keyof BiodiversityOpening)[] = [
+  'locationDescription',
+  'evaluationDate',
+  'teamLeadNameId',
+  'frepWtpOverride',
+  'patchReservesOnBlock',
+  'patchReservesSampled',
+  'innovativePracticeInd',
+  'innovativePracticesComment',
+  'invasivePlantIndicator',
+  'invasivePlantComment',
+  'frepSiteEvaluationCode',
+  'evaluatorOpinionComment',
+];
+
+/**
+ * Whether anything has ever been stored on this tab.
+ *
+ * Read from the saved record rather than tracked in component state, so it survives a reload: a
+ * checklist saved half-finished last week still counts as saved today. This is what gates the
+ * outstanding-fields banner and the tab's red count — telling someone what they have not filled in
+ * before they have opened the form once is nagging, not helping.
+ */
+export const openingTouched = (data?: BiodiversityOpening | null): boolean =>
+  data != null && OPENING_EDITABLE_FIELDS.some((key) => !isBlank(data[key] as string | undefined));
+
+/**
+ * The Opening fields the user must eventually fill in, with the label the banner names them by, in
+ * the order they appear down the tab.
+ *
+ * Three of them block submit in the database
+ * ({@code FREP_TOMBSTONE.validate_biodiversity_chklst}: evaluation date, evaluation team lead and
+ * location description); the rest come from the legacy FREP210 "Save" chain. Both sets are treated
+ * the same here — marked with an asterisk, counted on the tab, and named after a save — because to
+ * an evaluator they are all just answers still owed.
+ */
+export const OPENING_REQUIRED_LABELS: Record<string, string> = {
+  evaluationDate: 'Evaluation date',
+  teamLeadNameId: 'Evaluator',
+  locationDescription: 'Location description',
+  innovativePracticeInd: 'Innovative / unique forest practices used?',
+  innovativePracticesComment: 'Please describe the innovative practice',
+  frepSiteEvaluationCode: 'Rating',
+  invasivePlantIndicator: 'Invasive plant species present?',
+  invasivePlantComment: 'Comments on the invasive plants',
+};
+
+/**
+ * Required fields that are still blank, keyed by {@link BiodiversityOpening} key.
+ *
+ * These do <b>not</b> block the save. A part-finished Opening is a legitimate thing to store — an
+ * evaluator in the field has the answers they have — so these are reported (asterisk, tab count,
+ * post-save banner) and left for submit to enforce. See {@link openingFormatErrors} for the rules
+ * that do block.
+ */
+export const openingRequiredErrors = (data: BiodiversityOpening): Record<string, string> => {
   const errors: Record<string, string> = {};
 
-  // Required: Location description (+ length).
   if (isBlank(data.locationDescription)) {
     errors.locationDescription = 'Location description is required.';
-  } else if (byteLength(data.locationDescription) > LOCATION_MAX) {
-    errors.locationDescription = `Location description ${lower(
-      overLimitError(data.locationDescription, LOCATION_MAX),
-    )}`;
   }
-
-  // Required: Evaluation date (submit needs it; blocked here like the other required fields, matching
-  // the CHR Opening tab). Must not be in the future.
   if (isBlank(data.evaluationDate)) {
     errors.evaluationDate = 'Evaluation date is required.';
-  } else if (data.evaluationDate!.trim() > todayIso()) {
-    errors.evaluationDate = 'Evaluation date cannot be in the future.';
   }
-
-  // Required: Evaluator (submit needs a team lead; blocked here like CHR's Assessed by).
   if (isBlank(data.teamLeadNameId)) {
     errors.teamLeadNameId = 'An evaluator is required — use “Assign it to me”.';
   }
-
-  // Required dropdowns.
   if (isBlank(data.invasivePlantIndicator)) {
     errors.invasivePlantIndicator = 'Select whether invasive plant species are present.';
   }
@@ -109,35 +140,86 @@ export const validateOpening = (data: BiodiversityOpening): Record<string, strin
   if (isBlank(data.frepSiteEvaluationCode)) {
     errors.frepSiteEvaluationCode = 'A rating is required.';
   }
+  if (conditionalCommentMissing(data.innovativePracticeInd, data.innovativePracticesComment)) {
+    errors.innovativePracticesComment = 'Describe the innovative practice.';
+  }
+  if (conditionalCommentMissing(data.invasivePlantIndicator, data.invasivePlantComment)) {
+    errors.invasivePlantComment = 'Enter a comment about the invasive plants.';
+  }
 
-  // Innovative practices comment — required when innovative practices = Yes (+ length).
-  const innovativeComment = validateConditionalComment(
-    data.innovativePracticeInd,
-    data.innovativePracticesComment,
-    'Describe the innovative practice.',
-    `Description ${lower(overLimitError(data.innovativePracticesComment, COMMENT_MAX))}`,
-  );
-  if (innovativeComment) errors.innovativePracticesComment = innovativeComment;
+  return errors;
+};
 
-  // Invasive plant comment — required when invasive plants = Yes (+ length).
-  const invasiveComment = validateConditionalComment(
-    data.invasivePlantIndicator,
-    data.invasivePlantComment,
-    'Enter a comment about the invasive plants.',
-    `Comments ${lower(overLimitError(data.invasivePlantComment, COMMENT_MAX))}`,
-  );
-  if (invasiveComment) errors.invasivePlantComment = invasiveComment;
+/**
+ * Errors the stored row could not survive: values too long for their byte-semantic column, a
+ * future evaluation date, or an override that is not a number in range. These <b>do</b> block the
+ * save — the backend rejects them with a 400 and the database would raise ORA-12899 — so the user
+ * has to fix them before anything is written.
+ */
+export const openingFormatErrors = (data: BiodiversityOpening): Record<string, string> => {
+  const errors: Record<string, string> = {};
 
-  // Rationale length.
+  if (!isBlank(data.locationDescription) && byteLength(data.locationDescription) > LOCATION_MAX) {
+    errors.locationDescription = `Location description ${lower(
+      overLimitError(data.locationDescription, LOCATION_MAX),
+    )}`;
+  }
+  if (!isBlank(data.evaluationDate) && data.evaluationDate!.trim() > todayIso()) {
+    errors.evaluationDate = 'Evaluation date cannot be in the future.';
+  }
+  if (byteLength(data.innovativePracticesComment) > COMMENT_MAX) {
+    errors.innovativePracticesComment = `Description ${lower(
+      overLimitError(data.innovativePracticesComment, COMMENT_MAX),
+    )}`;
+  }
+  if (byteLength(data.invasivePlantComment) > COMMENT_MAX) {
+    errors.invasivePlantComment = `Comments ${lower(
+      overLimitError(data.invasivePlantComment, COMMENT_MAX),
+    )}`;
+  }
   if (byteLength(data.evaluatorOpinionComment) > RATIONALE_MAX) {
     errors.evaluatorOpinionComment = `Rationale ${lower(
       overLimitError(data.evaluatorOpinionComment, RATIONALE_MAX),
     )}`;
   }
-
-  // FREP gross area override — float within 0.01–99999.99, two decimals.
   const override = validateOverride(data.frepWtpOverride);
   if (override) errors.frepWtpOverride = override;
 
   return errors;
 };
+
+/**
+ * The one edit the write path cannot express: removing an evaluation date that is already stored.
+ *
+ * {@code FREP_210_BIO_OPENING.SAVE} takes the date as an optional trailing parameter and applies it
+ * only when it is not null — and Oracle binds an empty string as null, so "cleared" and "not
+ * supplied" reach the proc identically and the stored date survives the save. The tab then re-reads
+ * the record and the old date reappears in the field, looking like the form refused to clear.
+ *
+ * Rather than accept an edit that silently will not take, it is refused here with the reason. This
+ * is deliberately the *narrowest* rule that closes the gap: it fires only when a stored date is
+ * being removed. A checklist that never had one still saves blank — nothing is being removed, and
+ * the field stays advisory like every other required field on the tab.
+ *
+ * The alternative is a database change (letting the proc distinguish "clear" from "not supplied"),
+ * which this rule exists to avoid.
+ */
+export const evaluationDateRemovalError = (
+  stored: BiodiversityOpening | null | undefined,
+  data: BiodiversityOpening,
+): Record<string, string> =>
+  !isBlank(stored?.evaluationDate) && isBlank(data.evaluationDate)
+    ? {
+        evaluationDate:
+          'Evaluation date can’t be removed once saved — enter a different date instead.',
+      }
+    : {};
+
+/**
+ * Every field-level error on the Opening tab — what to show the user, blocking or not. A format
+ * error wins over a required one on the same field, since it names a value the user actually typed.
+ */
+export const validateOpening = (data: BiodiversityOpening): Record<string, string> => ({
+  ...openingRequiredErrors(data),
+  ...openingFormatErrors(data),
+});

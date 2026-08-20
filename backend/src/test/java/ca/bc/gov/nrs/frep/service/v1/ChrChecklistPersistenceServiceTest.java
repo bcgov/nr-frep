@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -43,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -141,6 +143,39 @@ class ChrChecklistPersistenceServiceTest {
     assertTrue(persisted.stream().anyMatch(o -> o instanceof ChrFeatureTypeXref type
             && "BURIALSITE".equals(type.getId().getChrFeatureTypeCode())),
         "checked type BURIALSITE should create a type xref");
+  }
+
+  /**
+   * Regression for the submit round-trip that came back claiming the feature types, ages and
+   * information source had been wiped.
+   *
+   * <p>{@link ChrChecklistPersistenceService#saveChecklist} rewrites the feature child xrefs by
+   * delete-then-reinsert, and the new rows carry only their embedded ids — the code associations the
+   * mapper reads are declared {@code insertable = false}. Submit saves and then re-reads the
+   * checklist in the same transaction to return it, so without dropping the persistence context that
+   * re-read mapped the cached rows and produced nulls: the flushed rows were correct, but the
+   * response said three required feature answers were missing. The per-section feature save already
+   * clears for exactly this reason; the whole-checklist save has to as well.
+   */
+  @Test
+  void aChecklistSaveDropsThePersistenceContextSoAReReadSeesTheFlushedXrefs() {
+    Feature feature = new Feature();
+    feature.setFeatureLabel("1");
+    feature.setCompositeFeatureInd("false");
+    feature.setPre1846("true");
+    feature.setBurialSite("true");
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>(List.of(feature)));
+
+    service.saveChecklist(resource, "IDIR\\tester");
+
+    InOrder inOrder = inOrder(entityManager);
+    inOrder.verify(entityManager).flush();
+    inOrder.verify(entityManager).clear();
   }
 
   /**

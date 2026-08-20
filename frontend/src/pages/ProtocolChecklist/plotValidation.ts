@@ -192,3 +192,47 @@ export const cwdRowErrors = (row: Row): Record<string, string> => {
   put(e, 'logLength', requiredFloat(g('logLength'), 'Length', 0, 99.9, 1, true));
   return e;
 };
+
+/**
+ * Fields whose "not filled in yet" error is advisory: nullable columns the tab still marks required
+ * and still counts against submit, but that no longer stop a plot being stored. A value that *is*
+ * entered must still be the right shape, so only a blank field is exempted.
+ */
+const ADVISORY_WHEN_BLANK = [
+  'utmZone',
+  'utmEasting',
+  'utmNorthing',
+  'firstLegTransect',
+  'secondLegTransect',
+  'basalAreaFactor',
+  'fixedAreaRadius',
+  'fullCountArea',
+];
+
+/**
+ * The subset of {@link plotErrors} that must still stop the save.
+ *
+ * A plot recorded before the GPS gets a fix, before the transect is walked or before it is measured
+ * is a legitimate thing to store — those gaps are reported on the tab and block submit instead.
+ * What remains blocking: `ASSESSOR_NAME` and `PLOT_NUMBER` (NOT NULL on BIODIVERSITY_PLOT), any
+ * malformed value, and naming two measurement methods at once, which is a contradiction rather than
+ * a gap.
+ */
+export const plotBlockingErrors = (
+  plot: BioPlot,
+  errors: Record<string, string>,
+): Record<string, string> => {
+  const blocking = { ...errors };
+  ADVISORY_WHEN_BLANK.forEach((key) => {
+    if (isBlank((plot as Record<string, string | undefined>)[key])) delete blocking[key];
+  });
+
+  const methods = ['basalAreaFactor', 'fixedAreaRadius', 'fullCountArea'].filter(
+    (key) => !isBlank((plot as Record<string, string | undefined>)[key]),
+  ).length;
+  if (methods > 1) {
+    // Re-stated because the original message can sit on a field that is itself blank.
+    blocking.basalAreaFactor = 'Enter only one of BAF, fixed area radius, or full count area.';
+  }
+  return blocking;
+};

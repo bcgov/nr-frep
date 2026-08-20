@@ -226,6 +226,14 @@ public class ChrChecklistPersistenceService {
 
     entityManager.flush();
     resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
+    // Same reason as saveFeaturesSection below: saveFeatures rewrites the feature child xrefs by
+    // delete-then-reinsert, and the new rows carry only their embedded ids — the code associations
+    // the mapper reads are insertable=false. A caller that re-reads the checklist in this same
+    // transaction (submit does, to return the submitted record) would otherwise map those cached
+    // rows and get nulls back, so the response claimed the feature types, ages and information
+    // source had been wiped when the flushed rows were fine. Dropping the context makes the re-read
+    // load the whole graph fresh from the database.
+    entityManager.clear();
   }
 
   /**

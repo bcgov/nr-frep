@@ -83,14 +83,32 @@ const renderPage = () =>
     </MemoryRouter>,
   );
 
+// A feature with every submit rule satisfied: labelled, not a composite (so it owes a description
+// code and an information source), one feature type, one age, and a rating.
+const completeFeature = {
+  featureLabel: '1',
+  compositeFeatureInd: 'false',
+  featureDescriptionCode: 'CMT',
+  featureInfoSourceCode: 'AIA',
+  burialSite: 'true',
+  pre1846: 'true',
+  featureRating: 'HIGH',
+};
+
+// A checklist that is ready to submit. Submit runs a client-side pre-flight over the same rules the
+// server enforces (see tabStatus.ts) and stops before calling the API when anything is outstanding,
+// so a fixture missing a required field would never reach the call the test is about.
 const sampleChecklist = {
   checklistID: '1001',
   status: 'ACT',
-  // The Opening tab requires these to save; pre-fill them (assessedBy = the mock user).
+  // Opening info (assessedBy = the mock user).
   assessedBy: String.raw`IDIR\TESTER`,
   evaluationDate: '2026-06-10',
   generalLocation: '16 km on Finnegan FSR',
-  features: [],
+  yearOfHarvest: '2024',
+  // Block summary.
+  rating: 'HIGH',
+  features: [completeFeature],
   contacts: [],
   pictures: [],
 };
@@ -122,6 +140,62 @@ describe('ChrChecklistPage', () => {
     expect(api.saveOpening).toHaveBeenCalledTimes(1);
     expect(api.saveOpening.mock.calls[0][0]).toBe('1001');
     expect(api.saveOpening.mock.calls[0][1]).toMatchObject({ checklistID: '1001' });
+  });
+
+  it('saves an Opening tab that is still missing a required field', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
+    api.saveOpening.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    // General location is required for submit, but a part-finished Opening is a legitimate thing to
+    // store — the save goes through, and the tab says what is still owed.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.saveOpening).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
+    expect(
+      screen.getByText('1 required field to resolve before this checklist can be submitted:'),
+    ).toBeTruthy();
+  });
+
+  it('stays quiet about a feature that has been added but not saved', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
+
+    // The editor is open on a blank feature. Listing everything it owes before the user has saved it
+    // once reads as a fault rather than as work in progress — the tab keeps quiet until the feature
+    // is stored, which is why the pending list is held outside `checkList`.
+    expect(screen.queryByText('Required fields missing')).toBeNull();
+  });
+
+  it('blocks Submit before calling the API when a tab is incomplete', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    // No features: the checklist cannot be submitted, and the Features tab has never been opened.
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(await screen.findByText("This checklist isn't ready to submit")).toBeTruthy();
+    // The pre-flight answers from what the page already holds, so the server is never asked.
+    expect(api.submit).not.toHaveBeenCalled();
+    // Pressing Submit also reveals the count a never-opened tab was holding back.
+    expect(screen.getByLabelText('Features: 1 required field missing')).toBeTruthy();
   });
 
   it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {

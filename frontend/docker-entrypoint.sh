@@ -30,6 +30,7 @@ window.config = {
   VITE_BACKEND_URL: "$(escape "${VITE_BACKEND_URL:-}")",
   VITE_SILVA_BASE_URL: "$(escape "${VITE_SILVA_BASE_URL:-https://silva.nrs.gov.bc.ca}")",
   VITE_SUPPORT_EMAIL: "$(escape "${VITE_SUPPORT_EMAIL:-}")",
+  VITE_ACCESS_REQUEST_EMAIL: "$(escape "${VITE_ACCESS_REQUEST_EMAIL:-}")",
   VITE_ZONE: "$(escape "${VITE_ZONE:-dev}")"
 };
 EOF

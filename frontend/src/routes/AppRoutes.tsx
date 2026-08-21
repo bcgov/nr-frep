@@ -2,6 +2,7 @@ import { Loading } from '@carbon/react';
 import { Suspense, useEffect, useMemo, type FC } from 'react';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
+import { LayoutProvider } from '@/context/layout/LayoutProvider';
 import {
   getNoRoleRoutes,
   getOfflineRoutes,
@@ -55,9 +56,14 @@ const AppRoutes: FC = () => {
   }
 
   return (
-    <Suspense fallback={displayLoading()}>
-      <RouterProvider router={browserRouter} />
-    </Suspense>
+    // Above the router on purpose: each route mounts its own <Layout>, so layout state held inside
+    // one would reset on every navigation (the side nav springing back open mid-task). The per-route
+    // providers pass through to this one — see LayoutProvider.
+    <LayoutProvider>
+      <Suspense fallback={displayLoading()}>
+        <RouterProvider router={browserRouter} />
+      </Suspense>
+    </LayoutProvider>
   );
 };
 

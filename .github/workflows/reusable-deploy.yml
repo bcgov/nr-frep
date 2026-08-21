@@ -231,6 +231,7 @@ jobs:
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_SILVA_BASE_URL="${{ vars.VITE_SILVA_BASE_URL }}"
             -p VITE_SUPPORT_EMAIL="${{ vars.SUPPORT_EMAIL }}"
+            -p VITE_ACCESS_REQUEST_EMAIL="${{ vars.ACCESS_REQUEST_EMAIL }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
           triggers: ${{ inputs.triggers }}
 

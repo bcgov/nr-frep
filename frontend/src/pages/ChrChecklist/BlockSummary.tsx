@@ -7,9 +7,12 @@ import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
 
+import {
+  blockSummaryFormatErrors,
+  blockSummaryRequiredErrors,
+} from '@/pages/ChrChecklist/checklistValidation';
 import { RATING_CODES, calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import { BLOCK_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
-import { addTextLimitErrors } from '@/utils/textLimits';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -53,40 +56,6 @@ type Draft = Pick<
   | 'rating'
   | 'ratingRationale'
 >;
-
-/**
- * Field-level errors keyed by field, mirroring the Biodiversity tabs' live-inline validation and the
- * CHR submit checks: Rating is required, and a description is required for any Q8/Q9/Q10 answered Yes.
- */
-const blockSummaryErrors = (d: Draft): Record<string, string> => {
-  const e: Record<string, string> = {};
-  if (!d.rating) e.rating = 'A rating is required.';
-  if (
-    isYes(d.q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock) &&
-    !d.q8Comments?.trim()
-  ) {
-    e.q8Comments = 'A description is required.';
-  }
-  if (
-    isYes(
-      d.q9WeretheremanagementstrategiesandorpracticesusedonthisblockthatwereparticularlyeffectiveinmanagingCHRvalues,
-    ) &&
-    !d.q9Comments?.trim()
-  ) {
-    e.q9Comments = 'A description is required.';
-  }
-  if (
-    isYes(
-      d.q10AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreduceimpactsonCHRvaluesonthisblock,
-    ) &&
-    !d.q10Comments?.trim()
-  ) {
-    e.q10Comments = 'A description is required.';
-  }
-  // Free-text length, same rule as the feature editor — see textLimits.ts.
-  addTextLimitErrors(e, d as Record<string, unknown>, BLOCK_TEXT_LIMITS);
-  return e;
-};
 
 /**
  * One Q8/Q9/Q10 row in edit mode: the Yes/No checkbox plus a description box that appears (and is
@@ -194,13 +163,19 @@ const BlockSummary: FC<{
   // opening an incomplete tab should not greet the user with errors they have not been asked to fix
   // yet (same gate as the Biodiversity tabs). `allErrors` drives the save guard, `fieldErrors` the
   // rendering, so every call site below is gated at once.
-  const allErrors: Record<string, string> = editing ? blockSummaryErrors(draft) : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
+  const allErrors: Record<string, string> = editing
+    ? { ...blockSummaryRequiredErrors(draft), ...blockSummaryFormatErrors(draft) }
+    : {};
+  // Only free text the column cannot store stops the save. A blank Rating or a missing Q8/Q9/Q10
+  // description is marked, counted on the tab and blocks submit, but saves happily.
+  const blockingErrors = editing ? blockSummaryFormatErrors(draft) : {};
+  const hasBlockingErrors = Object.keys(blockingErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
   const save = async () => {
-    // First point the user has asked for the tab to be complete — reveal the errors now.
+    // First point the user has asked for the tab to be complete — reveal the errors now. Blank
+    // required fields are shown but do not stop the save; only unstorable values do.
     setShowErrors(true);
-    if (hasErrors) return;
+    if (hasBlockingErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));

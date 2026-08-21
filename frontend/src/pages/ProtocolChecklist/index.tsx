@@ -1,13 +1,4 @@
-import {
-  ArrowLeft,
-  Attachment,
-  Document,
-  Information,
-  Layers,
-  Location,
-  Notebook,
-  type CarbonIconType,
-} from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -33,6 +24,8 @@ import BioStratumView from './BioStratumView';
 import RipAttachmentsView from './RipAttachmentsView';
 import RipNotesView from './RipNotesView';
 import { formatSubmitValidation } from './submitValidation';
+import TabStatusIcon from './TabStatusIcon';
+import { useTabStatuses } from './useTabStatuses';
 
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
@@ -47,16 +40,6 @@ import { formatShortDate } from '@/utils/date';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 import './protocolChecklist.scss';
-
-// Per-section tab icons (keyed by the backend section id), mirroring the contained-tab style with
-// an icon beside each label. Unknown sections fall back to a generic document icon.
-const SECTION_ICONS: Record<string, CarbonIconType> = {
-  opening: Information,
-  stratum: Layers,
-  plots: Location,
-  notes: Notebook,
-  attachments: Attachment,
-};
 
 const extractValidationErrors = (err: unknown): string[] | null => {
   const body = (err as { body?: { validationErrors?: string[] } })?.body;
@@ -98,6 +81,23 @@ const ProtocolChecklistPage: FC = () => {
   // Carbon keeps every TabPanel mounted, so sibling tabs (e.g. Plots) hold data loaded once on
   // mount. Track the active tab so a view can refetch when it becomes visible.
   const [tabIndex, setTabIndex] = useState(0);
+
+  // Per-tab completion dots. Held here rather than in each view so the whole strip is derived from
+  // one read, and so a save on any tab can move another tab's dot (stratum plot counts vs Plots).
+  const {
+    statuses: tabStatuses,
+    counts: tabCounts,
+    outstanding: tabOutstanding,
+    refresh: refreshTabStatuses,
+    evaluate: evaluateTabs,
+  } = useTabStatuses(id, !!checklist);
+
+  // Outstanding work found by the submit pre-flight, keyed by section id. Set when Submit is pressed
+  // and the checklist is not ready; cleared on the next attempt.
+  const [preflight, setPreflight] = useState<Record<string, string[]>>({});
+  // Once Submit has been pressed, every tab shows its count — including the ones held back for never
+  // having been opened. The user has asked the question, so the answer stops being a nag.
+  const [countsRevealed, setCountsRevealed] = useState(false);
 
   const protocolType: ProtocolType = 'biodiversity';
   const backendCode = PROTOCOL_TYPE_TO_BACKEND[protocolType];
@@ -190,9 +190,33 @@ const ProtocolChecklistPage: FC = () => {
     if (!backendCode) return;
     setBusy(true);
     setValidationErrors([]);
+    setPreflight({});
     try {
+      // Pre-flight every tab against current data before troubling the proc. This is what catches
+      // the checklist whose Opening tab was never opened: those tabs are deliberately quiet until
+      // they have been saved, so without this the first news of the problem would be a rejected
+      // submit. The proc stays authoritative — a clean pre-flight still submits and can still be
+      // refused; this only stops us asking when the answer is already known.
+      let blocking: Record<string, string[]> = {};
+      try {
+        const { outstanding } = await evaluateTabs();
+        blocking = Object.fromEntries(
+          Object.entries(outstanding).filter(([, items]) => items.length > 0),
+        );
+      } catch {
+        // The pre-flight is an early warning, not an authority. If its read fails we say nothing and
+        // submit anyway: refusing because we could not check would be worse than asking the proc.
+      }
+      if (Object.keys(blocking).length > 0) {
+        setPreflight(blocking);
+        setCountsRevealed(true);
+        display({ kind: 'warning', title: 'Submit blocked by validation', timeout: 6000 });
+        return;
+      }
+
       await API.protocolChecklist.submit(backendCode, id);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
+      setCountsRevealed(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
       const validation = extractValidationErrors(err);
@@ -211,6 +235,30 @@ const ProtocolChecklistPage: FC = () => {
       setBusy(false);
     }
   };
+
+  // The tabs the pre-flight objected to, named in the page-level banner. The items themselves stay
+  // on the tabs that own them, so there is one place to read them and one place to fix them.
+  const preflightTabNames = (() => {
+    const names = (checklist?.sections ?? [])
+      .filter((section) => preflight[section.id]?.length)
+      .map((section) => section.title);
+    if (names.length <= 1) return names[0] ?? 'A tab';
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  })();
+
+  // A tab held back for never having been saved starts showing its count once Submit has been
+  // pressed — at that point the silence would be hiding the very thing the user asked about.
+  const statusFor = (sectionId: string) => {
+    const status = tabStatuses[sectionId] ?? 'empty';
+    return countsRevealed && status === 'empty' && (tabCounts[sectionId] ?? 0) > 0
+      ? 'errors'
+      : status;
+  };
+
+  // A tab lists its outstanding items exactly when its dot is red. That keeps the two in step: a
+  // quiet dot on a never-opened tab means a quiet tab, and pressing Submit turns both on at once.
+  const visibleOutstanding = (sectionId: string): string[] =>
+    statusFor(sectionId) === 'errors' ? (tabOutstanding[sectionId] ?? []) : [];
 
   const handleUnsubmit = async () => {
     if (!backendCode) return;
@@ -249,9 +297,26 @@ const ProtocolChecklistPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>
-            {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
-          </h1>
+          {/* Title row: heading left, the checklist-level action right. Kept on one line so the
+              primary action sits at the top of the page rather than below the tombstone tile. */}
+          <div className="protocol-checklist__title-row">
+            <h1>
+              {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
+            </h1>
+            {!loading && !notFound && !hasError && checklist && editable && (
+              <div className="protocol-checklist__actions">
+                {submitted ? (
+                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                    Unsubmit
+                  </Button>
+                ) : (
+                  <Button onClick={() => void handleSubmit()} disabled={busy}>
+                    Submit
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </Column>
 
@@ -330,20 +395,18 @@ const ProtocolChecklistPage: FC = () => {
             </Tile>
           </Column>
 
-          {editable && (
+          {Object.keys(preflight).length > 0 && (
             <Column sm={4} md={8} lg={16}>
-              <div className="protocol-checklist__actions">
-                {!submitted && (
-                  <Button onClick={() => void handleSubmit()} disabled={busy}>
-                    Submit
-                  </Button>
-                )}
-                {submitted && (
-                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
-                  </Button>
-                )}
-              </div>
+              <InlineNotification
+                className="protocol-checklist__preflight"
+                kind="error"
+                hideCloseButton
+                lowContrast
+                title="This checklist isn't ready to submit"
+                subtitle={`${preflightTabNames} ${
+                  Object.keys(preflight).length === 1 ? 'has' : 'have'
+                } required fields outstanding. Fix the items listed on each tab, then submit again.`}
+              />
             </Column>
           )}
 
@@ -377,8 +440,15 @@ const ProtocolChecklistPage: FC = () => {
             >
               <TabList aria-label="Checklist sections" contained>
                 {checklist.sections.map((section) => (
-                  <Tab key={section.id} renderIcon={SECTION_ICONS[section.id] ?? Document}>
-                    {section.title}
+                  <Tab key={section.id}>
+                    <span className="protocol-checklist__tab-label">
+                      <TabStatusIcon
+                        status={statusFor(section.id)}
+                        count={tabCounts[section.id]}
+                        section={section.title}
+                      />
+                      {section.title}
+                    </span>
                   </Tab>
                 ))}
               </TabList>
@@ -401,15 +471,29 @@ const ProtocolChecklistPage: FC = () => {
                         submitted={submitted}
                       />
                     ) : section.id === 'opening' ? (
-                      <BioOpeningView checklistId={id} canEdit={editable} submitted={submitted} />
+                      <BioOpeningView
+                        checklistId={id}
+                        canEdit={editable}
+                        submitted={submitted}
+                        onSaved={refreshTabStatuses}
+                        revealOutstanding={countsRevealed}
+                      />
                     ) : section.id === 'stratum' ? (
-                      <BioStratumView checklistId={id} canEdit={editable} submitted={submitted} />
+                      <BioStratumView
+                        checklistId={id}
+                        canEdit={editable}
+                        submitted={submitted}
+                        onSaved={refreshTabStatuses}
+                        outstanding={visibleOutstanding('stratum')}
+                      />
                     ) : section.id === 'plots' ? (
                       <BioPlotsView
                         checklistId={id}
                         canEdit={editable}
                         submitted={submitted}
                         active={i === tabIndex}
+                        onSaved={refreshTabStatuses}
+                        outstanding={visibleOutstanding('plots')}
                       />
                     ) : null}
                   </TabPanel>

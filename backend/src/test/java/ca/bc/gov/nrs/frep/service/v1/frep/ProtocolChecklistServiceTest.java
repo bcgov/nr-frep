@@ -328,16 +328,30 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void saveBiodiversityOpeningRejectsMissingRequiredFields() {
-    // Blank location, invasive plant indicator, innovative practice and rating.
-    BiodiversityOpening bad = opening(null, "", null, null, null, null, null);
-    assertThrows(InvalidPayloadException.class, () -> service.saveBiodiversityOpening("9001", bad));
+  void saveBiodiversityOpeningAcceptsMissingRequiredFields() {
+    // Blank location, invasive plant indicator, innovative practice and rating. An evaluator part-way
+    // through the tab keeps what they have entered; the missing answers are reported on the tab and
+    // block submit, not the save.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening incomplete = opening(null, "", null, null, null, null, null);
+    when(writeRepository.saveBiodiversityOpening(incomplete, "u")).thenReturn(incomplete);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(incomplete);
+
+    service.saveBiodiversityOpening("9001", incomplete);
+
+    verify(writeRepository).saveBiodiversityOpening(incomplete, "u");
   }
 
   @Test
-  void saveBiodiversityOpeningRequiresInnovativeCommentWhenPracticeIsYes() {
-    BiodiversityOpening bad = opening(null, "loc", "Y", null, "N", null, "W");
-    assertThrows(InvalidPayloadException.class, () -> service.saveBiodiversityOpening("9001", bad));
+  void saveBiodiversityOpeningAcceptsAMissingInnovativeCommentWhenPracticeIsYes() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening incomplete = opening(null, "loc", "Y", null, "N", null, "W");
+    when(writeRepository.saveBiodiversityOpening(incomplete, "u")).thenReturn(incomplete);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(incomplete);
+
+    service.saveBiodiversityOpening("9001", incomplete);
+
+    verify(writeRepository).saveBiodiversityOpening(incomplete, "u");
   }
 
   @Test
@@ -371,6 +385,19 @@ class ProtocolChecklistServiceTest {
   void saveBioStratumRejectsMissingRequiredFields() {
     BioStratum bad = stratum(null, null, null, null, null, null, null, null, null);
     assertThrows(InvalidPayloadException.class, () -> service.saveBioStratum(bad));
+  }
+
+  @Test
+  void saveBioStratumAcceptsAMissingNumberTypeAndSize() {
+    // Nullable columns: a stratum entered before its type or size is known still stores. Plot count,
+    // map-consistency, harvest area and BGC zone/subzone are the floor and are still supplied.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioStratum partial = stratum(null, null, "Y", "3", null, "HNR", "CWH", "ds", null);
+    when(writeRepository.saveBioStratum(partial, "u")).thenReturn(partial);
+
+    service.saveBioStratum(partial);
+
+    verify(writeRepository).saveBioStratum(partial, "u");
   }
 
   @Test
@@ -467,15 +494,43 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void saveBioPlotRejectsMissingRequiredFields() {
+  void saveBioPlotRejectsABlankAssessor() {
+    // BIODIVERSITY_PLOT.ASSESSOR_NAME is NOT NULL, so this one cannot be waved through. The blank
+    // bearings alongside it are advisory now — the assessor is what refuses the save.
     BioPlot bad = plot(null, null, null, null, "N", List.of());
     assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
   }
 
   @Test
-  void saveBioPlotRejectsMissingMeasurementMethod() {
-    // Valid except no measurement method (BAF/fixed-area/full-count all blank).
-    BioPlot bad = plot("IDIR\\JDOE", "120", "240", null, "N", List.of());
+  void saveBioPlotAcceptsMissingBearingsAndUtm() {
+    // A plot recorded before the transect is walked or the GPS gets a fix still stores.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot partial = plot("IDIR\\JDOE", null, null, "5", "N", List.of());
+    when(writeRepository.saveBioPlot(partial, "u")).thenReturn(partial);
+
+    service.saveBioPlot(partial);
+
+    verify(writeRepository).saveBioPlot(partial, "u");
+  }
+
+  @Test
+  void saveBioPlotAcceptsNoMeasurementMethodYet() {
+    // No measurement method (BAF/fixed-area/full-count all blank) is a plot not measured yet, not a
+    // contradiction — it stores, and the tab counts it against submit.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot unmeasured = plot("IDIR\\JDOE", "120", "240", null, "N", List.of());
+    when(writeRepository.saveBioPlot(unmeasured, "u")).thenReturn(unmeasured);
+
+    service.saveBioPlot(unmeasured);
+
+    verify(writeRepository).saveBioPlot(unmeasured, "u");
+  }
+
+  @Test
+  void saveBioPlotRejectsTwoMeasurementMethods() {
+    // Naming both a BAF and a full-count area is a contradiction: still refused.
+    BioPlot bad = new BioPlot("P1", "S1", "1", "IDIR\\JDOE", "N", null, null, null, "N", "5",
+        null, "2.5", "N", "120", "240", null, "1", List.of(), List.of(), null);
     assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
   }
 

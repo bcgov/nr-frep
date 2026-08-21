@@ -25,6 +25,26 @@
   @include theme.add-component-tokens(tag-tokens.$tag-tokens);
   @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$white);
+
+  /* FREP blue — overrides Carbon's blue family. Declared after theme() so these win. See
+     _variables.scss for the two roles and how the hover/active shades are derived. */
+  --cds-background-brand: #{variables.$frep-blue-solid};
+  --cds-button-primary: #{variables.$frep-blue-solid};
+  --cds-button-primary-hover: #{variables.$frep-blue-solid-hover};
+  --cds-button-primary-active: #{variables.$frep-blue-solid-active};
+  --cds-interactive: #{variables.$frep-blue-solid};
+  --cds-border-interactive: #{variables.$frep-blue-solid};
+  --cds-support-info: #{variables.$frep-blue-solid};
+  --cds-focus: #{variables.$frep-blue-solid};
+
+  --cds-link-primary: #{variables.$frep-blue-text-light};
+  --cds-link-primary-hover: #{variables.$frep-blue-text-light-hover};
+  --cds-link-secondary: #{variables.$frep-blue-text-light-hover};
+  --cds-icon-interactive: #{variables.$frep-blue-text-light};
+  /* A tertiary button is blue text and border until hover, when it fills. */
+  --cds-button-tertiary: #{variables.$frep-blue-text-light};
+  --cds-button-tertiary-hover: #{variables.$frep-blue-text-light-hover};
+  --cds-button-tertiary-active: #{variables.$frep-blue-solid-active};
 }
 
 :root[data-carbon-theme='g100'] {
@@ -33,6 +53,22 @@
   @include theme.add-component-tokens(tag-tokens.$tag-tokens);
   @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$g100);
+
+  /* Solid stays the same blue in both themes; text lightens so it keeps its contrast against
+     #161616. `focus`, `icon-interactive` and `button-tertiary` are deliberately NOT overridden here
+     — Carbon makes them white on dark for contrast, and a blue focus ring on a dark page is the
+     accessibility regression this palette exists to avoid. */
+  --cds-background-brand: #{variables.$frep-blue-solid};
+  --cds-button-primary: #{variables.$frep-blue-solid};
+  --cds-button-primary-hover: #{variables.$frep-blue-solid-hover};
+  --cds-button-primary-active: #{variables.$frep-blue-solid-active};
+  --cds-interactive: #{variables.$frep-blue-text-dark};
+  --cds-border-interactive: #{variables.$frep-blue-text-dark};
+  --cds-support-info: #{variables.$frep-blue-text-dark};
+
+  --cds-link-primary: #{variables.$frep-blue-text-dark};
+  --cds-link-primary-hover: #{variables.$frep-blue-text-dark-hover};
+  --cds-link-secondary: #{variables.$frep-blue-text-dark-hover};
 }
 
 /* --------------------- Buttons ---------------------

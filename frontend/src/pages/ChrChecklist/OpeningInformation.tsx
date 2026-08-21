@@ -13,9 +13,12 @@ import { requiredLabel } from '@/utils/requiredLabel';
 import type { CheckList } from '@/types/chrChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
+import {
+  openingFormatErrors,
+  openingRequiredErrors,
+} from '@/pages/ChrChecklist/checklistValidation';
 import { OPENING_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
-import { addTextLimitErrors } from '@/utils/textLimits';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -30,20 +33,6 @@ type Draft = Pick<
   CheckList,
   'evaluationDate' | 'firstNationName' | 'generalLocation' | 'targeted' | 'assessedBy'
 >;
-
-/**
- * Field-level errors keyed by field, mirroring the Biodiversity tabs' live-inline validation and the
- * CHR submit checks: Evaluation date, General location and Assessed by are all required.
- */
-const openingErrors = (d: Draft): Record<string, string> => {
-  const e: Record<string, string> = {};
-  if (!d.evaluationDate?.trim()) e.evaluationDate = 'Evaluation date is required.';
-  if (!d.generalLocation?.trim()) e.generalLocation = 'General location is required.';
-  if (!d.assessedBy?.trim()) e.assessedBy = 'Evaluator is required — choose “Assign it to me”.';
-  // Free-text length, same rule as the feature editor — see textLimits.ts.
-  addTextLimitErrors(e, d as Record<string, unknown>, OPENING_TEXT_LIMITS);
-  return e;
-};
 
 /**
  * Section 1 — opening information. Read-only by default with an Edit / Save / Cancel toggle,
@@ -88,15 +77,21 @@ const OpeningInformation: FC<{
   };
   // Validation runs live off the draft, but is only *displayed* once a save has been attempted —
   // opening an incomplete tab should not greet the user with errors they have not been asked to fix
-  // yet (same gate as the Biodiversity tabs). `allErrors` drives the save guard, `fieldErrors` the
-  // rendering, so every call site below is gated at once.
-  const allErrors: Record<string, string> = editing ? openingErrors(draft) : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
+  // yet (same gate as the Biodiversity tabs). `fieldErrors` drives the rendering, so every call site
+  // below is gated at once; `blockingErrors` drives the save guard.
+  const allErrors: Record<string, string> = editing
+    ? { ...openingRequiredErrors(draft), ...openingFormatErrors(draft) }
+    : {};
+  // Only free text the column cannot store stops the save. A required field left blank is marked,
+  // counted on the tab and blocks submit — but a part-finished Opening is a legitimate saved state.
+  const blockingErrors = editing ? openingFormatErrors(draft) : {};
+  const hasBlockingErrors = Object.keys(blockingErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
   const save = async () => {
-    // First point the user has asked for the tab to be complete — reveal the errors now.
+    // First point the user has asked for the tab to be complete — reveal the errors now. Blank
+    // required fields are shown but do not stop the save; only unstorable values do.
     setShowErrors(true);
-    if (hasErrors) return;
+    if (hasBlockingErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
 

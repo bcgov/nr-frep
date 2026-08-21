@@ -28,8 +28,19 @@ export default defineConfig(({ mode }) => {
   const hmrHost = env.VITE_HMR_HOST ?? devHost;
   const hmrProtocolEnv = env.VITE_HMR_PROTOCOL ?? 'ws';
   const hmrProtocol = hmrProtocolEnv === 'wss' ? 'wss' : 'ws';
+  // Carbon's own SCSS trips Dart Sass's `mixed-decls` / `global-builtin` deprecations (1200+ warnings
+  // per build, none of them from our stylesheets and none actionable until Carbon updates upstream).
+  // quietDeps silences deprecations raised inside node_modules while still reporting any we introduce
+  // in src/styles.
+  const css = {
+    preprocessorOptions: {
+      scss: { quietDeps: true },
+    },
+  };
+
   return {
     define,
+    css,
     resolve: {
       alias: {
         '@': resolve(projectRootDir, 'src'),
@@ -181,6 +192,7 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          css,
           plugins: [react(), tsconfigPaths()],
           test: {
             name: 'node',
@@ -198,6 +210,7 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          css,
           plugins: [react(), tsconfigPaths()],
           test: {
             name: 'browser',

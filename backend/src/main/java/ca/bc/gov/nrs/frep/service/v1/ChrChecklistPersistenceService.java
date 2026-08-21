@@ -226,6 +226,14 @@ public class ChrChecklistPersistenceService {
 
     entityManager.flush();
     resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
+    // Same reason as saveFeaturesSection below: saveFeatures rewrites the feature child xrefs by
+    // delete-then-reinsert, and the new rows carry only their embedded ids — the code associations
+    // the mapper reads are insertable=false. A caller that re-reads the checklist in this same
+    // transaction (submit does, to return the submitted record) would otherwise map those cached
+    // rows and get nulls back, so the response claimed the feature types, ages and information
+    // source had been wiped when the flushed rows were fine. Dropping the context makes the re-read
+    // load the whole graph fresh from the database.
+    entityManager.clear();
   }
 
   /**
@@ -324,13 +332,12 @@ public class ChrChecklistPersistenceService {
     }
     chrChecklist.setFrepMrvaRatingCode(mrvaRatingCode);
 
-    if (ChrStringUtils.hasAValue(resource.getRating())) {
-      ChrSiteEvaluationCode siteEvaluationCode = entityManager.find(
-          ChrSiteEvaluationCode.class,
-          resource.getRating()
-      );
-      chrChecklist.setChrSiteEvaluationCode(siteEvaluationCode);
-    }
+    // Set unconditionally, null included. The checklist row is loaded and updated rather than
+    // recreated, so skipping the setter on a blank value left the previous rating in place: the tab
+    // accepted the clear, the save reported success, and the old rating came back on the re-read.
+    chrChecklist.setChrSiteEvaluationCode(ChrStringUtils.hasAValue(resource.getRating())
+        ? entityManager.find(ChrSiteEvaluationCode.class, resource.getRating())
+        : null);
     chrChecklist.setEvaluationRatingRationale(resource.getRatingRationale());
     chrChecklist.setBlockComments(resource.getCommentaires());
   }
@@ -691,10 +698,12 @@ public class ChrChecklistPersistenceService {
         identity.setEntryUserid(userId);
         identity.setUpdateUserid(userId);
       }
-      if (ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())) {
-        identity.setChrFeatureClassCode(
-            entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode()));
-      }
+      // Null included — an existing identity row is updated in place, so a conditional setter would
+      // keep the previous feature class when the user cleared it. See the note in
+      // applyBlockSummaryFields.
+      identity.setChrFeatureClassCode(ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())
+          ? entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode())
+          : null);
       identity.setComments(feature.getFeatureComment());
       identity.setChrChecklist(chrChecklist);
       identity.setFeatureLabel(feature.getFeatureLabel());
@@ -780,9 +789,7 @@ public class ChrChecklistPersistenceService {
     detail.setDescription(feature.getFeatureDescription());
     detail.setAreaWidthMeters(toBigDecimal(feature.getWidthofFeature()));
     detail.setAreaLengthMeters(toBigDecimal(feature.getLengthofFeature()));
-    if (ChrStringUtils.hasAValue(feature.getAreaofFeature())) {
-      detail.setAreaHectares(new BigDecimal(feature.getAreaofFeature()));
-    }
+    detail.setAreaHectares(toBigDecimal(feature.getAreaofFeature()));
     detail.setFnMgmtRecommendationsInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategyFN()));
     detail.setSitePlanStratsRecommndInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategySP()));
     detail.setPermitIssuedInd(ChrStringUtils.booleanToIndictorInverseLogic(feature.getSitePermitIssued()));
@@ -800,16 +807,12 @@ public class ChrChecklistPersistenceService {
     detail.setDamageIrreversibleAnswerCd(answer);
     detail.setWindthrowMgmtApplicableInd(ChrStringUtils.booleanToIndictor(feature.getWindthrowManagement()));
     detail.setAreaWindfirmInd(ChrStringUtils.booleanToIndictor(feature.getWindthrow()));
-    if (ChrStringUtils.hasAValue(feature.getEstwindthrow())) {
-      detail.setEstWindthrowPercent(Short.parseShort(feature.getEstwindthrow()));
-    }
+    detail.setEstWindthrowPercent(toShort(feature.getEstwindthrow()));
     detail.setTrailFeaturesApplicableInd(ChrStringUtils.booleanToIndictor(feature.getTrailfeatures()));
     detail.setTrailLocatableInd(ChrStringUtils.booleanToIndictor(feature.getCanthetrailstillbelocated()));
     detail.setTrailLessPassableInd(ChrStringUtils.booleanToIndictor(feature.getHasthetrailbeenmadelesspassble()));
     detail.setTrailAreaDamagedInd(ChrStringUtils.booleanToIndictor(feature.getIsthereevidenceofdamage()));
-    if (ChrStringUtils.hasAValue(feature.getTrailLength())) {
-      detail.setEstTrailDamagePercent(Short.parseShort(feature.getTrailLength()));
-    }
+    detail.setEstTrailDamagePercent(toShort(feature.getTrailLength()));
     detail.setLimitingOperatnlFactorsInd(ChrStringUtils.booleanToIndictor(
         feature.getQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature()));
     detail.setLimitingOperatnlFactorsDesc(feature.getQ4Description());
@@ -819,10 +822,9 @@ public class ChrChecklistPersistenceService {
     detail.setAlternateStratsAvailInd(ChrStringUtils.booleanToIndictor(
         feature.getQ6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature()));
     detail.setAlternateStratsAvailDesc(feature.getQ6Description());
-    if (ChrStringUtils.hasAValue(feature.getFeatureRating())) {
-      detail.setChrSiteEvaluationCode(
-          entityManager.find(ChrSiteEvaluationCode.class, feature.getFeatureRating()));
-    }
+    detail.setChrSiteEvaluationCode(ChrStringUtils.hasAValue(feature.getFeatureRating())
+        ? entityManager.find(ChrSiteEvaluationCode.class, feature.getFeatureRating())
+        : null);
     detail.setEvaluationRatingRationale(feature.getFeatureRatingRationale());
     entityManager.persist(detail);
     return detail;
@@ -1255,6 +1257,14 @@ public class ChrChecklistPersistenceService {
 
   private BigDecimal toBigDecimal(String value) {
     return ChrStringUtils.hasAValue(value) ? new BigDecimal(value) : null;
+  }
+
+  /**
+   * A blank value becomes null rather than being skipped, so clearing a number clears the column.
+   * The detail row is loaded and updated in place, so anything not written keeps its old value.
+   */
+  private Short toShort(String value) {
+    return ChrStringUtils.hasAValue(value) ? Short.parseShort(value.trim()) : null;
   }
 
   private Date parseDate(String value) {

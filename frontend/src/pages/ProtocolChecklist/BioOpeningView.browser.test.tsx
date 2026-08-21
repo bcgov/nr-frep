@@ -70,15 +70,172 @@ describe('BioOpeningView', () => {
     expect(api.saveBiodiversityOpening.mock.calls[0][0]).toBe('9001');
   });
 
-  it('blocks the save when Location description is blank', async () => {
-    api.getBiodiversityOpening.mockResolvedValue({
+  it('says nothing about missing fields until the tab has been saved once', async () => {
+    // A brand-new checklist: only the read-only RESULTS values are populated. Listing what it owes
+    // before the evaluator has opened the form reads as a fault rather than as work not yet started.
+    const untouched = {
+      checklistId: '9001',
+      grossArea: '50',
+      netArea: '40',
+      harvestDate: '2025-06-01',
+      revisionCount: '1',
+    };
+    api.getBiodiversityOpening.mockResolvedValue(untouched);
+    api.saveBiodiversityOpening.mockResolvedValue({
+      ...untouched,
+      locationDescription: 'Block 12',
+    });
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    await screen.findByRole('button', { name: 'Edit' });
+    expect(screen.queryByText('Required fields missing')).toBeNull();
+
+    // Still nothing part-way through filling the form in. The gate reads the *stored* record, not the
+    // edit buffer — reading the buffer meant the first character typed raised a banner listing every
+    // field the user had not reached yet.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.type(screen.getByLabelText(/Location description/), 'Block 12');
+    expect(screen.queryByText('Required fields missing')).toBeNull();
+
+    // After the first save it speaks up, and keeps doing so on every later visit.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBiodiversityOpening).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
+  });
+
+  it('saves a blank Location description and warns that it is still required', async () => {
+    // A part-finished Opening is a legitimate saved state: the evaluator keeps what they have, and
+    // the missing answers are reported rather than refused (submit still enforces them).
+    const incomplete = {
       checklistId: '9001',
       locationDescription: '',
+      evaluationDate: '2024-06-01',
+      teamLeadNameId: 'IDIR\\ME',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: '',
+      revisionCount: '3',
+    };
+    api.getBiodiversityOpening.mockResolvedValue(incomplete);
+    api.saveBiodiversityOpening.mockResolvedValue(incomplete);
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    // Before any save, the tab already says what it owes.
+    expect(await screen.findByText('Required fields missing')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBiodiversityOpening).toHaveBeenCalledTimes(1);
+    // The banner now leads with the save, counts what is left and names the fields in tab order.
+    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
+    expect(
+      screen.getByText('2 required fields to resolve before this checklist can be submitted:'),
+    ).toBeTruthy();
+    // Listed in tab order, one per line.
+    const listed = Array.from(document.querySelectorAll('.protocol-checklist__incomplete-list li'));
+    expect(listed.map((li) => li.textContent)).toEqual(['Location description', 'Rating']);
+    // A successful save closes the editor, so the inline field errors go with it — the banner is
+    // what persists, and it is the reason the user can still find the gaps.
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
+  });
+
+  it('refuses to remove an evaluation date, which the proc has no way to clear', async () => {
+    // FREP_210_BIO_OPENING.SAVE applies the date only when it is not null, and Oracle binds an empty
+    // string as null — so a cleared date arrives as "not supplied" and the stored one survives. The
+    // tab refuses the edit rather than accepting one that silently would not take, and then reading
+    // the old date back into the field as though the form had ignored the user.
+    const stored = {
+      checklistId: '9001',
+      evaluationDate: '2024-06-01',
+      locationDescription: 'Block 12',
+      teamLeadNameId: 'IDIR\\ME',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
+      revisionCount: '3',
+    };
+    api.getBiodiversityOpening.mockResolvedValue(stored);
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.clear(screen.getByLabelText(/Evaluation date/));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBiodiversityOpening).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'Evaluation date can\u2019t be removed once saved \u2014 enter a different date instead.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('still saves a blank evaluation date on a checklist that never had one', async () => {
+    // The removal rule is deliberately narrow: nothing is being removed here, so the date stays
+    // advisory like every other required field and the part-finished tab saves.
+    const untouched = {
+      checklistId: '9001',
+      locationDescription: 'Block 12',
+      teamLeadNameId: 'IDIR\\ME',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
+      revisionCount: '3',
+    };
+    api.getBiodiversityOpening.mockResolvedValue(untouched);
+    api.saveBiodiversityOpening.mockResolvedValue(untouched);
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBiodiversityOpening).toHaveBeenCalledTimes(1);
+    expect(api.saveBiodiversityOpening.mock.calls[0][1].evaluationDate ?? '').toBe('');
+  });
+
+  it('still blocks the save when a value is too long for its column', async () => {
+    // Completeness is advisory; a value the column cannot store is not — the insert would fail with
+    // ORA-12899, and the backend rejects it with a 400.
+    api.getBiodiversityOpening.mockResolvedValue({
+      checklistId: '9001',
+      locationDescription: 'x'.repeat(60),
+      evaluationDate: '2024-06-01',
+      teamLeadNameId: 'IDIR\\ME',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
       revisionCount: '3',
     });
-    api.saveBiodiversityOpening.mockResolvedValue({ checklistId: '9001', revisionCount: '4' });
-    config.getChecklistAnswers.mockResolvedValue([]);
-    config.getSiteEvaluationCodes.mockResolvedValue([]);
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
 
     render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
 
@@ -86,7 +243,9 @@ describe('BioOpeningView', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(api.saveBiodiversityOpening).not.toHaveBeenCalled();
-    expect(screen.getByText('Location description is required.')).toBeTruthy();
+    expect(
+      screen.getByText('Location description too long — the limit is 50 and this entry uses 60.'),
+    ).toBeTruthy();
   });
 
   it('claims the current user as evaluator via "Assign it to me"', async () => {

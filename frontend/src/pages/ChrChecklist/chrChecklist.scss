@@ -28,19 +28,22 @@
     }
   }
 
+  // Heading, its status tags and the checklist-level actions share one row; the actions are pushed
+  // to the end. On a narrow viewport the row wraps and the actions drop below, still end-aligned.
   &__title-row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
+    width: 100%;
   }
 
-  &__actions {
+  &__title-actions {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
-    margin: 1rem 0;
+    margin-inline-start: auto;
   }
 
   &__section {
@@ -342,4 +345,12 @@
 .feature-accordion__error-icon {
   fill: var(--cds-support-error, #da1e28);
   flex-shrink: 0;
+}
+
+/* `.default-grid :is(h1, …)` sets every page heading to `width: 100%`, which fills the title row on
+   its own and wraps the tags and actions onto the next line. Undone here only — and with two
+   classes, because `:is()` takes the specificity of its most specific argument, making that rule
+   (0,2,0). */
+.default-grid .chr-checklist__title-row h1 {
+  width: auto;
 }

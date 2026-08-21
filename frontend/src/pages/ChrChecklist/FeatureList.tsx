@@ -70,8 +70,9 @@ const FeatureList: FC<{
   };
 
   const save = async () => {
-    // First point the user has asked for the feature to be complete — reveal the errors now, then
-    // block the save while any remain.
+    // First point the user has asked for the feature to be complete — reveal the errors now. Blank
+    // required fields are marked, counted on the tab and block submit, but they do not stop the
+    // save; only a value the column cannot store does (see featureValidation.ts).
     setShowErrors(true);
     const editing = selected === null ? undefined : features[selected];
     if (editing && featureHasErrors(editing)) return;

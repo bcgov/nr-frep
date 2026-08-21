@@ -23,6 +23,7 @@ import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
+import TabIncompleteBanner from './TabIncompleteBanner';
 
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
@@ -47,6 +48,10 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
+  outstanding?: string[];
+  /** Called after a save or delete lands, so the tab-completion dots re-derive. */
+  onSaved?: () => void;
 };
 
 type FieldDef = { key: string; label: string };
@@ -398,6 +403,28 @@ const checkRange = (
   }
 };
 
+/**
+ * Fields whose "not filled in yet" error is advisory: nullable columns the tab still marks required
+ * and still counts against submit, but that no longer stop a stratum being stored.
+ *
+ * Deliberately excluded — the database refuses these outright (BIODIVERSITY_STRATUM declares them
+ * NOT NULL, and FREP_BIODIVERSITY_STRATUM.validate_mandatories re-checks three of them): plot count,
+ * consistent-with-map, harvest area and BGC zone. BGC subzone joins them because validate_bec runs
+ * the whole BEC combination through FREP_VALIDATE_BGC.
+ */
+const ADVISORY_WHEN_BLANK = new Set([
+  'stratumNumber',
+  'strataTypeCode',
+  'size',
+  'estimatedSize',
+  'patchWindthrowPct',
+  'patchLocationCode',
+]);
+
+/** Current value of a stratum field, for the advisory test above. */
+const valueOf = (stratum: BioStratum | null, key: string): string =>
+  ((stratum as unknown as Record<string, string | undefined>)?.[key] ?? '').trim();
+
 const checkRequiredAndFormat = (e: StratumErrors, v: ValueReader) => {
   REQUIRED_KEYS.forEach((k) => {
     if (!v(k)) e[k] = `${LABELS[k] ?? k} is required.`;
@@ -546,8 +573,17 @@ const checkCrossField = (
   }
 };
 
-const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const BioStratumView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  onSaved,
+  outstanding = [],
+}) => {
   const { display } = useNotification();
+  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
+  // a tab the user has not touched yet.
+  const [justSaved, setJustSaved] = useState(false);
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
@@ -792,8 +828,17 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // same gate in BioOpeningView. `allErrors` drives the save guard, `fieldErrors` the rendering, so
   // every `invalid`/`invalidText` site below is gated without touching each one.
   const allErrors: Record<string, string> = current && !readOnly ? validate() : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
+
+  // Which of those errors actually stop the save. A blank field in ADVISORY_WHEN_BLANK is a gap —
+  // marked, counted on the tab and blocking submit, but stored happily. A field that *has* a value
+  // can only be failing a format or range rule, so its error still blocks.
+  const blockingErrors = Object.fromEntries(
+    Object.entries(allErrors).filter(
+      ([key]) => !(ADVISORY_WHEN_BLANK.has(key) && !valueOf(current, key)),
+    ),
+  );
+  const hasErrors = Object.keys(blockingErrors).length > 0;
 
   const handleSave = async () => {
     if (!current) return;
@@ -806,6 +851,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       setCurrent(null);
       setComputed(null);
       await loadList();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -827,6 +874,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');
       await loadList();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -1010,6 +1059,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   return (
     <div className="rip-form">
+      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Stratum" />
       {/* The strata table and the stratum form are mutually exclusive — each takes the
           full width; the table is hidden while a stratum form is open. */}
       <div>

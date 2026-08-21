@@ -53,4 +53,20 @@ describe('LayoutHeader', () => {
     // After toggling once, aria-label should change to "Close menu"
     expect(screen.getByLabelText(/close menu/i)).toBeInTheDocument();
   });
+
+  /**
+   * Carbon's `--active` treatment for a header action is a light panel background with a dark icon,
+   * which rendered the open-state X as a grey box punched into the blue bar. The header colour never
+   * changes, so the button stays transparent and the icon white — matching FSPTS. Asserted on the
+   * computed style because it is a CSS override of a Carbon default: the class stays exactly the
+   * same whether or not our rule wins.
+   */
+  it('keeps the menu toggle transparent with a white icon while open', async () => {
+    await renderWithProviders();
+    fireEvent.click(await screen.findByLabelText(/open menu/i));
+
+    const style = getComputedStyle(screen.getByLabelText(/close menu/i));
+    expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(style.color).toBe('rgb(255, 255, 255)');
+  });
 });

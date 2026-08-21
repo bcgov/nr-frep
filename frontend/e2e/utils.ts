@@ -64,6 +64,23 @@ export const uniqueSuffix = (): string => {
  * SPA stayed on the loading overlay, redirected to /unauthorized, crashed
  * into the global error boundary, etc.
  */
+/**
+ * Navigation failures worth another attempt: the PR slot momentarily has no ready pod, so the router
+ * has nothing to send the request to. The frontend Deployment runs a single replica with a
+ * `Recreate` strategy (the deployer action patches both), so any pod swap — a redeploy, a
+ * reschedule — empties the Service's endpoint list and every request is refused until the
+ * replacement is ready, then recovers fully.
+ *
+ * Deliberately narrow: only connection-level errors match. An assertion, a missing element or a
+ * rendered error boundary is a real failure and still fails on the first attempt.
+ */
+const TRANSIENT_NAVIGATION =
+  /net::ERR_CONNECTION_REFUSED|net::ERR_CONNECTION_RESET|net::ERR_CONNECTION_CLOSED|net::ERR_EMPTY_RESPONSE|net::ERR_TIMED_OUT|net::ERR_NAME_NOT_RESOLVED/;
+
+/** How long to keep re-trying a refused connection before giving up on the slot. */
+const TRANSIENT_RETRY_BUDGET_MS = 90_000;
+const TRANSIENT_RETRY_GAP_MS = 10_000;
+
 export const gotoProtected = async (page: Page, path: string): Promise<void> => {
   // Capture browser console messages and page errors during this navigation.
   const consoleMessages: string[] = [];
@@ -78,8 +95,23 @@ export const gotoProtected = async (page: Page, path: string): Promise<void> => 
   page.on('pageerror', onPageError);
 
   try {
-    await page.goto(path);
-    await page.getByTestId('bc-header__header').waitFor({ timeout: 60_000 });
+    const deadline = Date.now() + TRANSIENT_RETRY_BUDGET_MS;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await page.goto(path);
+        await page.getByTestId('bc-header__header').waitFor({ timeout: 60_000 });
+        break;
+      } catch (navErr) {
+        const message = navErr instanceof Error ? navErr.message : String(navErr);
+        if (!TRANSIENT_NAVIGATION.test(message) || Date.now() >= deadline) throw navErr;
+        // Logged so a report that eventually passes still shows the slot went away.
+        console.warn(
+          `gotoProtected("${path}") attempt ${attempt}: slot not accepting connections, retrying in ` +
+            `${TRANSIENT_RETRY_GAP_MS / 1000}s — ${message.split('\n')[0]}`,
+        );
+        await page.waitForTimeout(TRANSIENT_RETRY_GAP_MS);
+      }
+    }
   } catch (err) {
     const url = page.url();
     const title = await page.title().catch(() => '(unavailable)');

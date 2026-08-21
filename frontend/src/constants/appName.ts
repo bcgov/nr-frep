@@ -8,3 +8,12 @@
  * "FREP IMS". One name in one place is what stops the two drifting apart again.
  */
 export const APP_NAME = 'FREP IMS';
+
+/**
+ * The expanded name, shown bold in the header after the {@link APP_NAME} prefix ("FREP IMS Forest
+ * and Range Evaluation Program Information System"), matching the FSPTS header treatment.
+ *
+ * Kept separate from {@link APP_NAME}, which is still what the browser tab, the landing heading and
+ * the dashboard heading use — spelling the whole thing out in those places would be shouting.
+ */
+export const APP_FULL_NAME = 'Forest and Range Evaluation Program Information System';

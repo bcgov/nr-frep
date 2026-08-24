@@ -27,6 +27,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 /**
  * Cutover tooling — delete alongside {@link BioAttachmentMigrationService} once Phase 4b ships.
  *
+ * <p><b>DELETE-AFTER-BIO-ATTACHMENT-MIGRATION</b> — grep that tag to find every file and method that must go; the
+ * checklist is in {@code backend/tools/bio-attachment-migration-runbook.md}.
+ *
  * <p>The cases that matter are the ones that would silently corrupt the cutover: skipping rows that
  * already landed (so a re-run resumes rather than repeats), never writing zero-byte objects over
  * legacy empty rows, surviving a single failed row, and — above all — verify() distinguishing "no

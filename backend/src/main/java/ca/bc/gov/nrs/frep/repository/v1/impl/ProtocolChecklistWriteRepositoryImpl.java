@@ -1037,6 +1037,9 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
    * checklist or resource-value row is missing, and a row that never appears in the scan is a row
    * that never migrates — invisible until its download 404s after the fallback is removed. That is
    * exactly the failure mode the old {@code GET} package cursor hid.
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove with the rest of the
+   * migration code; nothing in the application calls it.
    */
   @Override
   public List<BioAttachmentRef> listBioAttachmentsForMigration(String afterId, int limit) {
@@ -1067,6 +1070,9 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
    * The raw {@code GET_BLOB} read (10 params: id/checklist/type/name/desc/mime-code/mime-type IN OUT
    * 1-7, file_contents BLOB @8, userid @9, error @10) — returns metadata + whatever bytes are in the
    * Oracle BLOB (empty for a migrated BIO row).
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove with the rest of the
+   * migration code; nothing in the application calls it.
    */
   @Override
   public AttachmentContent getAttachmentContentFromBlob(

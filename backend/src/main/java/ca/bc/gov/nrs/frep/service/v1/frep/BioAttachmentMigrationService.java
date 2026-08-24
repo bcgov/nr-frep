@@ -13,12 +13,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * ONE-TIME CUTOVER TOOLING — delete this class, its endpoint/controller, the two repository methods
- * it uses and its tests once the migration is verified complete and Phase 4b has shipped.
+ * ONE-TIME CUTOVER TOOLING — delete this class, its scheduler and configuration, the two repository
+ * methods it uses and their tests once the migration is verified complete and Phase 4b has shipped.
+ *
+ * <p><b>DELETE-AFTER-BIO-ATTACHMENT-MIGRATION</b> — grep that tag to find every file and method that must go; the
+ * checklist is in {@code backend/tools/bio-attachment-migration-runbook.md}.
  *
  * <p>Copies existing Biodiversity attachment bytes from the Oracle BLOB to object storage under the
  * key the read path already expects ({@code slr/<attachmentId>}). New uploads have gone straight to
  * object storage since the storage switch; this only backfills rows the legacy app wrote.
+ *
+ * <p>Driven to completion by {@link BioAttachmentMigrationScheduler}, which calls the two methods
+ * below batch by batch. There is no HTTP surface: the API requires a Cognito access token that
+ * only an interactive IDIR login can produce, so an endpoint would have to be either driven by a
+ * hand-copied short-lived token or left open — neither is a good way to run a production cutover.
  *
  * <p><b>Why this runs inside the application</b> rather than as a standalone script: the JVM already
  * holds a working TCPS connection to Oracle. An external client hits two independent walls — the DB
@@ -34,8 +42,9 @@ import org.springframework.stereotype.Service;
  * keeping it serial keeps the memory ceiling equal to the largest single file.
  *
  * <p>Batched by design: {@code limit} rows per call, feeding {@code lastId} back as {@code afterId},
- * so no single request outlives the route timeout. Idempotent — an attachment whose object already
- * exists is skipped, so a re-run resumes rather than repeats.
+ * so the row set held at any moment stays bounded and an interrupted run has a natural resume point.
+ * Idempotent — an attachment whose object already exists is skipped, so a re-run resumes rather than
+ * repeats, whether it was interrupted by a pod restart or a second replica racing it.
  */
 @Service
 public class BioAttachmentMigrationService {

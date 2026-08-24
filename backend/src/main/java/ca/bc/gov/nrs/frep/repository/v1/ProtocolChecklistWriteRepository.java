@@ -52,7 +52,8 @@ public interface ProtocolChecklistWriteRepository {
    * behind the one-time BLOB → object-storage migration. Unlike {@link #getAttachments}, this is
    * not scoped to a checklist.
    *
-   * <p>Cutover tooling; remove with the migration endpoint.
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove this method with the
+   * rest of the migration code; nothing in the application calls it.
    */
   List<BioAttachmentRef> listBioAttachmentsForMigration(String afterId, int limit);
 
@@ -61,7 +62,8 @@ public interface ProtocolChecklistWriteRepository {
    * Migrated Biodiversity rows return an empty array here, which is exactly how the migration
    * detects what still needs copying.
    *
-   * <p>Cutover tooling; remove with the migration endpoint.
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove this method with the
+   * rest of the migration code; nothing in the application calls it.
    */
   AttachmentContent getAttachmentContentFromBlob(
       String checklistId, String resourceType, String attachmentId);

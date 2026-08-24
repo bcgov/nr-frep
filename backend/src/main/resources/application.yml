@@ -136,6 +136,25 @@ frep:
     read-timeout: ${CLAMAV_READ_TIMEOUT:30s}
     chunk-size: 8192
 
+  # ── ONE-TIME CUTOVER TOOLING — DELETE-AFTER-BIO-ATTACHMENT-MIGRATION ──────────────────────────
+  # Grep that tag to find every file and method that must go; the checklist is in
+  # backend/tools/bio-attachment-migration-runbook.md.
+  # Biodiversity attachment BLOB → object-storage backfill. Off everywhere by default; the whole run
+  # is driven by `oc set env` against the Deployment, so no rebuild is needed to start or stop it.
+  # When `enabled` is false the scheduler bean and all scheduling infrastructure are absent entirely
+  # (BioAttachmentMigrationConfiguration). Delete this block with the rest of the tooling once
+  # Phase 4b has shipped. See backend/tools/bio-attachment-migration-runbook.md.
+  bio-attachment-migration:
+    enabled: ${BIO_ATTACHMENT_MIGRATION_ENABLED:false}
+    # Defaults to a dry run: if the flag above is ever set without thinking, the result is a report,
+    # not 5,000 writes to production object storage.
+    dry-run: ${BIO_ATTACHMENT_MIGRATION_DRY_RUN:true}
+    # Delay after context refresh before the single run starts — lets the Hikari pool and the
+    # object-storage client settle, and leaves a window to abort by scaling the Deployment down.
+    initial-delay: ${BIO_ATTACHMENT_MIGRATION_INITIAL_DELAY:60s}
+    batch-size: ${BIO_ATTACHMENT_MIGRATION_BATCH_SIZE:250}
+    verify-batch-size: ${BIO_ATTACHMENT_MIGRATION_VERIFY_BATCH_SIZE:500}
+
 resilience4j:
   circuitbreaker:
     instances:

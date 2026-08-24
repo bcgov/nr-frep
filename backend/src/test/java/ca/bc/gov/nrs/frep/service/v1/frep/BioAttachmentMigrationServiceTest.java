@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -23,9 +24,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 
 /**
  * Cutover tooling — delete alongside {@link BioAttachmentMigrationService} once Phase 4b ships.
+ *
+ * <p><b>DELETE-AFTER-BIO-ATTACHMENT-MIGRATION</b> — grep that tag to find every file and method that must go; the
+ * checklist is in {@code backend/tools/bio-attachment-migration-runbook.md}.
  *
  * <p>The cases that matter are the ones that would silently corrupt the cutover: skipping rows that
  * already landed (so a re-run resumes rather than repeats), never writing zero-byte objects over
@@ -45,6 +51,21 @@ class BioAttachmentMigrationServiceTest {
 
   private static AttachmentContent content(byte[] bytes) {
     return new AttachmentContent("f.pdf", "application/pdf", bytes);
+  }
+
+  private static AttachmentContent content(String fileName, String mimeType, byte[] bytes) {
+    return new AttachmentContent(fileName, mimeType, bytes);
+  }
+
+  /** What the object-storage gateway actually throws: a 403 whose message says only "Access Denied". */
+  private static AwsServiceException gatewayError(String code, int status, String requestId) {
+    return AwsServiceException.builder()
+        .awsErrorDetails(
+            AwsErrorDetails.builder().errorCode(code).errorMessage("Access Denied").build())
+        .statusCode(status)
+        .requestId(requestId)
+        .message("Access Denied (Service: S3, Status Code: " + status + ")")
+        .build();
   }
 
   @Test
@@ -104,6 +125,65 @@ class BioAttachmentMigrationServiceTest {
     assertEquals(0, result.migrated());
     assertEquals(0L, result.bytesWritten());
     verify(objectStorage, never()).putObject(anyString(), anyString(), any());
+  }
+
+  @Test
+  void legacyMimeDescriptionsAreReplacedByARealMediaTypeBeforeTheWrite() {
+    when(writeRepository.listBioAttachmentsForMigration("0", 250)).thenReturn(List.of(ref("77")));
+    when(objectStorage.objectExists("slr/77")).thenReturn(false);
+    // What Oracle actually holds for these rows: a mime_type_code *description*, not a media type.
+    when(writeRepository.getAttachmentContentFromBlob("90077", "SLB", "77"))
+        .thenReturn(content("P1010070.JPG", "JPG Graphic File", new byte[] {1, 2, 3}));
+
+    service.migrate("0", 250, false);
+
+    // Sent verbatim, the space in "JPG Graphic File" breaks the SigV4 signature over Content-Type
+    // and the gateway rejects the write as 403 AccessDenied — 18 rows failed this way in DEV.
+    verify(objectStorage).putObject("slr/77", "image/jpeg", new byte[] {1, 2, 3});
+  }
+
+  @Test
+  void aRealMediaTypeIsPassedThroughUntouched() {
+    assertEquals("application/pdf", BioAttachmentMigrationService.contentTypeFor(
+        "application/pdf", "CANOE32.pdf"));
+  }
+
+  @Test
+  void aMalformedMediaTypeFallsBackToTheExtensionNotTheStoredValue() {
+    // The real 42076: "application/vnd ms-powerpoint" — a space where the dot belongs. Close enough
+    // to a media type to look fine in a log, malformed enough that the gateway answered 400.
+    assertEquals("application/vnd.ms-powerpoint", BioAttachmentMigrationService.contentTypeFor(
+        "application/vnd ms-powerpoint", "deck.ppt"));
+  }
+
+  @Test
+  void anUnrecognisableTypeAndExtensionStoresAsOctetStream() {
+    assertEquals("application/octet-stream",
+        BioAttachmentMigrationService.contentTypeFor("Some Legacy Description", "notes.xyz"));
+    assertEquals("application/octet-stream",
+        BioAttachmentMigrationService.contentTypeFor(null, "no-extension"));
+  }
+
+  @Test
+  void aStorageFailureRecordsTheGatewaysErrorCodeNotJustAccessDenied() {
+    when(writeRepository.listBioAttachmentsForMigration("0", 250)).thenReturn(List.of(ref("77")));
+    when(objectStorage.objectExists("slr/77")).thenReturn(false);
+    when(writeRepository.getAttachmentContentFromBlob("90077", "SLB", "77"))
+        .thenReturn(content(new byte[] {1, 2, 3}));
+    doThrow(gatewayError("QuotaExceeded", 403, "req-9"))
+        .when(objectStorage).putObject(anyString(), anyString(), any());
+
+    BioAttachmentMigrationResult result = service.migrate("0", 250, false);
+
+    assertEquals(1, result.failed().size());
+    String entry = result.failed().get(0);
+    // AccessDenied, QuotaExceeded, SlowDown and RequestTimeTooSkewed all arrive as a 403 saying
+    // "Access Denied". The code is the only part that says which, and each calls for a different
+    // fix — so it has to survive into the summary line an operator actually reads, not just the
+    // stack trace.
+    assertTrue(entry.contains("code=QuotaExceeded"), entry);
+    assertTrue(entry.contains("status=403"), entry);
+    assertTrue(entry.contains("requestId=req-9"), entry);
   }
 
   @Test

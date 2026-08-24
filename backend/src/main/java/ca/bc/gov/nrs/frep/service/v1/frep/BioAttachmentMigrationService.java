@@ -11,6 +11,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 
 /**
  * ONE-TIME CUTOVER TOOLING — delete this class, its scheduler and configuration, the two repository
@@ -73,6 +75,28 @@ public class BioAttachmentMigrationService {
   }
 
   /**
+   * The storage gateway's own error code, which the SDK's exception message does not carry.
+   *
+   * <p>A 403 from an S3-compatible gateway can mean {@code AccessDenied}, {@code QuotaExceeded},
+   * {@code SlowDown} or {@code RequestTimeTooSkewed}, and those call for completely different
+   * responses — more permissions, more space, less concurrency, or a clock fix. All four surface as
+   * the same {@code "Access Denied"} message text, so without the code there is nothing to tell
+   * them apart but guesswork. The request id is included because it is what the platform team needs
+   * to find the request at their end.
+   */
+  private static String describe(RuntimeException ex) {
+    if (!(ex instanceof AwsServiceException aws)) {
+      return ex.getMessage();
+    }
+    AwsErrorDetails details = aws.awsErrorDetails();
+    return String.format("code=%s status=%d requestId=%s message=%s",
+        details == null ? "(none)" : details.errorCode(),
+        aws.statusCode(),
+        aws.requestId(),
+        details == null ? ex.getMessage() : details.errorMessage());
+  }
+
+  /**
    * Migrate one batch. With {@code dryRun} nothing is written — it reports what would move, which is
    * how you size the real run and confirm the batch boundaries behave before touching the bucket.
    */
@@ -90,6 +114,10 @@ public class BioAttachmentMigrationService {
 
     for (BioAttachmentRef ref : refs) {
       lastId = ref.attachmentId();
+      // Captured outside the try so a failure can report what was being written. Left at their
+      // defaults when the row fails before the BLOB read, which itself says where it broke.
+      int size = -1;
+      String mime = null;
       try {
         String key = objectKey(ref.attachmentId());
         if (objectStorage.objectExists(key)) {
@@ -100,6 +128,8 @@ public class BioAttachmentMigrationService {
         AttachmentContent blob = writeRepository.getAttachmentContentFromBlob(
             ref.checklistId(), ref.resourceType(), ref.attachmentId());
         byte[] bytes = blob.data();
+        mime = blob.mimeType();
+        size = bytes == null ? -1 : bytes.length;
 
         // No bytes on either side: legacy rows that never had content. Writing a zero-byte object
         // would only launder bad data into the new store, so they are recorded and left alone.
@@ -119,8 +149,18 @@ public class BioAttachmentMigrationService {
       } catch (RuntimeException ex) {
         // One bad row must not abort the batch: record it and continue, so a single failure costs
         // one attachment rather than the rest of the run. Re-running retries exactly these.
-        log.error("BIO attachment migration failed for id {}", ref.attachmentId(), ex);
-        failed.add(ref.attachmentId() + ": " + ex.getMessage());
+        String detail = describe(ex);
+        failed.add(ref.attachmentId() + ": " + detail);
+        if (ex instanceof AwsServiceException) {
+          // describe() has already pulled out everything the storage gateway told us; the SDK's
+          // stack trace is 40 lines of retry-pipeline internals that name neither the attachment
+          // nor the reason, and 18 of them buried the one line that mattered.
+          log.error("BIO attachment migration failed for id {} (bytes={} contentType={}) :: {}",
+              ref.attachmentId(), size, mime, detail);
+        } else {
+          log.error("BIO attachment migration failed for id {} (bytes={} contentType={})",
+              ref.attachmentId(), size, mime, ex);
+        }
       }
     }
 

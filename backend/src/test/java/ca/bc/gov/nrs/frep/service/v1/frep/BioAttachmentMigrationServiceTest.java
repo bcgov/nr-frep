@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 
 /**
  * Cutover tooling — delete alongside {@link BioAttachmentMigrationService} once Phase 4b ships.
@@ -48,6 +51,17 @@ class BioAttachmentMigrationServiceTest {
 
   private static AttachmentContent content(byte[] bytes) {
     return new AttachmentContent("f.pdf", "application/pdf", bytes);
+  }
+
+  /** What the object-storage gateway actually throws: a 403 whose message says only "Access Denied". */
+  private static AwsServiceException gatewayError(String code, int status, String requestId) {
+    return AwsServiceException.builder()
+        .awsErrorDetails(
+            AwsErrorDetails.builder().errorCode(code).errorMessage("Access Denied").build())
+        .statusCode(status)
+        .requestId(requestId)
+        .message("Access Denied (Service: S3, Status Code: " + status + ")")
+        .build();
   }
 
   @Test
@@ -107,6 +121,28 @@ class BioAttachmentMigrationServiceTest {
     assertEquals(0, result.migrated());
     assertEquals(0L, result.bytesWritten());
     verify(objectStorage, never()).putObject(anyString(), anyString(), any());
+  }
+
+  @Test
+  void aStorageFailureRecordsTheGatewaysErrorCodeNotJustAccessDenied() {
+    when(writeRepository.listBioAttachmentsForMigration("0", 250)).thenReturn(List.of(ref("77")));
+    when(objectStorage.objectExists("slr/77")).thenReturn(false);
+    when(writeRepository.getAttachmentContentFromBlob("90077", "SLB", "77"))
+        .thenReturn(content(new byte[] {1, 2, 3}));
+    doThrow(gatewayError("QuotaExceeded", 403, "req-9"))
+        .when(objectStorage).putObject(anyString(), anyString(), any());
+
+    BioAttachmentMigrationResult result = service.migrate("0", 250, false);
+
+    assertEquals(1, result.failed().size());
+    String entry = result.failed().get(0);
+    // AccessDenied, QuotaExceeded, SlowDown and RequestTimeTooSkewed all arrive as a 403 saying
+    // "Access Denied". The code is the only part that says which, and each calls for a different
+    // fix — so it has to survive into the summary line an operator actually reads, not just the
+    // stack trace.
+    assertTrue(entry.contains("code=QuotaExceeded"), entry);
+    assertTrue(entry.contains("status=403"), entry);
+    assertTrue(entry.contains("requestId=req-9"), entry);
   }
 
   @Test

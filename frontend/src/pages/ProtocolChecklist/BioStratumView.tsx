@@ -22,6 +22,9 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
+import TabIncompleteBanner from './TabIncompleteBanner';
+
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
@@ -45,6 +48,10 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
+  outstanding?: string[];
+  /** Called after a save or delete lands, so the tab-completion dots re-derive. */
+  onSaved?: () => void;
 };
 
 type FieldDef = { key: string; label: string };
@@ -208,19 +215,6 @@ const ECO_CHECKBOX_KEYS = [
   'activeWltCwdFeedingInd',
   'uncommonTreeSpeciesInd',
 ];
-// Full groups the legacy enable/disable cascade clears when a group is turned off.
-/**
- * Byte limits for the stratum's free-text fields, keyed by field — the same numbers
- * checkStratumLengths enforces, shared with the counter so display and validation can't drift
- * apart. Bytes, not characters: the columns are byte-semantic (`BIODIVERSITY_STRATUM.
- * OTHER_CONSTRAINT VARCHAR2(50 BYTE)` and friends, nr-mof-db V2.00406__BIODIVERSITY_STRATUM.sql).
- */
-const STRATUM_TEXT_LIMITS: Record<string, number> = {
-  otherConstraint: 50,
-  otherEcoAnchorDesc: 30,
-  patchGeneralComment: 2000,
-};
-
 /**
  * Free-text fields rendered as a multi-line box rather than a single-line input. Only the general
  * comment earns it — the other two limited fields are short labels ("Other constraint" at 50,
@@ -228,6 +222,7 @@ const STRATUM_TEXT_LIMITS: Record<string, number> = {
  */
 const MULTILINE_KEYS = new Set(['patchGeneralComment']);
 
+// Full groups the legacy enable/disable cascade clears when a group is turned off.
 const CONSTRAINT_KEYS = [...CONSTRAINT_PCT_KEYS, 'otherConstraint', 'constrainedTotal'];
 const ECO_KEYS = [...ECO_COUNT_KEYS, 'otherEcoAnchorDesc', ...ECO_CHECKBOX_KEYS];
 const PATCH_KEYS = [
@@ -408,6 +403,28 @@ const checkRange = (
   }
 };
 
+/**
+ * Fields whose "not filled in yet" error is advisory: nullable columns the tab still marks required
+ * and still counts against submit, but that no longer stop a stratum being stored.
+ *
+ * Deliberately excluded — the database refuses these outright (BIODIVERSITY_STRATUM declares them
+ * NOT NULL, and FREP_BIODIVERSITY_STRATUM.validate_mandatories re-checks three of them): plot count,
+ * consistent-with-map, harvest area and BGC zone. BGC subzone joins them because validate_bec runs
+ * the whole BEC combination through FREP_VALIDATE_BGC.
+ */
+const ADVISORY_WHEN_BLANK = new Set([
+  'stratumNumber',
+  'strataTypeCode',
+  'size',
+  'estimatedSize',
+  'patchWindthrowPct',
+  'patchLocationCode',
+]);
+
+/** Current value of a stratum field, for the advisory test above. */
+const valueOf = (stratum: BioStratum | null, key: string): string =>
+  ((stratum as unknown as Record<string, string | undefined>)?.[key] ?? '').trim();
+
 const checkRequiredAndFormat = (e: StratumErrors, v: ValueReader) => {
   REQUIRED_KEYS.forEach((k) => {
     if (!v(k)) e[k] = `${LABELS[k] ?? k} is required.`;
@@ -556,8 +573,17 @@ const checkCrossField = (
   }
 };
 
-const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const BioStratumView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  onSaved,
+  outstanding = [],
+}) => {
   const { display } = useNotification();
+  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
+  // a tab the user has not touched yet.
+  const [justSaved, setJustSaved] = useState(false);
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
@@ -802,8 +828,17 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // same gate in BioOpeningView. `allErrors` drives the save guard, `fieldErrors` the rendering, so
   // every `invalid`/`invalidText` site below is gated without touching each one.
   const allErrors: Record<string, string> = current && !readOnly ? validate() : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
+
+  // Which of those errors actually stop the save. A blank field in ADVISORY_WHEN_BLANK is a gap —
+  // marked, counted on the tab and blocking submit, but stored happily. A field that *has* a value
+  // can only be failing a format or range rule, so its error still blocks.
+  const blockingErrors = Object.fromEntries(
+    Object.entries(allErrors).filter(
+      ([key]) => !(ADVISORY_WHEN_BLANK.has(key) && !valueOf(current, key)),
+    ),
+  );
+  const hasErrors = Object.keys(blockingErrors).length > 0;
 
   const handleSave = async () => {
     if (!current) return;
@@ -816,6 +851,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       setCurrent(null);
       setComputed(null);
       await loadList();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -837,6 +874,8 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');
       await loadList();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -933,6 +972,9 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       id: `stratum-${key}`,
       labelText: lbl,
       value: get(key),
+      // Undefined for anything not in the map — notably patchGeneralComment, which uses the byte
+      // counter below instead. A field takes one mechanism or the other, never both.
+      maxLength: STRATUM_FIELD_MAX[key],
       disabled,
       invalid: Boolean(fieldErrors[key]),
       invalidText: fieldErrors[key],
@@ -1017,6 +1059,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   return (
     <div className="rip-form">
+      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Stratum" />
       {/* The strata table and the stratum form are mutually exclusive — each takes the
           full width; the table is hidden while a stratum form is open. */}
       <div>
@@ -1239,6 +1282,11 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
                             labelText="Other constraint"
                             hideLabel
                             size="sm"
+                            // Rendered raw rather than through `textField`, so it gets neither the
+                            // byte counter nor a visible error: invalidText collapses to zero
+                            // height in a size="sm" table cell. The length rule above still blocks
+                            // the save, but the user would see no reason why — so cap the input.
+                            maxLength={STRATUM_TEXT_LIMITS.otherConstraint}
                             value={get('otherConstraint')}
                             disabled={disabledKey('otherConstraint')}
                             onChange={(e) => set('otherConstraint', e.target.value)}
@@ -1264,6 +1312,10 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
                             labelText="Other eco anchor"
                             hideLabel
                             size="sm"
+                            // Same as otherConstraint above — raw table cell, no counter or visible
+                            // error, so the cap is the only feedback. 30 bytes is the tightest
+                            // free-text column in either protocol.
+                            maxLength={STRATUM_TEXT_LIMITS.otherEcoAnchorDesc}
                             value={get('otherEcoAnchorDesc')}
                             disabled={disabledKey('otherEcoAnchorDesc')}
                             onChange={(e) => set('otherEcoAnchorDesc', e.target.value)}
@@ -1298,6 +1350,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
               key={c.key}
               id={`bec-${c.key}`}
               labelText={c.label}
+              maxLength={BEC_SEARCH_MAX[c.key]}
               value={becCriteria[c.key] ?? ''}
               onChange={(e) => setBecCriteria((prev) => ({ ...prev, [c.key]: e.target.value }))}
             />

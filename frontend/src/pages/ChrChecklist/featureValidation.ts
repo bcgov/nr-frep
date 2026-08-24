@@ -5,9 +5,16 @@ import { addTextLimitErrors } from '@/utils/textLimits';
 
 // Lightweight, high-value feature validation mirroring the most important CHR submit checks, for live
 // inline feedback. The full rule set (at-least-one groups, FN/AIA/SP planning, windthrow/damage
-// details, composite membership, etc.) stays server-side at submit.
+// details, composite membership, etc.) lives in `tabStatus.ts`, which drives the tab dots and the
+// submit pre-flight, and stays authoritative server-side at submit.
+//
+// The errors are split by what each rule can do. A required field left blank is advisory: it is
+// marked, counted on the Features tab and blocks submit, but the feature still saves — an evaluator
+// in the field routinely has some answers and not others. Only a value the column cannot store (a
+// malformed Borden #, a non-numeric count, free text past its byte limit) blocks the save.
 
-const BORDEN_RE = /^[A-U][a-l][A-W][a-x]-\d{1,4}$/;
+/** Borden # format, shared with the submit-rule mirror in tabStatus.ts. */
+export const BORDEN_RE = /^[A-U][a-l][A-W][a-x]-\d{1,4}$/;
 const isYes = (v?: string) => v === 'true';
 const isBlank = (v?: string) => v == null || `${v}`.trim() === '';
 
@@ -19,25 +26,36 @@ const intRange = (value: string | undefined, label: string, max: number): string
   return Number(v) > max ? `${label} must be from 0 to ${max}.` : '';
 };
 
-/** A numeric field that is required (and ranged) only when its gating checkbox is Yes. */
-const gatedNumber = (
+/** A numeric field that is required only when its gating checkbox is Yes. Blank only — advisory. */
+const gatedNumberMissing = (
   e: Record<string, string>,
   on: boolean,
   key: string,
   value: string | undefined,
   label: string,
-  max: number,
 ) => {
-  if (!on) return;
-  if (isBlank(value)) e[key] = `${label} is required.`;
-  else {
-    const err = intRange(value, label, max);
-    if (err) e[key] = err;
-  }
+  if (on && isBlank(value)) e[key] = `${label} is required.`;
 };
 
-/** Field-level errors keyed by Feature field. An empty object means the feature passes these checks. */
-export const featureErrors = (f: Feature): Record<string, string> => {
+/** The shape rule for the same field: an entered value must be a whole number in range. Blocking. */
+const gatedNumberFormat = (
+  e: Record<string, string>,
+  key: string,
+  value: string | undefined,
+  label: string,
+  max: number,
+) => {
+  const err = intRange(value, label, max);
+  if (err) e[key] = err;
+};
+
+/**
+ * Required feature fields that are still blank, keyed by `Feature` field.
+ *
+ * Advisory: reported and counted, but they do not stop the feature being stored. See
+ * {@link featureBlockingErrors} for the rules that do.
+ */
+export const featureRequiredErrors = (f: Feature): Record<string, string> => {
   const e: Record<string, string> = {};
 
   // Summary — rating required; description required when its question is "Yes".
@@ -65,22 +83,14 @@ export const featureErrors = (f: Feature): Record<string, string> => {
     e.q6Description = 'A description is required.';
   }
 
-  // Description — Borden format, CMT / Monumental cedar counts, "Other" description.
-  if (
-    isYes(f.chrRegisteredSite) &&
-    (f.borden ?? '').length > 0 &&
-    !BORDEN_RE.test(f.borden ?? '')
-  ) {
-    e.borden = 'Must match the Borden format, e.g. AaBb-0000.';
-  }
-  gatedNumber(e, isYes(f.ofCMTs), 'ofCMTsNumber', f.ofCMTsNumber, '# of CMTs', 999);
-  gatedNumber(
+  // Description — CMT / Monumental cedar counts, "Other" description.
+  gatedNumberMissing(e, isYes(f.ofCMTs), 'ofCMTsNumber', f.ofCMTsNumber, '# of CMTs');
+  gatedNumberMissing(
     e,
     isYes(f.ofMonumentalCedars),
     'standofMonumentalCedar',
     f.standofMonumentalCedar,
     '# of Monumental Cedars',
-    999,
   );
   if (isYes(f.other) && isBlank(f.otherdescription)) {
     e.otherdescription = 'A description is required.';
@@ -95,14 +105,41 @@ export const featureErrors = (f: Feature): Record<string, string> => {
   }
 
   // Effectiveness — retained-buffer width.
-  gatedNumber(
+  gatedNumberMissing(
     e,
     isYes(f.retainabuffer),
     'bufferWidthMeter',
     f.bufferWidthMeter,
     'Buffer size (m)',
-    9999,
   );
+
+  return e;
+};
+
+/**
+ * Feature errors the stored row could not survive: a Borden # in the wrong format, a count that is
+ * not a whole number or is out of range, or free text past its byte-semantic column limit. These
+ * <b>do</b> block the save.
+ */
+export const featureBlockingErrors = (f: Feature): Record<string, string> => {
+  const e: Record<string, string> = {};
+
+  if (
+    isYes(f.chrRegisteredSite) &&
+    (f.borden ?? '').length > 0 &&
+    !BORDEN_RE.test(f.borden ?? '')
+  ) {
+    e.borden = 'Must match the Borden format, e.g. AaBb-0000.';
+  }
+  gatedNumberFormat(e, 'ofCMTsNumber', f.ofCMTsNumber, '# of CMTs', 999);
+  gatedNumberFormat(
+    e,
+    'standofMonumentalCedar',
+    f.standofMonumentalCedar,
+    '# of Monumental Cedars',
+    999,
+  );
+  gatedNumberFormat(e, 'bufferWidthMeter', f.bufferWidthMeter, 'Buffer size (m)', 9999);
 
   // Free-text length. Enforced here rather than left to the database: these columns are byte-limited
   // and nothing else checks them, so an over-long entry used to surface only as a failed save.
@@ -111,5 +148,15 @@ export const featureErrors = (f: Feature): Record<string, string> => {
   return e;
 };
 
-/** True when the feature has any of the lightweight errors (used to block Save). */
-export const featureHasErrors = (f: Feature): boolean => Object.keys(featureErrors(f)).length > 0;
+/**
+ * Every field-level error on the feature editor — what to show the user, blocking or not. A blocking
+ * error wins over a required one on the same field, since it names a value the user actually typed.
+ */
+export const featureErrors = (f: Feature): Record<string, string> => ({
+  ...featureRequiredErrors(f),
+  ...featureBlockingErrors(f),
+});
+
+/** True when the feature cannot be stored as it stands (used to block Save). */
+export const featureHasErrors = (f: Feature): boolean =>
+  Object.keys(featureBlockingErrors(f)).length > 0;

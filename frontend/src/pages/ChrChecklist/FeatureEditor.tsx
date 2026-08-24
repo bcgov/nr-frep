@@ -33,7 +33,7 @@ import {
   RESERVE_TYPE_CODES,
 } from '@/pages/ChrChecklist/codeLists';
 import { featureErrors } from '@/pages/ChrChecklist/featureValidation';
-import { FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import { FEATURE_SINGLE_LINE_MAX, FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 
 type PatchFn = (patch: Partial<Feature>) => void;
 
@@ -404,6 +404,7 @@ const FeatureEditor: FC<{
               id="feat-label"
               labelText="Feature label"
               value={str('featureLabel')}
+              maxLength={FEATURE_SINGLE_LINE_MAX.featureLabel}
               disabled={readOnly}
               onChange={(v) => onPatch({ featureLabel: v })}
             />
@@ -589,6 +590,7 @@ const FeatureEditor: FC<{
                 labelText={requiredLabel('Other description', true)}
                 value={str('otherdescription')}
                 disabled={readOnly}
+                maxLength={FEATURE_SINGLE_LINE_MAX.otherdescription}
                 invalid={Boolean(err('otherdescription'))}
                 invalidText={err('otherdescription')}
                 onChange={(v) => onPatch({ otherdescription: v })}
@@ -616,6 +618,7 @@ const FeatureEditor: FC<{
               labelText={requiredLabel('Other location description', true)}
               value={str('locationOtherDescription')}
               disabled={readOnly}
+              maxLength={FEATURE_SINGLE_LINE_MAX.locationOtherDescription}
               invalid={Boolean(err('locationOtherDescription'))}
               invalidText={err('locationOtherDescription')}
               onChange={(v) => onPatch({ locationOtherDescription: v })}
@@ -658,6 +661,7 @@ const FeatureEditor: FC<{
               id="feat-permit"
               labelText="Permit number"
               value={str('permit')}
+              maxLength={FEATURE_SINGLE_LINE_MAX.permit}
               disabled={readOnly}
               onChange={(v) => onPatch({ permit: v })}
             />
@@ -720,6 +724,7 @@ const FeatureEditor: FC<{
                             id={`other-strat-${i}`}
                             labelText="Other strategy"
                             value={s.otherStrategy}
+                            maxLength={FEATURE_SINGLE_LINE_MAX.otherStrategy}
                             disabled={readOnly}
                             onChange={(v) => patchStrategy(i, { otherStrategy: v })}
                           />
@@ -860,6 +865,7 @@ const FeatureEditor: FC<{
             id="feat-eff-other"
             labelText="Other activities"
             value={str('otherActivities')}
+            maxLength={FEATURE_SINGLE_LINE_MAX.otherActivities}
             disabled={readOnly}
             onChange={(v) => onPatch({ otherActivities: v })}
           />
@@ -888,6 +894,9 @@ const FeatureEditor: FC<{
                       value={str(
                         'ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause',
                       )}
+                      maxLength={
+                        FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribeOtherQ2Wheredamagehasoccurredwhatisthemostlikelycause
+                      }
                       disabled={readOnly}
                       onChange={(v) =>
                         onPatch({
@@ -957,6 +966,7 @@ const FeatureEditor: FC<{
                       id="feat-windthrow-other"
                       labelText="Other technique description"
                       value={str('ifotherpleasedescribe')}
+                      maxLength={FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribe}
                       disabled={readOnly}
                       onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
                     />

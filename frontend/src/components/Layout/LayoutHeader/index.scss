@@ -13,7 +13,8 @@
 
   .#{vars.$bcgov-prefix}--header__name {
     margin-left: 0;
-    padding-inline-start: 0.25rem;
+    // 12px between the hamburger and the app name.
+    padding-inline-start: 0.75rem;
     color: #fff;
 
     &:hover {
@@ -22,7 +23,7 @@
 
     @include breakpoint-down(lg) {
       margin-left: 0;
-      padding: 0 0 0 0.25rem;
+      padding: 0 0 0 0.75rem;
     }
   }
 
@@ -31,10 +32,26 @@
   .#{vars.$bcgov-prefix}--header__menu-toggle,
   .#{vars.$bcgov-prefix}--header__menu-toggle__hidden {
     display: flex;
+    background-color: transparent;
     color: #fff;
 
+    // Open (the X): Carbon's --active treatment is a light panel background with a dark icon, which
+    // reads as a grey box punched into the blue bar. The header never changes colour, so keep the
+    // button transparent and the icon white in every state — matching FSPTS. Carbon also adds 1px
+    // inline borders when --active, which showed as light vertical lines against the blue.
     &.#{vars.$bcgov-prefix}--header__action--active {
-      color: var(--#{vars.$bcgov-prefix}-layer-selected-inverse);
+      background-color: transparent;
+      border-color: transparent;
+      color: #fff;
+    }
+
+    // Only hover/press darkens, and it does so by laying a wash over whatever the brand blue
+    // currently is rather than pinning a second hex — the header colour is the themeable
+    // `background-brand` token, so a hardcoded shade would drift from it.
+    &:hover,
+    &:active,
+    &.#{vars.$bcgov-prefix}--header__action--active:hover {
+      background-color: rgb(0 0 0 / 12%);
     }
 
     &:focus:not(:focus-visible) {

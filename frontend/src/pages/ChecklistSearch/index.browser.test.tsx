@@ -164,6 +164,37 @@ describe('ChecklistSearch — the search survives leaving the page', () => {
     expect(search.searchChecklistsPaged.mock.calls[0][0].effectiveYear).toBe('2024');
   });
 
+  it('refuses to search on a client term that matched no client', async () => {
+    // The reported bug: typing "lakepaced" set no clientNumber, so the search ran with the client
+    // filter simply absent and returned every checklist in the system.
+    renderAt();
+    await waitFor(() => expect(search.searchChecklistsPaged).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+
+    await userEvent.type(screen.getByRole('combobox', { name: /Client name/ }), 'lakepaced');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(await screen.findByText('Select a client from the list of suggestions.')).toBeTruthy();
+    // Still just the arrival search — no unfiltered second one.
+    expect(search.searchChecklistsPaged).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the client error as soon as the user edits the field', async () => {
+    renderAt();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+
+    const field = screen.getByRole('combobox', { name: /Client name/ });
+    await userEvent.type(field, 'lakepaced');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Select a client from the list of suggestions.');
+
+    await userEvent.type(field, 'x');
+
+    await waitFor(() =>
+      expect(screen.queryByText('Select a client from the list of suggestions.')).toBeNull(),
+    );
+  });
+
   it('Clear empties the URL', async () => {
     renderAt('?openingId=115874');
     await waitFor(() => expect(search.searchChecklistsPaged).toHaveBeenCalledTimes(1));

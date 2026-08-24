@@ -14,12 +14,22 @@ import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } fr
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import TabIncompleteBanner from './TabIncompleteBanner';
+
 import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
-import { OPENING_TEXT_LIMITS, validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
+import {
+  OPENING_REQUIRED_LABELS,
+  OPENING_TEXT_LIMITS,
+  evaluationDateRemovalError,
+  openingFormatErrors,
+  openingRequiredErrors,
+  openingTouched,
+  validateOpening,
+} from '@/pages/ProtocolChecklist/openingValidation';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { formatShortDate } from '@/utils/date';
@@ -36,6 +46,10 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /** Called after a save or delete lands, so the tab-completion dots re-derive. */
+  onSaved?: () => void;
+  /** True once Submit has been pressed: the outstanding list shows even on an untouched tab. */
+  revealOutstanding?: boolean;
 };
 
 // The evaluator id comes from the legacy `biodiversity_evaluator_name` table (written by the FREP301
@@ -47,11 +61,26 @@ const sameEvaluator = (a?: string, b?: string): boolean => {
   return norm(a) !== '' && norm(a) === norm(b);
 };
 
-const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const BioOpeningView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  onSaved,
+  revealOutstanding = false,
+}) => {
   const { display } = useNotification();
   const { user } = useAuth();
   const me = user?.providerUsername;
   const [data, setData] = useState<BiodiversityOpening | null>(null);
+  /**
+   * The record as it is *stored*: the load, the pre-edit refresh and the save response all land here.
+   *
+   * `data` doubles as the edit buffer, so it says what the user is typing rather than what is kept.
+   * The banner and the tab count have to describe the latter — reading them off `data` meant a
+   * brand-new checklist raised the banner the moment the first character was typed, listing every
+   * field the user had not reached yet.
+   */
+  const [stored, setStored] = useState<BiodiversityOpening | null>(null);
   const [answers, setAnswers] = useState<CodeOption[]>([]);
   const [ratings, setRatings] = useState<CodeOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +88,9 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [busy, setBusy] = useState(false);
   // Whether a save has been attempted on this edit. Errors stay hidden until then — see below.
   const [showErrors, setShowErrors] = useState(false);
+  // A save landed in this session, so the incomplete banner can lead with "Opening saved" rather
+  // than reporting gaps in a record the user has not touched yet.
+  const [justSaved, setJustSaved] = useState(false);
 
   // Validation runs live off the edited data, but is only *displayed* once the user has tried to
   // save. Opening a record that is merely incomplete (no evaluation date, no location description)
@@ -69,11 +101,35 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // chance of one being missed. After the first save attempt the errors are live again, so each
   // clears the moment it is fixed.
   const allErrors = useMemo<Record<string, string>>(
-    () => (editing && data ? validateOpening(data) : {}),
-    [editing, data],
+    () =>
+      editing && data
+        ? { ...validateOpening(data), ...evaluationDateRemovalError(stored, data) }
+        : {},
+    [editing, data, stored],
   );
-  const hasErrors = Object.keys(allErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
+
+  // Only a value the column cannot store blocks the save (too long, future date, malformed
+  // override) — plus removing an evaluation date the proc has no way to clear. A required field left
+  // blank does not — see openingRequiredErrors and evaluationDateRemovalError.
+  const blockingErrors = useMemo<Record<string, string>>(
+    () =>
+      editing && data
+        ? { ...openingFormatErrors(data), ...evaluationDateRemovalError(stored, data) }
+        : {},
+    [editing, data, stored],
+  );
+  const hasBlockingErrors = Object.keys(blockingErrors).length > 0;
+
+  // Required fields still owed, from the *stored* record — not the in-progress edits — so the banner
+  // and the tab count describe what is actually kept. Recomputed on every load and save.
+  const missingRequired = useMemo(() => {
+    if (!stored) return [];
+    const missing = openingRequiredErrors(stored);
+    // Listed in tab order (the order of OPENING_REQUIRED_LABELS), so the banner reads top-to-bottom
+    // the way the user would work down the form.
+    return Object.keys(OPENING_REQUIRED_LABELS).filter((key) => key in missing);
+  }, [stored]);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -92,7 +148,10 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       API.protocolChecklist
         .getBiodiversityOpening(checklistId)
         .then((d) => {
-          if (!signal?.cancelled) setData(d);
+          if (!signal?.cancelled) {
+            setData(d);
+            setStored(d);
+          }
         })
         .catch((err: unknown) => {
           if (!signal?.cancelled) reportError("We couldn't load the opening", err);
@@ -146,14 +205,20 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const handleSave = async () => {
     if (!data) return;
     // Reveal any errors now: this is the first point the user has asked for the form to be
-    // complete. Blocks the save while any remain — no error toast, they are shown inline.
+    // complete. Blank required fields are shown but do not stop the save — only values the column
+    // cannot store do. No error toast either way; they are shown inline.
     setShowErrors(true);
-    if (hasErrors) return;
+    if (hasBlockingErrors) return;
     setBusy(true);
     try {
       const saved = await API.protocolChecklist.saveBiodiversityOpening(checklistId, data);
       setData(saved);
+      setStored(saved);
       setEditing(false);
+      onSaved?.();
+      // The banner below carries the "saved, but still incomplete" wording once the record is
+      // stored; the toast stays a plain confirmation so the two do not say the same thing twice.
+      setJustSaved(true);
       display({ kind: 'success', title: 'Opening saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -171,6 +236,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       const fresh = await API.protocolChecklist.getBiodiversityOpening(checklistId);
       setData(fresh);
+      setStored(fresh);
       setShowErrors(false);
       setEditing(true);
     } catch (err) {
@@ -335,8 +401,25 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const showEditControls = canEdit && !submitted;
 
+  // Persistent while anything is outstanding: it is the answer to "why can't I submit?", so it has
+  // to survive leaving and re-entering the tab, and it is not dismissible. It clears itself when the
+  // last required field is filled.
+  // Held back until the tab has been saved at least once — `openingTouched` reads that off `stored`,
+  // never off the edit buffer, so it stays hidden while a brand-new checklist is being filled in and
+  // stays visible on one saved half-finished weeks ago. `justSaved` covers the edge case of saving a
+  // tab with nothing in it.
+  const incompleteBanner = (justSaved || revealOutstanding || openingTouched(stored)) && (
+    <TabIncompleteBanner
+      items={missingRequired.map((key) => OPENING_REQUIRED_LABELS[key] ?? key)}
+      saved={justSaved}
+      sectionLabel="Opening"
+      noun="required field"
+    />
+  );
+
   return (
     <div className="rip-form">
+      {incompleteBanner}
       <div className="protocol-checklist__section-actions">
         {!editing && showEditControls && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>

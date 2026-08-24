@@ -20,6 +20,8 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import TabIncompleteBanner from './TabIncompleteBanner';
+
 import type { CodeOption } from '@/types/configuration';
 import type {
   BioCwdRow,
@@ -35,6 +37,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import {
   PLOT_TEXT_LIMITS,
   cwdRowErrors,
+  plotBlockingErrors,
   plotHeaderErrors,
   standRowErrors,
 } from '@/pages/ProtocolChecklist/plotValidation';
@@ -57,6 +60,10 @@ type Props = {
   submitted: boolean;
   /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
   active?: boolean;
+  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
+  outstanding?: string[];
+  /** Called after a save or delete lands, so the tab-completion dots re-derive. */
+  onSaved?: () => void;
 };
 
 // Plot assessor userids are stored bare (no `IDIR\` prefix) — e.g. `ASODHI` — while the logged-in
@@ -122,6 +129,14 @@ const anyRowInvalid = (
 // A plot blocks Save when the header has errors, or "Trees exist" / "CWD in transect" is checked but the
 // matching sub-table is empty (trees — the legacy `notrees` check) or has an invalid row. Extracted to
 // keep the component's cognitive complexity down.
+/**
+ * Whether the plot cannot be stored as it stands.
+ *
+ * Not the same question as "is this plot finished". A blank bearing or a missing UTM fix is a gap:
+ * it is marked, counted on the tab and blocks submit, but the plot still saves. A stand-table or CWD
+ * row the user has *added* must be complete, because every column of BIODIVERSITY_STAND_DETAIL and
+ * COARSE_WOODY_DEBRIS_DETAIL is NOT NULL. "Trees exist" with no rows at all is a gap, not a bad row.
+ */
 const plotHasBlockingErrors = (
   plot: BioPlot | null,
   readOnly: boolean,
@@ -129,15 +144,26 @@ const plotHasBlockingErrors = (
 ): boolean => {
   if (!plot || readOnly) return false;
   const trees = plot.treeIndicator === 'Y';
-  const treesNeedRow = trees && (plot.standTable?.length ?? 0) === 0;
   const standInvalid = trees && anyRowInvalid(plot.standTable, standRowErrors);
   const cwdInvalid =
     plot.cwdTransectIndicator === 'Y' && anyRowInvalid(plot.cwdTable, cwdRowErrors);
-  return Object.keys(headerErrors).length > 0 || treesNeedRow || standInvalid || cwdInvalid;
+  return (
+    Object.keys(plotBlockingErrors(plot, headerErrors)).length > 0 || standInvalid || cwdInvalid
+  );
 };
 
-const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) => {
+const BioPlotsView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  active,
+  onSaved,
+  outstanding = [],
+}) => {
   const { display } = useNotification();
+  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
+  // a tab the user has not touched yet.
+  const [justSaved, setJustSaved] = useState(false);
   const { user } = useAuth();
   const me = user?.providerUsername;
   const confirm = useConfirm();
@@ -376,6 +402,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
       await API.protocolChecklist.saveBioPlot(stratumId, payload);
       setCurrent(null); // on save success, close the form and return to the table
       await loadPlots();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Plot saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -397,6 +425,8 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
     try {
       await API.protocolChecklist.deleteBioPlot(row.plotId, row.revisionCount ?? '');
       await loadPlots();
+      onSaved?.();
+      setJustSaved(true);
       display({ kind: 'success', title: 'Plot deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -754,6 +784,7 @@ const BioPlotsView: FC<Props> = ({ checklistId, canEdit, submitted, active }) =>
 
   return (
     <div className="rip-form">
+      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Plot" />
       {/* The plots table and the plot form are mutually exclusive — the table is hidden
           while a plot form is open (mirrors the Stratum summary tab). */}
       {!current && (

@@ -10,7 +10,6 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: flex-end;
-  margin-top: 1rem;
 }
 
 .protocol-checklist__errors {
@@ -49,8 +48,31 @@
   h1 {
     margin: 0;
     text-align: left;
-    width: 100%;
   }
+}
+
+/* Heading and the checklist-level action share a row; the action is pushed to the end. On a narrow
+   viewport the two wrap and the action drops under the heading, still end-aligned. */
+.protocol-checklist__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  width: 100%;
+
+  .protocol-checklist__actions {
+    flex: 0 0 auto;
+  }
+}
+
+/* `.default-grid :is(h1, …)` sets every page heading to `width: 100%`, which fills this row on its
+   own and wraps the action onto the next line. Undo it here only — and with two classes, because
+   `:is()` takes the specificity of its most specific argument, making that rule (0,2,0). */
+.default-grid .protocol-checklist__title-row h1 {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .protocol-checklist__back {
@@ -565,5 +587,56 @@
     @include type.type-style('label-01');
     font-weight: 400;
     max-width: 16rem;
+  }
+}
+
+/* Tab labels carry a leading completion dot (see TabStatusIcon) instead of the old decorative
+   section icon, so the label and the dot have to share a baseline-ish row inside Carbon's tab. */
+.protocol-checklist__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.protocol-checklist__tab-status {
+  flex: 0 0 auto;
+}
+
+/* "Saved but incomplete" banner at the top of the Opening tab. */
+.bio-opening__incomplete {
+  max-inline-size: 100%;
+  margin-block-end: 1rem;
+}
+
+/* Outstanding-rules list inside the "saved but incomplete" banner. */
+.protocol-checklist__incomplete {
+  max-inline-size: 100%;
+  margin-block-end: 1rem;
+
+  /* _overrides.scss sets the notification text wrapper to `flex-wrap: nowrap`, to keep a title and
+     subtitle on one line. This banner adds a third child — the list — and with nowrap it shares the
+     row and squeezes the subtitle to one character per line. Wrapping is restored here only: the
+     title and subtitle still fit one row on their own, and the list (basis 100%) takes the next. */
+  .#{vars.$bcgov-prefix}--inline-notification__text-wrapper {
+    flex-wrap: wrap;
+  }
+}
+
+
+.protocol-checklist__incomplete-list {
+  /* Carbon's notification text wrapper is a wrapping flex row, so the list would otherwise sit
+     alongside the subtitle and only wrap once it ran out of room. A full-width basis puts it on its
+     own row every time. The type matches `.cds--inline-notification__subtitle`, which the list
+     reads as a continuation of — without it the list inherits the page body size and looks larger
+     than the sentence introducing it. */
+  @include type.type-style('body-compact-01');
+
+  flex: 0 0 100%;
+  margin-block-start: 0.375rem;
+  padding-inline-start: 1.125rem;
+  list-style: disc;
+
+  li {
+    margin-block-end: 0.125rem;
   }
 }

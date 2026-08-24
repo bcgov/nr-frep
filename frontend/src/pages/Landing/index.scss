@@ -31,8 +31,15 @@
         }
 
         .landing-subtitle {
+          // Declared before the include: type-style's fluid variant emits nested @media rules, and
+          // a declaration sitting after those is the `mixed-decls` deprecation — Sass currently
+          // hoists it above them but will stop doing so. Neither order changes the result here
+          // (type-style sets no colour), so this just states the intended one.
+          // `text-primary`, not a literal black: it resolves to #161616 on the light theme and to
+          // white under g100, so the line stays legible in both. A hardcoded #000 would be
+          // black-on-black in dark mode. Matches the FSPTS landing subtitle.
+          color: var(--#{vars.$bcgov-prefix}-text-primary);
           @include type.type-style('fluid-paragraph-01', true);
-          color: var(--#{vars.$bcgov-prefix}-text-secondary);
         }
       }
 
@@ -84,5 +91,51 @@
         object-position: center;
       }
     }
+  }
+}
+
+/* "Request access" — a link and a one-line caveat under the login buttons, mirroring FSPTS. A button
+   rather than an anchor because it opens the instructions dialog rather than navigating. */
+.landing-request-access {
+  &__link {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--cds-link-primary);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+
+    &:hover {
+      color: var(--cds-link-primary-hover);
+    }
+  }
+
+  &__note {
+    margin: 0.5rem 0 0;
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+  }
+}
+
+.landing-request-modal {
+  // Matches the dialog heading, which Carbon paints with --cds-text-primary.
+  color: var(--cds-text-primary);
+
+  ul {
+    margin: 0.25rem 0 1rem;
+    padding-inline-start: 1.5rem;
+    // Restore the disc bullets the global list reset strips off.
+    list-style: disc;
+  }
+
+  li {
+    margin-block: 0.25rem;
+  }
+
+  &__group-title {
+    margin-block: 1rem 0;
+    font-weight: 600;
   }
 }

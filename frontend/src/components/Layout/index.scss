@@ -6,7 +6,9 @@
 // class would otherwise drop the transition and snap content back instantly).
 .cds--content {
   @include breakpoint(lg) {
-    margin-inline-start: 0;
+    // From lg the nav is a permanent rail beside the content; below it the drawer overlays instead,
+    // so the content keeps the full width.
+    margin-inline-start: vars.$layout-side-nav-rail;
     transition: margin-inline-start 400ms cubic-bezier(0.4, 0.14, 0.3, 1);
   }
 }

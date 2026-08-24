@@ -19,6 +19,8 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,6 +35,8 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
  */
 @Service
 public class MasterListAdminService {
+
+  private static final Logger log = LoggerFactory.getLogger(MasterListAdminService.class);
 
   private static final String DEFAULT_MIN_GROSS_AREA_HA = "2";
   private static final String DEFAULT_MAX_SITES_PER_DISTRICT = "300";
@@ -65,6 +69,14 @@ public class MasterListAdminService {
     validateGenerateRequest(request);
     String effectiveYear = request.effectiveYear().trim();
 
+    // Generation rewrites a whole year's random list and is the admin action most likely to prompt
+    // a "what happened to my list?" question. Log the parameters going in and the elapsed time
+    // coming out — the proc can run for a while on a large year.
+    long startedAt = System.currentTimeMillis();
+    log.info("Generating master list for year :: {} by user :: {} (maxSitesPerDistrict :: {}, "
+        + "minOpeningGrossAreaHa :: {})", effectiveYear, loggedUserHelper.getLoggedUserId(),
+        request.maxSitesPerDistrict(), request.minOpeningGrossAreaHa());
+
     masterListRepository.generate(
         effectiveYear,
         blankToEmpty(request.maxHarvestCompleteDate()),
@@ -75,6 +87,8 @@ public class MasterListAdminService {
         loggedUserHelper.getLoggedUserId()
     );
 
+    log.info("Generated master list for year :: {} in :: {} ms", effectiveYear,
+        System.currentTimeMillis() - startedAt);
     return getMasterListCriteria(effectiveYear);
   }
 
@@ -85,6 +99,8 @@ public class MasterListAdminService {
     throwIfInvalid(errors);
     masterListRepository.saveComments(
         effectiveYear.trim(), blankToEmpty(comments), loggedUserHelper.getLoggedUserId());
+    log.info("Saved master list comments for year :: {} by user :: {}", effectiveYear.trim(),
+        loggedUserHelper.getLoggedUserId());
     return getMasterListCriteria(effectiveYear.trim());
   }
 
@@ -92,6 +108,8 @@ public class MasterListAdminService {
   public MasterListAdminResponse deleteList(String effectiveYear) {
     try {
       masterListRepository.deleteList(effectiveYear.trim());
+      log.info("Deleted master list for year :: {} by user :: {}", effectiveYear.trim(),
+          loggedUserHelper.getLoggedUserId());
     } catch (StoredProcedureException ex) {
       // Proc backstop: the list has evaluated resources and can't be deleted. Clean 409, not a 500.
       if (StringUtils.containsIgnoreCase(ex.getOracleErrorMessage(), "resources associated")) {

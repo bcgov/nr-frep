@@ -40,6 +40,57 @@ const api = API.protocolChecklist as unknown as {
 describe('BioStratumView', () => {
   afterEach(() => vi.clearAllMocks());
 
+  it('lists the tab\u2019s outstanding rules in a banner', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+
+    render(
+      <BioStratumView
+        checklistId="9001"
+        canEdit
+        submitted={false}
+        outstanding={['Stratum 1 — missing Stratum type', 'Stratum 1 — missing Mapped size']}
+      />,
+    );
+
+    expect(await screen.findByText('Required fields missing')).toBeTruthy();
+    expect(
+      screen.getByText('2 items to resolve before this checklist can be submitted:'),
+    ).toBeTruthy();
+    const listed = Array.from(document.querySelectorAll('.protocol-checklist__incomplete-list li'));
+    expect(listed.map((li) => li.textContent)).toEqual([
+      'Stratum 1 — missing Stratum type',
+      'Stratum 1 — missing Mapped size',
+    ]);
+  });
+
+  it('saves a stratum that is missing its number, type and size', async () => {
+    // Nullable columns: the evaluator keeps what they have. The four the database insists on (plot
+    // count, consistent-with-map, harvest area, BGC zone) plus BGC subzone are supplied.
+    const partial = {
+      stratumId: 'S1',
+      checklistId: '9001',
+      stratumNumber: '',
+      strataTypeCode: '',
+      consistentMapInd: 'Y',
+      plotCount: '2',
+      harvestAreaCode: 'HDR',
+      bgcZoneCode: 'CWH',
+      bgcSubzoneCode: 'ds',
+      windthrowTreatments: [],
+      revisionCount: '2',
+    };
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.getBioStratum.mockResolvedValue(partial);
+    api.saveBioStratum.mockResolvedValue(partial);
+
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.saveBioStratum).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the form hidden until a stratum is opened', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.getBioStratum.mockResolvedValue({

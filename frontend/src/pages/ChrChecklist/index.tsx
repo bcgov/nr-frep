@@ -1,12 +1,4 @@
-import {
-  ArrowLeft,
-  Attachment,
-  Document,
-  Information,
-  Location,
-  Notebook,
-  UserMultiple,
-} from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -30,6 +22,8 @@ import FeatureList from '@/pages/ChrChecklist/FeatureList';
 import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
+import TabIncompleteBanner from '@/pages/ProtocolChecklist/TabIncompleteBanner';
+import TabStatusIcon from '@/pages/ProtocolChecklist/TabStatusIcon';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
@@ -37,6 +31,7 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
+import { chrTabStatuses, type ChrTabKey } from '@/pages/ChrChecklist/tabStatus';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 import {
@@ -54,10 +49,10 @@ import {
   type ValidationError,
 } from '@/types/chrChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
-import { pictureToFile } from '@/utils/pictureFile';
-import { silvaOpeningUrl } from '@/utils/silva';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { pictureToFile } from '@/utils/pictureFile';
+import { silvaOpeningUrl } from '@/utils/silva';
 
 // Reuse the Biodiversity checklist form primitives (rip-form / rip-form__group / rip-form__grid /
 // protocol-checklist__field) so CHR tab content is structured the same way.
@@ -72,6 +67,17 @@ const STATUS_LABELS: Record<string, string> = {
 
 // Stable empty-array reference so the Contacts draft-sync effect doesn't re-fire each render.
 const EMPTY_CONTACTS: ContactDto[] = [];
+
+// The tab strip, in order. `key` is what tabStatus.ts reports against; `title` is what the tab, the
+// submit pre-flight banner and the per-tab banner all call the section.
+const TABS: { key: ChrTabKey; title: string }[] = [
+  { key: 'opening', title: 'Opening info' },
+  { key: 'blockSummary', title: 'Block summary' },
+  { key: 'contacts', title: 'Contacts' },
+  { key: 'features', title: 'Features' },
+  { key: 'notes', title: 'Notes' },
+  { key: 'attachments', title: 'Attachments' },
+];
 
 // Map a submit-validation error's field to the CHR tab that owns it, so the inline panel names the
 // tab (like the Biodiversity submit panel) rather than the raw field. Checklist-level fields are
@@ -179,6 +185,30 @@ const ChrChecklistPage: FC = () => {
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState(0);
+  // Outstanding work found by the submit pre-flight, keyed by tab. Set when Submit is pressed and the
+  // checklist is not ready; cleared on the next attempt.
+  const [preflight, setPreflight] = useState<Partial<Record<ChrTabKey, string[]>>>({});
+  // Once Submit has been pressed, every tab shows its count — including the ones held back for never
+  // having been started. The user has asked the question, so the answer stops being a nag.
+  const [countsRevealed, setCountsRevealed] = useState(false);
+  // Tabs that have had a save land in this session, so their banner can lead with "saved" rather than
+  // reporting gaps in a record the user has not touched yet.
+  const [savedTabs, setSavedTabs] = useState<Partial<Record<ChrTabKey, boolean>>>({});
+
+  /**
+   * Per-tab completion state, derived from the checklist the page is already holding.
+   *
+   * No requests: CHR keeps the whole document — features included — in client state, so every submit
+   * rule can be answered from memory. The dots therefore move the moment a save lands and keep
+   * working on an offline copy.
+   */
+  const tabState = useMemo(() => chrTabStatuses(checkList), [checkList]);
+
+  /** Record that a section save landed, for that tab's banner wording. */
+  const markSaved = useCallback(
+    (key: ChrTabKey) => setSavedTabs((prev) => ({ ...prev, [key]: true })),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -288,10 +318,18 @@ const ChrChecklistPage: FC = () => {
   const offlineOutOfDate =
     isOfflineCopy && offlineStaleness != null && isStale(offlineStaleness.verdict);
 
-  const patch = useCallback(
-    (p: Partial<CheckList>) => setCheckList((prev) => (prev ? { ...prev, ...p } : prev)),
-    [],
-  );
+  /**
+   * Features being edited but not yet saved.
+   *
+   * The Features tab edits the whole list at once — a composite's membership and the cross-feature
+   * associations are both edited from inside one feature — so it needs the live array, and it used to
+   * write that straight back into `checkList`. That made a feature added seconds ago look stored, and
+   * greeted the user with a banner listing everything they had not typed yet. Holding the pending
+   * list here keeps `checkList` meaning "what the server (or the local record) actually holds", which
+   * is what the tab dots and banners describe. It also puts Features on the same footing as Opening
+   * info and Block summary, whose drafts have always been local to the tab until Save.
+   */
+  const [draftFeatures, setDraftFeatures] = useState<Feature[] | null>(null);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -313,6 +351,7 @@ const ChrChecklistPage: FC = () => {
   // saves the whole document locally. Returns true on success so per-tab Save can exit edit mode.
   const persistSection = useCallback(
     async (
+      section: ChrTabKey,
       endpoint: (checklistId: string, cl: CheckList) => Promise<CheckList>,
       merged: CheckList,
       applyBack: (prev: CheckList, saved: CheckList) => CheckList,
@@ -328,6 +367,7 @@ const ChrChecklistPage: FC = () => {
           setCheckList((prev) => (prev ? applyBack(prev, saved) : prev));
           display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
         }
+        markSaved(section);
         return true;
       } catch (err) {
         reportError('Save failed', err);
@@ -336,7 +376,7 @@ const ChrChecklistPage: FC = () => {
         setBusy(false);
       }
     },
-    [id, isOfflineCopy, display, reportError],
+    [id, isOfflineCopy, display, reportError, markSaved],
   );
 
   // Opening / Block summary are buffered (Edit → Save): they pass their committed draft, which we
@@ -345,6 +385,7 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
+        'opening',
         (cid, cl) => API.chrChecklist.saveOpening(cid, cl),
         { ...checkList, ...draft },
         // assessedBy is decided server-side (set-once / assign-to-me), so reflect its truth.
@@ -363,6 +404,7 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
+        'blockSummary',
         (cid, cl) => API.chrChecklist.saveBlockSummary(cid, cl),
         { ...checkList, ...draft },
         (prev, saved) => ({
@@ -382,6 +424,7 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
+        'notes',
         (cid, cl) => API.chrChecklist.saveBlockSummary(cid, cl),
         { ...checkList, ...draft },
         (prev, saved) => ({ ...prev, ...draft, revisionCount: saved.revisionCount }),
@@ -397,6 +440,7 @@ const ChrChecklistPage: FC = () => {
     (contacts: ContactDto[]): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
+        'contacts',
         (cid, cl) => API.chrChecklist.saveContacts(cid, cl),
         { ...checkList, contacts },
         (prev, saved) => ({
@@ -410,17 +454,22 @@ const ChrChecklistPage: FC = () => {
   );
 
   const saveFeatures = useCallback(
-    (features: Feature[]): Promise<boolean> => {
-      if (!checkList) return Promise.resolve(false);
-      return persistSection(
+    async (features: Feature[]): Promise<boolean> => {
+      if (!checkList) return false;
+      const saved = await persistSection(
+        'features',
         (cid, cl) => API.chrChecklist.saveFeatures(cid, cl),
         { ...checkList, features },
-        (prev, saved) => ({
+        (prev, stored) => ({
           ...prev,
-          features: saved.features,
-          revisionCount: saved.revisionCount,
+          features: stored.features,
+          revisionCount: stored.revisionCount,
         }),
       );
+      // The stored list is the truth again — drop the pending edits so the tab reads from it (and
+      // picks up the ids the server assigned to any new rows).
+      if (saved) setDraftFeatures(null);
+      return saved;
     },
     [checkList, persistSection],
   );
@@ -517,7 +566,13 @@ const ChrChecklistPage: FC = () => {
           const file = pictureToFile(picture);
           if (!file) continue;
           await API.chrChecklist.addPhoto(
-            id, file, picture.description ?? '', picture.date, undefined, picture.featureId);
+            id,
+            file,
+            picture.description ?? '',
+            picture.date,
+            undefined,
+            picture.featureId,
+          );
         }
         await loadPhotos();
         display({ kind: 'success', title: 'Photo saved', timeout: 4000 });
@@ -571,7 +626,27 @@ const ChrChecklistPage: FC = () => {
     if (!checkList) return;
     setBusy(true);
     setErrors([]);
+    setPreflight({});
     try {
+      // Pre-flight every tab against the checklist in hand before troubling the server. This is what
+      // catches the checklist whose Block summary was never opened: those tabs are deliberately quiet
+      // until they have been started, so without this the first news of the problem would be a
+      // rejected submit. For an offline copy it also avoids checking the record back in — an
+      // irreversible step — only for submit to turn it down. The server stays authoritative: a clean
+      // pre-flight still submits and can still be refused; this only stops us asking when the answer
+      // is already known.
+      const blocking = Object.fromEntries(
+        Object.entries(chrTabStatuses(checkList).outstanding).filter(
+          ([, items]) => items.length > 0,
+        ),
+      ) as Partial<Record<ChrTabKey, string[]>>;
+      if (Object.keys(blocking).length > 0) {
+        setPreflight(blocking);
+        setCountsRevealed(true);
+        display({ kind: 'warning', title: 'Submit blocked by validation', timeout: 6000 });
+        return;
+      }
+
       // Submit requires the server status to be ACT, but an offline copy is RDO. So for an offline
       // copy, first check it back in (upload: RDO → ACT) and drop the local draft, then submit the
       // now-active checklist. Checking in before submit also avoids a stuck state: upload clears the
@@ -592,6 +667,7 @@ const ChrChecklistPage: FC = () => {
       // so carry the loaded page over. (A check-in flips isOfflineCopy, which re-runs the photo
       // effect — these online status changes don't, so they must preserve it here.)
       setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
+      setCountsRevealed(false);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
     } catch (err) {
       const validation = extractValidationErrors(err);
@@ -788,6 +864,36 @@ const ChrChecklistPage: FC = () => {
   };
   const orgUnit = [checkList.orgUnitCode, checkList.orgUnitName].filter(Boolean).join(' - ');
 
+  // A tab held back for never having been started starts showing its count once Submit has been
+  // pressed — at that point the silence would be hiding the very thing the user asked about.
+  const statusFor = (key: ChrTabKey) => {
+    const status = tabState.statuses[key];
+    return countsRevealed && status === 'empty' && tabState.counts[key] > 0 ? 'errors' : status;
+  };
+
+  // A tab lists its outstanding items exactly when its dot is red. That keeps the two in step: a
+  // quiet dot on a never-opened tab means a quiet tab, and pressing Submit turns both on at once.
+  const visibleOutstanding = (key: ChrTabKey): string[] =>
+    statusFor(key) === 'errors' ? tabState.outstanding[key] : [];
+
+  // The tabs the pre-flight objected to, named in the page-level banner. The items themselves stay
+  // on the tabs that own them, so there is one place to read them and one place to fix them.
+  const preflightTabNames = (() => {
+    const names = TABS.filter((t) => preflight[t.key]?.length).map((t) => t.title);
+    if (names.length <= 1) return names[0] ?? 'A tab';
+    return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  })();
+
+  /** The per-tab "you can save this, but you can't submit it yet" banner. */
+  const tabBanner = (key: ChrTabKey, sectionLabel: string, noun?: string) => (
+    <TabIncompleteBanner
+      items={visibleOutstanding(key)}
+      saved={Boolean(savedTabs[key])}
+      sectionLabel={sectionLabel}
+      noun={noun}
+    />
+  );
+
   return (
     <Grid fullWidth className="default-grid chr-checklist">
       <Column sm={4} md={8} lg={16}>
@@ -817,6 +923,55 @@ const ChrChecklistPage: FC = () => {
             <Tag type="cool-gray" size="sm">
               MRVA {mrva || '—'}
             </Tag>
+            {/* Every checklist-level action lives here, at the top of the page rather than below
+                the tombstone tile. Most are mutually exclusive — Sync changes and Remove from
+                device only ever appear on an offline copy, Reactivate only on a checked-out one —
+                so the row stays short in practice, and wraps under the heading when it doesn't. */}
+            <div className="chr-checklist__title-actions">
+              {!readOnly && online && !offlineOutOfDate && (
+                <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
+                  Submit
+                </Button>
+              )}
+              {!isOfflineCopy && online && !readOnly && (
+                <Button kind="tertiary" onClick={() => void handleTakeOffline()} disabled={busy}>
+                  Take offline
+                </Button>
+              )}
+              {/* A submitted server copy is read-only; Unsubmit reopens it for editing (the legacy
+                  FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
+              {!isOfflineCopy &&
+                online &&
+                canEditThisChr &&
+                checkList.status === CHR_STATUS.SUBMITTED && (
+                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                    Unsubmit
+                  </Button>
+                )}
+              {/* Admin-only recovery for a checklist stuck "Checked out" on another device. */}
+              {!isOfflineCopy &&
+                online &&
+                canPerformSysAdminActions &&
+                checkList.status === CHR_STATUS.READ_ONLY_OFFLINE && (
+                  <Button kind="tertiary" onClick={() => void handleReactivate()} disabled={busy}>
+                    Reactivate
+                  </Button>
+                )}
+              {isOfflineCopy && online && !offlineOutOfDate && (
+                <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
+                  Sync changes
+                </Button>
+              )}
+              {isOfflineCopy && offlineOutOfDate && (
+                <Button
+                  kind="danger--tertiary"
+                  onClick={() => void handleRemoveOfflineCopy()}
+                  disabled={busy}
+                >
+                  Remove from device
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </Column>
@@ -890,54 +1045,24 @@ const ChrChecklistPage: FC = () => {
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <div className="chr-checklist__actions">
-          {!readOnly && online && !offlineOutOfDate && (
-            <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
-              Submit
-            </Button>
-          )}
-          {!isOfflineCopy && online && !readOnly && (
-            <Button kind="tertiary" onClick={() => void handleTakeOffline()} disabled={busy}>
-              Take offline
-            </Button>
-          )}
-          {/* A submitted server copy is read-only; Unsubmit reopens it for editing (the legacy
-              FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
-          {!isOfflineCopy &&
-            online &&
-            canEditThisChr &&
-            checkList.status === CHR_STATUS.SUBMITTED && (
-              <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                Unsubmit
-              </Button>
-            )}
-          {!isOfflineCopy &&
-            online &&
-            canPerformSysAdminActions &&
-            checkList.status === CHR_STATUS.READ_ONLY_OFFLINE && (
-              <Button kind="tertiary" onClick={() => void handleReactivate()} disabled={busy}>
-                Reactivate
-              </Button>
-            )}
-          {isOfflineCopy && online && !offlineOutOfDate && (
-            <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
-              Sync changes
-            </Button>
-          )}
-          {isOfflineCopy && offlineOutOfDate && (
-            <Button
-              kind="danger--tertiary"
-              onClick={() => void handleRemoveOfflineCopy()}
-              disabled={busy}
-            >
-              Remove from device
-            </Button>
-          )}
-        </div>
-      </Column>
+      {/* What the submit pre-flight found, named by tab. The items themselves are listed on the tabs
+          that own them — this says which tabs to go and look at. */}
+      {Object.keys(preflight).length > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            className="protocol-checklist__preflight"
+            kind="error"
+            hideCloseButton
+            lowContrast
+            title="This checklist isn't ready to submit"
+            subtitle={`${preflightTabNames} ${
+              Object.keys(preflight).length === 1 ? 'has' : 'have'
+            } required fields outstanding. Fix the items listed on each tab, then submit again.`}
+          />
+        </Column>
+      )}
 
-      {/* Submit validation errors, shown inline near the Submit button (mirrors the Biodiversity
+      {/* Submit validation errors returned by the server, shown inline (mirrors the Biodiversity
           checklist's submit-validation panel) rather than behind a tab. */}
       {errors.length > 0 && (
         <Column sm={4} md={8} lg={16}>
@@ -962,15 +1087,22 @@ const ChrChecklistPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tabs selectedIndex={tab} onChange={({ selectedIndex }) => setTab(selectedIndex)}>
           <TabList aria-label="CHR checklist sections" contained>
-            <Tab renderIcon={Information}>Opening info</Tab>
-            <Tab renderIcon={Document}>Block summary</Tab>
-            <Tab renderIcon={UserMultiple}>Contacts</Tab>
-            <Tab renderIcon={Location}>Features</Tab>
-            <Tab renderIcon={Notebook}>Notes</Tab>
-            <Tab renderIcon={Attachment}>Attachments</Tab>
+            {TABS.map((section) => (
+              <Tab key={section.key}>
+                <span className="protocol-checklist__tab-label">
+                  <TabStatusIcon
+                    status={statusFor(section.key)}
+                    count={tabState.counts[section.key]}
+                    section={section.title}
+                  />
+                  {section.title}
+                </span>
+              </Tab>
+            ))}
           </TabList>
           <TabPanels>
             <TabPanel>
+              {tabBanner('opening', 'Opening', 'required field')}
               <OpeningInformation
                 value={checkList}
                 onSave={saveOpening}
@@ -979,6 +1111,7 @@ const ChrChecklistPage: FC = () => {
               />
             </TabPanel>
             <TabPanel>
+              {tabBanner('blockSummary', 'Block summary', 'required field')}
               <BlockSummary
                 value={checkList}
                 onSave={saveBlockSummary}
@@ -995,9 +1128,10 @@ const ChrChecklistPage: FC = () => {
               />
             </TabPanel>
             <TabPanel>
+              {tabBanner('features', 'Feature')}
               <FeatureList
-                features={checkList.features ?? []}
-                onChange={(features: Feature[]) => patch({ features })}
+                features={draftFeatures ?? checkList.features ?? []}
+                onChange={setDraftFeatures}
                 onSave={saveFeatures}
                 readOnly={readOnly}
                 busy={busy}
@@ -1007,6 +1141,7 @@ const ChrChecklistPage: FC = () => {
               <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
             </TabPanel>
             <TabPanel>
+              {tabBanner('attachments', 'Photo')}
               <Photos
                 pictures={
                   isOfflineCopy

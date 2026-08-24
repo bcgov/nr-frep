@@ -53,6 +53,10 @@ class BioAttachmentMigrationServiceTest {
     return new AttachmentContent("f.pdf", "application/pdf", bytes);
   }
 
+  private static AttachmentContent content(String fileName, String mimeType, byte[] bytes) {
+    return new AttachmentContent(fileName, mimeType, bytes);
+  }
+
   /** What the object-storage gateway actually throws: a 403 whose message says only "Access Denied". */
   private static AwsServiceException gatewayError(String code, int status, String requestId) {
     return AwsServiceException.builder()
@@ -121,6 +125,43 @@ class BioAttachmentMigrationServiceTest {
     assertEquals(0, result.migrated());
     assertEquals(0L, result.bytesWritten());
     verify(objectStorage, never()).putObject(anyString(), anyString(), any());
+  }
+
+  @Test
+  void legacyMimeDescriptionsAreReplacedByARealMediaTypeBeforeTheWrite() {
+    when(writeRepository.listBioAttachmentsForMigration("0", 250)).thenReturn(List.of(ref("77")));
+    when(objectStorage.objectExists("slr/77")).thenReturn(false);
+    // What Oracle actually holds for these rows: a mime_type_code *description*, not a media type.
+    when(writeRepository.getAttachmentContentFromBlob("90077", "SLB", "77"))
+        .thenReturn(content("P1010070.JPG", "JPG Graphic File", new byte[] {1, 2, 3}));
+
+    service.migrate("0", 250, false);
+
+    // Sent verbatim, the space in "JPG Graphic File" breaks the SigV4 signature over Content-Type
+    // and the gateway rejects the write as 403 AccessDenied — 18 rows failed this way in DEV.
+    verify(objectStorage).putObject("slr/77", "image/jpeg", new byte[] {1, 2, 3});
+  }
+
+  @Test
+  void aRealMediaTypeIsPassedThroughUntouched() {
+    assertEquals("application/pdf", BioAttachmentMigrationService.contentTypeFor(
+        "application/pdf", "CANOE32.pdf"));
+  }
+
+  @Test
+  void aMalformedMediaTypeFallsBackToTheExtensionNotTheStoredValue() {
+    // The real 42076: "application/vnd ms-powerpoint" — a space where the dot belongs. Close enough
+    // to a media type to look fine in a log, malformed enough that the gateway answered 400.
+    assertEquals("application/vnd.ms-powerpoint", BioAttachmentMigrationService.contentTypeFor(
+        "application/vnd ms-powerpoint", "deck.ppt"));
+  }
+
+  @Test
+  void anUnrecognisableTypeAndExtensionStoresAsOctetStream() {
+    assertEquals("application/octet-stream",
+        BioAttachmentMigrationService.contentTypeFor("Some Legacy Description", "notes.xyz"));
+    assertEquals("application/octet-stream",
+        BioAttachmentMigrationService.contentTypeFor(null, "no-extension"));
   }
 
   @Test

@@ -8,6 +8,9 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioAttachmentRef;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioAttachmentVerifyResult;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -56,6 +59,38 @@ public class BioAttachmentMigrationService {
   private static final String KEY_PREFIX = "slr/";
   private static final int MAX_BATCH = 1000;
 
+  /**
+   * RFC 9110 {@code type/subtype}, token characters only and no parameters — enough to tell a real
+   * media type from the legacy descriptions below, which is all this needs to do.
+   */
+  private static final Pattern MEDIA_TYPE =
+      Pattern.compile("[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+");
+
+  private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
+  /** Enough to cover what legacy Biodiversity attachments actually are. */
+  private static final Map<String, String> CONTENT_TYPE_BY_EXTENSION = Map.ofEntries(
+      Map.entry("pdf", "application/pdf"),
+      Map.entry("jpg", "image/jpeg"),
+      Map.entry("jpeg", "image/jpeg"),
+      Map.entry("png", "image/png"),
+      Map.entry("gif", "image/gif"),
+      Map.entry("bmp", "image/bmp"),
+      Map.entry("tif", "image/tiff"),
+      Map.entry("tiff", "image/tiff"),
+      Map.entry("txt", "text/plain"),
+      Map.entry("csv", "text/csv"),
+      Map.entry("rtf", "application/rtf"),
+      Map.entry("zip", "application/zip"),
+      Map.entry("doc", "application/msword"),
+      Map.entry("xls", "application/vnd.ms-excel"),
+      Map.entry("ppt", "application/vnd.ms-powerpoint"),
+      Map.entry("docx",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+      Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      Map.entry("pptx",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation"));
+
   private final ProtocolChecklistWriteRepository writeRepository;
   private final ObjectStorageService objectStorage;
 
@@ -72,6 +107,39 @@ public class BioAttachmentMigrationService {
 
   private static int clampLimit(int limit) {
     return Math.max(1, Math.min(limit, MAX_BATCH));
+  }
+
+  /**
+   * A media type the storage gateway will accept, derived from the file name when the value Oracle
+   * holds is not one.
+   *
+   * <p>{@code mime_type_code} is a legacy <em>code</em>, and {@code GET_BLOB} hands back its
+   * description: rows come through as {@code "JPG Graphic File"} or {@code "application/vnd
+   * ms-powerpoint"} — note the space where the dot belongs. Neither is a media type, and both
+   * contain spaces, which are not legal in one.
+   *
+   * <p>Passing those straight to {@code PutObject} is what produced 18 unexplained failures in DEV.
+   * {@code Content-Type} is a SigV4-signed header, so a malformed value breaks the signature and the
+   * gateway answers <b>403 AccessDenied</b> — a permissions error for what is really a bad header,
+   * which is why it took a per-row content-type dump to see. The PowerPoint row failed 400 instead,
+   * with no error code at all. The upload path never hits this: its MIME comes from the browser.
+   *
+   * <p>Safe to normalise, because nothing reads it back. On download the app serves
+   * {@code viaBlob.mimeType()} — the value straight from Oracle — and uses object storage only for
+   * the bytes ({@code ProtocolChecklistWriteRepositoryImpl.getAttachmentContent}). So this only ever
+   * decides what the object is *stored* as, never what a user receives.
+   */
+  static String contentTypeFor(String declaredMimeType, String fileName) {
+    String declared = declaredMimeType == null ? "" : declaredMimeType.trim();
+    if (MEDIA_TYPE.matcher(declared).matches()) {
+      return declared;
+    }
+    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length() - 1) {
+      return DEFAULT_CONTENT_TYPE;
+    }
+    String extension = fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+    return CONTENT_TYPE_BY_EXTENSION.getOrDefault(extension, DEFAULT_CONTENT_TYPE);
   }
 
   /**
@@ -143,7 +211,12 @@ public class BioAttachmentMigrationService {
           continue;
         }
 
-        objectStorage.putObject(key, blob.mimeType(), bytes);
+        String contentType = contentTypeFor(blob.mimeType(), blob.fileName());
+        if (!contentType.equals(mime)) {
+          log.debug("BIO attachment {} :: storing as {} (Oracle holds \"{}\", not a media type)",
+              ref.attachmentId(), contentType, mime);
+        }
+        objectStorage.putObject(key, contentType, bytes);
         migrated++;
         bytesWritten += bytes.length;
       } catch (RuntimeException ex) {

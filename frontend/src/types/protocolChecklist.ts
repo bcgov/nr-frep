@@ -251,6 +251,62 @@ export type AttachmentContent = {
 
 /** Upload payload — {@code data} is base64-encoded file bytes. */
 
+/** Checkout state returned by take-offline / release / activate (backend `BioCheckout`). */
+export type BioCheckout = {
+  checklistId?: string;
+  statusCode?: string;
+  /** Null once released or activated. */
+  deviceCheckoutGuid?: string | null;
+};
+
+/**
+ * Whether this device still holds a checklist's checkout (backend `BioCheckoutState`).
+ * Never carries the server's token — the device sends its own and gets back a boolean.
+ */
+export type BioCheckoutState = {
+  checklistId?: string;
+  statusCode?: string;
+  heldByThisDevice: boolean;
+};
+
+/** One stratum with its plots, as the snapshot nests them. */
+export type BioStratumSnapshot = {
+  stratum: BioStratum;
+  plots: BioPlot[];
+};
+
+/**
+ * The whole SLR graph, read while the checklist is still ACT and *before* the checkout is claimed
+ * (backend `BioSnapshot`). Attachment metadata only — bytes are fetched per file.
+ */
+export type BioSnapshot = {
+  schemaVersion: string;
+  checklistId: string;
+  resourceType: string;
+  statusCode?: string;
+  opening: BiodiversityOpening;
+  notes?: RiparianNotes;
+  strata: BioStratumSnapshot[];
+  attachments: AttachmentRow[];
+};
+
+/** A row deleted on the device, replayed at check-in (backend `BioSnapshotUpload.Tombstone`). */
+export type BioTombstone = {
+  entity: 'STRATUM' | 'PLOT';
+  id: string;
+  revisionCount?: string;
+};
+
+/** The edited graph posted back at check-in (backend `BioSnapshotUpload`). */
+export type BioSnapshotUpload = {
+  schemaVersion: string;
+  deviceCheckoutGuid?: string;
+  opening: BiodiversityOpening;
+  notes?: RiparianNotes;
+  strata: BioStratumSnapshot[];
+  tombstones: BioTombstone[];
+};
+
 export const PROTOCOL_TYPE_TO_BACKEND: Record<ProtocolType, 'bio'> = {
   biodiversity: 'bio',
 };

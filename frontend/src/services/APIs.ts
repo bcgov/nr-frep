@@ -8,6 +8,8 @@ import { AcceptedSitesService } from '@/services/acceptedSites.service';
 import { ChrChecklistService } from '@/services/chrChecklist.service';
 import { ConfigurationService } from '@/services/configuration.service';
 import { MasterListAdminService } from '@/services/masterListAdmin.service';
+import { withBioReferenceCache } from '@/services/offline/bioConfigurationFacade';
+import { withBioOffline } from '@/services/offline/bioFacade';
 import { ProtocolChecklistService } from '@/services/protocolChecklist.service';
 import { RandomListService } from '@/services/randomList.service';
 import { SearchService } from '@/services/search.service';
@@ -49,10 +51,15 @@ BackendApiConfig.TOKEN = async () => {
 const serviceConstructors = {
   user: new UserService(BackendApiConfig),
   acceptedSites: new AcceptedSitesService(BackendApiConfig),
-  configuration: new ConfigurationService(BackendApiConfig),
+  // Wrapped so the Bio reference dropdowns (species, decay classes, strata types, BEC) keep
+  // working with no connectivity. Network first, cache as the fallback.
+  configuration: withBioReferenceCache(new ConfigurationService(BackendApiConfig)),
   randomList: new RandomListService(BackendApiConfig),
   siteDetail: new SiteDetailService(BackendApiConfig),
-  protocolChecklist: new ProtocolChecklistService(BackendApiConfig),
+  // Wrapped so the Bio views work unchanged whether or not the checklist is checked out to this
+  // device: reads and writes are served from the local copy when one exists, and pass straight
+  // through to the real client otherwise.
+  protocolChecklist: withBioOffline(new ProtocolChecklistService(BackendApiConfig)),
   chrChecklist: new ChrChecklistService(BackendApiConfig),
   search: new SearchService(BackendApiConfig),
   masterListAdmin: new MasterListAdminService(BackendApiConfig),

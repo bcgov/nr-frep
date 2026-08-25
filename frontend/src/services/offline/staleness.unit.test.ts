@@ -5,9 +5,9 @@ import {
   formatUpdatedBy,
   isStale,
   stalenessBanner,
-} from '@/services/offline/chrStaleness';
+} from '@/services/offline/staleness';
 
-import type { StalenessVerdict } from '@/services/offline/chrStaleness';
+import type { StalenessVerdict } from '@/services/offline/staleness';
 
 describe('classifyStaleness', () => {
   it('is CURRENT when the server checkout still matches the local guid', () => {

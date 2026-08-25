@@ -145,8 +145,13 @@ export class ChrChecklistService extends HttpClient {
     });
   }
 
-  activate(checklistId: string): CancelablePromise<CheckList> {
-    return this.doRequest<CheckList>(this.config, {
+  /**
+   * Admin reactivation of a checked-out checklist (RDO → ACT). Resolves to `void` (204) — the caller
+   * re-reads the checklist, rather than the server returning a whole aggregate as a side effect of a
+   * status flip.
+   */
+  activate(checklistId: string): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
       method: 'POST',
       url: '/v1/chr/checklists/{checklistId}/activate',
       path: { checklistId },
@@ -174,8 +179,8 @@ export class ChrChecklistService extends HttpClient {
    * Release an offline checkout (RDO → ACT) held by this device, so the online copy is editable again.
    * The deviceCheckoutGuid proves ownership; the backend no-ops if it doesn't match / isn't checked out.
    */
-  release(checklistId: string, deviceCheckoutGuid: string): CancelablePromise<CheckList> {
-    return this.doRequest<CheckList>(this.config, {
+  release(checklistId: string, deviceCheckoutGuid: string): CancelablePromise<void> {
+    return this.doRequest<void>(this.config, {
       method: 'POST',
       url: '/v1/chr/checklists/{checklistId}/release',
       path: { checklistId },

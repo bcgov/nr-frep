@@ -23,8 +23,10 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Struct;
 import java.sql.Types;
+import ca.bc.gov.nrs.frep.util.UuidUtils;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import oracle.jdbc.OracleConnection;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.apache.commons.lang3.StringUtils;
@@ -102,6 +104,41 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           cs.registerOutParameter(4, Types.VARCHAR);
         },
         cs -> cs.getString(4)
+    );
+  }
+
+  /**
+   * ACT → RDO plus the device token. See
+   * {@link ProtocolChecklistWriteRepository#takeOffline(String, UUID, String)}.
+   */
+  public String takeOffline(String checklistId, UUID deviceCheckoutGuid, String userId) {
+    return executeCall(
+        callSql(TOMBSTONE, "take_offline", 4),
+        cs -> {
+          cs.setString(1, checklistId);
+          // DEVICE_CHECKOUT_GUID is RAW(16); UuidUtils is the same converter the CHR path uses, so
+          // both protocols agree on the token's byte form and therefore on its text form.
+          cs.setBytes(2, UuidUtils.asBytes(deviceCheckoutGuid));
+          cs.setString(3, userId);
+          cs.registerOutParameter(4, Types.VARCHAR);
+        },
+        cs -> cs.getString(4)
+    );
+  }
+
+  /**
+   * RDO → ACT and clear the token. See
+   * {@link ProtocolChecklistWriteRepository#activate(String, String)}.
+   */
+  public String activate(String checklistId, String userId) {
+    return executeCall(
+        callSql(TOMBSTONE, "activate", 3),
+        cs -> {
+          cs.setString(1, checklistId);
+          cs.setString(2, userId);
+          cs.registerOutParameter(3, Types.VARCHAR);
+        },
+        cs -> cs.getString(3)
     );
   }
 

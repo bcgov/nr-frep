@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.repository.v1.impl;
 import ca.bc.gov.nrs.frep.repository.v1.ChecklistRepository;
 import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.*;
+import ca.bc.gov.nrs.frep.util.UuidUtils;
 
 import java.sql.Array;
 import java.sql.CallableStatement;
@@ -13,6 +14,7 @@ import java.sql.Types;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import oracle.jdbc.OracleConnection;
 import oracle.jdbc.OracleTypes;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -111,6 +113,39 @@ public class ChecklistRepositoryImpl extends AbstractFrepRepository implements C
         (rs, n) -> rs.getString(1),
         checklistId);
     return types.isEmpty() || types.get(0) == null ? "SLB" : types.get(0).trim();
+  }
+
+  /**
+   * The checklist's status code. Uses the list form rather than {@code queryForObject} so a bogus id
+   * returns null instead of throwing — the caller leaves not-found to the downstream proc, matching
+   * {@link #resolveResourceType}.
+   */
+  public String getBioChecklistStatus(String checklistId) {
+    List<String> codes = jdbcTemplate.query(
+        "SELECT frep_checklist_status_code FROM the.biodiversity_checklist "
+            + "WHERE biodiversity_checklist_id = ?",
+        (rs, n) -> rs.getString(1),
+        checklistId);
+    return codes.isEmpty() || codes.get(0) == null ? null : codes.get(0).trim();
+  }
+
+  /**
+   * The device holding this checklist's checkout, or null when it is not checked out.
+   *
+   * <p>{@code DEVICE_CHECKOUT_GUID} is {@code RAW(16)}, so it comes back as a byte[] and is widened
+   * to a UUID by the same {@link UuidUtils} the CHR path uses — the two protocols must agree on the
+   * textual form of the token, since the client round-trips it as a string.
+   */
+  public UUID getBioDeviceCheckoutGuid(String checklistId) {
+    List<byte[]> raw = jdbcTemplate.query(
+        "SELECT device_checkout_guid FROM the.biodiversity_checklist "
+            + "WHERE biodiversity_checklist_id = ?",
+        (rs, n) -> rs.getBytes(1),
+        checklistId);
+    if (raw.isEmpty() || raw.get(0) == null || raw.get(0).length == 0) {
+      return null;
+    }
+    return UuidUtils.asUuid(raw.get(0));
   }
 
   /** The checklist's first stratum id (a checklist may have 0..n strata); "" when none. */

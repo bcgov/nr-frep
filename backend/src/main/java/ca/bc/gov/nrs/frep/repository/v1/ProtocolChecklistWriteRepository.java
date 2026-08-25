@@ -11,6 +11,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Contract for protocol-checklist writes (FREP210/211/212 + administration/notes/attachments +
@@ -20,6 +21,25 @@ import java.util.List;
 public interface ProtocolChecklistWriteRepository {
   String submit(String resourceValueType, String checklistId, String userId);
   String unsubmit(String resourceValueType, String checklistId, String userId);
+
+  /**
+   * Check a Biodiversity checklist out to a field device: ACT → RDO, stamping the device's token.
+   * The proc guards the ACT precondition in its WHERE clause, so a second checkout of an
+   * already-checked-out checklist returns an error rather than stealing it. Returns the (possibly
+   * empty) error message, as {@link #submit} does.
+   *
+   * <p>The token is minted in Java and only stored here — the comparison lives in the service, so
+   * the rule exists in exactly one place.
+   */
+  String takeOffline(String checklistId, UUID deviceCheckoutGuid, String userId);
+
+  /**
+   * Return a checked-out Biodiversity checklist to ACT and clear its token. One proc for all three
+   * callers — the holder releasing its own checkout, an admin recovering a stranded device, and the
+   * RDO → ACT flip at the end of a sync — because at the database level they are the same write.
+   * Authorization and the token comparison differ, and both live above this layer.
+   */
+  String activate(String checklistId, String userId);
   BiodiversityOpening getBiodiversityOpening(String checklistId);
   BiodiversityOpening saveBiodiversityOpening(BiodiversityOpening o, String userId);
   void assignBiodiversityLead(String checklistId, String resourceType, String newLead,

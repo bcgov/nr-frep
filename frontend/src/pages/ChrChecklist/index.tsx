@@ -39,7 +39,7 @@ import {
   isStale,
   stalenessBanner,
   type StalenessVerdict,
-} from '@/services/offline/chrStaleness';
+} from '@/services/offline/staleness';
 import {
   CHR_STATUS,
   type CheckList,
@@ -717,8 +717,11 @@ const ChrChecklistPage: FC = () => {
   const handleReactivate = async () => {
     setBusy(true);
     try {
-      const saved = await API.chrChecklist.activate(id);
-      // Carry the photo page over — see the note in handleSubmit.
+      // Activate returns 204; re-read rather than having a status flip hand back the whole aggregate.
+      await API.chrChecklist.activate(id);
+      const saved = await API.chrChecklist.getChecklist(id);
+      // Carry the photo page over — see the note in handleSubmit. Needed on the re-read too: the
+      // checklist GET no longer embeds photos, so replacing state wholesale would blank the tab.
       setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
       display({ kind: 'success', title: 'Checklist reactivated', timeout: 4000 });
     } catch (err) {

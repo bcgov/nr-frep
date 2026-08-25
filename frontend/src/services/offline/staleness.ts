@@ -1,10 +1,24 @@
-import type { CheckList } from '@/types/chrChecklist';
-
-import { CHR_STATUS } from '@/types/chrChecklist';
 import { formatShortDate } from '@/utils/date';
 
-// Proactive staleness detection for offline CHR copies. This is a UX layer only — the backend's
-// deviceCheckoutGuid upload guard remains the source of truth, so a probe-vs-upload race is harmless.
+/**
+ * Proactive staleness detection for an offline copy, shared by CHR and SLR.
+ *
+ * A UX layer only — the backend's `deviceCheckoutGuid` guard remains the source of truth, so a
+ * probe-vs-upload race is harmless.
+ *
+ * Protocol-agnostic by construction: it compares a checkout token and a status code, and both
+ * protocols draw those from the same FREP code table. Taking a structural type rather than either
+ * protocol's `CheckList`/snapshot is what keeps it that way.
+ */
+
+/** Submitted. The same `FREP_CHECKLIST_STATUS_CODE` value for every protocol. */
+const SUBMITTED = 'SUB';
+
+/** The minimum a server response must expose to be classified. */
+export type StalenessProbe = {
+  status?: string;
+  deviceCheckoutGuid?: string | null;
+};
 
 export type StalenessVerdict =
   | 'CURRENT' // your checkout still matches the server
@@ -25,11 +39,24 @@ export type UpdateAudit = {
  */
 export const classifyStaleness = (
   localGuid: string | undefined,
-  server: Pick<CheckList, 'status' | 'deviceCheckoutGuid'>,
+  server: StalenessProbe,
 ): StalenessVerdict => {
-  if (server.status === CHR_STATUS.SUBMITTED) return 'SUBMITTED_ELSEWHERE';
+  if (server.status === SUBMITTED) return 'SUBMITTED_ELSEWHERE';
   if ((server.deviceCheckoutGuid ?? '') !== (localGuid ?? '')) return 'RECLAIMED';
   return 'CURRENT';
+};
+
+/**
+ * Classify from a checkout-state read, where the server has already compared the tokens.
+ *
+ * Preferred over {@link classifyStaleness} wherever available: it detects a *reclaimed* checkout —
+ * the most common stale case — without the server ever returning its token to the client.
+ */
+export const classifyFromCheckoutState = (
+  state: { statusCode?: string; heldByThisDevice: boolean },
+): StalenessVerdict => {
+  if (state.statusCode === SUBMITTED) return 'SUBMITTED_ELSEWHERE';
+  return state.heldByThisDevice ? 'CURRENT' : 'RECLAIMED';
 };
 
 export const isStale = (verdict: StalenessVerdict): boolean =>

@@ -13,7 +13,7 @@ import {
   Tag,
   Tile,
 } from '@carbon/react';
-import { useEffect, useMemo, useState, type FC } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import BioOpeningView from './BioOpeningView';
@@ -27,12 +27,18 @@ import { formatSubmitValidation } from './submitValidation';
 import TabStatusIcon from './TabStatusIcon';
 import { useTabStatuses } from './useTabStatuses';
 
+import type { BioAttachmentOp, OfflineBioChecklist } from '@/services/offline/bioDb';
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
+import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import API from '@/services/APIs';
+import { CheckInBlockedError, checkInBioChecklist } from '@/services/offline/bioCheckIn';
+import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
+import { TakeOfflineCancelled, takeBioChecklistOffline } from '@/services/offline/bioTakeOffline';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
@@ -61,6 +67,33 @@ const HEADER_EXTRA_LABELS = [
 ] as const;
 const HEADER_EXTRA_LABEL_SET = new Set<string>(HEADER_EXTRA_LABELS);
 
+/**
+ * Why the checklist is read-only. Ordered by precedence: a historical record can never be edited,
+ * whatever its status; a checked-out one is temporarily locked to the device holding it.
+ */
+/** Bytes as a rounded MB, for the quota warning. */
+const formatMb = (bytes: number): string =>
+  Number.isFinite(bytes) ? `${Math.round(bytes / 1_000_000)} MB` : 'an unknown amount';
+
+const readOnlyReason = ({
+  isLegacySlb,
+  checkedOut,
+}: {
+  isLegacySlb: boolean;
+  checkedOut: boolean;
+}): string => {
+  if (isLegacySlb) {
+    return 'This is a historical Stand Level Retention (SLB) record and is read-only.';
+  }
+  if (checkedOut) {
+    return (
+      'This checklist is checked out to a field device, so the online copy is read-only. ' +
+      'Check it in from that device, or have an administrator reactivate it, to edit here.'
+    );
+  }
+  return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
+};
+
 const ProtocolChecklistPage: FC = () => {
   // Dedicated biodiversity route (/protocol-checklists/slr/:id) — the family is the route, so there is
   // no type param. The record's actual code (SLB legacy / SLR going forward) comes from the GET, not
@@ -68,8 +101,10 @@ const ProtocolChecklistPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { display } = useNotification();
-  const { canEdit } = useAuthorization();
+  const { canEdit, canPerformSysAdminActions } = useAuthorization();
   const { user } = useAuth();
+  const confirm = useConfirm();
+  const online = useOnlineStatus();
 
   const [checklist, setChecklist] = useState<ProtocolChecklist | null>(null);
   const [loading, setLoading] = useState(true);
@@ -279,11 +314,176 @@ const ProtocolChecklistPage: FC = () => {
     }
   };
 
+  // Offline copy held on this device, if any. Drives which of Take offline / Sync changes is shown.
+  const [offlineRecord, setOfflineRecord] = useState<OfflineBioChecklist | null>(null);
+  const [offlineBusy, setOfflineBusy] = useState<string | null>(null);
+  const [rejectedFiles, setRejectedFiles] = useState<BioAttachmentOp[]>([]);
+
+  const refreshOfflineState = useCallback(async () => {
+    const record = await bioOfflineRepo.load(id);
+    setOfflineRecord(record ?? null);
+    setRejectedFiles(record ? await bioOfflineRepo.rejectedAttachmentOps(id) : []);
+  }, [id]);
+
+  useEffect(() => {
+    void refreshOfflineState();
+  }, [refreshOfflineState]);
+
+  /**
+   * Pull the checklist onto this device.
+   *
+   * The progress text matters more than it looks: attachments dominate the wall-clock (files run to
+   * 15 MB with no per-checklist cap), so without a per-file count a large checklist looks hung.
+   */
+  const handleTakeOffline = async () => {
+    setOfflineBusy('Preparing…');
+    try {
+      await takeBioChecklistOffline(id, {
+        onProgress: (progress) => {
+          if (progress.phase === 'attachments' && progress.total) {
+            setOfflineBusy(`Downloading files (${progress.done ?? 0} of ${progress.total})…`);
+          } else if (progress.phase === 'reference') {
+            setOfflineBusy('Downloading reference data…');
+          } else if (progress.phase === 'checkout') {
+            setOfflineBusy('Checking out…');
+          } else {
+            setOfflineBusy('Downloading checklist…');
+          }
+        },
+        onQuotaWarning: (needBytes, availableBytes) =>
+          confirm({
+            title: 'Not enough room on this device?',
+            message:
+              `This checklist's files need about ${formatMb(needBytes)}, and only ` +
+              `${formatMb(availableBytes)} is free. Continuing may fail part-way. Continue anyway?`,
+            confirmButtonText: 'Continue',
+          }),
+      });
+      await refreshOfflineState();
+      display({ kind: 'success', title: 'Saved to this device', timeout: 5000 });
+    } catch (err) {
+      // A cancelled quota warning is a choice, not a failure — say nothing.
+      if (!(err instanceof TakeOfflineCancelled)) {
+        display({
+          kind: 'error',
+          title: 'Could not take this checklist offline',
+          subtitle: apiErrorMessage(err),
+          timeout: 9000,
+        });
+      }
+    } finally {
+      setOfflineBusy(null);
+    }
+  };
+
+  /** Check the local copy back in: attachments first, then the graph. */
+  const handleCheckIn = async () => {
+    setOfflineBusy('Checking in…');
+    try {
+      await checkInBioChecklist(id, {
+        onProgress: (progress) => {
+          if (progress.phase === 'attachments' && progress.total) {
+            setOfflineBusy(`Uploading files (${progress.done ?? 0} of ${progress.total})…`);
+          } else if (progress.phase === 'graph') {
+            setOfflineBusy('Saving to the server…');
+          }
+        },
+      });
+      await refreshOfflineState();
+      display({ kind: 'success', title: 'Checked in', timeout: 5000 });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      await refreshOfflineState();
+      display({
+        kind: 'error',
+        title: 'Check in stopped',
+        subtitle: err instanceof CheckInBlockedError ? err.message : apiErrorMessage(err),
+        timeout: 9000,
+      });
+    } finally {
+      setOfflineBusy(null);
+    }
+  };
+
+  /** Discard one file the server refused, so the check-in is no longer blocked by it. */
+  const handleDiscardRejected = async (op: BioAttachmentOp) => {
+    if (
+      !(await confirm({
+        title: 'Discard this file?',
+        message:
+          `"${op.fileName ?? 'This file'}" was refused by the server and has never been uploaded. ` +
+          'Discarding it deletes it from this device permanently.',
+        confirmButtonText: 'Discard',
+      }))
+    ) {
+      return;
+    }
+    if (op.id !== undefined) await bioOfflineRepo.discardAttachmentOp(op.id);
+    await refreshOfflineState();
+  };
+
+  /**
+   * Admin recovery for a checkout stranded on a lost or wiped device (RDO → ACT).
+   *
+   * Clearing the token is the point — and the cost: whatever is still on that device can never be
+   * checked in afterwards, so the confirmation has to say so rather than just asking "are you sure".
+   */
+  const handleActivate = async () => {
+    if (
+      !(await confirm({
+        title: 'Reactivate this checklist?',
+        message:
+          'This checklist is checked out to a field device. Reactivating it releases that checkout, ' +
+          'and any unsynced work still on that device can no longer be checked in.',
+        confirmButtonText: 'Reactivate',
+      }))
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await API.protocolChecklist.activateCheckout(id);
+      display({ kind: 'success', title: 'Checklist reactivated', timeout: 5000 });
+      // Re-read rather than trusting the response: the status flip is the whole point, and a fresh
+      // read is what clears the read-only banner.
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      display({
+        kind: 'error',
+        title: 'Reactivate failed',
+        subtitle: apiErrorMessage(err),
+        timeout: 9000,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitted = checklist?.statusCode === 'SUB';
   // Historical biodiversity records carry code SLB and are view-only in the new app (SLR is the
   // go-forward code). The backend also 403s any SLB mutation — this just hides the edit affordances.
   const isLegacySlb = checklist?.protocolType === 'SLB';
-  const editable = canEdit && !isLegacySlb;
+  /**
+   * Checked out to a field device (RDO). The online copy is read-only until that device checks it
+   * back in — otherwise two people edit the same checklist and one set of changes is lost at sync.
+   *
+   * Until now the SLR page handled only SUB, so a checked-out checklist rendered fully editable and
+   * every save 403'd (once BE-1 added the status guard) or, before that, silently raced the device.
+   */
+  const checkedOut = checklist?.statusCode === 'RDO';
+  const editable = canEdit && !isLegacySlb && !submitted && !checkedOut;
+
+  /**
+   * Whether the checklist-level actions (Submit / Unsubmit / Take offline / Check in) can be offered
+   * at all.
+   *
+   * Deliberately not `editable`, which excludes submitted — Unsubmit is precisely the submitted case,
+   * so gating on `editable` made it unreachable. A checklist checked out to another device offers
+   * nothing here: that device has to check in first, and a sys admin can still reactivate a stranded
+   * checkout from the read-only banner below.
+   */
+  const actionsReady =
+    !loading && !notFound && !hasError && !!checklist && canEdit && !isLegacySlb && !checkedOut;
 
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">
@@ -303,16 +503,38 @@ const ProtocolChecklistPage: FC = () => {
             <h1>
               {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
             </h1>
-            {!loading && !notFound && !hasError && checklist && editable && (
+            {actionsReady && (
               <div className="protocol-checklist__actions">
-                {submitted ? (
-                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
+                {/* While a local copy exists it is the authoritative one, so it replaces the other
+                    actions entirely — offering Take offline or Submit alongside it would invite a
+                    second download over the top of unsynced field work. */}
+                {offlineRecord ? (
+                  <Button onClick={() => void handleCheckIn()} disabled={!!offlineBusy || !online}>
+                    {offlineBusy ?? 'Check in'}
                   </Button>
                 ) : (
-                  <Button onClick={() => void handleSubmit()} disabled={busy}>
-                    Submit
-                  </Button>
+                  <>
+                    {submitted ? (
+                      <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                        Unsubmit
+                      </Button>
+                    ) : (
+                      <Button onClick={() => void handleSubmit()} disabled={busy}>
+                        Submit
+                      </Button>
+                    )}
+                    {/* Take offline is offered only for an editable, active checklist: a submitted
+                        one has nothing to take and the server would refuse the checkout. */}
+                    {!submitted && online && (
+                      <Button
+                        kind="tertiary"
+                        onClick={() => void handleTakeOffline()}
+                        disabled={!!offlineBusy || busy}
+                      >
+                        {offlineBusy ?? 'Take offline'}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -352,19 +574,60 @@ const ProtocolChecklistPage: FC = () => {
 
       {!loading && !notFound && !hasError && checklist && (
         <>
-          {(submitted || isLegacySlb) && (
+          {/* A copy held on this device. Shown above everything else because while it exists it is
+              the authoritative one — the rest of this page is its local state. */}
+          {offlineRecord && (
             <Column sm={4} md={8} lg={16}>
               <InlineNotification
                 kind="info"
-                title="Read only"
+                title="Saved on this device"
                 subtitle={
-                  isLegacySlb
-                    ? 'This is a historical Stand Level Retention (SLB) record and is read-only.'
-                    : 'This checklist has been submitted and is read-only. Unsubmit it to make changes.'
+                  rejectedFiles.length > 0
+                    ? 'Some files were refused by the server. Review them below, then check in again.'
+                    : 'You can edit this checklist without a connection. Check it in when you are back online.'
                 }
                 hideCloseButton
                 lowContrast
               />
+              {/* Named per file rather than "3 files failed": the user has to decide about each one,
+                  and the bytes may be field evidence that cannot be re-collected. */}
+              {rejectedFiles.length > 0 && (
+                <ul className="protocol-checklist__rejected">
+                  {rejectedFiles.map((op) => (
+                    <li key={op.id}>
+                      <strong>{op.fileName ?? 'File'}</strong>
+                      {` — ${op.rejectedReason ?? 'refused'} `}
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void handleDiscardRejected(op)}
+                        disabled={!!offlineBusy}
+                      >
+                        Discard
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Column>
+          )}
+
+          {(submitted || isLegacySlb || checkedOut) && (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind="info"
+                title="Read only"
+                subtitle={readOnlyReason({ isLegacySlb, checkedOut })}
+                hideCloseButton
+                lowContrast
+              />
+              {checkedOut && canPerformSysAdminActions && (
+                <div className="protocol-checklist__actions">
+                  <Button kind="tertiary" onClick={() => void handleActivate()} disabled={busy}>
+                    Reactivate
+                  </Button>
+                </div>
+              )}
             </Column>
           )}
 

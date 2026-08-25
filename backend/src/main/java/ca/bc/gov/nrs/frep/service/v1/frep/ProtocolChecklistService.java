@@ -1,8 +1,12 @@
 package ca.bc.gov.nrs.frep.service.v1.frep;
 
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioCwdRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStandRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
@@ -22,6 +26,9 @@ import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
+import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.io.IOException;
@@ -44,7 +51,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import ca.bc.gov.nrs.frep.ChrConstants;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -776,7 +786,13 @@ public class ProtocolChecklistService {
    * the write, since {@link MultipartFile#getBytes()} allocates a fresh array on every call.
    */
   public void saveAttachment(
-      String protocol, String checklistId, MultipartFile file, String description) {
+      String protocol, String checklistId, MultipartFile file, String description,
+      String deviceCheckoutGuid) {
+    // Previously unguarded: this path checked neither the SLB exclusion nor status, so an attachment
+    // could be added to a historical or submitted checklist. ACT, or RDO with the caller's own token
+    // — the offline flush pushes attachments through here while the checklist is still checked out,
+    // since the RDO → ACT flip happens at the end of the sync.
+    assertChecklistEditable(checklistId, deviceCheckoutGuid);
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "The selected file is empty. Choose a file with content and try again.");
@@ -816,9 +832,12 @@ public class ProtocolChecklistService {
     }
   }
 
-  public void deleteAttachment(String protocol, String checklistId, String attachmentId) {
+  public void deleteAttachment(String protocol, String checklistId, String attachmentId,
+      String deviceCheckoutGuid) {
+    // Was SLB-only; now the full three-way check, so a submitted checklist's attachments are safe and
+    // a checked-out one can only be changed by the device holding it.
+    assertChecklistEditable(checklistId, deviceCheckoutGuid);
     String resourceType = checklistRepository.resolveResourceType(checklistId);
-    assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
     log.info("Deleted attachment :: {} from {} checklist :: {} by user :: {}", attachmentId,
         resourceType, checklistId, loggedUserHelper.getLoggedUserId());
@@ -899,12 +918,373 @@ public class ProtocolChecklistService {
     }
   }
 
+  // ── Offline snapshot (SLR only) ──────────────────────────────────────
+
+  /** Attachment pages to walk per request when assembling the snapshot's full metadata set. */
+  private static final int SNAPSHOT_ATTACHMENT_PAGE_SIZE = 50;
+
+  /**
+   * Assemble the whole SLR graph for taking a checklist offline.
+   *
+   * <p><b>Read-only on purpose.</b> This does not flip status or claim the checkout — the client
+   * POSTs {@code /offline} afterwards. Reads first, checkout last, so an interrupted download leaves
+   * the checklist editable online instead of stranded in {@code RDO} with no local copy to show for
+   * it. An earlier draft of this design had the snapshot GET take the checkout; CHR's shipped flow
+   * proved the opposite order, and the mid-download network kill was verified by hand.
+   *
+   * <p>Cost is inherent rather than accidental: there is no bulk read, so this is one call per
+   * stratum plus one per plot. Field-sized data (a single block) is the expected shape.
+   */
+  public BioSnapshot getSnapshot(String checklistId) {
+    assertSlrOnly(checklistId);
+
+    BiodiversityOpening opening = getBiodiversityOpening(checklistId);
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+
+    List<BioSnapshot.BioStratumSnapshot> strata = new ArrayList<>();
+    for (BioStratumRow stratumRow : listBioStrata(checklistId)) {
+      BioStratum stratum = getBioStratum(stratumRow.stratumId());
+      List<BioPlot> plots = new ArrayList<>();
+      for (BioPlotRow plotRow : listBioPlots(stratumRow.stratumId())) {
+        plots.add(getBioPlot(plotRow.plotId()));
+      }
+      strata.add(new BioSnapshot.BioStratumSnapshot(stratum, plots));
+    }
+
+    return new BioSnapshot(
+        BioSnapshot.CURRENT_SCHEMA_VERSION,
+        checklistId,
+        resourceType,
+        checklistRepository.getBioChecklistStatus(checklistId),
+        opening,
+        getNotes(resourceType, checklistId),
+        strata,
+        allAttachments(resourceType, checklistId));
+  }
+
+  /**
+   * Every attachment's metadata, not one page.
+   *
+   * <p>The list read is paginated for the online tab, but an offline copy needs the complete set —
+   * page 1 would silently truncate what the device can see and, worse, what it can flush back. Walks
+   * to {@code totalCount} rather than adding an unpaginated read path, matching how CHR's
+   * take-offline pages through photo metadata.
+   */
+  private List<AttachmentRow> allAttachments(String resourceType, String checklistId) {
+    List<AttachmentRow> all = new ArrayList<>();
+    for (int page = 0; ; page++) {
+      List<AttachmentRow> current =
+          getAttachments(resourceType, checklistId, page, SNAPSHOT_ATTACHMENT_PAGE_SIZE)
+              .attachments();
+      all.addAll(current);
+      // Terminate on a short page, NOT on totalCount. The count is a separate query from the page, so
+      // if the two ever disagree — a concurrent delete, or simply a bug — trusting it would silently
+      // truncate the snapshot, and the device would neither see those attachments nor be able to
+      // flush them back. A short page is self-evidently the last one. Costs at most one extra call
+      // when the total is an exact multiple of the page size.
+      if (current.size() < SNAPSHOT_ATTACHMENT_PAGE_SIZE) {
+        return all;
+      }
+    }
+  }
+
+  /**
+   * Whether the calling device still holds this checklist's checkout.
+   *
+   * <p>Exists so an offline copy can be told it has been superseded <em>before</em> the user spends
+   * a check-in finding out. Status alone is not enough: the common case is an admin activating a
+   * stranded checkout, which leaves the checklist {@code ACT} and the device's copy unsyncable.
+   *
+   * <p>Returns a boolean rather than the server's token — see {@link BioCheckoutState}.
+   */
+  public BioCheckoutState getCheckoutState(String checklistId, String deviceCheckoutGuid) {
+    String status = checklistRepository.getBioChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      return new BioCheckoutState(checklistId, status, false);
+    }
+    UUID serverToken = checklistRepository.getBioDeviceCheckoutGuid(checklistId);
+    boolean held = serverToken != null && serverToken.toString().equals(deviceCheckoutGuid);
+    return new BioCheckoutState(checklistId, status, held);
+  }
+
+  /**
+   * Check a device's edited graph back in: one transaction, then RDO → ACT.
+   *
+   * <p>Ordering is not stylistic — every step below was verified against DEV during the week-1 spike,
+   * and three of them fail loudly if reordered:
+   *
+   * <ol>
+   *   <li><b>The whole chain is one transaction.</b> The Bio save procs do not self-COMMIT and
+   *       {@code executeCall} joins the Spring transaction, so a mid-chain conflict rolls everything
+   *       back and the device can retry cleanly. Without {@code @Transactional} each proc call
+   *       auto-commits independently and a failure at step 3 of 5 leaves the checklist half-synced.</li>
+   *   <li><b>The opening's returned token is threaded into the notes save.</b> Both write the same
+   *       {@code BIODIVERSITY_CHECKLIST} row and share its single {@code revision_count}, so the
+   *       second call sending the device's stale token fails {@code record.modified2} —
+   *       deterministically, in every sync that touches both tabs, not as a rare race.</li>
+   *   <li><b>Creates and updates run before deletes</b>, so an id assigned earlier in this same sync
+   *       cannot be deleted by a stale reference.</li>
+   *   <li><b>Plot tombstones are applied before their stratum's.</b> The stratum delete <em>refuses</em>
+   *       while any plot references it — it does not cascade — so the wrong order aborts the sync.</li>
+   * </ol>
+   *
+   * <p>The checkout is held throughout and released only at the end, so a failure anywhere leaves the
+   * device still holding its copy and its token.
+   */
+  @Transactional
+  public BioCheckout uploadSnapshot(String checklistId, BioSnapshotUpload upload) {
+    assertSlrOnly(checklistId);
+    assertReadableSchema(upload.schemaVersion());
+    // Full three-way check: this must be RDO and the caller must hold the checkout.
+    assertChecklistEditable(checklistId, upload.deviceCheckoutGuid());
+
+    String userId = loggedUserHelper.getLoggedUserId();
+
+    // 1. Opening, and carry its new token forward — see the class note above.
+    BiodiversityOpening savedOpening =
+        writeRepository.saveBiodiversityOpening(upload.opening(), userId);
+
+    // 2. Notes, on the token the opening just produced rather than the device's.
+    if (upload.notes() != null) {
+      writeRepository.saveNotes(
+          new RiparianNotes(checklistId, upload.notes().noteDescription(),
+              savedOpening.revisionCount()),
+          checklistRepository.resolveResourceType(checklistId),
+          userId);
+    }
+
+    // 3. Strata, then their plots. A stratum created offline gets its real id here, and its plots
+    //    must be pointed at that id rather than the tmp: one they were captured against.
+    for (BioSnapshotUpload.BioStratumUpload entry : nullSafe(upload.strata())) {
+      BioStratum toSave = isTemporaryId(entry.stratum().stratumId())
+          ? entry.stratum().withIdentity(null, null)
+          : entry.stratum();
+      BioStratum savedStratum =
+          writeRepository.saveBioStratum(toSave.withChecklist(checklistId), userId);
+
+      for (BioPlot plot : nullSafe(entry.plots())) {
+        BioPlot plotToSave = isTemporaryId(plot.plotId())
+            ? plot.withIdentity(null, savedStratum.stratumId(), null)
+            : plot.withStratum(savedStratum.stratumId());
+        writeRepository.saveBioPlot(plotToSave, userId);
+      }
+    }
+
+    // 4. Deletes last, plots before strata.
+    applyTombstones(upload.tombstones());
+
+    // 5. Only now release the checkout.
+    assertActivated(checklistId);
+    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.ACT, null);
+  }
+
+  /**
+   * Apply delete tombstones: every plot first, then every stratum.
+   *
+   * <p>Not merely tidy. {@code frep_biodiversity_stratum.validate_remove} refuses while any plot
+   * references the stratum, so a stratum-first order gets {@code frep.error.usr.childexists} and
+   * rolls the entire sync back on what reads like a data problem rather than an ordering bug.
+   */
+  private void applyTombstones(List<BioSnapshotUpload.Tombstone> tombstones) {
+    List<BioSnapshotUpload.Tombstone> all = nullSafe(tombstones);
+    for (BioSnapshotUpload.Tombstone tombstone : all) {
+      if (BioSnapshotUpload.Tombstone.PLOT.equalsIgnoreCase(tombstone.entity())) {
+        throwIfDeleteFailed(
+            writeRepository.deleteBioPlot(tombstone.id(), tombstone.revisionCount()), tombstone);
+      }
+    }
+    for (BioSnapshotUpload.Tombstone tombstone : all) {
+      if (BioSnapshotUpload.Tombstone.STRATUM.equalsIgnoreCase(tombstone.entity())) {
+        throwIfDeleteFailed(
+            writeRepository.deleteBioStratum(tombstone.id(), tombstone.revisionCount()), tombstone);
+      }
+    }
+  }
+
+  /**
+   * A failed delete must abort the sync, not be skipped. The delete procs report failure as a message
+   * rather than an exception, so an unchecked return would silently drop the deletion and the row
+   * would reappear on the device's next read — the exact "deleted strata come back" failure the
+   * tombstone design exists to prevent.
+   */
+  private void throwIfDeleteFailed(String error, BioSnapshotUpload.Tombstone tombstone) {
+    if (StringUtils.isNotBlank(error)) {
+      throw new ConflictFoundException(
+          "Could not delete " + tombstone.entity().toLowerCase() + " " + tombstone.id()
+              + " during check-in: " + error + " Re-pull the checklist and try again.");
+    }
+  }
+
+  /**
+   * A snapshot written by a build this server cannot read is blocked, never migrated forward.
+   * Silently reinterpreting an older graph is how a sync corrupts data rather than failing.
+   */
+  private static void assertReadableSchema(String schemaVersion) {
+    if (!BioSnapshot.CURRENT_SCHEMA_VERSION.equals(schemaVersion)) {
+      throw new InvalidParameterException(
+          "This offline copy was made by a different version of the app (snapshot format "
+              + schemaVersion + "; this server reads " + BioSnapshot.CURRENT_SCHEMA_VERSION
+              + "). Update the app and sync again.");
+    }
+  }
+
+  /**
+   * Whether an id was minted on the device rather than by Oracle. Offline-created rows carry a
+   * {@code tmp:} prefix (or nothing at all); anything else is a real sequence id.
+   */
+  private static boolean isTemporaryId(String id) {
+    return StringUtils.isBlank(id) || id.startsWith("tmp:");
+  }
+
+  private static <T> List<T> nullSafe(List<T> values) {
+    return values == null ? List.of() : values;
+  }
+
+  // ── Offline checkout (SLR only) ──────────────────────────────────────
+  //
+  // Mirrors the shipped CHR flow: take-offline hands the device a token, release lets that device
+  // give the checkout back, and an admin-only activate recovers a checkout stranded on a lost or
+  // wiped device. Status is what makes a checked-out checklist read-only online
+  // (see assertChecklistEditable); the token is what stops a *different* device editing it.
+
+  /**
+   * Check an SLR checklist out to a field device (ACT → RDO) and issue its token.
+   *
+   * <p>The token is minted here rather than accepted from the client: it is proof the server issued
+   * this checkout, so a caller cannot pick its own value and claim someone else's.
+   */
+  @Transactional
+  public BioCheckout takeOffline(String checklistId) {
+    assertSlrOnly(checklistId);
+    UUID token = UUID.randomUUID();
+    String error = writeRepository.takeOffline(
+        checklistId, token, loggedUserHelper.getLoggedUserId());
+    if (StringUtils.isNotBlank(error)) {
+      // The proc refuses unless the row is ACT, so this is "already checked out, or submitted".
+      throw new AccessForbiddenException(
+          "This checklist can't be taken offline right now — it may already be checked out or "
+              + "submitted. Refresh and try again.");
+    }
+    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.RDO, token.toString());
+  }
+
+  /**
+   * Release a checkout on behalf of the device holding it (RDO → ACT), so the online copy is
+   * editable again.
+   *
+   * <p>Idempotent, matching CHR: releasing a checklist that isn't checked out returns the current
+   * state rather than failing, because the common cause is a device discarding a copy the server
+   * already reclaimed.
+   */
+  @Transactional
+  public BioCheckout releaseCheckout(String checklistId, String deviceCheckoutGuid) {
+    assertSlrOnly(checklistId);
+    String status = checklistRepository.getBioChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      return new BioCheckout(checklistId, status, null);
+    }
+    UUID serverToken = checklistRepository.getBioDeviceCheckoutGuid(checklistId);
+    if (serverToken == null || !serverToken.toString().equals(deviceCheckoutGuid)) {
+      throw new AccessForbiddenException(
+          "This checklist is checked out on another device, so it can't be released here. "
+              + "An administrator can activate it instead.");
+    }
+    assertActivated(checklistId);
+    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.ACT, null);
+  }
+
+  /**
+   * Admin recovery for a checkout stranded on a device that is lost, wiped, or simply never coming
+   * back (RDO → ACT, no token required).
+   *
+   * <p>Clearing the token is the point: whatever is still on that device can never be uploaded
+   * afterwards, so the caller must accept losing it. The endpoint is {@code FREP_ADMIN}-only.
+   */
+  @Transactional
+  public BioCheckout activate(String checklistId) {
+    assertSlrOnly(checklistId);
+    assertActivated(checklistId);
+    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.ACT, null);
+  }
+
+  private void assertActivated(String checklistId) {
+    String error = writeRepository.activate(checklistId, loggedUserHelper.getLoggedUserId());
+    if (StringUtils.isNotBlank(error)) {
+      // The proc refuses unless the row is RDO.
+      throw new AccessForbiddenException(
+          "This checklist isn't checked out, so there is nothing to release or activate.");
+    }
+  }
+
+  /**
+   * Offline is SLR-only. SLB records are historical and read-only everywhere, so checking one out
+   * would hand a device a copy it could never sync back.
+   *
+   * <p>Stricter than {@link #assertEditable}, which only excludes SLB: this requires SLR positively,
+   * so a future third biodiversity code is refused by default rather than silently permitted.
+   */
+  private void assertSlrOnly(String checklistId) {
+    String resourceType = checklistRepository.resolveResourceType(checklistId);
+    assertEditable(resourceType);
+    if (!"SLR".equals(resourceType)) {
+      throw new AccessForbiddenException(
+          "Only Stand Level Retention (SLR) checklists can be taken offline.");
+    }
+  }
+
   /** Resolve the record's code from the checklist id and enforce {@link #assertEditable}. A blank id
    * (e.g. an orphan stratum/plot lookup) is left for the downstream proc to report as not-found. */
   private void assertChecklistEditable(String checklistId) {
-    if (StringUtils.isNotBlank(checklistId)) {
-      assertEditable(checklistRepository.resolveResourceType(checklistId));
+    assertChecklistEditable(checklistId, null);
+  }
+
+  /**
+   * Full editability gate for a Biodiversity write: the SLB exclusion <em>and</em> the checklist's
+   * status. Mirrors {@code ChrChecklistService.assertPhotoEditable}, which is the shipped precedent.
+   *
+   * <ul>
+   *   <li>{@code ACT} — editable by anyone who passed the endpoint's authorization.</li>
+   *   <li>{@code RDO} — checked out to a device. Editable <em>only</em> by the holder of that
+   *       checkout, so the caller must present the matching {@code deviceCheckoutGuid}. The online
+   *       per-section saves pass {@code null} and are therefore refused, which is what makes a
+   *       checked-out checklist read-only in the UI.</li>
+   *   <li>anything else — refused. {@code SUB} is the case that matters: submitted checklists were
+   *       writable through the API until now, because nothing on this path read status at all.</li>
+   * </ul>
+   *
+   * <p>RDO has to be allowed at all because the offline check-in flushes attachments and posts the
+   * snapshot while the checklist is still checked out — the RDO → ACT flip happens at the end of that
+   * sync, not before it.
+   *
+   * <p>The GUID comparison lives here rather than in PL/SQL (decided 2026-08-07): the procs only
+   * store and clear the token, so the rule exists in exactly one place.
+   */
+  private void assertChecklistEditable(String checklistId, String deviceCheckoutGuid) {
+    if (StringUtils.isBlank(checklistId)) {
+      return;
     }
+    assertEditable(checklistRepository.resolveResourceType(checklistId));
+
+    String status = checklistRepository.getBioChecklistStatus(checklistId);
+    if (status == null || ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      // Null here means the checklist row does not exist. FREP_CHECKLIST_STATUS_CODE is nullable in
+      // the DDL (TABLES/V2.00399:5, unlike CHR_CHECKLIST's NOT NULL), but nothing ever writes a null
+      // and the count is zero in every environment — so this is the not-found path, not a permissive
+      // fallback for a real row. It defers to the downstream proc to report the bad id, exactly as
+      // resolveResourceType does.
+      return;
+    }
+    if (ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
+      UUID serverGuid = checklistRepository.getBioDeviceCheckoutGuid(checklistId);
+      if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+            "This checklist is checked out to a device, so it can't be changed here. "
+                + "Upload it from that device, or have it activated.");
+      }
+      return;
+    }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+        "This checklist has been submitted and is read-only. Unsubmit it to make changes.");
   }
 
   static ProtocolChecklistField toField(String label, String value) {

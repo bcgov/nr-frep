@@ -144,12 +144,27 @@ public class LoggedUserHelper {
    * True if the user may access CHR for the given 3-letter district {@code org_unit_code}. Sys-admins
    * see every district; a district editor sees only the codes they hold a role for.
    */
+  /**
+   * Whether the caller may act on CHR for the given district.
+   *
+   * <p>The absent-district check runs <b>before</b> the sysadmin bypass on purpose. Callers pass a
+   * code they resolved from something else — most importantly
+   * {@code ChrChecklistAuthorizer.canEditChecklist}, which resolves it from a checklist id and gets
+   * null when no such checklist exists. Letting a sysadmin through on a null meant "authorized to
+   * edit a checklist that isn't there", and the request then died further downstream on the status
+   * read as a 500 rather than an honest 403.
+   *
+   * <p>Blank is treated as absent too, matching the guard {@code ReportAuthorizer} already applies
+   * before calling here.
+   */
   public boolean canChr(String orgUnitCode) {
+    if (orgUnitCode == null || orgUnitCode.isBlank()) {
+      return false;
+    }
     if (isSysAdmin()) {
       return true;
     }
-    return orgUnitCode != null
-        && chrDistrictCodes().contains(orgUnitCode.toUpperCase(Locale.ROOT));
+    return chrDistrictCodes().contains(orgUnitCode.toUpperCase(Locale.ROOT));
   }
 
   // ─── Internal helpers ─────────────────────────────────────────────

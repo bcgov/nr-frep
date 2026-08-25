@@ -97,13 +97,15 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
   }
 
   @Override
-  public ResponseEntity<CheckList> activateChecklist(long id) {
-    return ResponseEntity.ok(chrChecklistService.activateChecklist(id));
+  public ResponseEntity<Void> activateChecklist(long id) {
+    chrChecklistService.activateChecklist(id);
+    return ResponseEntity.noContent().build();
   }
 
   @Override
-  public ResponseEntity<CheckList> releaseCheckout(long id, ReleaseCheckoutRequest body) {
-    return ResponseEntity.ok(chrChecklistService.releaseCheckout(id, body.deviceCheckoutGuid()));
+  public ResponseEntity<Void> releaseCheckout(long id, ReleaseCheckoutRequest body) {
+    chrChecklistService.releaseCheckout(id, body.deviceCheckoutGuid());
+    return ResponseEntity.noContent().build();
   }
 
   @Override

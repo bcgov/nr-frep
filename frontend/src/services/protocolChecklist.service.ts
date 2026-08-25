@@ -1,4 +1,8 @@
 import type {
+  BioCheckout,
+  BioCheckoutState,
+  BioSnapshot,
+  BioSnapshotUpload,
   AttachmentContent,
   AttachmentPageResponse,
   BiodiversityOpening,
@@ -47,6 +51,83 @@ export class ProtocolChecklistService extends HttpClient {
       method: 'POST',
       url: '/v1/protocol-checklists/{protocolType}/{checklistId}/unsubmit',
       path: { protocolType: protocolBackendCode, checklistId },
+    });
+  }
+
+  // ── Offline (SLR) ───────────────────────────────────────────────────
+
+  /**
+   * The whole SLR graph for taking a checklist offline. Read-only — it does **not** claim the
+   * checkout; call {@link takeOffline} afterwards, so an abandoned download costs nothing.
+   */
+  getSnapshot(checklistId: string): CancelablePromise<BioSnapshot> {
+    return this.doRequest<BioSnapshot>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/bio/{checklistId}/snapshot',
+      path: { checklistId },
+    });
+  }
+
+  /**
+   * Whether this device still holds the checkout. Used by the offline list to flag a superseded copy
+   * before the user attempts a check-in — status alone can't see a reclaimed checkout.
+   */
+  getCheckoutState(
+    checklistId: string,
+    deviceCheckoutGuid?: string,
+  ): CancelablePromise<BioCheckoutState> {
+    return this.doRequest<BioCheckoutState>(this.config, {
+      method: 'GET',
+      url: '/v1/protocol-checklists/bio/{checklistId}/checkout',
+      path: { checklistId },
+      query: deviceCheckoutGuid ? { deviceCheckoutGuid } : undefined,
+    });
+  }
+
+  /** Claim the checkout (ACT → RDO) and receive the token every later write must present. */
+  takeOffline(checklistId: string): CancelablePromise<BioCheckout> {
+    return this.doRequest<BioCheckout>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/bio/{checklistId}/offline',
+      path: { checklistId },
+    });
+  }
+
+  /**
+   * Release this device's own checkout. Idempotent server-side: releasing a checklist that is no
+   * longer checked out succeeds, which is what lets a reclaimed copy still be removed cleanly.
+   * The token rides in the body rather than the URL so it isn't logged.
+   */
+  releaseCheckout(checklistId: string, deviceCheckoutGuid: string): CancelablePromise<BioCheckout> {
+    return this.doRequest<BioCheckout>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/bio/{checklistId}/release',
+      path: { checklistId },
+      body: { deviceCheckoutGuid },
+      mediaType: 'application/json',
+    });
+  }
+
+  /** Admin recovery for a checkout stranded on a lost device. Clears the token. */
+  activateCheckout(checklistId: string): CancelablePromise<BioCheckout> {
+    return this.doRequest<BioCheckout>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/bio/{checklistId}/activate',
+      path: { checklistId },
+    });
+  }
+
+  /** Post the edited graph back. Attachments are flushed separately, before this call. */
+  uploadSnapshot(
+    checklistId: string,
+    upload: BioSnapshotUpload,
+  ): CancelablePromise<BioCheckout> {
+    return this.doRequest<BioCheckout>(this.config, {
+      method: 'POST',
+      url: '/v1/protocol-checklists/bio/{checklistId}/snapshot',
+      path: { checklistId },
+      body: upload,
+      mediaType: 'application/json',
     });
   }
 
@@ -220,12 +301,16 @@ export class ProtocolChecklistService extends HttpClient {
     checklistId: string,
     file: File,
     description?: string,
+    deviceCheckoutGuid?: string,
   ): CancelablePromise<void> {
     const body = new FormData();
     body.append('file', file);
     if (description && description.trim()) {
       body.append('description', description.trim());
     }
+    // Required only while the checklist is checked out: the check-in flush sends it to prove it
+    // holds the checkout, since the RDO → ACT flip happens later, in the graph POST.
+    if (deviceCheckoutGuid) body.append('deviceCheckoutGuid', deviceCheckoutGuid);
     return this.doRequest<void>(this.config, {
       method: 'POST',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments',
@@ -239,11 +324,13 @@ export class ProtocolChecklistService extends HttpClient {
     protocol: string,
     checklistId: string,
     attachmentId: string,
+    deviceCheckoutGuid?: string,
   ): CancelablePromise<void> {
     return this.doRequest<void>(this.config, {
       method: 'DELETE',
       url: '/v1/protocol-checklists/{protocol}/{checklistId}/attachments/{attachmentId}',
       path: { protocol, checklistId, attachmentId },
+      query: deviceCheckoutGuid ? { deviceCheckoutGuid } : undefined,
     });
   }
 }

@@ -34,7 +34,6 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  * Global exception handler. Translates application and framework exceptions into a consistent
  * {@link ApiError} JSON body so internal failures (stack traces, raw Oracle ORA-xxxxx messages) never
  * reach the UI — the frontend reads {@code message}; {@code debugMessage} carries detail for logs/devs.
- * Modelled on nr-fspts {@code RestExceptionHandler}.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @ControllerAdvice

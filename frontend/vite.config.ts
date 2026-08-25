@@ -224,6 +224,16 @@ export default defineConfig(({ mode }) => {
               instances: [{ browser: 'chromium' }],
             },
             include: ['src/**/*.browser.test.{ts,tsx}'],
+            // Browser mode starts a real Chromium context per worker. Unbounded on a CI runner
+            // that has a couple of cores, workers time out starting up and Vitest reports
+            // "Failed to import test file … Vitest failed to find the runner" — the whole file
+            // never loads, so no test in it even runs. The giveaway is a `prepare` time far
+            // larger than the test time (1061s of prepare for 22s of tests).
+            //
+            // Capped rather than serialised: two workers keep most of the parallelism while
+            // leaving the runner enough headroom to start them. Left uncapped locally, where
+            // there are cores to spare.
+            ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
           },
         },
       ],

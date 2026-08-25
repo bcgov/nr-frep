@@ -507,12 +507,12 @@ describe('Ungroup dialog', () => {
 
     await user.click(ungroup);
     expect(within(dialog).getByText('Choose whether to keep or delete them.')).toBeTruthy();
-    expect(onSave.mock.calls.length).toBe(saves);
+    expect(onSave.mock.calls).toHaveLength(saves);
 
     // Answering clears the way through.
     await user.click(within(dialog).getByRole('radio', { name: /Keep them/ }));
     await user.click(ungroup);
-    expect(onSave.mock.calls.length).toBe(saves + 1);
+    expect(onSave.mock.calls).toHaveLength(saves + 1);
   });
 
   it('deletes the undescribed features when asked to, and keeps the rest', async () => {
@@ -535,7 +535,7 @@ describe('Ungroup dialog', () => {
     const saves = onSave.mock.calls.length;
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    expect(onSave.mock.calls.length).toBe(saves);
+    expect(onSave.mock.calls).toHaveLength(saves);
     expect(compositeLabel()).not.toBeNull();
   });
 

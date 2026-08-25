@@ -29,8 +29,13 @@ import { AGE_FIELDS, FEATURE_TYPE_FIELDS } from '@/pages/ChrChecklist/tabStatus'
 /** The label comparison the backend makes — trimmed and case-insensitive, matching
  *  `ChrSubmitValidationService.matchesCompositeLabel`. "Composite of" is free text, so a stray
  *  space must not silently drop a member. */
-export const sameLabel = (a?: string, b?: string): boolean =>
-  a != null && b != null && a.trim().toLowerCase() === b.trim().toLowerCase();
+export const sameLabel = (a?: string, b?: string): boolean => {
+  const left = a?.trim().toLowerCase();
+  const right = b?.trim().toLowerCase();
+  // `left === right` alone would call two *unlabelled* features a match, since both sides are
+  // undefined. A missing label matches nothing, including another missing label.
+  return left !== undefined && left === right;
+};
 
 const hasValue = (value?: string): boolean => (value ?? '').trim() !== '';
 
@@ -209,12 +214,17 @@ export const featureRows = (features: Feature[]): FeatureRow[] => [
  * nobody gave, and no saved feature ever looks untouched.
  */
 export const hasNoDetailsOfItsOwn = (feature: Feature): boolean => {
+  // Narrowed rather than stringified: the Feature index signature is `unknown`, so a template
+  // literal would turn an array or object field into "[object Object]" and compare that.
   const ticked = (fields: readonly string[]): boolean =>
-    fields.some((key) => `${feature[key] ?? ''}`.trim().toLowerCase() === 'true');
+    fields.some((key) => {
+      const value = feature[key];
+      return typeof value === 'string' && value.trim().toLowerCase() === 'true';
+    });
   return (
     !ticked(FEATURE_TYPE_FIELDS) &&
     !ticked(AGE_FIELDS) &&
-    `${feature.featureDescription ?? ''}`.trim() === ''
+    (feature.featureDescription ?? '').trim() === ''
   );
 };
 
@@ -226,7 +236,7 @@ export const undescribedMembers = (features: Feature[], anchor: Feature): Featur
 export const listFeatureLabels = (features: Feature[]): string => {
   const labels = features.map((f) => f.featureLabel ?? '?');
   if (labels.length <= 1) return `Feature ${labels[0] ?? '?'}`;
-  return `Features ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+  return `Features ${labels.slice(0, -1).join(', ')} and ${labels.at(-1) ?? '?'}`;
 };
 
 /** Ungroup, discarding the members that were never assessed rather than stranding them. */

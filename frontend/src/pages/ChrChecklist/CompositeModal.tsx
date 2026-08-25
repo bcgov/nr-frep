@@ -20,6 +20,7 @@ import type { Feature } from '@/types/chrChecklist';
 import { FEATURE_CLASS_CODES, INFORMATION_SOURCE_CODES } from '@/pages/ChrChecklist/codeLists';
 import {
   classLabel,
+  isCompositeAnchor,
   nextFeatureLabel,
   sameLabel,
   sourceLabel,
@@ -27,6 +28,132 @@ import {
 
 /** Every table cell reads the same way when it has nothing to show. */
 const orDash = (value?: string) => (value?.trim() ? value : '—');
+
+/**
+ * What the dialog is missing, and what to say about it.
+ *
+ * `hasErrors` is what blocks the submit; the three messages are what the fields show, and stay
+ * undefined until the user has asked to create the composite. The composite's own class and source
+ * are only asked for when creating one — the members dialog does not show those fields, so it can
+ * never be blocked on them.
+ */
+const compositeErrors = ({
+  showErrors,
+  editing,
+  featureClass,
+  infoSource,
+  enoughMembers,
+}: {
+  showErrors: boolean;
+  editing: boolean;
+  featureClass: string;
+  infoSource: string;
+  enoughMembers: boolean;
+}) => {
+  const missingCodes = !editing && (!featureClass || !infoSource);
+  const show = (missing: boolean, message: string) => (showErrors && missing ? message : undefined);
+  return {
+    classError: show(!editing && !featureClass, 'Feature class is required.'),
+    sourceError: show(!editing && !infoSource, 'Information source is required.'),
+    memberError: show(!enoughMembers, 'Select at least two features.'),
+    hasErrors: !enoughMembers || missingCodes,
+  };
+};
+
+/**
+ * The features on offer in the dialog. A composite is never among them — a composite cannot
+ * contain a composite.
+ *
+ * Beyond that the two modes differ. Creating a group offers only unattached features, so a new
+ * composite cannot quietly empty an existing one. Editing a group's members offers everything,
+ * because moving a feature across from another composite is the point of that dialog.
+ */
+const selectableFeatures = (features: Feature[], anchor?: Feature): Feature[] =>
+  features.filter((f) => {
+    if (f === anchor) return false;
+    if (isCompositeAnchor(f)) return false;
+    // Already in some composite: offered only when editing, where picking it moves it across.
+    return !f.compositeFeature || anchor != null;
+  });
+
+/** One selectable row. A feature added from inside the dialog is described here for the first
+ *  time, so it gets pickers and a Delete; an existing feature just shows what it already has. */
+const CompositeRow: FC<{
+  feature: Feature;
+  index: number;
+  added: boolean;
+  checked: boolean;
+  busy: boolean;
+  showAction: boolean;
+  onToggle: () => void;
+  onPatch: (patch: Partial<Feature>) => void;
+  onRemove: () => void;
+}> = ({ feature, index, added, checked, busy, showAction, onToggle, onPatch, onRemove }) => {
+  const label = feature.featureLabel;
+  const editable = added && label != null;
+  return (
+    <TableRow>
+      <TableCell>
+        <Checkbox
+          id={`composite-select-${feature.id ?? label ?? index}`}
+          labelText={`Include feature ${label ?? index + 1} in this composite`}
+          hideLabel
+          checked={checked}
+          disabled={busy}
+          onChange={onToggle}
+        />
+      </TableCell>
+      <TableCell>{label ?? index + 1}</TableCell>
+      <TableCell>
+        {editable ? (
+          <CodeSelect
+            id={`composite-add-class-${label}`}
+            labelText={`Feature class for feature ${label}`}
+            hideLabel
+            value={feature.featureDescriptionCode}
+            options={FEATURE_CLASS_CODES}
+            includeBlank
+            disabled={busy}
+            onChange={(v) => onPatch({ featureDescriptionCode: v })}
+          />
+        ) : (
+          orDash(classLabel(feature.featureDescriptionCode))
+        )}
+      </TableCell>
+      <TableCell>
+        {editable ? (
+          <CodeSelect
+            id={`composite-add-source-${label}`}
+            labelText={`Information source for feature ${label}`}
+            hideLabel
+            value={feature.featureInfoSourceCode}
+            options={INFORMATION_SOURCE_CODES}
+            includeBlank
+            disabled={busy}
+            onChange={(v) => onPatch({ featureInfoSourceCode: v })}
+          />
+        ) : (
+          orDash(sourceLabel(feature.featureInfoSourceCode))
+        )}
+      </TableCell>
+      {showAction && (
+        <TableCell className="table-actions">
+          {editable && (
+            <Button
+              kind="danger--ghost"
+              size="sm"
+              renderIcon={TrashCan}
+              disabled={busy}
+              onClick={onRemove}
+            >
+              Delete
+            </Button>
+          )}
+        </TableCell>
+      )}
+    </TableRow>
+  );
+};
 
 /**
  * Create or edit a composite: pick the class and information source the group is assessed under,
@@ -59,23 +186,7 @@ const CompositeModal: FC<{
       .filter((label): label is string => Boolean(label)),
   );
 
-  /**
-   * The features on offer. A composite is never among them — a composite cannot contain a
-   * composite.
-   *
-   * Beyond that the two modes differ. Creating a group offers only unattached features, so a new
-   * composite cannot quietly empty an existing one. Editing a group's members offers everything,
-   * because moving a feature across from another composite is the point of that dialog.
-   */
-  const selectable = features.filter((f) => {
-    if (f === anchor) return false;
-    if ((f.compositeFeatureInd ?? '').trim().toLowerCase() === 'true' && !f.compositeFeature) {
-      return false;
-    }
-    if (!f.compositeFeature) return true;
-    if (editing) return true;
-    return false;
-  });
+  const selectable = selectableFeatures(features, anchor);
 
   // Newest first, matching where the row appears when "Add a new feature" is used.
   const rows = [...additions].reverse().concat(selectable);
@@ -120,12 +231,13 @@ const CompositeModal: FC<{
    * separate controls. Clicking it names what is missing instead.
    */
   const [showErrors, setShowErrors] = useState(false);
-  const classError = showErrors && !featureClass ? 'Feature class is required.' : undefined;
-  const sourceError = showErrors && !infoSource ? 'Information source is required.' : undefined;
-  const memberError = showErrors && !enoughMembers ? 'Select at least two features.' : undefined;
-  // The composite's own class and source are only asked for when creating one; the members dialog
-  // does not show those fields, so it cannot be blocked on them.
-  const hasErrors = !enoughMembers || (!editing && (!featureClass || !infoSource));
+  const { classError, sourceError, memberError, hasErrors } = compositeErrors({
+    showErrors,
+    editing,
+    featureClass,
+    infoSource,
+    enoughMembers,
+  });
 
   const submit = () => {
     setShowErrors(true);
@@ -258,70 +370,19 @@ const CompositeModal: FC<{
           <TableBody>
             {rows.map((feature, index) => {
               const label = feature.featureLabel;
-              const added = isAddition(feature);
               return (
-                <TableRow key={feature.id ?? `composite-row-${label ?? index}`}>
-                  <TableCell>
-                    <Checkbox
-                      id={`composite-select-${feature.id ?? label ?? index}`}
-                      labelText={`Include feature ${label ?? index + 1} in this composite`}
-                      hideLabel
-                      checked={isChecked(label)}
-                      disabled={busy}
-                      onChange={() => toggle(label)}
-                    />
-                  </TableCell>
-                  <TableCell>{label ?? index + 1}</TableCell>
-                  {/* An existing feature already has a class and source; a brand-new one is being
-                      described here for the first time, so it gets the pickers. */}
-                  <TableCell>
-                    {added && label ? (
-                      <CodeSelect
-                        id={`composite-add-class-${label}`}
-                        labelText={`Feature class for feature ${label}`}
-                        hideLabel
-                        value={feature.featureDescriptionCode}
-                        options={FEATURE_CLASS_CODES}
-                        includeBlank
-                        disabled={busy}
-                        onChange={(v) => patchAddition(label, { featureDescriptionCode: v })}
-                      />
-                    ) : (
-                      orDash(classLabel(feature.featureDescriptionCode))
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {added && label ? (
-                      <CodeSelect
-                        id={`composite-add-source-${label}`}
-                        labelText={`Information source for feature ${label}`}
-                        hideLabel
-                        value={feature.featureInfoSourceCode}
-                        options={INFORMATION_SOURCE_CODES}
-                        includeBlank
-                        disabled={busy}
-                        onChange={(v) => patchAddition(label, { featureInfoSourceCode: v })}
-                      />
-                    ) : (
-                      orDash(sourceLabel(feature.featureInfoSourceCode))
-                    )}
-                  </TableCell>
-                  {additions.length > 0 && (
-                    <TableCell className="table-actions">
-                      {added && label && (
-                        <Button
-                          kind="danger--ghost"
-                          size="sm"
-                          renderIcon={TrashCan}
-                          disabled={busy}
-                          onClick={() => removeAddition(label)}
-                        >
-                          Delete
-                        </Button>
-                      )}
-                    </TableCell>
-                  )}
-                </TableRow>
+                <CompositeRow
+                  key={feature.id ?? `composite-row-${label ?? index}`}
+                  feature={feature}
+                  index={index}
+                  added={isAddition(feature)}
+                  checked={isChecked(label)}
+                  busy={busy}
+                  showAction={additions.length > 0}
+                  onToggle={() => toggle(label)}
+                  onPatch={(patch) => label && patchAddition(label, patch)}
+                  onRemove={() => label && removeAddition(label)}
+                />
               );
             })}
           </TableBody>

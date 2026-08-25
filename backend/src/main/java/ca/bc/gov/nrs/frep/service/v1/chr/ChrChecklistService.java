@@ -310,7 +310,6 @@ public class ChrChecklistService {
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     log.info("Activated CHR checklist :: {} by user :: {}", checklistId,
         loggedUserHelper.getLoggedUserId());
-    return getChecklist(checklistId);
   }
 
   /**
@@ -334,7 +333,6 @@ public class ChrChecklistService {
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     log.info("Released offline checkout of CHR checklist :: {} by user :: {}", checklistId,
         loggedUserHelper.getLoggedUserId());
-    return getChecklist(checklistId);
   }
 
   @Transactional

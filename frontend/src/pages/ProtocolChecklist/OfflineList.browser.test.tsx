@@ -58,7 +58,12 @@ const aRecord = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const renderPage = () => render(<MemoryRouter><BioOfflineListPage /></MemoryRouter>);
+const renderPage = () =>
+  render(
+    <MemoryRouter>
+      <BioOfflineListPage />
+    </MemoryRouter>,
+  );
 
 describe('BioOfflineListPage', () => {
   beforeEach(() => {
@@ -150,7 +155,6 @@ describe('BioOfflineListPage', () => {
 
     renderPage();
 
-    await waitFor(() =>
-      expect(api.getCheckoutState).toHaveBeenCalledWith('9001', 'guid-1'));
+    await waitFor(() => expect(api.getCheckoutState).toHaveBeenCalledWith('9001', 'guid-1'));
   });
 });

@@ -16,6 +16,7 @@ vi.mock('@/services/APIs', () => ({
       getChecklist: vi.fn(),
       submit: vi.fn(),
       unsubmit: vi.fn(),
+      activateCheckout: vi.fn(),
       // Read by the tab-status pre-flight. Left un-stubbed (rejecting) in the older cases, which is
       // itself the "pre-flight failed → submit anyway" path.
       getBiodiversityOpening: vi.fn(),
@@ -87,6 +88,7 @@ const repo = bioOfflineRepo as unknown as {
 const api = API.protocolChecklist as unknown as {
   getChecklist: ReturnType<typeof vi.fn>;
   submit: ReturnType<typeof vi.fn>;
+  activateCheckout: ReturnType<typeof vi.fn>;
   getBiodiversityOpening: ReturnType<typeof vi.fn>;
   listBioStrata: ReturnType<typeof vi.fn>;
   listBioPlots: ReturnType<typeof vi.fn>;

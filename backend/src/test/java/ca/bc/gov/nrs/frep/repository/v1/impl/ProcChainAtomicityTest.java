@@ -1,4 +1,4 @@
-package ca.bc.gov.nrs.frep.spike;
+package ca.bc.gov.nrs.frep.repository.v1.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -20,8 +20,8 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * SPIKE — throwaway. Proof #1 of the SLR-offline week-1 spike
- * (see {@code bio-offline-mode.local.md} § Execution plan).
+ * Locks in the assumption the whole snapshot-POST design rests on: that the Bio write path becomes
+ * atomic purely by adding {@code @Transactional}.
  *
  * <p><b>Question.</b> The whole snapshot-POST design rests on one unproven assumption, recorded as
  * constraint #2: the Bio write path has no {@code @Transactional} anywhere and Hikari runs at its
@@ -38,14 +38,16 @@ import org.springframework.transaction.annotation.Transactional;
  * do not self-COMMIT", was already established by reading all 9 package bodies. So this runs on H2,
  * through the <b>real</b> {@code executeCall}, and the answer transfers.
  *
- * <p>Proofs #2–#4 (token threading, tombstone ordering, tmp-id assignment) exercise real PL/SQL and
- * must run against DEV — see {@code SpikeOracleOrchestratorIT}.
+ * <p>Kept when the rest of the SLR-offline spike harness was deleted: it costs nothing, needs no
+ * database, and is the only thing standing between a refactor of {@code executeCall} and a sync that
+ * silently half-applies. The Oracle-side proofs it was written alongside (token threading, tombstone
+ * ordering, tmp-id assignment) are now covered by ProtocolChecklistServiceTest.
  */
-class SpikeTxChainTest {
+class ProcChainAtomicityTest {
 
   /** Minimal stand-in for a save unit: reuses the production {@code executeCall} verbatim. */
-  static class SpikeRepo extends AbstractFrepRepository {
-    SpikeRepo(JdbcTemplate jdbcTemplate) {
+  static class ChainRepo extends AbstractFrepRepository {
+    ChainRepo(JdbcTemplate jdbcTemplate) {
       super(jdbcTemplate);
     }
 
@@ -56,17 +58,17 @@ class SpikeTxChainTest {
      * → {@code conn.prepareCall} → {@code cs.execute()}.
      */
     void write(String id) {
-      executeCall("INSERT INTO SPIKE_ROW (ID) VALUES (?)",
+      executeCall("INSERT INTO CHAIN_ROW (ID) VALUES (?)",
           cs -> cs.setString(1, id),
           cs -> null);
     }
   }
 
   /** Stands in for the snapshot-POST orchestrator chaining several save units. */
-  static class SpikeOrchestrator {
-    private final SpikeRepo repo;
+  static class ChainOrchestrator {
+    private final ChainRepo repo;
 
-    SpikeOrchestrator(SpikeRepo repo) {
+    ChainOrchestrator(ChainRepo repo) {
       this.repo = repo;
     }
 
@@ -93,13 +95,13 @@ class SpikeTxChainTest {
 
   @Configuration
   @EnableTransactionManagement
-  static class SpikeConfig {
+  static class ChainConfig {
     @Bean
     DataSource dataSource() {
       // autoCommit is left at the JDBC default (true), mirroring Hikari's unset auto-commit in
       // application.yml — the exact condition constraint #2 warns about.
       DriverManagerDataSource ds = new DriverManagerDataSource(
-          "jdbc:h2:mem:spiketx;DB_CLOSE_DELAY=-1", "sa", "");
+          "jdbc:h2:mem:procchain;DB_CLOSE_DELAY=-1", "sa", "");
       ds.setDriverClassName("org.h2.Driver");
       return ds;
     }
@@ -115,28 +117,28 @@ class SpikeTxChainTest {
     }
 
     @Bean
-    SpikeRepo spikeRepo(JdbcTemplate jdbcTemplate) {
-      return new SpikeRepo(jdbcTemplate);
+    ChainRepo chainRepo(JdbcTemplate jdbcTemplate) {
+      return new ChainRepo(jdbcTemplate);
     }
 
     /** A real proxied bean, so {@code @Transactional} is exercised via AOP, not simulated. */
     @Bean
-    SpikeOrchestrator spikeOrchestrator(SpikeRepo repo) {
-      return new SpikeOrchestrator(repo);
+    ChainOrchestrator chainOrchestrator(ChainRepo repo) {
+      return new ChainOrchestrator(repo);
     }
   }
 
   private AnnotationConfigApplicationContext context;
   private JdbcTemplate jdbc;
-  private SpikeOrchestrator orchestrator;
+  private ChainOrchestrator orchestrator;
 
   @BeforeEach
   void setUp() {
-    context = new AnnotationConfigApplicationContext(SpikeConfig.class);
+    context = new AnnotationConfigApplicationContext(ChainConfig.class);
     jdbc = context.getBean(JdbcTemplate.class);
-    orchestrator = context.getBean(SpikeOrchestrator.class);
-    jdbc.execute("DROP TABLE IF EXISTS SPIKE_ROW");
-    jdbc.execute("CREATE TABLE SPIKE_ROW (ID VARCHAR(10) PRIMARY KEY)");
+    orchestrator = context.getBean(ChainOrchestrator.class);
+    jdbc.execute("DROP TABLE IF EXISTS CHAIN_ROW");
+    jdbc.execute("CREATE TABLE CHAIN_ROW (ID VARCHAR(10) PRIMARY KEY)");
   }
 
   @AfterEach
@@ -145,7 +147,7 @@ class SpikeTxChainTest {
   }
 
   private List<String> rows() {
-    return jdbc.queryForList("SELECT ID FROM SPIKE_ROW ORDER BY ID", String.class);
+    return jdbc.queryForList("SELECT ID FROM CHAIN_ROW ORDER BY ID", String.class);
   }
 
   // ── The proof ────────────────────────────────────────────────────────

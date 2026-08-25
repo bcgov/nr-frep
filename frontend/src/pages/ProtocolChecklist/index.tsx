@@ -32,13 +32,13 @@ import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist'
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { useNotification } from '@/context/notification/useNotification';
+import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import API from '@/services/APIs';
 import { CheckInBlockedError, checkInBioChecklist } from '@/services/offline/bioCheckIn';
 import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 import { TakeOfflineCancelled, takeBioChecklistOffline } from '@/services/offline/bioTakeOffline';
-import { useNotification } from '@/context/notification/useNotification';
-import { useAuthorization } from '@/hooks/useAuthorization';
-import API from '@/services/APIs';
 import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolChecklist';
 import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
@@ -86,8 +86,10 @@ const readOnlyReason = ({
     return 'This is a historical Stand Level Retention (SLB) record and is read-only.';
   }
   if (checkedOut) {
-    return 'This checklist is checked out to a field device, so the online copy is read-only. '
-      + 'Check it in from that device, or have an administrator reactivate it, to edit here.';
+    return (
+      'This checklist is checked out to a field device, so the online copy is read-only. ' +
+      'Check it in from that device, or have an administrator reactivate it, to edit here.'
+    );
   }
   return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
 };
@@ -352,8 +354,8 @@ const ProtocolChecklistPage: FC = () => {
           confirm({
             title: 'Not enough room on this device?',
             message:
-              `This checklist's files need about ${formatMb(needBytes)}, and only `
-              + `${formatMb(availableBytes)} is free. Continuing may fail part-way. Continue anyway?`,
+              `This checklist's files need about ${formatMb(needBytes)}, and only ` +
+              `${formatMb(availableBytes)} is free. Continuing may fail part-way. Continue anyway?`,
             confirmButtonText: 'Continue',
           }),
       });
@@ -395,9 +397,7 @@ const ProtocolChecklistPage: FC = () => {
       display({
         kind: 'error',
         title: 'Check in stopped',
-        subtitle: err instanceof CheckInBlockedError
-          ? err.message
-          : apiErrorMessage(err),
+        subtitle: err instanceof CheckInBlockedError ? err.message : apiErrorMessage(err),
         timeout: 9000,
       });
     } finally {
@@ -411,8 +411,8 @@ const ProtocolChecklistPage: FC = () => {
       !(await confirm({
         title: 'Discard this file?',
         message:
-          `"${op.fileName ?? 'This file'}" was refused by the server and has never been uploaded. `
-          + 'Discarding it deletes it from this device permanently.',
+          `"${op.fileName ?? 'This file'}" was refused by the server and has never been uploaded. ` +
+          'Discarding it deletes it from this device permanently.',
         confirmButtonText: 'Discard',
       }))
     ) {
@@ -433,8 +433,8 @@ const ProtocolChecklistPage: FC = () => {
       !(await confirm({
         title: 'Reactivate this checklist?',
         message:
-          'This checklist is checked out to a field device. Reactivating it releases that checkout, '
-          + 'and any unsynced work still on that device can no longer be checked in.',
+          'This checklist is checked out to a field device. Reactivating it releases that checkout, ' +
+          'and any unsynced work still on that device can no longer be checked in.',
         confirmButtonText: 'Reactivate',
       }))
     ) {
@@ -473,6 +473,18 @@ const ProtocolChecklistPage: FC = () => {
   const checkedOut = checklist?.statusCode === 'RDO';
   const editable = canEdit && !isLegacySlb && !submitted && !checkedOut;
 
+  /**
+   * Whether the checklist-level actions (Submit / Unsubmit / Take offline / Check in) can be offered
+   * at all.
+   *
+   * Deliberately not `editable`, which excludes submitted — Unsubmit is precisely the submitted case,
+   * so gating on `editable` made it unreachable. A checklist checked out to another device offers
+   * nothing here: that device has to check in first, and a sys admin can still reactivate a stranded
+   * checkout from the read-only banner below.
+   */
+  const actionsReady =
+    !loading && !notFound && !hasError && !!checklist && canEdit && !isLegacySlb && !checkedOut;
+
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">
       <Column sm={4} md={8} lg={16}>
@@ -491,16 +503,38 @@ const ProtocolChecklistPage: FC = () => {
             <h1>
               {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
             </h1>
-            {!loading && !notFound && !hasError && checklist && editable && (
+            {actionsReady && (
               <div className="protocol-checklist__actions">
-                {submitted ? (
-                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
+                {/* While a local copy exists it is the authoritative one, so it replaces the other
+                    actions entirely — offering Take offline or Submit alongside it would invite a
+                    second download over the top of unsynced field work. */}
+                {offlineRecord ? (
+                  <Button onClick={() => void handleCheckIn()} disabled={!!offlineBusy || !online}>
+                    {offlineBusy ?? 'Check in'}
                   </Button>
                 ) : (
-                  <Button onClick={() => void handleSubmit()} disabled={busy}>
-                    Submit
-                  </Button>
+                  <>
+                    {submitted ? (
+                      <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                        Unsubmit
+                      </Button>
+                    ) : (
+                      <Button onClick={() => void handleSubmit()} disabled={busy}>
+                        Submit
+                      </Button>
+                    )}
+                    {/* Take offline is offered only for an editable, active checklist: a submitted
+                        one has nothing to take and the server would refuse the checkout. */}
+                    {!submitted && online && (
+                      <Button
+                        kind="tertiary"
+                        onClick={() => void handleTakeOffline()}
+                        disabled={!!offlineBusy || busy}
+                      >
+                        {offlineBusy ?? 'Take offline'}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -540,6 +574,44 @@ const ProtocolChecklistPage: FC = () => {
 
       {!loading && !notFound && !hasError && checklist && (
         <>
+          {/* A copy held on this device. Shown above everything else because while it exists it is
+              the authoritative one — the rest of this page is its local state. */}
+          {offlineRecord && (
+            <Column sm={4} md={8} lg={16}>
+              <InlineNotification
+                kind="info"
+                title="Saved on this device"
+                subtitle={
+                  rejectedFiles.length > 0
+                    ? 'Some files were refused by the server. Review them below, then check in again.'
+                    : 'You can edit this checklist without a connection. Check it in when you are back online.'
+                }
+                hideCloseButton
+                lowContrast
+              />
+              {/* Named per file rather than "3 files failed": the user has to decide about each one,
+                  and the bytes may be field evidence that cannot be re-collected. */}
+              {rejectedFiles.length > 0 && (
+                <ul className="protocol-checklist__rejected">
+                  {rejectedFiles.map((op) => (
+                    <li key={op.id}>
+                      <strong>{op.fileName ?? 'File'}</strong>
+                      {` — ${op.rejectedReason ?? 'refused'} `}
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void handleDiscardRejected(op)}
+                        disabled={!!offlineBusy}
+                      >
+                        Discard
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Column>
+          )}
+
           {(submitted || isLegacySlb || checkedOut) && (
             <Column sm={4} md={8} lg={16}>
               <InlineNotification

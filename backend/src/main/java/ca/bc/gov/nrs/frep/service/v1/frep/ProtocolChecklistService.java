@@ -832,9 +832,12 @@ public class ProtocolChecklistService {
     }
   }
 
-  public void deleteAttachment(String protocol, String checklistId, String attachmentId) {
+  public void deleteAttachment(String protocol, String checklistId, String attachmentId,
+      String deviceCheckoutGuid) {
+    // Was SLB-only; now the full three-way check, so a submitted checklist's attachments are safe and
+    // a checked-out one can only be changed by the device holding it.
+    assertChecklistEditable(checklistId, deviceCheckoutGuid);
     String resourceType = checklistRepository.resolveResourceType(checklistId);
-    assertEditable(resourceType);
     writeRepository.deleteAttachment(checklistId, resourceType, attachmentId);
     log.info("Deleted attachment :: {} from {} checklist :: {} by user :: {}", attachmentId,
         resourceType, checklistId, loggedUserHelper.getLoggedUserId());

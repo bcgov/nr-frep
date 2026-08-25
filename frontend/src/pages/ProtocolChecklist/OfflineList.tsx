@@ -14,6 +14,8 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
+import type { OfflineBioChecklist } from '@/services/offline/bioDb';
+
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -22,8 +24,6 @@ import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 import { bioRowStatus, type OfflineRowStatus } from '@/services/offline/bioOfflineStatus';
 import { classifyFromCheckoutState, type StalenessVerdict } from '@/services/offline/staleness';
 import { apiErrorMessage } from '@/utils/apiError';
-
-import type { OfflineBioChecklist } from '@/services/offline/bioDb';
 
 const PROTOCOL_LABEL = 'Stand Level Retention';
 
@@ -41,7 +41,9 @@ const BioOfflineListPage: FC = () => {
   const online = useOnlineStatus();
   const [records, setRecords] = useState<OfflineBioChecklist[]>([]);
   const [verdicts, setVerdicts] = useState<Record<string, StalenessVerdict>>({});
-  const [queueCounts, setQueueCounts] = useState<Record<string, { pending: number; rejected: number }>>({});
+  const [queueCounts, setQueueCounts] = useState<
+    Record<string, { pending: number; rejected: number }>
+  >({});
 
   const reload = async () => {
     const items = await bioOfflineRepo.listOffline();
@@ -52,7 +54,10 @@ const BioOfflineListPage: FC = () => {
           bioOfflineRepo.pendingAttachmentOps(record.checklistId),
           bioOfflineRepo.rejectedAttachmentOps(record.checklistId),
         ]);
-        return [record.checklistId, { pending: pending.length, rejected: rejected.length }] as const;
+        return [
+          record.checklistId,
+          { pending: pending.length, rejected: rejected.length },
+        ] as const;
       }),
     );
     setQueueCounts(Object.fromEntries(counts));
@@ -61,7 +66,6 @@ const BioOfflineListPage: FC = () => {
   useEffect(() => {
     void reload();
     // Loaded once on mount; every mutation below re-reads explicitly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -82,7 +86,9 @@ const BioOfflineListPage: FC = () => {
       records.map(async (record): Promise<readonly [string, StalenessVerdict]> => {
         try {
           const state = await API.protocolChecklist.getCheckoutState(
-            record.checklistId, record.deviceCheckoutGuid);
+            record.checklistId,
+            record.deviceCheckoutGuid,
+          );
           return [record.checklistId, classifyFromCheckoutState(state)];
         } catch (err) {
           const status = (err as { status?: number })?.status;
@@ -126,14 +132,16 @@ const BioOfflineListPage: FC = () => {
    * already reclaimed still removes cleanly.
    */
   const remove = async (record: OfflineBioChecklist) => {
-    const unsynced = (queueCounts[record.checklistId]?.pending ?? 0)
-      + (queueCounts[record.checklistId]?.rejected ?? 0);
+    const unsynced =
+      (queueCounts[record.checklistId]?.pending ?? 0) +
+      (queueCounts[record.checklistId]?.rejected ?? 0);
     if (
       !(await confirm({
         title: 'Remove from device?',
-        message: unsynced > 0
-          ? `This copy still has ${unsynced} file(s) that have not reached the server. Removing it deletes them permanently. Continue?`
-          : 'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        message:
+          unsynced > 0
+            ? `This copy still has ${unsynced} file(s) that have not reached the server. Removing it deletes them permanently. Continue?`
+            : 'Remove this offline copy from this device? Any unsynced local changes will be lost.',
         confirmButtonText: 'Remove',
       }))
     ) {
@@ -188,7 +196,9 @@ const BioOfflineListPage: FC = () => {
                     <TableCell>{PROTOCOL_LABEL}</TableCell>
                     <TableCell>
                       <Tag type={status.tag}>{status.label}</Tag>
-                      {status.detail ? <div className="offline-list__detail">{status.detail}</div> : null}
+                      {status.detail ? (
+                        <div className="offline-list__detail">{status.detail}</div>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Button

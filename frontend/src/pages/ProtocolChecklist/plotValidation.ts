@@ -80,7 +80,28 @@ const bearingErrors = (e: Record<string, string>, g: Getter): void => {
   leg('secondLegTransect', '2nd leg');
 };
 
-const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
+/**
+ * Plot numbers already used by *other* plots in the same stratum.
+ *
+ * Compared numerically rather than as text: `BIODIVERSITY_PLOT.PLOT_NUMBER` is `NUMBER(3)`
+ * (nr-mof-db V2.00403__BIODIVERSITY_PLOT.sql), so "01" and "1" are the same plot number to Oracle.
+ * A string comparison here would let a duplicate through to
+ * `FREP_BIODIVERSITY_PLOT.VALIDATE`, which rejects the save with
+ * `frep.web.usr.database.record.plot.number.already.exists`.
+ */
+const isTaken = (value: string, taken: readonly string[]): boolean => {
+  const wanted = Number(value);
+  return (
+    Number.isFinite(wanted) &&
+    taken.some((other) => other.trim() !== '' && Number(other) === wanted)
+  );
+};
+
+const plotNumberErrors = (
+  e: Record<string, string>,
+  g: Getter,
+  takenPlotNumbers: readonly string[],
+): void => {
   // Matches the Opening tab's Evaluator error: name the remedy, since this field is read-only and
   // "Evaluated by is required" gives no hint that "Assign it to me" is how you fill it.
   if (isBlank(g('assessorName'))) {
@@ -92,6 +113,12 @@ const plotNumberErrors = (e: Record<string, string>, g: Getter): void => {
     e.plotNumber = 'Plot # is required.';
   } else {
     put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
+    // Caught here rather than left to the proc: the number is unique per stratum, and finding that
+    // out from a failed save costs the evaluator the round-trip. Only when the number is otherwise
+    // valid — "Plot # must be a whole number" is the more useful of the two messages.
+    if (!e.plotNumber && isTaken(g('plotNumber'), takenPlotNumbers)) {
+      e.plotNumber = `Plot ${g('plotNumber')} already exists in this stratum. Use a different number.`;
+    }
   }
   if (byteLength(g('plotComment')) > PLOT_TEXT_LIMITS.plotComment) {
     e.plotComment = `Comments — ${overLimitError(g('plotComment'), PLOT_TEXT_LIMITS.plotComment)}`;
@@ -143,7 +170,12 @@ const measurementMethodErrors = (
  * including clear-cut (CC). (Earlier the app mirrored the legacy CC-except-NAR block; per requirement
  * that gate was removed here and in FREP_BIODIVERSITY_STRATUM.VALIDATE.)
  */
-export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<string, string> => {
+export const plotHeaderErrors = (
+  plot: BioPlot,
+  stratumType: string,
+  /** Plot numbers held by the other plots in this stratum — see {@link isTaken}. */
+  takenPlotNumbers: readonly string[] = [],
+): Record<string, string> => {
   const e: Record<string, string> = {};
   // Read a plot field as a trimmed string; non-string values (e.g. the table arrays) read as ''.
   const g: Getter = (k) => {
@@ -152,7 +184,7 @@ export const plotHeaderErrors = (plot: BioPlot, stratumType: string): Record<str
   };
   utmErrors(e, g, g('utmSignal') === 'N');
   bearingErrors(e, g);
-  plotNumberErrors(e, g);
+  plotNumberErrors(e, g, takenPlotNumbers);
   measurementMethodErrors(e, g, stratumType);
   return e;
 };

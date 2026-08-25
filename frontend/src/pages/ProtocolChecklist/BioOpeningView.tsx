@@ -32,6 +32,7 @@ import {
 } from '@/pages/ProtocolChecklist/openingValidation';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength } from '@/utils/textLimits';
 
@@ -271,6 +272,7 @@ const BioOpeningView: FC<Props> = ({
   const text = (key: keyof BiodiversityOpening, label: string): ReactNode =>
     editing ? (
       <TextInput
+        autoComplete="off"
         key={key}
         id={`bio-${key}`}
         labelText={label}
@@ -292,6 +294,7 @@ const BioOpeningView: FC<Props> = ({
     const limit = OPENING_TEXT_LIMITS[key];
     const field = (
       <TextArea
+        autoComplete="off"
         key={key}
         id={`bio-${key}`}
         labelText={requiredLabel(label, required)}
@@ -324,6 +327,7 @@ const BioOpeningView: FC<Props> = ({
         onChange={(dates: Date[]) => set(key, dates[0] ? dates[0].toISOString().slice(0, 10) : '')}
       >
         <DatePickerInput
+          {...NO_AUTOFILL}
           id={`bio-${key}`}
           labelText={requiredLabel(label, required)}
           placeholder="YYYY-MM-DD"
@@ -375,6 +379,7 @@ const BioOpeningView: FC<Props> = ({
   ): ReactNode =>
     editing ? (
       <Select
+        autoComplete="off"
         key={key}
         id={`bio-${key}`}
         labelText={requiredLabel(label, required)}

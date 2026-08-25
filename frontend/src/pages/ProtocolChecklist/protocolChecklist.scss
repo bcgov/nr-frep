@@ -377,7 +377,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 1rem 2rem;
-  align-items: end;
+  // Top-aligned so every label in a row starts on the same line. This was `end`, which lines the
+  // cells up by their bottoms — indistinguishable while Carbon's inline errors were absolutely
+  // positioned and every cell was therefore the same height. Once the errors took real height (see
+  // the .cds--form-requirement rule below), one field's two-line error pushed its neighbours' labels
+  // and inputs down the page.
+  align-items: start;
   margin-bottom: 1rem;
 }
 
@@ -639,4 +644,25 @@
   li {
     margin-block-end: 0.125rem;
   }
+}
+
+/* The secondary actions on a fieldset (BEC catalogue search, copy from the previous stratum) sit on
+   one row so neither reads as the group's primary action. */
+.rip-form__group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Carbon positions the inline error (`.cds--form-requirement`) absolutely, so it contributes no
+   height and the field's row never grows to hold it. A one-line message is absorbed by the grid's
+   row gap and looks fine; a message that wraps — "Plot 1 already exists in this stratum. Use a
+   different number." in a narrow column — prints its second line straight over the next row's
+   label.
+
+   Putting it back in flow makes the field, and therefore the grid row, grow to fit whatever the
+   message needs. Rows only grow while an error is showing. */
+.rip-form__grid .#{vars.$bcgov-prefix}--form-requirement {
+  position: static;
 }

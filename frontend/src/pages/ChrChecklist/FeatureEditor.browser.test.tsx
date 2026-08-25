@@ -6,6 +6,8 @@ import FeatureEditor from './FeatureEditor';
 
 import type { Feature } from '@/types/chrChecklist';
 
+import { autofillableCount, stillAutofillable } from '@/testing/autofill';
+
 const baseFeature = (over: Partial<Feature> = {}): Feature =>
   ({ featureLabel: 'Feature 1', ...over }) as Feature;
 
@@ -192,5 +194,27 @@ describe('FeatureEditor — Composite of (sibling-label dropdown)', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Composite feature' })).toBeTruthy();
     expect(screen.queryByText('Add another feature to create a composite.')).toBeNull();
+  });
+});
+
+describe('FeatureEditor — browser autofill', () => {
+  /**
+   * Every feature field keeps a stable `id`, so without this the browser treats the next feature's
+   * field as one it has seen before and offers what was typed on the last one — and accepting a
+   * single suggestion cascades into the rest of the group it infers. These are per-feature
+   * evaluation values, so a repeat of the previous feature is always wrong.
+   *
+   * Covers the shared builders in fields.tsx, which is where every CHR field is rendered.
+   */
+  it('leaves no field for the browser to autofill from the previous feature', async () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    // Open every section, so collapsed fields are checked too.
+    for (const button of screen.getAllByRole('button')) {
+      if (button.getAttribute('aria-expanded') === 'false') await userEvent.click(button);
+    }
+
+    expect(autofillableCount()).toBeGreaterThan(5);
+    expect(stillAutofillable()).toEqual([]);
   });
 });

@@ -154,3 +154,39 @@ describe('cwdRowErrors', () => {
     ).toEqual({});
   });
 });
+
+describe('plotHeaderErrors — plot number uniqueness', () => {
+  it('reports a number another plot in the stratum already holds', () => {
+    // Otherwise FREP_BIODIVERSITY_PLOT.VALIDATE rejects the save with
+    // frep.web.usr.database.record.plot.number.already.exists, costing a round-trip.
+    const e = plotHeaderErrors(validHeader({ plotNumber: '2' }), 'DO', ['1', '2', '3']);
+    expect(e.plotNumber).toBe('Plot 2 already exists in this stratum. Use a different number.');
+  });
+
+  it('accepts a number no other plot holds', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['1', '2', '3'])).toEqual({});
+  });
+
+  it('compares numerically, the way the column does', () => {
+    // PLOT_NUMBER is NUMBER(3), so "01" and "1" are the same plot number to Oracle. Comparing as
+    // text would pass this straight through to the proc.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '01' }), 'DO', ['1']).plotNumber).toMatch(
+      /already exists/,
+    );
+  });
+
+  it('says the number is invalid before it says it is taken', () => {
+    // "Plot # must be a whole number" is the more useful of the two messages.
+    const e = plotHeaderErrors(validHeader({ plotNumber: 'abc' }), 'DO', ['abc']);
+    expect(e.plotNumber).not.toMatch(/already exists/);
+  });
+
+  it('ignores blanks among the taken numbers', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['', ' '])).toEqual({});
+  });
+
+  it('reports nothing when no other plots are passed', () => {
+    // The default keeps every existing caller behaving exactly as before.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO')).toEqual({});
+  });
+});

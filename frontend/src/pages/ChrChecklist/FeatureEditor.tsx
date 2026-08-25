@@ -3,7 +3,6 @@ import {
   Accordion,
   AccordionItem,
   Button,
-  Checkbox,
   RadioButton,
   RadioButtonGroup,
   Table,
@@ -220,20 +219,7 @@ const FeatureEditor: FC<{
   // flag because it owns the Save button. Also gates the section error badges and the auto-open
   // effect below, so an untouched feature opens fully collapsed and quiet.
   showErrors?: boolean;
-  siblingLabels?: string[];
-  // Other features eligible to be this feature's composite anchor (excludes siblings already in a
-  // composite). Defaults to all siblings when not supplied.
-  compositeCandidateLabels?: string[];
-  onToggleAssociated?: (siblingLabel: string) => void;
-}> = ({
-  feature,
-  onPatch,
-  readOnly,
-  showErrors = false,
-  siblingLabels = [],
-  compositeCandidateLabels = siblingLabels,
-  onToggleAssociated,
-}) => {
+}> = ({ feature, onPatch, readOnly, showErrors = false }) => {
   const ind = (field: string): Indicator | undefined => feature[field] as Indicator | undefined;
   const str = (field: string): string | undefined => feature[field] as string | undefined;
   const on = (field: string): boolean => ind(field) === 'true';
@@ -316,6 +302,8 @@ const FeatureEditor: FC<{
     );
   };
 
+  // Set from the feature table, never from here — the Effectiveness tab still asks a
+  // composite-only question.
   const isComposite = on('compositeFeatureInd');
 
   // --- Planning: column visibility + the "Other management strategies" dynamic list ---
@@ -441,46 +429,6 @@ const FeatureEditor: FC<{
                 onChange={(v) => onPatch({ featureDescription: v })}
               />
             </div>
-            {/* Inline help explaining the composite-feature concept, shown just above the composite
-                control (mirrors the "How is the MRVA rating determined?" disclosure). */}
-            <details className="chr-feature-help">
-              <summary>What is a composite feature?</summary>
-              <p>
-                A composite feature is a group of two or more associated cultural heritage features
-                that are assessed together because they are culturally, spatially, or functionally
-                connected.
-              </p>
-              <p>
-                <strong>Example:</strong> A cultural trail and an adjacent berry harvesting area
-                that occur together and are protected within the same area could be assessed as one
-                composite feature rather than as two separate features.
-              </p>
-            </details>
-            {/* A composite groups this feature with another; you can only create one when another
-                feature exists to group with (mirrors the legacy "Composite of" dropdown of sibling
-                features). Still shown for an already-composite feature so a stale one can be undone
-                even after its siblings were removed. */}
-            {siblingLabels.length === 0 && !isComposite ? (
-              <p className="rip-form__hint">Add another feature to create a composite.</p>
-            ) : (
-              <>
-                {chk('compositeFeatureInd', 'Composite feature')}
-                {isComposite && (
-                  <CodeSelect
-                    id="feat-composite"
-                    labelText="Composite of (feature label)"
-                    value={str('compositeFeature')}
-                    options={compositeCandidateLabels.map((label) => ({
-                      code: label,
-                      label: `Feature ${label}`,
-                    }))}
-                    includeBlank
-                    disabled={readOnly}
-                    onChange={(v) => onPatch({ compositeFeature: v })}
-                  />
-                )}
-              </>
-            )}
             {chk('chrRegisteredSite', 'Registered archaeological site')}
             {on('chrRegisteredSite') && (
               <TextField
@@ -496,21 +444,6 @@ const FeatureEditor: FC<{
               />
             )}
           </div>
-          {siblingLabels.length > 0 && (
-            <fieldset className="rip-form__group">
-              <legend>Associated features</legend>
-              {siblingLabels.map((label) => (
-                <Checkbox
-                  key={`assoc-${label}`}
-                  id={`feat-assoc-${label}`}
-                  labelText={`Feature ${label}`}
-                  checked={(feature.associatedFeatures ?? []).includes(label)}
-                  disabled={readOnly}
-                  onChange={() => onToggleAssociated?.(label)}
-                />
-              ))}
-            </fieldset>
-          )}
         </fieldset>
 
         <fieldset className="rip-form__group">
@@ -713,7 +646,7 @@ const FeatureEditor: FC<{
                       {showFN && <TableHeader>FN</TableHeader>}
                       <TableHeader>AIA/SAP</TableHeader>
                       {showSP && <TableHeader>Site plan</TableHeader>}
-                      <TableHeader>Actions</TableHeader>
+                      <TableHeader>Action</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -760,16 +693,16 @@ const FeatureEditor: FC<{
                             />
                           </TableCell>
                         )}
-                        <TableCell>
+                        <TableCell className="table-actions">
                           {!readOnly && (
                             <Button
                               kind="danger--ghost"
                               size="sm"
                               renderIcon={TrashCan}
-                              iconDescription="Delete"
-                              hasIconOnly
                               onClick={() => removeStrategy(i)}
-                            />
+                            >
+                              Delete
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>

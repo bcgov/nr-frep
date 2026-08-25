@@ -207,7 +207,7 @@ const Contacts: FC<{
                 <TableHeader>Name</TableHeader>
                 <TableHeader>Role</TableHeader>
                 <TableHeader>Organization</TableHeader>
-                <TableHeader>Actions</TableHeader>
+                <TableHeader>Action</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -216,26 +216,26 @@ const Contacts: FC<{
                   <TableCell>{fullName(contact) || '—'}</TableCell>
                   <TableCell>{roleLabel(contact.roleCode) || '—'}</TableCell>
                   <TableCell>{contact.organization || '—'}</TableCell>
-                  <TableCell>
+                  <TableCell className="table-actions">
                     <Button
                       kind="ghost"
                       size="sm"
                       renderIcon={Edit}
-                      iconDescription="Edit"
-                      hasIconOnly
                       disabled={busy}
                       onClick={() => openEdit(index)}
-                    />
+                    >
+                      Edit
+                    </Button>
                     {!readOnly && (
                       <Button
                         kind="danger--ghost"
                         size="sm"
                         renderIcon={TrashCan}
-                        iconDescription="Delete"
-                        hasIconOnly
                         disabled={busy}
                         onClick={() => void remove(index)}
-                      />
+                      >
+                        Delete
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>

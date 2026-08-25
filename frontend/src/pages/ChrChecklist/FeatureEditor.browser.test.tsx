@@ -11,18 +11,6 @@ import { autofillableCount, stillAutofillable } from '@/testing/autofill';
 const baseFeature = (over: Partial<Feature> = {}): Feature =>
   ({ featureLabel: 'Feature 1', ...over }) as Feature;
 
-describe('FeatureEditor — composite-feature help', () => {
-  it('renders the "What is a composite feature?" disclosure with its explanation', () => {
-    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
-
-    expect(screen.getByText('What is a composite feature?')).toBeTruthy();
-    expect(
-      screen.getByText(/group of two or more associated cultural heritage features/i),
-    ).toBeTruthy();
-    expect(screen.getByText(/cultural trail and an adjacent berry harvesting area/i)).toBeTruthy();
-  });
-});
-
 describe('FeatureEditor — Age single-select', () => {
   it('disables the other ages once one is selected', async () => {
     const onPatch = vi.fn();
@@ -120,80 +108,21 @@ describe('FeatureEditor — Summary section stays open', () => {
   });
 });
 
-describe('FeatureEditor — Composite of (sibling-label dropdown)', () => {
-  it('renders "Composite of" as a dropdown of the sibling features for a composite feature', () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={['2', '3']}
-      />,
-    );
-
-    const select = screen.getByLabelText('Composite of (feature label)');
-    expect(select.tagName).toBe('SELECT'); // dropdown, not a free-text input
-    expect(screen.getByRole('option', { name: 'Feature 2' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Feature 3' })).toBeTruthy();
-  });
-
-  it('excludes siblings already in a composite (uses compositeCandidateLabels)', () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={['2', '3']}
-        compositeCandidateLabels={['2']} // Feature 3 is already in a composite → not a candidate
-      />,
-    );
-
-    expect(screen.getByRole('option', { name: 'Feature 2' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Feature 3' })).toBeNull();
-  });
-
-  it('selecting a sibling patches compositeFeature with the raw label', async () => {
-    const onPatch = vi.fn();
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={onPatch}
-        readOnly={false}
-        siblingLabels={['2', '3']}
-      />,
-    );
-
-    await userEvent.selectOptions(screen.getByLabelText('Composite of (feature label)'), '3');
-    expect(onPatch).toHaveBeenCalledWith({ compositeFeature: '3' });
-  });
-
-  it('hides the composite control and shows a hint when there are no other features', () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature()}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={[]}
-      />,
-    );
+describe('FeatureEditor — composites', () => {
+  it('does not offer to make a feature a composite', () => {
+    // Composites are built, edited and dissolved from the feature table. Leaving a second way in
+    // here would let a feature be flagged a composite with no members, which fails submit against
+    // itself ("must include at least two features").
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
 
     expect(screen.queryByRole('checkbox', { name: 'Composite feature' })).toBeNull();
-    expect(screen.getByText('Add another feature to create a composite.')).toBeTruthy();
+    expect(screen.queryByLabelText('Composite of (feature label)')).toBeNull();
   });
 
-  it('keeps the composite checkbox for an already-composite feature even with no siblings', () => {
-    // A stale composite (its siblings were deleted) must still be editable so it can be undone.
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={[]}
-      />,
-    );
-
-    expect(screen.getByRole('checkbox', { name: 'Composite feature' })).toBeTruthy();
-    expect(screen.queryByText('Add another feature to create a composite.')).toBeNull();
+  it('does not explain composites here — that belongs where they are created', () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+    expect(screen.queryByText('What is a composite feature?')).toBeNull();
+    expect(screen.queryByText(/culturally, spatially, or functionally connected/)).toBeNull();
   });
 });
 

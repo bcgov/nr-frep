@@ -244,12 +244,12 @@ describe('BioStratumView', () => {
     // Table columns + a row with the strata-type label resolved from the code.
     expect(await screen.findByRole('columnheader', { name: 'Stratum number' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Stratum type' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Action' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'A1' })).toBeTruthy();
     // Type label resolves from the code once getStrataTypes loads.
     expect(await screen.findByRole('cell', { name: 'CC - Clear cut' })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: /Delete/ }));
     expect(api.deleteBioStratum).toHaveBeenCalledWith('S1', '2');
   });
 
@@ -260,7 +260,7 @@ describe('BioStratumView', () => {
 
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add stratum' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete/ })).toBeNull();
   });
 });
 

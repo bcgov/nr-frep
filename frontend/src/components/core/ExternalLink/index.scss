@@ -1,0 +1,12 @@
+/* Inline-flex so the icon sits on the text's baseline row and never wraps away from the label it
+   belongs to — a launch glyph alone on the next line reads as a separate control. */
+.external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.external-link__icon {
+  flex: 0 0 auto;
+  fill: currentColor;
+}

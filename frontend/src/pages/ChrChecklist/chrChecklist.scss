@@ -315,25 +315,6 @@
   grid-column: 1 / -1;
 }
 
-// Inline disclosure help inside a feature form grid (e.g. "What is a composite feature?"). Spans the
-// full grid width so it reads as its own row, and mirrors the .chr-mrva-help disclosure styling.
-.chr-feature-help {
-  grid-column: 1 / -1;
-  margin: 0.25rem 0;
-  font-size: 0.75rem;
-
-  summary {
-    cursor: pointer;
-    color: var(--cds-link-primary, #0f62fe);
-  }
-
-  p {
-    margin: 0.5rem 0;
-    max-width: 48rem;
-    color: var(--cds-text-secondary, #525252);
-  }
-}
-
 // Feature accordion section header with an error badge: name + warning icon + count, shown when a
 // section holds a live validation error (the section also stays expanded — see FeatureEditor).
 .feature-accordion__title {
@@ -353,4 +334,222 @@
    (0,2,0). */
 .default-grid .chr-checklist__title-row h1 {
   width: auto;
+}
+
+.chr-features__associate-intro {
+  margin-block-end: 1rem;
+  color: var(--cds-text-primary);
+}
+
+/* The dialog's table sits under two paragraphs of explanation, so it needs the gap. */
+.chr-features__associate-table {
+  margin-block-start: 1.5rem;
+}
+
+/* Carbon's modal footer stretches its buttons to fill the width (`flex: 0 1 50%`) and makes them
+   64px tall with top-aligned text — a full-bleed black/blue bar. The design wants ordinary buttons
+   sitting at the end of the row, so this restores normal sizing. Scoped to this dialog rather than
+   applied globally: the confirm dialog and the others still use Carbon's default treatment. */
+.chr-features__associate-modal,
+.chr-features__composite-modal,
+.chr-features__ungroup-modal {
+  .cds--modal-footer {
+    justify-content: flex-end;
+    gap: 1rem;
+    // More below than above, so the buttons are not flush against the dialog's bottom edge.
+    // `block-size: auto` is what makes that padding count: Carbon pins the footer to a fixed height,
+    // which the taller buttons then fill exactly, leaving nothing visible below them.
+    block-size: auto;
+    padding: 1rem 1rem 1.5rem;
+
+    .cds--btn {
+      flex: 0 0 auto;
+      align-items: center;
+      // The footer is also a `cds--btn-set`, which sets `inline-size: 100%` on every child — so
+      // without this each button is as wide as the whole footer and `flex-end` pushes the first one
+      // off the left edge, outside the dialog. Sizing to content is the actual fix; `flex` alone
+      // never was.
+      inline-size: auto;
+      max-inline-size: none;
+      block-size: auto;
+      min-inline-size: 8rem;
+      padding-block: 0.75rem;
+    }
+  }
+
+  /* Carbon has no prop for the secondary button's kind, and its `secondary` is a dark grey fill.
+     The design's Cancel is the tertiary treatment — outlined, brand-coloured — so it is restyled
+     here rather than by hand-rolling the footer and losing the dialog's submit/close wiring. */
+  .cds--btn--secondary {
+    border: 1px solid var(--cds-button-tertiary);
+    background-color: transparent;
+    color: var(--cds-button-tertiary);
+
+    &:hover,
+    &:active {
+      background-color: var(--cds-button-tertiary-hover);
+      color: var(--cds-text-on-color);
+    }
+  }
+}
+
+.chr-features__saved {
+  max-inline-size: 100%;
+  margin-block-end: 1rem;
+}
+
+/* --- Create composite dialog ------------------------------------------------------------ */
+
+.chr-features__composite-intro {
+  margin-block-end: 0.5rem;
+  color: var(--cds-text-primary);
+}
+
+.chr-features__composite-required,
+.chr-features__composite-hint {
+  margin-block-end: 1rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* The asterisk is the only thing marking a field required, so it has to read as the error colour
+   rather than inheriting the muted text around it. */
+.chr-features__composite-required span,
+.chr-features__composite-subhead span {
+  color: var(--cds-text-error);
+}
+
+.chr-features__composite-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+}
+
+.chr-features__composite-subhead {
+  margin-block-end: 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* The feature picker is boxed so the count and the "Add a new feature" action read as belonging to
+   the table below them rather than to the dialog at large. */
+.chr-features__composite-panel {
+  border: 1px solid var(--cds-border-subtle);
+}
+
+.chr-features__composite-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  background-color: var(--cds-layer);
+}
+
+.chr-features__composite-table {
+  width: 100%;
+}
+
+/* --- Composites in the feature table ---------------------------------------------------- */
+
+/* The composite is the record being assessed, so it carries the weight; its members read as
+   belonging to it. */
+.chr-features__composite-row td:first-child {
+  font-weight: 600;
+}
+
+.chr-features__composite-caption td {
+  padding-block: 0.5rem;
+  font-weight: 600;
+}
+
+/* Indented rather than separately bordered: the indent is what ties a member to the composite
+   above it once the caption row has scrolled past. */
+.chr-features__member-row td:first-child {
+  padding-inline-start: 2.5rem;
+}
+
+/* A composite and its members are one record, so they share one unbroken white background. The
+   app-wide zebra stripe (styles/_overrides.scss) would otherwise cut the group into bands and make
+   a member look like just another row.
+
+   The extra `.bio-strata` scope is deliberate: the stripe is
+   `.cds--data-table tbody tr:not(.cds--parent-row):not(.cds--data-table--selected):nth-child(even)`,
+   which is four classes deep. Matching it exactly would leave the winner down to file order. */
+.bio-strata
+  .cds--data-table
+  tbody
+  tr:is(
+    .chr-features__composite-row,
+    .chr-features__composite-caption,
+    .chr-features__member-row
+  ):not(.cds--data-table--selected) {
+  background-color: var(--cds-layer-02);
+
+  &:hover {
+    background-color: var(--cds-layer-hover);
+  }
+}
+
+/* Members carry a single action, which sits at the end of the column under the composite's own
+   actions rather than orphaned at the start of an otherwise empty cell. */
+.chr-features__member-row .table-actions {
+  text-align: end;
+}
+
+/* Shrink the Action column to its widest button group. Left to `table-layout: auto` it takes a
+   share of the spare width, so a right-aligned Associate lands at the table's edge rather than
+   under the composite's own Ungroup — which is what the design lines it up with. The freed width
+   goes to Description and Associated features, which have real content to show. */
+.chr-features__table td:last-child,
+.chr-features__table th:last-child {
+  inline-size: 1%;
+  white-space: nowrap;
+}
+
+/* --- Ungroup confirmation --------------------------------------------------------------- */
+
+.chr-features__ungroup-modal {
+  /* The stranded features are the reason the dialog asks anything at all, so they are called out
+     rather than left as another line of body copy.
+
+     Scoped to the dialog, not left as a bare class: Carbon styles `.cds--modal-content p`, which is
+     a class plus an element (0,1,1) and beats a lone class (0,1,0) — unscoped, the bold silently
+     lost to the modal's default body text. */
+  .chr-features__ungroup-stranded {
+    margin-block-end: 1rem;
+    color: var(--cds-text-primary);
+    font-weight: 600;
+  }
+
+  .cds--radio-button-group {
+    margin-block-start: 0.5rem;
+  }
+
+  /* Carbon sizes a fieldset legend as a 12px form label. Here it is a question put to the reader in
+     the middle of body copy, not a field label, so it is set to the same size as the paragraphs
+     around it — the design has one size throughout the dialog. */
+  legend.cds--label {
+    margin-block-end: 0.25rem;
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    line-height: 1.43;
+  }
+}
+
+/* The asterisk is the only thing marking an answer required, so it has to read as the error colour
+   rather than inheriting the label's. */
+.chr-features__ungroup-modal .chr-features__required-mark {
+  color: var(--cds-text-error);
+}
+
+/* The picker panel has no form control to hang Carbon's invalidText on, so its requirement line
+   turns into the error instead of a second line repeating it.
+
+   Scoped to the dialog rather than left as a bare class: Carbon styles `.cds--modal-content p`,
+   which is a class + element (0,1,1) and outspecifies a lone class (0,1,0) — the error colour was
+   silently losing to the modal's default body text. */
+.chr-features__composite-modal .chr-features__composite-required--error {
+  color: var(--cds-text-error);
+  font-weight: 600;
 }

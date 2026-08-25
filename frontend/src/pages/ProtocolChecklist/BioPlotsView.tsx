@@ -743,7 +743,11 @@ const BioPlotsView: FC<Props> = ({
                 {c.label}
               </th>
             ))}
-            {!readOnly && <th aria-label="Actions" />}
+            {!readOnly && (
+              <th scope="col" className="table-actions">
+                Action
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -762,11 +766,11 @@ const BioPlotsView: FC<Props> = ({
                   <Button
                     kind="danger--tertiary"
                     size="sm"
-                    hasIconOnly
                     renderIcon={TrashCan}
-                    iconDescription="Remove row"
                     onClick={() => removeRowAt(index)}
-                  />
+                  >
+                    Remove row
+                  </Button>
                 </td>
               )}
             </tr>
@@ -848,7 +852,7 @@ const BioPlotsView: FC<Props> = ({
                   <TableRow>
                     <TableHeader>Plot number</TableHeader>
                     <TableHeader>Assessor name</TableHeader>
-                    <TableHeader>Actions</TableHeader>
+                    <TableHeader>Action</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -856,26 +860,26 @@ const BioPlotsView: FC<Props> = ({
                     <TableRow key={row.plotId}>
                       <TableCell>{row.plotNumber || row.plotId}</TableCell>
                       <TableCell>{row.assessorDisplayName || row.assessorName}</TableCell>
-                      <TableCell>
+                      <TableCell className="table-actions">
                         <Button
                           kind="ghost"
                           size="sm"
                           renderIcon={Edit}
-                          iconDescription="Edit"
-                          hasIconOnly
                           disabled={busy}
                           onClick={() => void select(row.plotId ?? '')}
-                        />
+                        >
+                          Edit
+                        </Button>
                         {!readOnly && (
                           <Button
                             kind="danger--ghost"
                             size="sm"
                             renderIcon={TrashCan}
-                            iconDescription="Delete"
-                            hasIconOnly
                             disabled={busy}
                             onClick={() => void deleteRow(row)}
-                          />
+                          >
+                            Delete
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>

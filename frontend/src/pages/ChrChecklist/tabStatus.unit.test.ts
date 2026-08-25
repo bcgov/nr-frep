@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { addComposite } from './composites';
 import {
   attachmentsOutstanding,
   blockSummaryOutstanding,
@@ -236,5 +237,60 @@ describe('chrTabStatuses', () => {
     expect(statuses.notes).toBe('complete');
     expect(outstanding.contacts).toEqual([]);
     expect(outstanding.notes).toEqual([]);
+  });
+});
+
+describe('composites in the outstanding list', () => {
+  it('names a composite by the number the feature table shows', () => {
+    const features = addComposite(
+      [
+        { featureLabel: '1', compositeFeatureInd: 'false' },
+        { featureLabel: '2', compositeFeatureInd: 'false' },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    const items = featuresOutstanding({ features } as CheckList);
+
+    // The anchor took label 3, and that is what the table shows — no invented name to chase.
+    expect(items.some((i) => i.startsWith('Feature 3 — '))).toBe(true);
+  });
+
+  it('does not ask a member for the assessment its composite carries', () => {
+    const features = addComposite(
+      [
+        {
+          featureLabel: '1',
+          compositeFeatureInd: 'false',
+          featureDescriptionCode: 'CMT',
+          featureInfoSourceCode: 'AIA',
+        },
+        {
+          featureLabel: '2',
+          compositeFeatureInd: 'false',
+          featureDescriptionCode: 'CT',
+          featureInfoSourceCode: 'SP',
+        },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    const items = featuresOutstanding({ features } as CheckList);
+
+    expect(items.some((i) => i.startsWith('Feature 1 — '))).toBe(false);
+    expect(items.some((i) => i.startsWith('Feature 2 — '))).toBe(false);
+  });
+
+  it('does not report a well-formed composite as short of members', () => {
+    const features = addComposite(
+      [
+        { featureLabel: '1', compositeFeatureInd: 'false' },
+        { featureLabel: '2', compositeFeatureInd: 'false' },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    expect(
+      featuresOutstanding({ features } as CheckList).some((i) =>
+        i.includes('at least two features'),
+      ),
+    ).toBe(false);
   });
 });

@@ -22,6 +22,8 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
+
 import type { RejectionReason } from '@/types/configuration';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
@@ -281,13 +283,7 @@ const HeaderRow: FC<{
   <div className="site-detail__field">
     <span className="site-detail__field-label">{label}</span>
     <span className="site-detail__field-value">
-      {value && href ? (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {value}
-        </a>
-      ) : (
-        (value ?? '—')
-      )}
+      {value && href ? <ExternalLink href={href}>{value}</ExternalLink> : (value ?? '—')}
     </span>
   </div>
 );

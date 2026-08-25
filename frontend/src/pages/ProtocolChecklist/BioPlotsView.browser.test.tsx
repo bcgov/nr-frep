@@ -179,10 +179,10 @@ describe('BioPlotsView', () => {
 
     expect(await screen.findByRole('columnheader', { name: 'Plot number' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Assessor name' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Action' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'jdoe' })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: /Delete/ }));
     expect(api.deleteBioPlot).toHaveBeenCalledWith('P1', '2');
   });
 
@@ -242,7 +242,7 @@ describe('BioPlotsView', () => {
 
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add plot' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete/ })).toBeNull();
   });
 });
 

@@ -215,7 +215,7 @@ describe('ChrChecklistPage', () => {
     renderPage();
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
 
     expect(await screen.findByText("This checklist isn't ready to submit")).toBeTruthy();
     // The pre-flight answers from what the page already holds, so the server is never asked.
@@ -271,7 +271,7 @@ describe('ChrChecklistPage', () => {
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     expect(screen.getByText('Offline copy')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
     // Upload (check in: RDO → ACT) and drop the local draft happen before the submit call.
     // waitFor: the submit chain is async.
     await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
@@ -409,7 +409,7 @@ describe('ChrChecklistPage', () => {
     renderPage();
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
 
     await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
     expect(savedLocally().pictures).toHaveLength(1);
@@ -439,7 +439,7 @@ describe('ChrChecklistPage', () => {
     expect(await screen.findByText('Offline copy out of date')).toBeTruthy();
     expect(screen.getByText(/Last updated by jsmith on Oct 1, 2012/)).toBeTruthy();
     // A stale copy can't be uploaded, so Submit and Sync changes are hidden…
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
     expect(screen.queryByText('Sync changes')).toBeNull();
     // …leaving only the Remove from device escape hatch.
     expect(screen.getByText('Remove from device')).toBeTruthy();

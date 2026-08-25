@@ -493,7 +493,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
               <th scope="col">File</th>
               <th scope="col">Description</th>
               <th scope="col">Type</th>
-              <th scope="col">Actions</th>
+              <th scope="col">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -530,26 +530,26 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                   <td>{row.fileName || '—'}</td>
                   <td>{row.description || '—'}</td>
                   <td>{row.mimeTypeCode || '—'}</td>
-                  <td className="rip-grid__choice">
+                  <td className="table-actions">
                     <Button
                       kind="ghost"
                       size="sm"
-                      hasIconOnly
                       renderIcon={Download}
-                      iconDescription="Download"
                       disabled={busy}
                       onClick={() => void handleDownload(row)}
-                    />
+                    >
+                      Download
+                    </Button>
                     {canManage && (
                       <Button
                         kind="danger--ghost"
                         size="sm"
-                        hasIconOnly
                         renderIcon={TrashCan}
-                        iconDescription="Delete"
                         disabled={busy}
                         onClick={() => void handleDelete(row)}
-                      />
+                      >
+                        Delete
+                      </Button>
                     )}
                   </td>
                 </tr>

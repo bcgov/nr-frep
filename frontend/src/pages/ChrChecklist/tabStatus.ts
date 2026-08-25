@@ -61,7 +61,7 @@ const anyYes = (f: Feature, keys: readonly string[]): boolean =>
   keys.some((key) => isYes(field(f, key)));
 
 // Feature-description "type of feature(s)" group — at least one must be selected.
-const FEATURE_TYPE_FIELDS = [
+export const FEATURE_TYPE_FIELDS = [
   'culturaltraildesignated',
   'culturaltrailundesignated',
   'burialSite',
@@ -81,7 +81,7 @@ const FEATURE_TYPE_FIELDS = [
   'other',
 ] as const;
 
-const AGE_FIELDS = ['pre1846', 'post1846', 'ageUnknown', 'historicalUse'] as const;
+export const AGE_FIELDS = ['pre1846', 'post1846', 'ageUnknown', 'historicalUse'] as const;
 
 const Q2_CAUSE_FIELDS = [
   'harvestingQ2Wheredamagehasoccurredwhatisthemostlikelycause',
@@ -146,7 +146,12 @@ const SP_STRATEGY_FIELDS = FN_STRATEGY_FIELDS.map((key) =>
   key.replace(/FN$/, 'SP'),
 ) as readonly string[];
 
-/** How a feature is named in the banner: its label if it has one, else its position. */
+/**
+ * How a feature is named in the banner: its label if it has one, else its position.
+ *
+ * A composite needs no special case — it is a feature with a real label, and the table shows that
+ * same number, so "Feature 4" points at the row the reader can see.
+ */
 const featureName = (feature: Feature, index: number): string =>
   `Feature ${feature.featureLabel?.trim() || index + 1}`;
 

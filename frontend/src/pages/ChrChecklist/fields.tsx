@@ -188,6 +188,9 @@ export const CodeSelect: FC<{
   includeBlank?: boolean;
   invalid?: boolean;
   invalidText?: string;
+  /** Keep the label for screen readers but take it out of the layout — for a select in a table
+   *  cell, where the column header already names the field. */
+  hideLabel?: boolean;
 }> = ({
   id,
   labelText,
@@ -198,10 +201,12 @@ export const CodeSelect: FC<{
   includeBlank,
   invalid,
   invalidText,
+  hideLabel,
 }) => (
   <Select
     id={id}
     labelText={labelText}
+    hideLabel={hideLabel}
     value={value ?? ''}
     disabled={disabled}
     invalid={invalid}

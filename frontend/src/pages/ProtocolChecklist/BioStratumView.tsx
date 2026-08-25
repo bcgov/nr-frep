@@ -1089,7 +1089,7 @@ const BioStratumView: FC<Props> = ({
                   <TableRow>
                     <TableHeader>Stratum number</TableHeader>
                     <TableHeader>Stratum type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
+                    <TableHeader>Action</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1097,26 +1097,26 @@ const BioStratumView: FC<Props> = ({
                     <TableRow key={row.stratumId}>
                       <TableCell>{row.stratumNumber || row.stratumId}</TableCell>
                       <TableCell>{strataTypeLabel(row.strataTypeCode)}</TableCell>
-                      <TableCell>
+                      <TableCell className="table-actions">
                         <Button
                           kind="ghost"
                           size="sm"
                           renderIcon={Edit}
-                          iconDescription="Edit"
-                          hasIconOnly
                           disabled={busy}
                           onClick={() => void select(row.stratumId ?? '')}
-                        />
+                        >
+                          Edit
+                        </Button>
                         {!readOnly && (
                           <Button
                             kind="danger--ghost"
                             size="sm"
                             renderIcon={TrashCan}
-                            iconDescription="Delete"
-                            hasIconOnly
                             disabled={busy}
                             onClick={() => void deleteRow(row)}
-                          />
+                          >
+                            Delete
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>

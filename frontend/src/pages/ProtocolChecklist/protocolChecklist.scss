@@ -56,13 +56,16 @@
 .protocol-checklist__title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   width: 100%;
 
+  /* Pushed to the end by margin rather than `justify-content: space-between`: the row now holds a
+     third child (the status tag), and space-between would strand it midway between the heading and
+     the actions instead of keeping it with the heading it describes. */
   .protocol-checklist__actions {
     flex: 0 0 auto;
+    margin-inline-start: auto;
   }
 }
 
@@ -71,7 +74,9 @@
    `:is()` takes the specificity of its most specific argument, making that rule (0,2,0). */
 .default-grid .protocol-checklist__title-row h1 {
   width: auto;
-  flex: 1 1 auto;
+  /* Sized to its text, not grown: `flex: 1 1 auto` made the heading swallow the free space and
+     carried the status tag along to the far right, away from the title. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -638,5 +643,21 @@
 
   li {
     margin-block-end: 0.125rem;
+  }
+}
+
+/* Shared "Action" column treatment. Every table that offers row actions labels them — Edit, Delete,
+   Download — rather than relying on a bare glyph, so three ghost buttons in a row stay tellable
+   apart and the destructive one says so. Defined here because ChrChecklist imports this stylesheet
+   too, keeping one definition for both protocols. */
+.table-actions {
+  // Left, so the buttons line up under the "Action" header. The attachments cell previously used
+  // `rip-grid__choice`, which centres — correct for its checkbox cells, wrong for a labelled action
+  // that has to sit under its own column heading.
+  text-align: start;
+  white-space: nowrap;
+
+  .#{vars.$bcgov-prefix}--btn {
+    padding-inline: 0.5rem;
   }
 }

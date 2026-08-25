@@ -16,6 +16,8 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
+
 import BioOpeningView from './BioOpeningView';
 import BioPlotsView from './BioPlotsView';
 import BioStratumView from './BioStratumView';
@@ -178,9 +180,7 @@ const ProtocolChecklistPage: FC = () => {
       <div key="Opening ID">
         <span className="protocol-checklist__label">Opening ID</span>
         <span>
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {value}
-          </a>
+          <ExternalLink href={href}>{value}</ExternalLink>
         </span>
       </div>
     );
@@ -303,15 +303,22 @@ const ProtocolChecklistPage: FC = () => {
             <h1>
               {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
             </h1>
+            {/* Status reads beside the heading rather than as a cell of the tombstone grid: it
+                governs what the whole page allows, so it belongs where the eye lands first. */}
+            {checklist && (
+              <Tag type={statusTagType(checklist.statusCode)} size="sm">
+                {statusLabel(checklist.statusCode, checklist.statusLabel)}
+              </Tag>
+            )}
             {!loading && !notFound && !hasError && checklist && editable && (
               <div className="protocol-checklist__actions">
                 {submitted ? (
                   <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
+                    Unsubmit checklist
                   </Button>
                 ) : (
                   <Button onClick={() => void handleSubmit()} disabled={busy}>
-                    Submit
+                    Submit checklist
                   </Button>
                 )}
               </div>
@@ -382,12 +389,6 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}
                 {headerCell('Cut block', headerExtras['Cut block'])}
-                <div>
-                  <span className="protocol-checklist__label">Status</span>
-                  <Tag type={statusTagType(checklist.statusCode)} size="sm">
-                    {statusLabel(checklist.statusCode, checklist.statusLabel)}
-                  </Tag>
-                </div>
                 {headerCell('Evaluator', checklist.evaluatorName, true)}
                 {headerCell('Evaluation date', formatShortDate(checklist.evaluationDate), true)}
                 {headerCell('Sample #', headerExtras['Sample #'])}

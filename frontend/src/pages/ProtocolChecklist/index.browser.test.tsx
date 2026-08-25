@@ -148,7 +148,7 @@ describe('ProtocolChecklistPage submit', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
     // Submit now pre-flights every tab first, so the call happens a couple of awaits later.
     await vi.waitFor(() => expect(api.submit).toHaveBeenCalledWith('bio', '9001'));
@@ -162,7 +162,7 @@ describe('ProtocolChecklistPage submit', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
     // frep.submit.common.teamlead is mapped to friendly text (title "Opening info" + detail).
     expect(await screen.findByText('an evaluator is required.')).toBeTruthy();
@@ -177,7 +177,7 @@ describe('ProtocolChecklistPage submit', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
     // One page-level banner naming the tabs at fault — the items themselves stay on those tabs.
     await screen.findByText("This checklist isn't ready to submit");
@@ -215,7 +215,7 @@ describe('ProtocolChecklistPage submit', () => {
         'This is a historical Stand Level Retention (SLB) record and is read-only.',
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Unsubmit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unsubmit checklist' })).toBeNull();
   });
 });

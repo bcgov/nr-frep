@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
 import BlockSummary from '@/pages/ChrChecklist/BlockSummary';
 import Contacts from '@/pages/ChrChecklist/Contacts';
 import FeatureList from '@/pages/ChrChecklist/FeatureList';
@@ -785,11 +786,6 @@ const ChrChecklistPage: FC = () => {
     }
   };
 
-  const mrva = useMemo(
-    () => calculateMrvaRatingCode(checkList?.rating, checkList?.features),
-    [checkList?.rating, checkList?.features],
-  );
-
   if (loading) {
     return (
       <Grid fullWidth className="default-grid">
@@ -852,9 +848,7 @@ const ChrChecklistPage: FC = () => {
       <div key="Opening ID">
         <span className="protocol-checklist__label">Opening ID</span>
         <span>
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {value}
-          </a>
+          <ExternalLink href={href}>{value}</ExternalLink>
         </span>
       </div>
     );
@@ -905,8 +899,13 @@ const ChrChecklistPage: FC = () => {
           </button>
           <div className="chr-checklist__title-row">
             <h1>{`${checkList.checklistID}-Cultural Heritage`}</h1>
-            {/* The status itself lives in the tombstone grid below; an offline copy is your editable
-                local copy (always RDO under the hood), so flag that here instead. */}
+            {/* Status reads beside the heading rather than as the last cell of the tombstone grid:
+                it governs what the whole page allows, so it belongs where the eye lands first. */}
+            <Tag type={statusTagType(checkList.status)} size="sm">
+              {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
+            </Tag>
+            {/* An offline copy is your editable local copy (always RDO under the hood), so it is
+                flagged separately from the server-side status above. */}
             {isOfflineCopy && (
               <Tag type="teal" size="sm">
                 Offline copy
@@ -917,9 +916,6 @@ const ChrChecklistPage: FC = () => {
                 No network connection
               </Tag>
             )}
-            <Tag type="cool-gray" size="sm">
-              MRVA {mrva || '—'}
-            </Tag>
             {/* Every checklist-level action lives here, at the top of the page rather than below
                 the tombstone tile. Most are mutually exclusive — Sync changes and Remove from
                 device only ever appear on an offline copy, Reactivate only on a checked-out one —
@@ -927,7 +923,7 @@ const ChrChecklistPage: FC = () => {
             <div className="chr-checklist__title-actions">
               {!readOnly && online && !offlineOutOfDate && (
                 <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
-                  Submit
+                  Submit checklist
                 </Button>
               )}
               {!isOfflineCopy && online && !readOnly && (
@@ -942,7 +938,7 @@ const ChrChecklistPage: FC = () => {
                 canEditThisChr &&
                 checkList.status === CHR_STATUS.SUBMITTED && (
                   <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
+                    Unsubmit checklist
                   </Button>
                 )}
               {/* Admin-only recovery for a checklist stuck "Checked out" on another device. */}
@@ -1030,12 +1026,6 @@ const ChrChecklistPage: FC = () => {
             {headerCell('Cutting permit', checkList.cuttingPermit)}
             {headerCell('Cut block', checkList.block)}
             {headerCell('Year of harvest', checkList.yearOfHarvest)}
-            <div>
-              <span className="protocol-checklist__label">Status</span>
-              <Tag type={statusTagType(checkList.status)} size="sm">
-                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
-              </Tag>
-            </div>
             {headerCell('Evaluator', checkList.assessedByName || checkList.assessedBy)}
             {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
           </div>

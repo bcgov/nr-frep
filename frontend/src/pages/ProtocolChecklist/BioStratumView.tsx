@@ -32,6 +32,7 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
@@ -332,6 +333,20 @@ const CONSTRAINT_ECO_ROWS: {
     eKind: 'check',
   },
 ];
+
+/**
+ * The fields that make up a BEC combination, in form order. One list so the catalogue search and
+ * the copy-from-previous action can never drift apart.
+ */
+const BEC_KEYS = [
+  'bgcZoneCode',
+  'bgcSubzoneCode',
+  'bgcVariant',
+  'bgcPhase',
+  'becSiteSeriesCd',
+  'siteSeriesPhaseCd',
+  'seral',
+] as const;
 
 // BEC search modal criteria fields.
 const BEC_CRITERIA: FieldDef[] = [
@@ -789,22 +804,53 @@ const BioStratumView: FC<Props> = ({
       setBecBusy(false);
     }
   };
-  const applyBec = (r: BecRow) => {
+  /**
+   * Set the whole BEC combination from a source that carries the same field names — a catalogue row
+   * or another stratum.
+   *
+   * All seven together, never a subset: `FREP_VALIDATE_BGC` validates the combination, so a
+   * half-copied BEC is a validation failure rather than a head start.
+   */
+  const applyBecFrom = (source: Partial<Record<(typeof BEC_KEYS)[number], string | undefined>>) =>
     setCurrent((prev) =>
-      prev
-        ? {
-            ...prev,
-            bgcZoneCode: r.bgcZoneCode ?? '',
-            bgcSubzoneCode: r.bgcSubzoneCode ?? '',
-            bgcVariant: r.bgcVariant ?? '',
-            bgcPhase: r.bgcPhase ?? '',
-            becSiteSeriesCd: r.becSiteSeriesCd ?? '',
-            siteSeriesPhaseCd: r.siteSeriesPhaseCd ?? '',
-            seral: r.seral ?? '',
-          }
-        : prev,
+      prev ? { ...prev, ...Object.fromEntries(BEC_KEYS.map((k) => [k, source[k] ?? ''])) } : prev,
     );
+
+  const applyBec = (r: BecRow) => {
+    applyBecFrom(r);
     setBecOpen(false);
+  };
+
+  /**
+   * The stratum this one follows: the row before it in the list, or the last saved row when adding
+   * a new stratum. Undefined when there is nothing to copy from.
+   */
+  const previousRow = ((): BioStratumRow | undefined => {
+    if (rows.length === 0) return undefined;
+    if (!current?.stratumId) return rows[rows.length - 1];
+    const at = rows.findIndex((r) => r.stratumId === current.stratumId);
+    return at > 0 ? rows[at - 1] : undefined;
+  })();
+
+  /**
+   * Copy the previous stratum's BEC, and only its BEC.
+   *
+   * Strata within one block usually share a BEC zone, which is why the browser's own autofill was
+   * being used for it — but that fills whatever else it infers belongs to the same group, and the
+   * rest of a stratum is per-stratum evaluation data. Naming the seven fields makes it impossible
+   * for this to touch anything else. See utils/autofill.ts for the other half of that fix.
+   */
+  const copyBecFromPrevious = async () => {
+    const stratumId = previousRow?.stratumId;
+    if (!stratumId) return;
+    setBusy(true);
+    try {
+      applyBecFrom(await API.protocolChecklist.getBioStratum(stratumId));
+    } catch (err) {
+      reportError("We couldn't copy the BEC from the previous stratum", err);
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Mirror Frep211ValidationManager + the proc's validate(). Returns a field-keyed map (one message
@@ -917,6 +963,7 @@ const BioStratumView: FC<Props> = ({
       }
       return (
         <Select
+          autoComplete="off"
           key={key}
           id={`stratum-${key}`}
           labelText={lbl}
@@ -948,6 +995,7 @@ const BioStratumView: FC<Props> = ({
           }
         >
           <DatePickerInput
+            {...NO_AUTOFILL}
             id={`stratum-${key}`}
             labelText={lbl}
             placeholder="YYYY-MM-DD"
@@ -970,6 +1018,12 @@ const BioStratumView: FC<Props> = ({
     const inputProps = {
       key,
       id: `stratum-${key}`,
+      // Off across the checklist forms: every field keeps a stable id across strata / plots /
+      // features, so the browser treats the next one as the same field and offers what was typed
+      // last time. Accepting one suggestion then cascades into the rest of the group — these are
+      // per-record evaluation values, never a repeat of the previous record.
+      autoComplete: 'off',
+
       labelText: lbl,
       value: get(key),
       // Undefined for anything not in the map — notably patchGeneralComment, which uses the byte
@@ -1011,6 +1065,7 @@ const BioStratumView: FC<Props> = ({
       get(key) || '—'
     ) : (
       <TextInput
+        autoComplete="off"
         id={`stratum-${key}`}
         labelText={LABELS[key] ?? key}
         hideLabel
@@ -1178,9 +1233,22 @@ const BioStratumView: FC<Props> = ({
                   {field('seral', 'Seral')}
                 </div>
                 {!readOnly && (
-                  <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
-                    Search BEC catalogue…
-                  </Button>
+                  <div className="rip-form__group-actions">
+                    <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
+                      Search BEC
+                    </Button>
+                    {/* Only offered when there is a stratum to copy from. */}
+                    {previousRow && (
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void copyBecFromPrevious()}
+                      >
+                        {`Same BEC as stratum ${previousRow.stratumNumber ?? ''}`.trim()}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </fieldset>
 
@@ -1278,6 +1346,7 @@ const BioStratumView: FC<Props> = ({
                           get('otherConstraint') || '—'
                         ) : (
                           <TextInput
+                            autoComplete="off"
                             id="stratum-otherConstraint"
                             labelText="Other constraint"
                             hideLabel
@@ -1308,6 +1377,7 @@ const BioStratumView: FC<Props> = ({
                           get('otherEcoAnchorDesc') || '—'
                         ) : (
                           <TextInput
+                            autoComplete="off"
                             id="stratum-otherEcoAnchorDesc"
                             labelText="Other eco anchor"
                             hideLabel
@@ -1347,6 +1417,7 @@ const BioStratumView: FC<Props> = ({
         <div className="rip-form__grid">
           {BEC_CRITERIA.map((c) => (
             <TextInput
+              autoComplete="off"
               key={c.key}
               id={`bec-${c.key}`}
               labelText={c.label}

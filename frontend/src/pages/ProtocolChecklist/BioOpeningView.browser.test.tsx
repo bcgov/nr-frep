@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import BioOpeningView from './BioOpeningView';
 
 import API from '@/services/APIs';
+import { autofillableCount, stillAutofillable } from '@/testing/autofill';
 
 vi.mock('@/services/APIs', () => ({
   default: {
@@ -310,5 +311,17 @@ describe('BioOpeningView', () => {
 
     expect(await screen.findByText('Opening identification')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+  });
+});
+
+describe('BioOpeningView — browser autofill', () => {
+  /** See the note in BioStratumView's equivalent: stable ids make every checklist field a
+   *  candidate for the browser to refill from the last record it saw. */
+  it('leaves no field for the browser to autofill', async () => {
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(autofillableCount()).toBeGreaterThan(2);
+    expect(stillAutofillable()).toEqual([]);
   });
 });

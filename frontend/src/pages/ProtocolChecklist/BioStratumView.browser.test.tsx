@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import BioStratumView from './BioStratumView';
 
 import API from '@/services/APIs';
+import { autofillableCount, stillAutofillable } from '@/testing/autofill';
 
 vi.mock('@/services/APIs', () => ({
   default: {
@@ -260,5 +261,105 @@ describe('BioStratumView', () => {
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add stratum' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Delete/ })).toBeNull();
+  });
+});
+
+describe('BioStratumView — browser autofill', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  /**
+   * Every stratum field keeps a stable `id` (`stratum-<key>`), so without this the browser treats
+   * the second stratum's field as the same one it saw on the first and offers what was typed there
+   * — and accepting a single suggestion cascades into the rest of the group it infers. The values
+   * are per-stratum evaluation data, so a repeat of the previous stratum is always wrong.
+   */
+  it('leaves no field for the browser to autofill from the previous stratum', async () => {
+    api.listBioStrata.mockResolvedValue([]);
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} outstanding={[]} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
+    await screen.findByLabelText(/Stratum type/i);
+
+    expect(autofillableCount()).toBeGreaterThan(5);
+    expect(stillAutofillable()).toEqual([]);
+  });
+});
+
+describe('BioStratumView — same BEC as previous stratum', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  /** The previous stratum, carrying a full BEC plus per-stratum values that must not travel. */
+  const previous = {
+    stratumId: 'S1',
+    stratumNumber: '1',
+    bgcZoneCode: 'CWH',
+    bgcSubzoneCode: 'vm',
+    bgcVariant: '1',
+    bgcPhase: 'a',
+    becSiteSeriesCd: '01',
+    siteSeriesPhaseCd: 'b',
+    seral: 'Y',
+    // Everything below is this stratum's own evaluation data.
+    estimatedSize: '42.5',
+    harvestAreaCode: 'CC',
+    patchWindthrowPct: '15',
+    otherWindthrowTreatmentDesc: 'Blowdown along the east edge',
+    revisionCount: '1',
+  };
+
+  /**
+   * A stratum form field's value, by key.
+   *
+   * Read by id, not by label: the BEC search modal's criteria inputs carry the same labels and stay
+   * in the DOM while the dialog is closed, so a label query can silently assert on the wrong field.
+   */
+  const stratumField = (key: string): string =>
+    (document.getElementById(`stratum-${key}`) as HTMLInputElement | null)?.value ?? '(missing)';
+
+  const openNewStratum = async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.getBioStratum.mockResolvedValue(previous);
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} outstanding={[]} />);
+    await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
+    await screen.findByLabelText(/Stratum type/i);
+  };
+
+  it('copies every field of the BEC combination', async () => {
+    await openNewStratum();
+    await userEvent.click(screen.getByRole('button', { name: /Same BEC as stratum 1/ }));
+
+    // All seven together: FREP_VALIDATE_BGC validates the combination, so a partial copy is worse
+    // than none.
+    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('CWH'));
+    expect(stratumField('bgcSubzoneCode')).toBe('vm');
+    expect(stratumField('bgcVariant')).toBe('1');
+    expect(stratumField('bgcPhase')).toBe('a');
+    expect(stratumField('becSiteSeriesCd')).toBe('01');
+    expect(stratumField('siteSeriesPhaseCd')).toBe('b');
+    expect(stratumField('seral')).toBe('Y');
+  });
+
+  it('copies nothing but the BEC', async () => {
+    // The whole point of the button: the browser's autofill was dragging these across too, and they
+    // are per-stratum evaluation values.
+    await openNewStratum();
+    await userEvent.click(screen.getByRole('button', { name: /Same BEC as stratum 1/ }));
+    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('CWH'));
+
+    // The exact fields the user watched autofill drag across.
+    expect(stratumField('estimatedSize')).toBe('');
+    expect(stratumField('harvestAreaCode')).toBe('');
+    expect(stratumField('patchWindthrowPct')).toBe('');
+    expect(screen.queryByDisplayValue('42.5')).toBeNull();
+    expect(screen.queryByDisplayValue('Blowdown along the east edge')).toBeNull();
+  });
+
+  it('offers nothing to copy when this is the first stratum', async () => {
+    api.listBioStrata.mockResolvedValue([]);
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} outstanding={[]} />);
+    await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
+    await screen.findByLabelText(/Stratum type/i);
+
+    expect(screen.queryByRole('button', { name: /Same BEC as stratum/ })).toBeNull();
   });
 });

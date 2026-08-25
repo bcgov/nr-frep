@@ -408,6 +408,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
           <div className="attach-card__body">
             <div className="frep-field attach-card__desc">
               <TextArea
+                autoComplete="off"
                 id="attach-description"
                 labelText={requiredLabel('Description', true)}
                 rows={3}

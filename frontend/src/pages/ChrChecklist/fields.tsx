@@ -14,6 +14,7 @@ import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
 import type { FC, ReactNode } from 'react';
 
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
@@ -57,6 +58,7 @@ export const TextField: FC<{
   maxLength,
 }) => (
   <TextInput
+    autoComplete="off"
     id={id}
     labelText={labelText}
     value={value ?? ''}
@@ -112,6 +114,7 @@ export const DateField: FC<{
     }}
   >
     <DatePickerInput
+      {...NO_AUTOFILL}
       id={id}
       labelText={labelText}
       placeholder={placeholder}
@@ -156,6 +159,7 @@ export const TextAreaField: FC<{
   const over = limit !== undefined && used > limit;
   const field = (
     <TextArea
+      autoComplete="off"
       id={id}
       labelText={labelText}
       value={value ?? ''}
@@ -204,6 +208,7 @@ export const CodeSelect: FC<{
   hideLabel,
 }) => (
   <Select
+    autoComplete="off"
     id={id}
     labelText={labelText}
     hideLabel={hideLabel}

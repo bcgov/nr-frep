@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import BioPlotsView from './BioPlotsView';
 
 import API from '@/services/APIs';
+import { autofillableCount, stillAutofillable } from '@/testing/autofill';
 
 vi.mock('@/services/APIs', () => ({
   default: {
@@ -242,5 +243,73 @@ describe('BioPlotsView', () => {
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add plot' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Delete/ })).toBeNull();
+  });
+});
+
+describe('BioPlotsView — browser autofill', () => {
+  /** See the note in BioStratumView's equivalent: stable ids make every checklist field a
+   *  candidate for the browser to refill from the last record it saw. */
+  it('leaves no field for the browser to autofill from the previous plot', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await screen.findByLabelText('Bearing 1st leg', { exact: false });
+
+    expect(autofillableCount()).toBeGreaterThan(5);
+    expect(stillAutofillable()).toEqual([]);
+  });
+});
+
+describe('BioPlotsView — duplicate plot number', () => {
+  /**
+   * Caught before the save. Left to the database this comes back from
+   * FREP_BIODIVERSITY_PLOT.VALIDATE as frep.web.usr.database.record.plot.number.already.exists.
+   */
+  it('reports a number another plot in the stratum already holds, and does not save', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([{ plotId: 'P1', plotNumber: '1', stratumId: 'S1' }]);
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await userEvent.type(await screen.findByLabelText('Plot #', { exact: false }), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText('Plot 1 already exists in this stratum. Use a different number.'),
+    ).toBeTruthy();
+    expect(api.saveBioPlot).not.toHaveBeenCalled();
+  });
+
+  it('does not report an existing plot as a clash with itself', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([{ plotId: 'P1', plotNumber: '1', stratumId: 'S1' }]);
+    api.getBioPlot.mockResolvedValue({
+      plotId: 'P1',
+      stratumId: 'S1',
+      plotNumber: '1',
+      assessorName: 'IDIR\\TESTER',
+      utmSignal: 'N',
+      firstLegTransect: '120',
+      secondLegTransect: '240',
+      treeIndicator: 'N',
+      cwdTransectIndicator: 'N',
+      standTable: [],
+      cwdTable: [],
+    });
+
+    api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '2' });
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: /Edit/ }));
+    await screen.findByLabelText('Plot #', { exact: false });
+
+    // Saving is what reveals the errors, so the save has to be attempted for this to mean anything.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // Same exclusion the proc makes: the plot being saved is not compared against itself.
+    expect(screen.queryByText(/already exists in this stratum/)).toBeNull();
+    expect(api.saveBioPlot).toHaveBeenCalled();
   });
 });

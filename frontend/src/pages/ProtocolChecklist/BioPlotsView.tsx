@@ -366,8 +366,15 @@ const BioPlotsView: FC<Props> = ({
   // Errors are computed live but only *displayed* once a save has been attempted (see the same gate
   // in BioOpeningView). `headerErrors` still drives the save guard; the three lookups below are what
   // the UI renders, so every call site is gated at once — header fields and sub-table cells alike.
+  // The numbers the other plots in this stratum already hold. The plot being edited is excluded by
+  // id, so re-saving it without changing its number is not reported as a clash with itself — the
+  // same exclusion FREP_BIODIVERSITY_PLOT.VALIDATE makes.
+  const takenPlotNumbers = rows
+    .filter((row) => !current?.plotId || row.plotId !== current.plotId)
+    .map((row) => row.plotNumber ?? '');
+
   const headerErrors: Record<string, string> =
-    current && !readOnly ? plotHeaderErrors(current, stratumType) : {};
+    current && !readOnly ? plotHeaderErrors(current, stratumType, takenPlotNumbers) : {};
   const plotFieldError = (key: string): string => (showErrors ? (headerErrors[key] ?? '') : '');
   const standError = (index: number, colKey: string): string =>
     showErrors
@@ -533,6 +540,12 @@ const BioPlotsView: FC<Props> = ({
     }
     const inputProps = {
       id: `plot-${key}`,
+      // Off across the checklist forms: every field keeps a stable id across strata / plots /
+      // features, so the browser treats the next one as the same field and offers what was typed
+      // last time. Accepting one suggestion then cascades into the rest of the group — these are
+      // per-record evaluation values, never a repeat of the previous record.
+      autoComplete: 'off',
+
       labelText: requiredLabel(label, required),
       value: get(key),
       maxLength,
@@ -570,6 +583,7 @@ const BioPlotsView: FC<Props> = ({
       roField(label, options.find((o) => o.code === get(key))?.description ?? get(key))
     ) : (
       <Select
+        autoComplete="off"
         id={`plot-${key}`}
         labelText={requiredLabel(label, required)}
         value={get(key)}
@@ -666,6 +680,7 @@ const BioPlotsView: FC<Props> = ({
       }
       return withError(
         <Select
+          autoComplete="off"
           id={`${caption}-${index}-${col.key}`}
           labelText={col.label}
           hideLabel
@@ -693,6 +708,7 @@ const BioPlotsView: FC<Props> = ({
     if (readOnly) return value || '—';
     return withError(
       <TextInput
+        autoComplete="off"
         id={`${caption}-${index}-${col.key}`}
         labelText={col.label}
         hideLabel
@@ -797,6 +813,7 @@ const BioPlotsView: FC<Props> = ({
               completed on the right. */}
           <div className="bio-plot__header">
             <Select
+              autoComplete="off"
               id="plots-stratum"
               labelText="Stratum"
               value={stratumId}

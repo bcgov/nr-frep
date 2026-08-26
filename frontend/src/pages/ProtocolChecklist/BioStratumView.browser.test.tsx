@@ -333,10 +333,14 @@ describe('BioStratumView — same BEC as another stratum', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
     await screen.findByLabelText(/Stratum type/i);
     await userEvent.click(screen.getByRole('button', { name: /Same BEC as another stratum/ }));
-    // Scoped by heading, not by role: the BEC catalogue dialog is also in the DOM while closed, so
-    // `getByRole('dialog')` matches both.
-    const heading = await screen.findByText('Same BEC as another stratum');
-    return heading.closest('.cds--modal') as HTMLElement;
+    // Scoped by class, not by role or text: the BEC catalogue dialog is also in the DOM while
+    // closed (so `getByRole('dialog')` matches both), and the button that opens this one carries
+    // the same words as its heading (so a text query matches both of those).
+    return (await waitFor(() => {
+      const modal = document.querySelector('.bec-copy-modal');
+      if (!modal) throw new Error('copy dialog not open');
+      return modal as HTMLElement;
+    })) as HTMLElement;
   };
 
   it('offers every other stratum, not just the one before this', async () => {

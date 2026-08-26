@@ -1425,7 +1425,9 @@ const BioStratumView: FC<Props> = ({
       </div>
 
       <Modal
-        className="bec-modal"
+        // Its own class as well as the shared one: the button that opens this dialog carries the
+        // same words as its heading, so the dialog needs an identifier that is not its text.
+        className="bec-modal bec-copy-modal"
         open={becCopyOpen}
         modalHeading="Same BEC as another stratum"
         passiveModal

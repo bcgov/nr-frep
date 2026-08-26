@@ -609,11 +609,11 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         PLOT_LIST_SELECT,
         (rs, rowNum) -> new BioPlotRow(
-            rs.getString("biodiversity_plot_id"),
-            rs.getString("plot_number"),
+            numberString(rs, "biodiversity_plot_id"),
+            numberString(rs, "plot_number"),
             rs.getString("assessor_name"),
             null, // display name resolved via FAM in the service
-            rs.getString("revision_count")),
+            numberString(rs, "revision_count")),
         stratumId
     );
   }
@@ -622,17 +622,17 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioStandRow> stand = jdbcTemplate.query(
         STAND_SELECT,
         (rs, rowNum) -> new BioStandRow(
-            rs.getString("biodiversity_stand_id"),
-            rs.getString("biodiversity_plot_id"),
+            numberString(rs, "biodiversity_stand_id"),
+            numberString(rs, "biodiversity_plot_id"),
             rs.getString("frep_tree_species_code"),
             rs.getString("species_desc"),
-            rs.getString("tree_number"),
-            rs.getString("dbh"),
-            rs.getString("height"),
+            numberString(rs, "tree_number"),
+            numberString(rs, "dbh"),
+            numberString(rs, "height"),
             rs.getString("comments"),
             rs.getString("wildlife_tree_decay_class_code"),
             rs.getString("decay_desc"),
-            rs.getString("revision_count"),
+            numberString(rs, "revision_count"),
             rs.getString("entry_userid"),
             rs.getString("update_userid")),
         plotId
@@ -640,17 +640,17 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioCwdRow> cwd = jdbcTemplate.query(
         CWD_SELECT,
         (rs, rowNum) -> new BioCwdRow(
-            rs.getString("coarse_woody_debris_detail_id"),
-            rs.getString("biodiversity_plot_id"),
+            numberString(rs, "coarse_woody_debris_detail_id"),
+            numberString(rs, "biodiversity_plot_id"),
             rs.getString("frep_tree_species_code"),
             rs.getString("species_desc"),
-            rs.getString("log_number"),
-            rs.getString("log_diameter"),
-            rs.getString("log_length"),
+            numberString(rs, "log_number"),
+            numberString(rs, "log_diameter"),
+            numberString(rs, "log_length"),
             rs.getString("cwd_decay_class_code"),
             rs.getString("decay_desc"),
             rs.getString("comments"),
-            rs.getString("revision_count"),
+            numberString(rs, "revision_count"),
             rs.getString("entry_userid"),
             rs.getString("update_userid")),
         plotId
@@ -661,22 +661,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       }
       return new BioPlot(
           plotId,
-          rs.getString("stratum_id"),
-          rs.getString("plot_number"),
+          numberString(rs, "stratum_id"),
+          numberString(rs, "plot_number"),
           rs.getString("assessor_name"),
           rs.getString("utm_signal"),
-          rs.getString("utm_zone"),
-          rs.getString("utm_easting"),
-          rs.getString("utm_northing"),
+          numberString(rs, "utm_zone"),
+          numberString(rs, "utm_easting"),
+          numberString(rs, "utm_northing"),
           rs.getString("tree_indicator"),
-          rs.getString("basal_area_factor"),
-          rs.getString("fixed_area_radius"),
-          rs.getString("full_count_area"),
+          numberString(rs, "basal_area_factor"),
+          numberString(rs, "fixed_area_radius"),
+          numberString(rs, "full_count_area"),
           rs.getString("cwd_transect_indicator"),
-          rs.getString("first_leg_transect"),
-          rs.getString("second_leg_transect"),
+          numberString(rs, "first_leg_transect"),
+          numberString(rs, "second_leg_transect"),
           rs.getString("plot_comment"),
-          rs.getString("revision_count"),
+          numberString(rs, "revision_count"),
           stand,
           cwd,
           null // display name resolved via FAM in the service

@@ -119,12 +119,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           }
           return new BiodiversityOpening(
               checklistId,
-              rs.getString("frep_resource_value_id"),
+              numberString(rs, "frep_resource_value_id"),
               rs.getString("frep_checklist_status_code"),
-              rs.getString("frep_wtp_override"),
+              numberString(rs, "frep_wtp_override"),
               rs.getString("location_description"),
-              rs.getString("patch_reserves_on_block"),
-              rs.getString("patch_reserves_sampled"),
+              numberString(rs, "patch_reserves_on_block"),
+              numberString(rs, "patch_reserves_sampled"),
               rs.getString("innovtv_practice_answer_code"),
               rs.getString("innovative_practices_comment"),
               rs.getString("invasive_plant_answer_code"),
@@ -132,11 +132,11 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
               rs.getString("frep_site_evaluation_code"),
               rs.getString("evaluator_opinion_comment"),
               rs.getString("evaluation_date"),
-              rs.getString("revision_count"),
+              numberString(rs, "revision_count"),
               null, null, null,
               rs.getString("team_lead_userid"),
               null, // teamLeadName — resolved via FAM in the service
-              rs.getString("team_lead_revision_count")
+              numberString(rs, "team_lead_revision_count")
           );
         },
         checklistId
@@ -167,8 +167,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
             + " ON frv.frep_selected_site_id = fss.frep_selected_site_id"
             + " WHERE frv.frep_resource_value_id = ?",
         (rs, n) -> opening.withResultsRefs(
-            rs.getString("opening_gross_area"),
-            rs.getString("nar_area"),
+            numberString(rs, "opening_gross_area"),
+            numberString(rs, "nar_area"),
             rs.getString("harvest_date")),
         resourceValueId);
     return refs.isEmpty() ? opening : refs.get(0);
@@ -286,13 +286,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         STRATUM_LIST_SELECT,
         (rs, rowNum) -> new BioStratumRow(
-            rs.getString("stratum_id"),
+            numberString(rs, "stratum_id"),
             rs.getString("stratum_number"),
             rs.getString("biodiversity_strata_type_code"),
             rs.getString("summary_date"),
-            rs.getString("stratum_plot_count"),
-            rs.getString("stratum_size"),
-            rs.getString("revision_count")),
+            numberString(rs, "stratum_plot_count"),
+            numberString(rs, "stratum_size"),
+            numberString(rs, "revision_count")),
         checklistId
     );
   }
@@ -301,7 +301,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioWindthrowTreatment> treatments = jdbcTemplate.query(
         WINDTHROW_SELECT,
         (rs, rowNum) -> new BioWindthrowTreatment(
-            rs.getString("windthrow_treatment_id"),
+            numberString(rs, "windthrow_treatment_id"),
             rs.getString("windthrow_treatment_code"),
             rs.getString("check_ind")),
         stratumId
@@ -312,52 +312,52 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       }
       return new BioStratum(
           stratumId,
-          rs.getString("biodiversity_checklist_id"),
+          numberString(rs, "biodiversity_checklist_id"),
           rs.getString("biodiversity_strata_type_code"),
           rs.getString("stratum_number"),
           rs.getString("summary_date"),
           rs.getString("stratum_summary_assessor_name"),
-          rs.getString("stratum_plot_count"),
-          rs.getString("stratum_size"),
+          numberString(rs, "stratum_plot_count"),
+          numberString(rs, "stratum_size"),
           rs.getString("stratum_consistent_map_ind"),
-          rs.getString("stratum_estimated_size"),
+          numberString(rs, "stratum_estimated_size"),
           rs.getString("patch_location_code"),
-          rs.getString("patch_estimated_oldst_tree_age"),
+          numberString(rs, "patch_estimated_oldst_tree_age"),
           rs.getString("patch_general_comment"),
-          rs.getString("patch_windthrow_pct"),
+          numberString(rs, "patch_windthrow_pct"),
           rs.getString("constraint_indicator"),
-          rs.getString("wetland_pct"),
+          numberString(rs, "wetland_pct"),
           rs.getString("harvest_area_code"),
-          rs.getString("riparian_management_zone_pct"),
-          rs.getString("riparian_reserve_zone_pct"),
-          rs.getString("rock_outcrop_pct"),
-          rs.getString("non_commercial_brush_pct"),
-          rs.getString("non_merch_timber_pct"),
-          rs.getString("sensitive_soil_pct"),
-          rs.getString("ung_hoof_animal_wintering_pct"),
-          rs.getString("wildlife_habitat_area_pct"),
-          rs.getString("old_growth_management_area_pct"),
-          rs.getString("visuals_pct"),
-          rs.getString("cultural_heritage_feature_pct"),
-          rs.getString("recreation_feature_pct"),
+          numberString(rs, "riparian_management_zone_pct"),
+          numberString(rs, "riparian_reserve_zone_pct"),
+          numberString(rs, "rock_outcrop_pct"),
+          numberString(rs, "non_commercial_brush_pct"),
+          numberString(rs, "non_merch_timber_pct"),
+          numberString(rs, "sensitive_soil_pct"),
+          numberString(rs, "ung_hoof_animal_wintering_pct"),
+          numberString(rs, "wildlife_habitat_area_pct"),
+          numberString(rs, "old_growth_management_area_pct"),
+          numberString(rs, "visuals_pct"),
+          numberString(rs, "cultural_heritage_feature_pct"),
+          numberString(rs, "recreation_feature_pct"),
           rs.getString("other_constraint"),
-          rs.getString("other_constraint_pct"),
+          numberString(rs, "other_constraint_pct"),
           rs.getString("eco_indicator"),
-          rs.getString("bear_den_cnt"),
-          rs.getString("hibernaculum_cnt"),
-          rs.getString("vet_tree_cnt"),
-          rs.getString("mineral_lick_cnt"),
-          rs.getString("large_stick_nest_cnt"),
-          rs.getString("cavity_nest_cnt"),
-          rs.getString("large_hallow_tree_cnt"),
-          rs.getString("large_witches_broom_cnt"),
+          numberString(rs, "bear_den_cnt"),
+          numberString(rs, "hibernaculum_cnt"),
+          numberString(rs, "vet_tree_cnt"),
+          numberString(rs, "mineral_lick_cnt"),
+          numberString(rs, "large_stick_nest_cnt"),
+          numberString(rs, "cavity_nest_cnt"),
+          numberString(rs, "large_hallow_tree_cnt"),
+          numberString(rs, "large_witches_broom_cnt"),
           rs.getString("karst_feature_ind"),
           rs.getString("largest_tree_ind"),
           rs.getString("cwd_heavy_concentration_ind"),
           rs.getString("active_wildlife_trails_ind"),
           rs.getString("active_wlt_cwd_feeding_ind"),
           rs.getString("uncommon_tree_species_ind"),
-          rs.getString("other_eco_anchor_cnt"),
+          numberString(rs, "other_eco_anchor_cnt"),
           rs.getString("other_eco_anchor_desc"),
           rs.getString("bgc_zone_code"),
           rs.getString("bgc_subzone_code"),
@@ -368,8 +368,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           rs.getString("seral"),
           rs.getString("windthrow_distribution_code"),
           rs.getString("other_windthrow_treatment"),
-          rs.getString("calc_constrained_total"),
-          rs.getString("revision_count"),
+          numberString(rs, "calc_constrained_total"),
+          numberString(rs, "revision_count"),
           treatments
       );
     }, stratumId);
@@ -972,7 +972,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         BIO_ATTACHMENTS_PAGE,
         (rs, n) -> new AttachmentRow(
-            trimNumericId(rs.getString("chklst_attach_id")), rs.getString("file_name"),
+            trimNumericId(numberString(rs, "chklst_attach_id")), rs.getString("file_name"),
             rs.getString("description"), rs.getString("mime_type_code"), null),
         Long.valueOf(checklistId), (long) page * size, size);
   }
@@ -1060,8 +1060,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         sql,
         (rs, n) -> new BioAttachmentRef(
-            trimNumericId(rs.getString("chklst_attach_id")),
-            trimNumericId(rs.getString("checklist_id")),
+            trimNumericId(numberString(rs, "chklst_attach_id")),
+            trimNumericId(numberString(rs, "checklist_id")),
             StringUtils.trimToEmpty(rs.getString("resource_type"))),
         after, limit);
   }

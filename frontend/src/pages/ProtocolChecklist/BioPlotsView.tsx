@@ -321,7 +321,19 @@ const BioPlotsView: FC<Props> = ({
   const plotsExpected = selectedStratum?.plotCount ?? '';
   const plotsCompleted = String(rows.length);
 
-  const select = async (plotId: string) => {
+  const select = async (plotId?: string) => {
+    // A row with no id is a bug upstream, not something to send: `/plots/` binds an empty string to
+    // BIODIVERSITY_PLOT_ID (a NUMBER), which fails inside Oracle as "Invalid Input Number" and
+    // reaches the evaluator as "A database error occurred". Say what is actually wrong instead.
+    if (!plotId) {
+      display({
+        kind: 'error',
+        title: 'Could not load the plot',
+        subtitle: "This plot has no id, so it can't be opened. Reload the checklist and try again.",
+        timeout: 9000,
+      });
+      return;
+    }
     setBusy(true);
     try {
       setCurrent(await API.protocolChecklist.getBioPlot(plotId));
@@ -866,7 +878,7 @@ const BioPlotsView: FC<Props> = ({
                           size="sm"
                           renderIcon={Edit}
                           disabled={busy}
-                          onClick={() => void select(row.plotId ?? '')}
+                          onClick={() => void select(row.plotId)}
                         >
                           Edit
                         </Button>

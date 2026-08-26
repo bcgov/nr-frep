@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.repository.v1;
 
 import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import java.sql.Array;
+import java.math.BigDecimal;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -148,6 +149,53 @@ public abstract class AbstractFrepRepository {
 
   protected static String callSql(String packageName, String procedureName, int paramCount) {
     return "{call " + packageName + "." + procedureName + "(" + placeholders(paramCount) + ")}";
+  }
+
+  /**
+   * Read a NUMBER column as text.
+   *
+   * <p>Deliberately not {@code rs.getString(...)}. On Oracle that routes a NUMBER through
+   * {@code oracle.sql.NUMBER.toString()}, which throws
+   * {@code IllegalArgumentException: Invalid Input Number} when the stored bytes are not a
+   * canonical NUMBER — the row still reads perfectly as a {@code BigDecimal}, and every other
+   * client displays it. A single such value in
+   * {@code BIODIVERSITY_STAND_DETAIL.HEIGHT} took down the whole plot read with a 500, because one
+   * unreadable column fails the entire row mapper.
+   *
+   * <p>{@code getBigDecimal} decodes the same bytes without that conversion, and
+   * {@code toPlainString} keeps the column's own scale (so 11.0 stays "11.0", not "1.1E+1").
+   */
+  protected static String numberString(ResultSet rs, String column) throws SQLException {
+    BigDecimal value = rs.getBigDecimal(column);
+    return value == null ? null : value.toPlainString();
+  }
+
+  /**
+   * A value bound for a NUMBER attribute of an Oracle OBJECT type.
+   *
+   * <p>Handing {@code createStruct} a raw {@code String} makes ojdbc convert it to
+   * {@code oracle.sql.NUMBER} client-side, and that conversion keeps trailing zero digits: "11.0"
+   * was written as {@code Len=3: 193,12,1} where canonical Oracle stores {@code Len=2: 193,12}.
+   * Those bytes are readable as a {@code BigDecimal} but {@code NUMBER.toString()} rejects them, so
+   * the row wrote cleanly and then failed every later read — see {@link #numberString}, which is the
+   * read half of the same defect. ("12.6" has no trailing zero, so it round-tripped fine.)
+   *
+   * <p>Converting here, with the trailing zeros stripped, keeps the driver on its BigDecimal path
+   * and writes canonical bytes. A value that is not a number is passed through untouched so it
+   * still fails where it did before, rather than throwing a new exception from in here.
+   */
+  protected static @Nullable Object numberAttribute(@Nullable String value) {
+    String trimmed = value == null ? null : value.trim();
+    if (trimmed == null || trimmed.isEmpty()) {
+      return null;
+    }
+    try {
+      BigDecimal number = new BigDecimal(trimmed).stripTrailingZeros();
+      // stripTrailingZeros can leave a negative scale (100 -> 1E+2); NUMBER has no use for that.
+      return number.scale() < 0 ? number.setScale(0) : number;
+    } catch (NumberFormatException ex) {
+      return trimmed;
+    }
   }
 
   protected static String emptyIfNull(@Nullable String s) {

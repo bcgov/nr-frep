@@ -564,7 +564,26 @@ public class ProtocolChecklistService {
         .toList();
   }
 
+
+  /**
+   * Reject a non-numeric id before it reaches the driver.
+   *
+   * {@code BIODIVERSITY_PLOT.BIODIVERSITY_PLOT_ID} is a NUMBER, so binding a blank or non-numeric
+   * string fails inside Oracle as "Invalid Input Number" — which surfaces to the evaluator as
+   * "A database error occurred… contact the FREP help desk" and is logged as a system fault, with
+   * nothing anywhere naming the value that caused it. A 400 that quotes the id says what happened
+   * and leaves a usable trace.
+   */
+  private static void requireNumericId(String value, String what) {
+    if (!StringUtils.isNumeric(value)) {
+      log.warn("Rejected non-numeric {}: '{}'", what, value);
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Invalid " + what + ": '" + value + "'");
+    }
+  }
+
   public BioPlot getBioPlot(String plotId) {
+    requireNumericId(plotId, "plot id");
     BioPlot plot = writeRepository.getBioPlot(plotId);
     if (plot == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plot not found: " + plotId);

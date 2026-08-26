@@ -1,5 +1,6 @@
 package ca.bc.gov.nrs.frep.endpoint.v1;
 
+import ca.bc.gov.nrs.frep.security.FrepAuthorities;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -33,13 +34,25 @@ public interface ReportApiEndpoint {
       @PathVariable("reportName") String reportName,
       @Valid @RequestBody ReportRequest request);
 
-  /** FREP100 District Random List CSV export (legacy "Export to Excel"). */
+  /**
+   * FREP100 District Random List CSV export (legacy "Export to Excel").
+   *
+   * <p>Same gate as the screen it exports ({@code GET /api/v1/random-list}) — the widest role check
+   * FREP has, which keeps every usable role in and a role-less caller out. Not a district scope.
+   */
+  @PreAuthorize(FrepAuthorities.SITE_EDIT)
   @GetMapping("/random-list/csv")
   ResponseEntity<byte[]> exportRandomListCsv(
       @RequestParam("effectiveYear") String effectiveYear,
       @RequestParam(name = "orgUnit", required = false) String orgUnit);
 
-  /** FREP400 Checklist Search CSV export — streams the result set row-by-row. */
+  /**
+   * FREP400 Checklist Search CSV export — streams the result set row-by-row.
+   *
+   * <p>Same gate as the screen it exports: the rows are still scoped in SQL from the caller, and
+   * this stops a role-less caller opening a streaming query that can only return nothing.
+   */
+  @PreAuthorize(FrepAuthorities.SITE_EDIT)
   @GetMapping("/checklist-search/csv")
   ResponseEntity<StreamingResponseBody> exportChecklistSearchCsv(
       @RequestParam(name = "effectiveYear", required = false) String effectiveYear,

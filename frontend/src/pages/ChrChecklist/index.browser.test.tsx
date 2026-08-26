@@ -125,7 +125,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('loads a checklist from the API and saves edits back', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
     api.saveOpening.mockResolvedValue({ ...sampleChecklist });
@@ -143,7 +143,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('saves an Opening tab that is still missing a required field', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
     api.saveOpening.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
@@ -164,7 +164,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('stays quiet about a feature that has been added but not saved', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
 
@@ -181,7 +181,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('applies an edit made to a feature that has not been saved yet', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
 
@@ -207,7 +207,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('blocks Submit before calling the API when a tab is incomplete', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     // No features: the checklist cannot be submitted, and the Features tab has never been opened.
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
@@ -225,7 +225,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({
       ...sampleChecklist,
@@ -242,7 +242,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('hides write actions for view-only users', async () => {
-    useAuthorization.mockReturnValue({ canEdit: false, isViewOnly: true, canChr: () => false });
+    useAuthorization.mockReturnValue({ canEdit: false, canChr: () => false });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
 
@@ -253,7 +253,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('on an offline copy, Submit checks it in (upload) then submits', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -309,7 +309,7 @@ describe('ChrChecklistPage', () => {
     (repo.saveLocal.mock.calls.at(-1)?.[0] ?? {}) as { pictures?: unknown[] };
 
   it('keeps offline photos when a section is saved locally', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
@@ -327,7 +327,7 @@ describe('ChrChecklistPage', () => {
   it('keeps offline photos when Sync changes writes the local copy before uploading', async () => {
     // The worst of the three: this ran immediately before upload() flushed the photos, so the bytes
     // were already gone by the time the flush looked for them — and the sync reported success.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -349,7 +349,7 @@ describe('ChrChecklistPage', () => {
 
   it('drops the local copy after a successful sync', async () => {
     // A check-in clears the server's checkout guid, so a retained copy can never upload again.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -373,7 +373,7 @@ describe('ChrChecklistPage', () => {
   it('keeps the local copy when a sync fails', async () => {
     // The whole point of removing only on success: a failed check-in must stay retryable, with the
     // photos still on the device.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockRejectedValue(new Error('conflict'));
@@ -394,7 +394,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('keeps offline photos when Submit checks the copy in first', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -418,7 +418,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('warns when an offline copy has been superseded on the server', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -448,7 +448,6 @@ describe('ChrChecklistPage', () => {
   it('lets an admin reactivate a checked-out (RDO) server checklist', async () => {
     useAuthorization.mockReturnValue({
       canEdit: true,
-      isViewOnly: false,
       canPerformSysAdminActions: true,
       canChr: () => true,
     });

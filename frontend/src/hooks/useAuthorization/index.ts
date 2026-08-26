@@ -14,11 +14,6 @@ export type AuthorizationInfo = {
   isSysAdmin: boolean;
   /** `true` when the user holds the `FREP_EDITOR` Cognito group. */
   isUpdate: boolean;
-  /**
-   * `true` when the user is view-only: has `FREP_VIEW_ONLY` without
-   * `FREP_ADMIN` or `FREP_EDITOR` (legacy {@code isViewOnlyUser}).
-   */
-  isViewOnly: boolean;
   /** `true` when the user has at least one recognized FREP role. */
   hasAnyRole: boolean;
   /** `true` when the user can perform write operations (sys-admin or update). */
@@ -72,9 +67,6 @@ export const useAuthorization = (): AuthorizationInfo => {
     const roles = user?.roles ?? [];
     const isSysAdmin = roles.includes('FREP_ADMIN');
     const isUpdate = roles.includes('FREP_EDITOR');
-    const hasViewOnlyRole = roles.includes('FREP_VIEW_ONLY');
-    const isViewOnly = hasViewOnlyRole && !isSysAdmin && !isUpdate;
-
     // Per-district CHR access: the FREP_CHR_EDITOR privilege value is the list of district codes.
     const chrDistricts = user?.privileges?.FREP_CHR_EDITOR ?? [];
     const canAnyChr = isSysAdmin || chrDistricts.length > 0;
@@ -82,8 +74,9 @@ export const useAuthorization = (): AuthorizationInfo => {
       isSysAdmin || (!!orgUnitCode && chrDistricts.includes(orgUnitCode.toUpperCase()));
 
     // A CHR-district-only user holds no base role, so include CHR access here — otherwise they'd be
-    // treated as having no role and routed away from the app.
-    const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole || canAnyChr;
+    // treated as having no role and routed away from the app. FREP_VIEW_ONLY used to count here
+    // too; it has been retired, so holding only that group no longer admits anyone.
+    const hasAnyRole = isSysAdmin || isUpdate || canAnyChr;
 
     const canEdit = isSysAdmin || isUpdate;
     const canCreate = canEdit;
@@ -96,7 +89,6 @@ export const useAuthorization = (): AuthorizationInfo => {
     return {
       isSysAdmin,
       isUpdate,
-      isViewOnly,
       hasAnyRole,
       canEdit,
       canCreate,

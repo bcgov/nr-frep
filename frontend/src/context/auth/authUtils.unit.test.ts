@@ -40,7 +40,7 @@ describe('parseToken', () => {
         'custom:idp_username': 'CONTRACTOR1',
         'custom:idp_display_name': 'Doe, Jane',
         'email': 'jane@example.com',
-        'cognito:groups': ['FREP_VIEW_ONLY'],
+        'cognito:groups': ['FREP_EDITOR'],
       }),
     );
 
@@ -48,7 +48,7 @@ describe('parseToken', () => {
     expect(user?.idpProvider).toBe('BCEIDBUSINESS');
     // ...but providerUsername mirrors the backend-stored userid (BCEIDBUSINESS normalized to BCEID).
     expect(user?.providerUsername).toBe(String.raw`BCEID\CONTRACTOR1`);
-    expect(user?.roles).toEqual(['FREP_VIEW_ONLY']);
+    expect(user?.roles).toEqual(['FREP_EDITOR']);
   });
 
   it('leaves idpProvider undefined for an unrecognized provider', () => {

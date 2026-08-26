@@ -45,11 +45,9 @@ public class CorsConfiguration implements WebMvcConfigurer {
         .maxAge(cors.getAge().getSeconds())
         .allowCredentials(true);
 
-    registry.addMapping("/actuator/**")
-        .allowedOrigins("*")
-        .allowedMethods("GET")
-        .allowedHeaders("*")
-        .allowCredentials(false);
+    // No CORS mapping for /actuator: the probes and the Prometheus scrape are not browsers, so
+    // they never send an Origin. The previous `allowedOrigins("*")` granted browser read access
+    // that nothing asked for. Matches nr-fspts, which has no actuator CORS at all.
 
     WebMvcConfigurer.super.addCorsMappings(registry);
   }

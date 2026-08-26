@@ -15,7 +15,7 @@ public final class FrepAuthorities {
 
   /**
    * Roles permitted to create or modify FREP content (checklists, site evaluations, etc.):
-   * {@code FREP_ADMIN} and {@code FREP_EDITOR}. Read-only ({@code FREP_VIEW_ONLY}) is excluded.
+   * {@code FREP_ADMIN} and {@code FREP_EDITOR} — the only two global roles FREP has.
    */
   public static final String CONTENT_EDIT = "hasAnyAuthority('FREP_ADMIN','FREP_EDITOR')";
 

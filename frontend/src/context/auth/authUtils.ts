@@ -104,7 +104,7 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
  * Parses Cognito group strings into a user privilege object.
  *
  * - Global roles that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMIN", "FREP_EDITOR",
- *   "FREP_VIEW_ONLY") map to a `null` value (null = global, non-scoped role).
+ *   "FREP_EDITOR") map to a `null` value (null = global, non-scoped role).
  * - Per-district CHR groups ({@link CHR_DISTRICT_EDITOR_PREFIX}`<code>`, e.g.
  *   "FREP_CHR_EDITOR_DISTRICT_DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
  *   value is the `string[]` of district codes the user may edit CHR for (a scoped role).

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { useAuthorization } from './index';
 
-import type { FamLoginUser } from '@/context/auth/types';
+import type { FamLoginUser, ROLE_TYPE } from '@/context/auth/types';
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -38,7 +38,6 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     expect(result.current).toMatchObject({
       isSysAdmin: true,
       isUpdate: false,
-      isViewOnly: false,
       hasAnyRole: true,
       canEdit: true,
       canCreate: true,
@@ -55,23 +54,23 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     expect(result.current).toMatchObject({
       isSysAdmin: false,
       isUpdate: true,
-      isViewOnly: false,
       hasAnyRole: true,
       canEdit: true,
       canPerformSysAdminActions: false,
     });
   });
 
-  it('treats FREP_VIEW_ONLY as read-only', () => {
-    withRoles(['FREP_VIEW_ONLY']);
+  it('does not admit a user holding only the retired read-only group', () => {
+    // FREP_VIEW_ONLY has been retired from FREP. It used to count toward hasAnyRole, so a stale
+    // account carrying only that group would still have been let into an app it can do nothing in.
+    withRoles(['FREP_VIEW_ONLY' as ROLE_TYPE]);
 
     const { result } = renderHook(() => useAuthorization());
 
     expect(result.current).toMatchObject({
       isSysAdmin: false,
       isUpdate: false,
-      isViewOnly: true,
-      hasAnyRole: true,
+      hasAnyRole: false,
       canEdit: false,
       canCreate: false,
       canDelete: false,
@@ -79,29 +78,25 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
     });
   });
 
-  it('does not treat FREP_VIEW_ONLY as view-only when FREP_EDITOR is also present', () => {
-    withRoles(['FREP_VIEW_ONLY', 'FREP_EDITOR']);
+  it('admits a CHR-district editor, who holds no global role', () => {
+    // The only caller with no global FREP role who should still get in.
+    withRoles([]);
+    (useAuth as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      user: { roles: [], privileges: { FREP_CHR_EDITOR: ['DCK'] } },
+    });
 
     const { result } = renderHook(() => useAuthorization());
 
-    expect(result.current.isViewOnly).toBe(false);
-    expect(result.current.canEdit).toBe(true);
-  });
-
-  it('does not treat FREP_VIEW_ONLY as view-only when FREP_ADMIN is also present', () => {
-    withRoles(['FREP_VIEW_ONLY', 'FREP_ADMIN']);
-
-    const { result } = renderHook(() => useAuthorization());
-
-    expect(result.current.isViewOnly).toBe(false);
-    expect(result.current.canPerformSysAdminActions).toBe(true);
+    expect(result.current.hasAnyRole).toBe(true);
+    expect(result.current.canEdit).toBe(false);
+    expect(result.current.canChr('DCK')).toBe(true);
   });
 
   /**
    * Legacy WebADE action_lnk parity (scripts/5.0.0/00/webade/webade_inserts.sql):
    * - SUBMITCHECKLIST, TAKECHECKLISTOFFLINE, UNSUBMITCHECKLIST: SYS_ADMIN + UPDATE
    * - ACTIVATECHECKLIST: SYS_ADMIN only
-   * - CHECKLIST, ACCEPTEDSITES: all three roles (view-only may read, not POST-save)
+   * - CHECKLIST, ACCEPTEDSITES: both remaining roles (the legacy read-only role is retired)
    */
   it('maps legacy write actions to sys-admin and update roles', () => {
     const writeActionsRoles: Array<FamLoginUser['roles']> = [['FREP_ADMIN'], ['FREP_EDITOR']];
@@ -111,9 +106,6 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
       const { result } = renderHook(() => useAuthorization());
       expect(result.current.canEdit).toBe(true);
     }
-
-    withRoles(['FREP_VIEW_ONLY']);
-    expect(renderHook(() => useAuthorization()).result.current.canEdit).toBe(false);
   });
 
   it('maps legacy ACTIVATECHECKLIST to sys-admin only', () => {
@@ -180,6 +172,7 @@ describe('useAuthorization — protocol + district scope', () => {
   it.each([
     ['FREP_EDITOR', true],
     ['FREP_ADMIN', true],
+    // A group FREP no longer issues: it must grant nothing rather than fall through to a default.
     ['FREP_VIEW_ONLY', false],
   ])('canEditSite for %s is %s', (role, expected) => {
     withRoles([role as never]);

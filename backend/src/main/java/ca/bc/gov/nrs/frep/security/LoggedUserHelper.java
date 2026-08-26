@@ -75,17 +75,6 @@ public class LoggedUserHelper {
   }
 
   /**
-   * Returns {@code true} when the user is view-only per legacy {@code RestAction#isViewOnlyUser}:
-   * has {@code FREP_VIEW_ONLY} and does not also hold sys-admin or update roles.
-   */
-  public boolean isViewOnly() {
-    Set<String> authorities = getAuthorities();
-    return authorities.contains(RoleConstants.VIEW_ONLY_AUTHORITY)
-        && !authorities.contains(RoleConstants.SYS_ADMIN_AUTHORITY)
-        && !authorities.contains(RoleConstants.UPDATE_AUTHORITY);
-  }
-
-  /**
    * Returns {@code true} if the user may perform write operations
    * ({@code FREP_ADMIN} or {@code FREP_EDITOR}).
    */

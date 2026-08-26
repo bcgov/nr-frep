@@ -155,8 +155,8 @@ class ApiAuthorizationSecurityTest {
   // ── CONTENT_EDIT (writers) ───────────────────────────────────────────
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyIsForbiddenFromSavingSiteResources() {
+  @WithMockUser
+  void userWithNoFrepRoleCannotSaveSiteResources() {
     assertThrows(
         AccessDeniedException.class,
         () -> siteDetailApi.saveResources("1", List.of()));
@@ -179,8 +179,8 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyStillCannotSaveSiteResources() {
+  @WithMockUser
+  void userWithNoFrepRoleStillCannotSaveSiteResources() {
     assertThrows(
         AccessDeniedException.class,
         () -> siteDetailApi.saveResources("1", List.of()));
@@ -199,10 +199,10 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyCannotReadSiteDetail() {
+  @WithMockUser
+  void userWithNoFrepRoleCannotReadSiteDetail() {
     // The read was previously ungated. It now matches the rest of the surface — and the
-    // protocol-checklist / CHR reads, which exclude view-only too.
+    // protocol-checklist / CHR reads, which exclude a roleless caller too.
     assertThrows(AccessDeniedException.class, () -> siteDetailApi.getSiteDetail("1"));
   }
 
@@ -291,11 +291,11 @@ class ApiAuthorizationSecurityTest {
   // ── Jasper template reports (unrestricted) ───────────────────────────
   // The Reports screen shows Checklist Completion Status / Rejection Reason to everyone
   // (pages/Reports/index.tsx), so the endpoint must not gate them on CONTENT_EDIT — it previously
-  // did, and a view-only or CHR-only user saw both listed and got a 403 on generate.
+  // did, and a CHR-only user saw both listed and got a 403 on generate.
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyMayGenerateAJasperReport() {
+  @WithMockUser
+  void userWithNoFrepRoleMayGenerateAJasperReport() {
     assertDoesNotThrow(
         () -> reportApi.generateReport("checklist-completion-status", emptyRequest()));
   }
@@ -310,8 +310,8 @@ class ApiAuthorizationSecurityTest {
   // ── CSV data extracts (still gated by @reportAuth) ───────────────────
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyIsForbiddenFromTheBiodiversityExtract() {
+  @WithMockUser
+  void userWithNoFrepRoleIsForbiddenFromTheBiodiversityExtract() {
     assertThrows(
         AccessDeniedException.class,
         () -> reportApi.generateCsvReport("biodiversity-extract-block", emptyRequest()));

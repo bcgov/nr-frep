@@ -4,7 +4,7 @@ import * as routePaths from './routePaths';
 
 describe('routePaths', () => {
   it('getMenuEntries returns the dashboard and ported FREP screens for non-admin', () => {
-    const entries = routePaths.getMenuEntries(['FREP_VIEW_ONLY']);
+    const entries = routePaths.getMenuEntries(['FREP_EDITOR']);
     expect(Array.isArray(entries)).toBe(true);
     expect(entries.some((e) => e.id === 'Dashboard')).toBe(true);
     expect(entries.some((e) => e.id === 'District Random List')).toBe(true);

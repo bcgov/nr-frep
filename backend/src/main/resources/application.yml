@@ -96,14 +96,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,info,prometheus"
+        # health + prometheus only: the probes and the Prometheus scrape. `info` was exposed but
+        # nothing reads it — the `info.app.*` properties below are consumed by
+        # FrepMetricConfiguration through @Value, not through the endpoint.
+        include: "health,prometheus"
   endpoint:
     metrics:
       enabled: false
     health:
-      show-details: always
+      # The liveness/readiness probes only check the status code (openshift.deploy.yml), so the
+      # component and datasource detail was published to no one who needed it.
+      show-details: never
 
-# Application metadata (consumed by FrepMetricConfiguration + Actuator /info endpoint)
+# Application metadata. Read by FrepMetricConfiguration through @Value — not by the Actuator
+# /info endpoint, which is no longer exposed. These keys must stay or startup fails.
 info:
   app:
     name: ${spring.application.name}

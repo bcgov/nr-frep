@@ -616,6 +616,11 @@ const BioStratumView: FC<Props> = ({
   const [becResults, setBecResults] = useState<BecRow[]>([]);
   const [becBusy, setBecBusy] = useState(false);
 
+  // "Copy BEC from another stratum" dialog.
+  const [becCopyOpen, setBecCopyOpen] = useState(false);
+  const [becCopyBusy, setBecCopyBusy] = useState(false);
+  const [becCopyRows, setBecCopyRows] = useState<{ stratumNumber: string; bec: BioStratum }[]>([]);
+
   const reportError = useCallback(
     (title: string, err: unknown) =>
       display({
@@ -821,35 +826,51 @@ const BioStratumView: FC<Props> = ({
     setBecOpen(false);
   };
 
-  /**
-   * The stratum this one follows: the row before it in the list, or the last saved row when adding
-   * a new stratum. Undefined when there is nothing to copy from.
-   */
-  const previousRow = ((): BioStratumRow | undefined => {
-    if (rows.length === 0) return undefined;
-    if (!current?.stratumId) return rows[rows.length - 1];
-    const at = rows.findIndex((r) => r.stratumId === current.stratumId);
-    return at > 0 ? rows[at - 1] : undefined;
-  })();
+  /** The other strata on this checklist — the ones whose BEC can be copied. */
+  const otherRows = rows.filter((r) => !current?.stratumId || r.stratumId !== current.stratumId);
 
   /**
-   * Copy the previous stratum's BEC, and only its BEC.
+   * Load the BEC every other stratum is using, so the user can pick any of them rather than only
+   * the one immediately before this stratum.
    *
-   * Strata within one block usually share a BEC zone, which is why the browser's own autofill was
-   * being used for it — but that fills whatever else it infers belongs to the same group, and the
-   * rest of a stratum is per-stratum evaluation data. Naming the seven fields makes it impossible
-   * for this to touch anything else. See utils/autofill.ts for the other half of that fix.
+   * Fetched when the dialog opens, not when the form does: the list rows carry no BEC fields, so
+   * this is one read per stratum and most stratum edits never ask for it.
+   *
+   * Strata within one block usually share a BEC, which is why the browser's own autofill was being
+   * used for it — but that fills whatever else it infers belongs to the same group, and the rest of
+   * a stratum is per-stratum evaluation data. Copying only the seven named BEC fields makes it
+   * impossible for this to touch anything else. See utils/autofill.ts for the other half of that fix.
    */
-  const copyBecFromPrevious = async () => {
-    const stratumId = previousRow?.stratumId;
-    if (!stratumId) return;
-    setBusy(true);
+  const openBecCopy = async () => {
+    setBecCopyOpen(true);
+    setBecCopyBusy(true);
     try {
-      applyBecFrom(await API.protocolChecklist.getBioStratum(stratumId));
+      const loaded = await Promise.all(
+        otherRows
+          .filter((r) => r.stratumId)
+          .map(async (r) => ({
+            stratumNumber: r.stratumNumber ?? r.stratumId ?? '',
+            bec: await API.protocolChecklist.getBioStratum(r.stratumId as string),
+          })),
+      );
+      // Only strata that actually have a BEC, and one entry per distinct combination — repeating
+      // the same BEC once per stratum would make the list longer without offering another choice.
+      const seen = new Set<string>();
+      setBecCopyRows(
+        loaded
+          .filter(({ bec }) => (bec.bgcZoneCode ?? '').trim() !== '')
+          .filter(({ bec }) => {
+            const key = BEC_KEYS.map((k) => (bec[k] ?? '').trim().toLowerCase()).join('|');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }),
+      );
     } catch (err) {
-      reportError("We couldn't copy the BEC from the previous stratum", err);
+      reportError("We couldn't load the other strata's BEC", err);
+      setBecCopyRows([]);
     } finally {
-      setBusy(false);
+      setBecCopyBusy(false);
     }
   };
 
@@ -1237,15 +1258,15 @@ const BioStratumView: FC<Props> = ({
                     <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
                       Search BEC
                     </Button>
-                    {/* Only offered when there is a stratum to copy from. */}
-                    {previousRow && (
+                    {/* Only offered when there is another stratum to copy from. */}
+                    {otherRows.length > 0 && (
                       <Button
                         kind="ghost"
                         size="sm"
                         disabled={busy}
-                        onClick={() => void copyBecFromPrevious()}
+                        onClick={() => void openBecCopy()}
                       >
-                        {`Same BEC as stratum ${previousRow.stratumNumber ?? ''}`.trim()}
+                        Same BEC as another stratum
                       </Button>
                     )}
                   </div>
@@ -1402,6 +1423,67 @@ const BioStratumView: FC<Props> = ({
           )}
         </div>
       </div>
+
+      <Modal
+        // Its own class as well as the shared one: the button that opens this dialog carries the
+        // same words as its heading, so the dialog needs an identifier that is not its text.
+        className="bec-modal bec-copy-modal"
+        open={becCopyOpen}
+        modalHeading="Same BEC as another stratum"
+        passiveModal
+        onRequestClose={() => setBecCopyOpen(false)}
+        size="lg"
+      >
+        <p>
+          Pick the stratum whose BEC this one shares. Only the BEC is copied — everything else on
+          this stratum is its own evaluation.
+        </p>
+        {becCopyRows.length > 0 ? (
+          <table className="rip-field-grid" style={{ marginTop: '1rem' }}>
+            <thead>
+              <tr>
+                <th scope="col">Stratum</th>
+                <th scope="col">Zone</th>
+                <th scope="col">Subzone</th>
+                <th scope="col">Variant</th>
+                <th scope="col">Phase</th>
+                <th scope="col">Site series</th>
+                <th scope="col">Seral</th>
+                <th scope="col" aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {becCopyRows.map(({ stratumNumber, bec }) => (
+                <tr key={`bec-copy-${stratumNumber}`}>
+                  <td>{stratumNumber || '—'}</td>
+                  <td>{bec.bgcZoneCode || '—'}</td>
+                  <td>{bec.bgcSubzoneCode || '—'}</td>
+                  <td>{bec.bgcVariant || '—'}</td>
+                  <td>{bec.bgcPhase || '—'}</td>
+                  <td>{bec.becSiteSeriesCd || '—'}</td>
+                  <td>{bec.seral || '—'}</td>
+                  <td>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => {
+                        applyBecFrom(bec);
+                        setBecCopyOpen(false);
+                      }}
+                    >
+                      Select
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ marginTop: '1rem' }}>
+            {becCopyBusy ? 'Loading…' : 'None of the other strata have a BEC recorded yet.'}
+          </p>
+        )}
+      </Modal>
 
       <Modal
         className="bec-modal"

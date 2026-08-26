@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -285,11 +285,11 @@ describe('BioStratumView — browser autofill', () => {
   });
 });
 
-describe('BioStratumView — same BEC as previous stratum', () => {
+describe('BioStratumView — same BEC as another stratum', () => {
   afterEach(() => vi.clearAllMocks());
 
-  /** The previous stratum, carrying a full BEC plus per-stratum values that must not travel. */
-  const previous = {
+  /** Two saved strata with different BECs, plus per-stratum values that must not travel. */
+  const stratumOne = {
     stratumId: 'S1',
     stratumNumber: '1',
     bgcZoneCode: 'CWH',
@@ -299,59 +299,105 @@ describe('BioStratumView — same BEC as previous stratum', () => {
     becSiteSeriesCd: '01',
     siteSeriesPhaseCd: 'b',
     seral: 'Y',
-    // Everything below is this stratum's own evaluation data.
+    // This stratum's own evaluation data.
     estimatedSize: '42.5',
     harvestAreaCode: 'CC',
     patchWindthrowPct: '15',
     otherWindthrowTreatmentDesc: 'Blowdown along the east edge',
     revisionCount: '1',
   };
+  const stratumTwo = {
+    stratumId: 'S2',
+    stratumNumber: '2',
+    bgcZoneCode: 'IDF',
+    bgcSubzoneCode: 'dk',
+    bgcVariant: '3',
+    bgcPhase: '',
+    becSiteSeriesCd: '05',
+    siteSeriesPhaseCd: '',
+    seral: 'N',
+    revisionCount: '1',
+  };
 
-  /**
-   * A stratum form field's value, by key.
-   *
-   * Read by id, not by label: the BEC search modal's criteria inputs carry the same labels and stay
-   * in the DOM while the dialog is closed, so a label query can silently assert on the wrong field.
-   */
   const stratumField = (key: string): string =>
     (document.getElementById(`stratum-${key}`) as HTMLInputElement | null)?.value ?? '(missing)';
 
-  const openNewStratum = async () => {
-    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
-    api.getBioStratum.mockResolvedValue(previous);
+  const openPicker = async (saved: Record<string, unknown>[] = [stratumOne, stratumTwo]) => {
+    api.listBioStrata.mockResolvedValue(
+      saved.map((s) => ({ stratumId: s.stratumId, stratumNumber: s.stratumNumber })),
+    );
+    api.getBioStratum.mockImplementation(async (id: string) =>
+      saved.find((s) => s.stratumId === id),
+    );
     render(<BioStratumView checklistId="9001" canEdit submitted={false} outstanding={[]} />);
     await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
     await screen.findByLabelText(/Stratum type/i);
+    await userEvent.click(screen.getByRole('button', { name: /Same BEC as another stratum/ }));
+    // Scoped by class, not by role or text: the BEC catalogue dialog is also in the DOM while
+    // closed (so `getByRole('dialog')` matches both), and the button that opens this one carries
+    // the same words as its heading (so a text query matches both of those).
+    return (await waitFor(() => {
+      const modal = document.querySelector('.bec-copy-modal');
+      if (!modal) throw new Error('copy dialog not open');
+      return modal as HTMLElement;
+    })) as HTMLElement;
   };
 
-  it('copies every field of the BEC combination', async () => {
-    await openNewStratum();
-    await userEvent.click(screen.getByRole('button', { name: /Same BEC as stratum 1/ }));
+  it('offers every other stratum, not just the one before this', async () => {
+    const dialog = await openPicker();
+
+    // The reported bug: only the last stratum could be chosen.
+    expect(await within(dialog).findByText('CWH')).toBeTruthy();
+    expect(within(dialog).getByText('IDF')).toBeTruthy();
+  });
+
+  it('copies every field of the chosen stratum’s BEC', async () => {
+    const dialog = await openPicker();
+    await within(dialog).findByText('IDF');
+
+    const row = within(dialog).getByText('IDF').closest('tr') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Select' }));
 
     // All seven together: FREP_VALIDATE_BGC validates the combination, so a partial copy is worse
-    // than none.
-    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('CWH'));
-    expect(stratumField('bgcSubzoneCode')).toBe('vm');
-    expect(stratumField('bgcVariant')).toBe('1');
-    expect(stratumField('bgcPhase')).toBe('a');
-    expect(stratumField('becSiteSeriesCd')).toBe('01');
-    expect(stratumField('siteSeriesPhaseCd')).toBe('b');
-    expect(stratumField('seral')).toBe('Y');
+    // than none — including the blanks, which must overwrite rather than be skipped.
+    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('IDF'));
+    expect(stratumField('bgcSubzoneCode')).toBe('dk');
+    expect(stratumField('bgcVariant')).toBe('3');
+    expect(stratumField('bgcPhase')).toBe('');
+    expect(stratumField('becSiteSeriesCd')).toBe('05');
+    expect(stratumField('siteSeriesPhaseCd')).toBe('');
+    expect(stratumField('seral')).toBe('N');
   });
 
   it('copies nothing but the BEC', async () => {
-    // The whole point of the button: the browser's autofill was dragging these across too, and they
-    // are per-stratum evaluation values.
-    await openNewStratum();
-    await userEvent.click(screen.getByRole('button', { name: /Same BEC as stratum 1/ }));
+    const dialog = await openPicker();
+    await within(dialog).findByText('CWH');
+
+    const row = within(dialog).getByText('CWH').closest('tr') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Select' }));
     await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('CWH'));
 
-    // The exact fields the user watched autofill drag across.
+    // The exact fields the user watched browser autofill drag across.
     expect(stratumField('estimatedSize')).toBe('');
     expect(stratumField('harvestAreaCode')).toBe('');
     expect(stratumField('patchWindthrowPct')).toBe('');
-    expect(screen.queryByDisplayValue('42.5')).toBeNull();
     expect(screen.queryByDisplayValue('Blowdown along the east edge')).toBeNull();
+  });
+
+  it('lists one entry per distinct BEC, however many strata share it', async () => {
+    const twin = { ...stratumOne, stratumId: 'S3', stratumNumber: '3' };
+    const dialog = await openPicker([stratumOne, stratumTwo, twin]);
+    await within(dialog).findByText('IDF');
+
+    // Strata 1 and 3 share a BEC; repeating it offers no extra choice.
+    expect(within(dialog).getAllByText('CWH')).toHaveLength(1);
+  });
+
+  it('says so when no other stratum has a BEC yet', async () => {
+    const dialog = await openPicker([{ stratumId: 'S1', stratumNumber: '1', revisionCount: '1' }]);
+    expect(
+      await within(dialog).findByText('None of the other strata have a BEC recorded yet.'),
+    ).toBeTruthy();
   });
 
   it('offers nothing to copy when this is the first stratum', async () => {
@@ -360,6 +406,6 @@ describe('BioStratumView — same BEC as previous stratum', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
     await screen.findByLabelText(/Stratum type/i);
 
-    expect(screen.queryByRole('button', { name: /Same BEC as stratum/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Same BEC as another stratum/ })).toBeNull();
   });
 });

@@ -471,7 +471,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<Object> structs = new ArrayList<>(treatments.size());
     for (BioWindthrowTreatment t : treatments) {
       structs.add(connection.createStruct(WINDTHROW_OBJECT_TYPE, new Object[] {
-          t.windthrowTreatmentId(), s.stratumId(), t.code(), t.checkInd()
+          numberAttribute(t.windthrowTreatmentId()), numberAttribute(s.stratumId()),
+          t.code(), t.checkInd()
       }));
     }
     return connection.createOracleArray(WINDTHROW_VARRAY_TYPE, structs.toArray());
@@ -734,10 +735,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, STAND_VARRAY_TYPE, STAND_OBJECT_TYPE, rows,
+              // Attribute order matches THE.FREP_STAND_TABLE_OBJECT; the NUMBER attributes go
+              // through numberAttribute so the driver writes canonical bytes.
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, blankToNull(row.treeNumber()),
-                  blankToNull(row.dbh()), blankToNull(row.height()), row.comments(),
-                  row.decayClassCode(), null, blankToNull(row.revisionCount()), null, userId
+                  null, numberAttribute(plotId), row.speciesCode(), null,
+                  numberAttribute(row.treeNumber()), numberAttribute(row.dbh()),
+                  numberAttribute(row.height()), row.comments(), row.decayClassCode(), null,
+                  numberAttribute(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },
@@ -752,10 +756,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, CWD_VARRAY_TYPE, CWD_OBJECT_TYPE, rows,
+              // Attribute order matches THE.FREP_CWD_TABLE_OBJECT; see the stand mapper above.
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, blankToNull(row.logNumber()),
-                  blankToNull(row.logDiameter()), blankToNull(row.logLength()), row.decayClassCode(),
-                  null, row.comments(), blankToNull(row.revisionCount()), null, userId
+                  null, numberAttribute(plotId), row.speciesCode(), null,
+                  numberAttribute(row.logNumber()), numberAttribute(row.logDiameter()),
+                  numberAttribute(row.logLength()), row.decayClassCode(), null, row.comments(),
+                  numberAttribute(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },

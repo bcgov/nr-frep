@@ -170,6 +170,34 @@ public abstract class AbstractFrepRepository {
     return value == null ? null : value.toPlainString();
   }
 
+  /**
+   * A value bound for a NUMBER attribute of an Oracle OBJECT type.
+   *
+   * <p>Handing {@code createStruct} a raw {@code String} makes ojdbc convert it to
+   * {@code oracle.sql.NUMBER} client-side, and that conversion keeps trailing zero digits: "11.0"
+   * was written as {@code Len=3: 193,12,1} where canonical Oracle stores {@code Len=2: 193,12}.
+   * Those bytes are readable as a {@code BigDecimal} but {@code NUMBER.toString()} rejects them, so
+   * the row wrote cleanly and then failed every later read — see {@link #numberString}, which is the
+   * read half of the same defect. ("12.6" has no trailing zero, so it round-tripped fine.)
+   *
+   * <p>Converting here, with the trailing zeros stripped, keeps the driver on its BigDecimal path
+   * and writes canonical bytes. A value that is not a number is passed through untouched so it
+   * still fails where it did before, rather than throwing a new exception from in here.
+   */
+  protected static @Nullable Object numberAttribute(@Nullable String value) {
+    String trimmed = value == null ? null : value.trim();
+    if (trimmed == null || trimmed.isEmpty()) {
+      return null;
+    }
+    try {
+      BigDecimal number = new BigDecimal(trimmed).stripTrailingZeros();
+      // stripTrailingZeros can leave a negative scale (100 -> 1E+2); NUMBER has no use for that.
+      return number.scale() < 0 ? number.setScale(0) : number;
+    } catch (NumberFormatException ex) {
+      return trimmed;
+    }
+  }
+
   protected static String emptyIfNull(@Nullable String s) {
     return s == null ? "" : s;
   }

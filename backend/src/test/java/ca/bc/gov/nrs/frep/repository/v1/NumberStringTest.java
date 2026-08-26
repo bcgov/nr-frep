@@ -28,6 +28,10 @@ class NumberStringTest {
     static String read(ResultSet rs, String column) throws SQLException {
       return numberString(rs, column);
     }
+
+    static Object attribute(String value) {
+      return numberAttribute(value);
+    }
   }
 
   private static String read(ResultSet rs, String column) throws SQLException {
@@ -58,6 +62,36 @@ class NumberStringTest {
 
     assertThat(read(rs, "height")).isEqualTo("11.0");
     assertThat(read(rs, "utm_northing")).isEqualTo("7654321");
+  }
+
+  @Test
+  @DisplayName("strips the trailing zero that produced the unreadable bytes")
+  void stripsTrailingZeros() {
+    // "11.0" written as a String became Len=3: 193,12,1 — the trailing zero digit kept — where
+    // canonical Oracle stores Len=2: 193,12. Those bytes read back as a BigDecimal but not as a
+    // String, so the row saved cleanly and broke every later read of the plot.
+    assertThat(Probe.attribute("11.0")).isEqualTo(new BigDecimal("11"));
+    assertThat(Probe.attribute("12.60")).isEqualTo(new BigDecimal("12.6"));
+    // Whole numbers must not come back with a negative scale (100 -> 1E+2).
+    assertThat(Probe.attribute("100")).isEqualTo(new BigDecimal("100"));
+    assertThat(Probe.attribute("100").toString()).isEqualTo("100");
+  }
+
+  @Test
+  @DisplayName("nulls a blank attribute rather than sending an unconvertible empty string")
+  void blankAttributeIsNull() {
+    // Oracle 17059 for an empty string in a NUMBER attribute; a new row also needs a null id so the
+    // proc takes its insert branch.
+    assertThat(Probe.attribute(null)).isNull();
+    assertThat(Probe.attribute("")).isNull();
+    assertThat(Probe.attribute("   ")).isNull();
+  }
+
+  @Test
+  @DisplayName("passes a non-numeric attribute through untouched")
+  void nonNumericPassesThrough() {
+    // Fails where it failed before, rather than throwing a different exception from in here.
+    assertThat(Probe.attribute("abc")).isEqualTo("abc");
   }
 
   @Test

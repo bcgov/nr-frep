@@ -252,6 +252,25 @@ describe('ChrChecklistPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
+  it('does not claim "View only" on an offline copy the district check cannot verify', async () => {
+    // Offline there is no session to read the CHR districts from, so canChr always says no. Holding
+    // the copy already proves the check passed at checkout (@chrAuth gates take-offline), the form
+    // is editable (readOnly ignores the role check for an offline copy), and sync re-checks
+    // server-side — so the banner would contradict the page it sits on.
+    useAuthorization.mockReturnValue({ canEdit: false, canChr: () => false });
+    repo.load.mockResolvedValue({
+      checklistId: '1001',
+      checkList: { ...sampleChecklist, status: 'RDO' },
+      dirty: false,
+    });
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
+
+    renderPage();
+
+    expect(await screen.findByText('Offline copy')).toBeTruthy();
+    expect(screen.queryByText('View only')).toBeNull();
+  });
+
   it('on an offline copy, Submit checks it in (upload) then submits', async () => {
     useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue({

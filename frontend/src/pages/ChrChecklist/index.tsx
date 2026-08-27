@@ -987,7 +987,13 @@ const ChrChecklistPage: FC = () => {
           );
         })()}
 
-      {!canEditThisChr && (
+      {/* Not shown for an offline copy — the same reasoning readOnly above already applies. Holding
+          the copy at all proves the district check passed at checkout
+          (@chrAuth.canEditChecklist gates POST /checklists/{id}/offline), and the role check cannot
+          be evaluated offline anyway: there is no session to read the districts from, so it would
+          always report "view only" and contradict a form that is genuinely editable. Anything that
+          did slip through is refused server-side on sync. */}
+      {!canEditThisChr && !isOfflineCopy && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"

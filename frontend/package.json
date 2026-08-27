@@ -31,8 +31,6 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@carbon/charts": "^1.23.15",
-    "@carbon/charts-react": "^1.23.15",
     "@carbon/icons-react": "^11.64.0",
     "@carbon/pictograms-react": "^11.83.0",
     "@carbon/react": "^1.88.0",

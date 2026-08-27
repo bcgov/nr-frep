@@ -75,7 +75,10 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
-          globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // png/jpg included so the landing page — which is the *offline* entry point
+          // (getOfflineRoutes serves it) — still has its logo and cover art with no network. They
+          // were missing, so both rendered as broken-image alt text offline.
+          globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff,woff2}'],
           // config.js is generated per-container at start-up by docker-entrypoint.sh — it is the
           // ONLY file whose contents differ between environments and deploys. Precaching it froze
           // the runtime config: Workbox fetches a precached URL once at service-worker install and

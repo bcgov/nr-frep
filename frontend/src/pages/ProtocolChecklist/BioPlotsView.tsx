@@ -2,7 +2,6 @@ import { Add, Edit, TrashCan } from '@carbon/icons-react';
 import {
   Button,
   Checkbox,
-  InlineNotification,
   Select,
   SelectItem,
   SkeletonText,
@@ -20,8 +19,9 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
-import TabIncompleteBanner from './TabIncompleteBanner';
+import OutstandingPanel from './OutstandingPanel';
 
+import type { OutstandingGroup } from './tabStatus';
 import type { CodeOption } from '@/types/configuration';
 import type {
   BioCwdRow,
@@ -60,10 +60,12 @@ type Props = {
   submitted: boolean;
   /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
   active?: boolean;
-  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
-  outstanding?: string[];
+  /** Outstanding submit rules for this tab, grouped by plot (see OutstandingPanel). */
+  outstanding?: OutstandingGroup[];
   /** Called after a save or delete lands, so the tab-completion dots re-derive. */
   onSaved?: () => void;
+  /** `error` once a submit has been refused — see OutstandingPanel. */
+  tone?: 'neutral' | 'error';
 };
 
 // Plot assessor userids are stored bare (no `IDIR\` prefix) — e.g. `ASODHI` — while the logged-in
@@ -82,25 +84,32 @@ type Col = {
   label: string;
   kind?: 'index' | 'select-spp' | 'select-wt' | 'select-cwd';
   maxLength?: number;
+  /**
+   * Owed by every row once one exists — see {@link standRowErrors} / {@link cwdRowErrors}, which is
+   * where the rule is enforced. The columns marked here are NOT NULL on
+   * BIODIVERSITY_STAND_DETAIL / COARSE_WOODY_DEBRIS_DETAIL; the row number is generated and the
+   * comment is free text, so neither is asked for.
+   */
+  required?: boolean;
 };
 
 // Legacy column order: Tree# | Spp. | WT Class | DBH (cm) | Ht (m) | Comments.
 const STAND_COLS: Col[] = [
   { key: 'treeNumber', label: 'Tree #', kind: 'index' },
-  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp' },
-  { key: 'decayClassCode', label: 'WT Class', kind: 'select-wt' },
-  { key: 'dbh', label: 'DBH (cm)', maxLength: 5 },
-  { key: 'height', label: 'Ht (m)', maxLength: 4 },
+  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp', required: true },
+  { key: 'decayClassCode', label: 'WT Class', kind: 'select-wt', required: true },
+  { key: 'dbh', label: 'DBH (cm)', maxLength: 5, required: true },
+  { key: 'height', label: 'Ht (m)', maxLength: 4, required: true },
   { key: 'comments', label: 'Comments', maxLength: 50 },
 ];
 
 // Legacy column order: Log# | Spp. | Decay Class | Dia. (cm) | Length (m) | Comments.
 const CWD_COLS: Col[] = [
   { key: 'logNumber', label: 'Log #', kind: 'index' },
-  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp' },
-  { key: 'decayClassCode', label: 'Decay Class', kind: 'select-cwd' },
-  { key: 'logDiameter', label: 'Dia. (cm)', maxLength: 5 },
-  { key: 'logLength', label: 'Length (m)', maxLength: 4 },
+  { key: 'speciesCode', label: 'Spp.', kind: 'select-spp', required: true },
+  { key: 'decayClassCode', label: 'Decay Class', kind: 'select-cwd', required: true },
+  { key: 'logDiameter', label: 'Dia. (cm)', maxLength: 5, required: true },
+  { key: 'logLength', label: 'Length (m)', maxLength: 4, required: true },
   { key: 'comments', label: 'Comments', maxLength: 50 },
 ];
 
@@ -159,11 +168,9 @@ const BioPlotsView: FC<Props> = ({
   active,
   onSaved,
   outstanding = [],
+  tone,
 }) => {
   const { display } = useNotification();
-  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
-  // a tab the user has not touched yet.
-  const [justSaved, setJustSaved] = useState(false);
   const { user } = useAuth();
   const me = user?.providerUsername;
   const confirm = useConfirm();
@@ -312,6 +319,12 @@ const BioPlotsView: FC<Props> = ({
   // the UTM zone/easting/northing fields.
   const noUtmSignal = get('utmSignal') === 'N';
 
+  // Coordinates are owed only on an affirmative signal — the same test plotValidation makes, so the
+  // asterisk and the outstanding item agree. Not simply "the box is unchecked": a legacy plot that
+  // never answered the question is exempt, and marking its fields required would promise an error
+  // that never comes.
+  const utmSignalled = get('utmSignal') === 'Y';
+
   // --- computed stratum read-out (legacy "Stratum Identification" block) ---
   const selectedStratum = strata.find((s) => s.stratumId === stratumId);
   const stratumTypeLabel =
@@ -351,6 +364,11 @@ const BioPlotsView: FC<Props> = ({
       stratumId,
       // Default "Evaluated by" to the checklist's Evaluator; claimable via "Assign it to me".
       assessorName: bareUserid(evaluator.userid),
+      // The "No UTM signal available" box renders unchecked on a new plot, and unchecked *means*
+      // utm_signal = 'Y'. Stated here so the record says what the form shows: left unset, the plot
+      // would read as one that never answered the question — which is how legacy rows read, and
+      // those are deliberately exempt from the UTM rules (see utmErrors).
+      utmSignal: 'Y',
       treeIndicator: 'N',
       cwdTransectIndicator: 'N',
       standTable: [],
@@ -422,7 +440,6 @@ const BioPlotsView: FC<Props> = ({
       setCurrent(null); // on save success, close the form and return to the table
       await loadPlots();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Plot saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -445,7 +462,6 @@ const BioPlotsView: FC<Props> = ({
       await API.protocolChecklist.deleteBioPlot(row.plotId, row.revisionCount ?? '');
       await loadPlots();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Plot deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -629,7 +645,7 @@ const BioPlotsView: FC<Props> = ({
       return roField('Evaluated by', displayName);
     }
     return (
-      <div className="protocol-checklist__field" key="evaluatedBy">
+      <div className="protocol-checklist__field rip-form__cell--wide" key="evaluatedBy">
         <span className="protocol-checklist__label">{requiredLabel('Evaluated by', true)}</span>
         <span
           className="protocol-checklist__value"
@@ -747,50 +763,53 @@ const BioPlotsView: FC<Props> = ({
     cellError: (index: number, colKey: string) => string,
   ): ReactNode => (
     <>
-      <table className="rip-field-grid rip-field-grid--inputs">
-        <thead>
-          <tr>
-            {cols.map((c) => (
-              <th scope="col" key={c.key}>
-                {c.label}
-              </th>
-            ))}
-            {!readOnly && (
-              <th scope="col" className="table-actions">
-                Action
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && (
+      {/* No rows, no table. An empty grid was a full header rule over a single "None." cell — seven
+          column names for a table the evaluator has not started, which reads as something that
+          failed to load. The Add button below is the whole empty state; pressing it puts the first
+          row on screen, and the header arrives with it. */}
+      {items.length > 0 && (
+        <table className="rip-field-grid rip-field-grid--inputs">
+          <thead>
             <tr>
-              <td colSpan={cols.length + (readOnly ? 0 : 1)}>None.</td>
-            </tr>
-          )}
-          {items.map((row, index) => (
-            <tr key={keyOf(index)}>
               {cols.map((c) => (
-                <td key={c.key}>{cell(caption, c, row, index, onChange, cellError)}</td>
+                <th scope="col" key={c.key}>
+                  {/* The cells carry no label of their own — the header is the label, so the marker
+                      belongs here. Not shown read-only, where nothing can be filled in. */}
+                  {requiredLabel(c.label, !readOnly && Boolean(c.required))}
+                </th>
               ))}
               {!readOnly && (
-                <td>
-                  <Button
-                    kind="danger--tertiary"
-                    size="sm"
-                    renderIcon={TrashCan}
-                    onClick={() => removeRowAt(index)}
-                  >
-                    Remove row
-                  </Button>
-                </td>
+                <th scope="col" className="table-actions">
+                  Action
+                </th>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.map((row, index) => (
+              <tr key={keyOf(index)}>
+                {cols.map((c) => (
+                  <td key={c.key}>{cell(caption, c, row, index, onChange, cellError)}</td>
+                ))}
+                {!readOnly && (
+                  <td>
+                    <Button
+                      kind="danger--tertiary"
+                      size="sm"
+                      renderIcon={TrashCan}
+                      onClick={() => removeRowAt(index)}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {!readOnly && (
-        <Button kind="ghost" size="sm" renderIcon={Add} onClick={addRow}>
+        <Button kind="tertiary" size="lg" renderIcon={Add} onClick={addRow}>
           {addLabel}
         </Button>
       )}
@@ -816,7 +835,7 @@ const BioPlotsView: FC<Props> = ({
 
   return (
     <div className="rip-form">
-      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Plot" />
+      <OutstandingPanel groups={outstanding} tone={tone} />
       {/* The plots table and the plot form are mutually exclusive — the table is hidden
           while a plot form is open (mirrors the Stratum summary tab). */}
       {!current && (
@@ -844,10 +863,10 @@ const BioPlotsView: FC<Props> = ({
                 kind="tertiary"
                 size="lg"
                 className="bio-strata__add"
+                renderIcon={Add}
                 disabled={busy}
                 onClick={addPlot}
               >
-                <Add size={16} className="bio-strata__add-icon" />
                 Add plot
               </Button>
             ) : (
@@ -922,6 +941,13 @@ const BioPlotsView: FC<Props> = ({
           <fieldset className="rip-form__group">
             <legend>Plot identification</legend>
             <div className="rip-form__grid">
+              {textField('plotNumber', 'Plot #', 3, false, true)}
+              {evaluatedByField()}
+            </div>
+            {/* The checkbox sits between the plot's own details and the coordinates, because it is
+                the switch that governs the row beneath it: ticking it disables all three. Above the
+                lot, it read as a heading for the whole section. */}
+            <div className="rip-form__grid">
               {readOnly ? (
                 roField('No UTM signal available', noUtmSignal ? 'Yes' : 'No')
               ) : (
@@ -934,11 +960,9 @@ const BioPlotsView: FC<Props> = ({
               )}
             </div>
             <div className="rip-form__grid">
-              {textField('plotNumber', 'Plot #', 3, false, true)}
-              {evaluatedByField()}
-              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, !noUtmSignal)}
-              {textField('utmEasting', 'Easting', 6, noUtmSignal, !noUtmSignal)}
-              {textField('utmNorthing', 'Northing', 7, noUtmSignal, !noUtmSignal)}
+              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, utmSignalled)}
+              {textField('utmEasting', 'Easting', 6, noUtmSignal, utmSignalled)}
+              {textField('utmNorthing', 'Northing', 7, noUtmSignal, utmSignalled)}
             </div>
           </fieldset>
 
@@ -951,9 +975,47 @@ const BioPlotsView: FC<Props> = ({
             <p className="rip-form__hint">Fill in one of:</p>
             <div className="rip-form__grid">
               {textField('basalAreaFactor', 'BAF', 2)}
-              {textField('fixedAreaRadius', 'Fixed area radius (m)', 6)}
+              {/* A clear-cut plot must use the fixed-area radius — the other two methods are
+                  refused for CC — so it is the one measurement field that is genuinely owed. */}
+              {textField(
+                'fixedAreaRadius',
+                'Fixed area radius (m)',
+                6,
+                false,
+                stratumType === 'CC',
+              )}
               {textField('fullCountArea', 'Full count area (ha)', 7)}
             </div>
+            {/* Directly under the measurement row that sizes the plot, and under the "Trees exist"
+                box that calls for it — both tables used to sit below the whole section, so ticking a
+                box added rows a screen away from the control that asked for them. */}
+            {/* Read-only with nothing recorded now has nothing to show — no table and no Add
+                button — so the section is skipped rather than left as a bare legend. */}
+            {get('treeIndicator') === 'Y' &&
+              (!readOnly || (current.standTable ?? []).length > 0) && (
+                <fieldset className="rip-form__group">
+                  {/* The table itself is owed, not just its columns: the section only renders once
+                    "Trees exist" is ticked, and the proc refuses the submit while it holds no rows
+                    (`frep.submit.biodiversity.plot.notrees`). */}
+                  <legend>{requiredLabel('Stand table (trees)', !readOnly)}</legend>
+                  {/* Under the heading of the table it applies to, where the reader meets it before
+                    entering a row. It repeats across both tables on purpose: each is filled in on
+                    its own, and a note left at one of them is no use at the other. */}
+                  <p className="rip-form__hint">* Decimal place means measured</p>
+                  {childGrid(
+                    'Stand',
+                    STAND_COLS,
+                    (current.standTable ?? []) as Array<Record<string, string | undefined>>,
+                    (i) => current.standTable?.[i]?.standId ?? `stand-${i}`,
+                    (index, key, value) => setStand(index, { [key]: value }),
+                    removeStand,
+                    addStand,
+                    'Add stand table (tree)',
+                    standError,
+                  )}
+                </fieldset>
+              )}
+
             <div className="rip-form__grid">
               {checkField('cwdTransectIndicator', 'CWD in transect')}
             </div>
@@ -961,60 +1023,33 @@ const BioPlotsView: FC<Props> = ({
               {textField('firstLegTransect', 'Bearing 1st leg', 3, false, true)}
               {textField('secondLegTransect', '2nd leg', 3, false, true)}
             </div>
+            {/* Under the bearings that define the transect it measures. Those used to be repeated
+                read-only at the top of this block, which is redundant now they are the row above. */}
+            {get('cwdTransectIndicator') === 'Y' &&
+              (!readOnly || (current.cwdTable ?? []).length > 0) && (
+                <fieldset className="rip-form__group">
+                  {/* Owed for the same reason as the stand table — `frep.submit.biodiversity.plot.nocwd`. */}
+                  <legend>{requiredLabel('Coarse woody debris (30 m transect)', !readOnly)}</legend>
+                  {/* Under the heading of the table it applies to, where the reader meets it before
+                    entering a row. It repeats across both tables on purpose: each is filled in on
+                    its own, and a note left at one of them is no use at the other. */}
+                  <p className="rip-form__hint">* Decimal place means measured</p>
+                  {childGrid(
+                    'CWD',
+                    CWD_COLS,
+                    (current.cwdTable ?? []) as Array<Record<string, string | undefined>>,
+                    (i) => current.cwdTable?.[i]?.cwdId ?? `cwd-${i}`,
+                    (index, key, value) => setCwd(index, { [key]: value }),
+                    removeCwd,
+                    addCwd,
+                    'Add CWD (log)',
+                    cwdError,
+                  )}
+                </fieldset>
+              )}
+
             <div className="rip-form__grid">{textField('plotComment', 'Comments')}</div>
           </fieldset>
-
-          {/* Stand table only when "Trees exist"; CWD only when "CWD in transect" (legacy). */}
-          {get('treeIndicator') === 'Y' && (
-            <fieldset className="rip-form__group">
-              <legend>Stand table (trees)</legend>
-              {(current.standTable ?? []).length === 0 && (
-                <InlineNotification
-                  kind="error"
-                  title="Stand table required"
-                  subtitle='"Trees exist" is checked — add at least one stand-table row, or uncheck it.'
-                  hideCloseButton
-                  lowContrast
-                />
-              )}
-              {childGrid(
-                'Stand',
-                STAND_COLS,
-                (current.standTable ?? []) as Array<Record<string, string | undefined>>,
-                (i) => current.standTable?.[i]?.standId ?? `stand-${i}`,
-                (index, key, value) => setStand(index, { [key]: value }),
-                removeStand,
-                addStand,
-                'Add new row',
-                standError,
-              )}
-            </fieldset>
-          )}
-
-          {get('cwdTransectIndicator') === 'Y' && (
-            <fieldset className="rip-form__group">
-              <legend>Coarse woody debris (30 m transect)</legend>
-              <div className="rip-form__grid">
-                {roField('Bearing 1st leg', get('firstLegTransect'))}
-                {roField('2nd leg', get('secondLegTransect'))}
-              </div>
-              {childGrid(
-                'CWD',
-                CWD_COLS,
-                (current.cwdTable ?? []) as Array<Record<string, string | undefined>>,
-                (i) => current.cwdTable?.[i]?.cwdId ?? `cwd-${i}`,
-                (index, key, value) => setCwd(index, { [key]: value }),
-                removeCwd,
-                addCwd,
-                'Add new row',
-                cwdError,
-              )}
-            </fieldset>
-          )}
-
-          {(get('treeIndicator') === 'Y' || get('cwdTransectIndicator') === 'Y') && (
-            <p className="rip-form__hint">* Decimal place means measured</p>
-          )}
         </>
       )}
     </div>

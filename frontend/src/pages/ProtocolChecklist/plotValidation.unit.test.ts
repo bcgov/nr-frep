@@ -31,6 +31,23 @@ describe('plotHeaderErrors', () => {
     expect(withSignal.utmNorthing).toMatch(/required/);
   });
 
+  it('exempts a plot that never answered the UTM question', () => {
+    // Legacy rows: UTM_SIGNAL is nullable and predates this app, which always writes 'Y' or 'N'.
+    // Silence is not a yes — neither the columns, nor FREP_BIODIVERSITY_PLOT.VALIDATE, nor legacy's
+    // UtmSignalCompleteValidator (which tested `equals("Y")`) ever asked those rows for coordinates.
+    expect(plotHeaderErrors(validHeader({ utmSignal: undefined }), 'DO')).toEqual({});
+    expect(plotHeaderErrors(validHeader({ utmSignal: '' }), 'DO')).toEqual({});
+  });
+
+  it('still checks the shape of a coordinate that was entered, whatever the signal says', () => {
+    // Exempt from being *required* is not exempt from being right: legacy registered its
+    // Easting/Northing field validators unconditionally, and only a blank field is ever excused.
+    const e = plotHeaderErrors(validHeader({ utmSignal: undefined, utmEasting: '123' }), 'DO');
+    expect(e.utmEasting).toMatch(/exactly 6 digits/);
+    expect(e.utmZone).toBeUndefined();
+    expect(e.utmNorthing).toBeUndefined();
+  });
+
   it('checks easting/northing digit counts', () => {
     const e = plotHeaderErrors(
       validHeader({ utmSignal: 'Y', utmZone: '10', utmEasting: '123', utmNorthing: '12' }),

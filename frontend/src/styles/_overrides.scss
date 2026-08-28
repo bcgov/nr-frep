@@ -319,6 +319,13 @@ $types: "error", "info", "success", "warning";
   vertical-align: middle;
 }
 
+/* On a disabled field the marker fades with its label. A read-only checklist renders its inputs
+   disabled, and a full-strength red asterisk against a greyed-out label reads as an unmet
+   requirement on a form that cannot be filled in. */
+.#{variables.$bcgov-prefix}--label--disabled .required-asterisk {
+  color: inherit;
+}
+
 /* Zebra striping for every data table: white rows with a faint grey alternate,
    matching the standard NRIDS results-table look. Applies to all Carbon
    DataTables (no `useZebraStyles` prop needed). Carbon's White theme maps
@@ -486,9 +493,15 @@ li.#{variables.$bcgov-prefix}--overflow-menu-options__option:last-child {
 /* ------------ Label ---------------
 - Update text color from text-secondary to text-primary
 This will apply to Checkbox, Data Picker, Dropdown, RadioButton, Select, Slider, Text Input, Password Input, Text Area label
+
+Disabled labels are excluded. `label.cds--label` is specificity (0,1,1), which outranks Carbon's
+`.cds--label--disabled` (0,1,0), so without the guard this rule repainted every disabled label full
+black — a disabled text input kept a black label beside its greyed-out value, while a disabled
+select greyed correctly (Carbon reaches those through a more specific selector). The `:not()` keeps
+this rule ahead of Carbon's base label colour while letting the disabled one through.
 ------------------------------- */
-label.#{variables.$bcgov-prefix}--label,
-legend.#{variables.$bcgov-prefix}--label {
+label.#{variables.$bcgov-prefix}--label:not(.#{variables.$bcgov-prefix}--label--disabled),
+legend.#{variables.$bcgov-prefix}--label:not(.#{variables.$bcgov-prefix}--label--disabled) {
   color: var(--#{variables.$bcgov-prefix}-text-primary);
 }
 

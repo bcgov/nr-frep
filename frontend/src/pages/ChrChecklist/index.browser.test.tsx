@@ -62,6 +62,7 @@ const api = API.chrChecklist as unknown as {
   getChecklist: ReturnType<typeof vi.fn>;
   save: ReturnType<typeof vi.fn>;
   saveOpening: ReturnType<typeof vi.fn>;
+  saveFeatures: ReturnType<typeof vi.fn>;
   getPhotos: ReturnType<typeof vi.fn>;
   activate: ReturnType<typeof vi.fn>;
   submit: ReturnType<typeof vi.fn>;
@@ -157,13 +158,15 @@ describe('ChrChecklistPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.saveOpening).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
-    expect(
-      screen.getByText('1 required field to resolve before this checklist can be submitted:'),
-    ).toBeTruthy();
+    // The tab's own panel names it, and the page-level tally counts it.
+    expect(await screen.findByText('Outstanding in this tab')).toBeTruthy();
+    expect(screen.getByText('1 required item outstanding across 1 tab')).toBeTruthy();
   });
 
-  it('stays quiet about a feature that has been added but not saved', async () => {
+  it('lists a blank “Other description” once the Features tab has been saved', async () => {
+    // The reported case, end to end: tick “Other” in the editor, save the tab, and the description
+    // it now owes has to appear in the outstanding list. The count reads the *stored* checklist, so
+    // this also pins the point at which it moves — the tab's Save, not the editor's own writes.
     useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
@@ -173,11 +176,27 @@ describe('ChrChecklistPage', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Other' }));
 
-    // The editor is open on a blank feature. Listing everything it owes before the user has saved it
-    // once reads as a fault rather than as work in progress — the tab keeps quiet until the feature
-    // is stored, which is why the pending list is held outside `checkList`.
-    expect(screen.queryByText('Required fields missing')).toBeNull();
+    const listed = () =>
+      Array.from(document.querySelectorAll('.protocol-checklist__outstanding-list li')).map(
+        (li) => li.textContent,
+      );
+    // Not yet: the edit is still pending, and the count describes what is stored.
+    expect(listed()).not.toContain('Other description, in the Description section');
+
+    // The server echoes the saved record back, which is what the count then reads.
+    const savedFeature = { featureLabel: '1', compositeFeatureInd: 'false', other: 'true' };
+    api.saveFeatures.mockResolvedValue({
+      ...sampleChecklist,
+      features: [savedFeature],
+      revisionCount: '2',
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() =>
+      expect(listed()).toContain('Other description, in the Description section'),
+    );
   });
 
   it('applies an edit made to a feature that has not been saved yet', async () => {
@@ -217,11 +236,13 @@ describe('ChrChecklistPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
 
-    expect(await screen.findByText("This checklist isn't ready to submit")).toBeTruthy();
+    expect(await screen.findByText('Checklist not submitted')).toBeTruthy();
     // The pre-flight answers from what the page already holds, so the server is never asked.
     expect(api.submit).not.toHaveBeenCalled();
-    // Pressing Submit also reveals the count a never-opened tab was holding back.
-    expect(screen.getByLabelText('Features: 1 required field missing')).toBeTruthy();
+    // The count was already on the tab before Submit was pressed; the refusal recolours it rather
+    // than revealing it, and says so to a screen reader as well as in the badge.
+    expect(screen.getByLabelText('Features: 1 item outstanding, blocking submit')).toBeTruthy();
+    expect(document.querySelector('.protocol-checklist__outstanding-toggle--error')).not.toBeNull();
   });
 
   it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {

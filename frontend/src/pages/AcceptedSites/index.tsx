@@ -400,7 +400,7 @@ const AcceptedSitesPage: FC = () => {
                         {/* Add Target Site: enabled once a district is selected (legacy gate). */}
                         <Button
                           kind="tertiary"
-                          size="md"
+                          size="lg"
                           renderIcon={Add}
                           onClick={goToAddTargetSite}
                           disabled={configLoading || !orgUnit}

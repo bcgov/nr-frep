@@ -102,7 +102,10 @@ describe('BioPlotsView — inline error layout', () => {
       .filter((label): label is HTMLElement => label != null)
       .map((label) => Math.round(label.getBoundingClientRect().top));
 
-    expect(labelTops.length).toBeGreaterThan(2);
+    // Plot # shares its row with Evaluated by; the coordinates moved to their own row under the
+    // "No UTM signal available" box. Two cells is still the case this guards — a wrapped error in
+    // one must not push its neighbour's label down.
+    expect(labelTops.length).toBeGreaterThanOrEqual(2);
     expect(new Set(labelTops).size).toBe(1);
   });
 });

@@ -353,7 +353,7 @@ const CompositeModal: FC<{
       <div className="chr-features__composite-panel">
         <div className="chr-features__composite-toolbar">
           <span>{`${rows.length} feature${rows.length === 1 ? '' : 's'}`}</span>
-          <Button kind="ghost" size="sm" renderIcon={Add} disabled={busy} onClick={addFeature}>
+          <Button kind="tertiary" size="lg" renderIcon={Add} disabled={busy} onClick={addFeature}>
             Add a new feature
           </Button>
         </div>

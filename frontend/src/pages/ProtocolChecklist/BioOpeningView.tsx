@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } fr
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
-import TabIncompleteBanner from './TabIncompleteBanner';
+import OutstandingPanel from './OutstandingPanel';
 
 import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
@@ -23,13 +23,14 @@ import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
 import {
   OPENING_REQUIRED_LABELS,
+  OPENING_REQUIRED_SECTIONS,
   OPENING_TEXT_LIMITS,
   evaluationDateRemovalError,
   openingFormatErrors,
   openingRequiredErrors,
-  openingTouched,
   validateOpening,
 } from '@/pages/ProtocolChecklist/openingValidation';
+import { inFormSection } from '@/pages/ProtocolChecklist/tabStatus';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { NO_AUTOFILL } from '@/utils/autofill';
@@ -49,8 +50,8 @@ type Props = {
   submitted: boolean;
   /** Called after a save or delete lands, so the tab-completion dots re-derive. */
   onSaved?: () => void;
-  /** True once Submit has been pressed: the outstanding list shows even on an untouched tab. */
-  revealOutstanding?: boolean;
+  /** `error` once a submit has been refused — see OutstandingPanel. */
+  tone?: 'neutral' | 'error';
 };
 
 // The evaluator id comes from the legacy `biodiversity_evaluator_name` table (written by the FREP301
@@ -62,13 +63,7 @@ const sameEvaluator = (a?: string, b?: string): boolean => {
   return norm(a) !== '' && norm(a) === norm(b);
 };
 
-const BioOpeningView: FC<Props> = ({
-  checklistId,
-  canEdit,
-  submitted,
-  onSaved,
-  revealOutstanding = false,
-}) => {
+const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, tone }) => {
   const { display } = useNotification();
   const { user } = useAuth();
   const me = user?.providerUsername;
@@ -91,7 +86,6 @@ const BioOpeningView: FC<Props> = ({
   const [showErrors, setShowErrors] = useState(false);
   // A save landed in this session, so the incomplete banner can lead with "Opening saved" rather
   // than reporting gaps in a record the user has not touched yet.
-  const [justSaved, setJustSaved] = useState(false);
 
   // Validation runs live off the edited data, but is only *displayed* once the user has tried to
   // save. Opening a record that is merely incomplete (no evaluation date, no location description)
@@ -219,7 +213,6 @@ const BioOpeningView: FC<Props> = ({
       onSaved?.();
       // The banner below carries the "saved, but still incomplete" wording once the record is
       // stored; the toast stays a plain confirmation so the two do not say the same thing twice.
-      setJustSaved(true);
       display({ kind: 'success', title: 'Opening saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -406,19 +399,19 @@ const BioOpeningView: FC<Props> = ({
 
   const showEditControls = canEdit && !submitted;
 
-  // Persistent while anything is outstanding: it is the answer to "why can't I submit?", so it has
-  // to survive leaving and re-entering the tab, and it is not dismissible. It clears itself when the
-  // last required field is filled.
-  // Held back until the tab has been saved at least once — `openingTouched` reads that off `stored`,
-  // never off the edit buffer, so it stays hidden while a brand-new checklist is being filled in and
-  // stays visible on one saved half-finished weeks ago. `justSaved` covers the edge case of saving a
-  // tab with nothing in it.
-  const incompleteBanner = (justSaved || revealOutstanding || openingTouched(stored)) && (
-    <TabIncompleteBanner
-      items={missingRequired.map((key) => OPENING_REQUIRED_LABELS[key] ?? key)}
-      saved={justSaved}
-      sectionLabel="Opening"
-      noun="required field"
+  // Shown whenever anything is outstanding, including on a checklist nobody has touched yet: the
+  // list is the answer to "why can't I submit?", and it is least useful when withheld from someone
+  // just starting. Ungrouped — the Opening tab is a single form, so every item is one record's.
+  const incompleteBanner = (
+    <OutstandingPanel
+      groups={[
+        {
+          items: missingRequired.map((key) =>
+            inFormSection(OPENING_REQUIRED_LABELS[key] ?? key, OPENING_REQUIRED_SECTIONS[key]),
+          ),
+        },
+      ]}
+      tone={tone}
     />
   );
 
@@ -467,7 +460,7 @@ const BioOpeningView: FC<Props> = ({
 
       <fieldset className="rip-form__group">
         <legend>Innovative practices</legend>
-        <div className="rip-form__grid">
+        <div className="rip-form__grid rip-form__grid--wide">
           {select(
             'innovativePracticeInd',
             'Innovative / unique forest practices used?',
@@ -484,7 +477,7 @@ const BioOpeningView: FC<Props> = ({
 
       <fieldset className="rip-form__group">
         <legend>Evaluator opinion</legend>
-        <div className="rip-form__grid">
+        <div className="rip-form__grid rip-form__grid--wide">
           {select(
             'frepSiteEvaluationCode',
             'Rating (stand-level biodiversity maintained)',
@@ -497,7 +490,7 @@ const BioOpeningView: FC<Props> = ({
 
       <fieldset className="rip-form__group">
         <legend>Invasive plants</legend>
-        <div className="rip-form__grid">
+        <div className="rip-form__grid rip-form__grid--wide">
           {select('invasivePlantIndicator', 'Invasive plant species present?', answers, true)}
         </div>
         {textarea('invasivePlantComment', 'Comments', get('invasivePlantIndicator') === 'Y')}

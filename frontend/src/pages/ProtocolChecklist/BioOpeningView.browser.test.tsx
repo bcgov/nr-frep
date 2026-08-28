@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,9 +71,35 @@ describe('BioOpeningView', () => {
     expect(api.saveBiodiversityOpening.mock.calls[0][0]).toBe('9001');
   });
 
-  it('says nothing about missing fields until the tab has been saved once', async () => {
-    // A brand-new checklist: only the read-only RESULTS values are populated. Listing what it owes
-    // before the evaluator has opened the form reads as a fault rather than as work not yet started.
+  it('shows no disclosure at all once the tab owes nothing', async () => {
+    // The Opening tab hands the panel one group whether or not it holds anything, so an empty group
+    // used to render the toggle opening onto an empty list. Nothing outstanding, nothing shown.
+    const complete = {
+      checklistId: '9001',
+      evaluationDate: '2024-06-01',
+      teamLeadNameId: 'IDIR\\ME',
+      locationDescription: 'Block 12',
+      innovativePracticeInd: 'N',
+      invasivePlantIndicator: 'N',
+      frepSiteEvaluationCode: 'M',
+      revisionCount: '1',
+    };
+    api.getBiodiversityOpening.mockResolvedValue(complete);
+    config.getChecklistAnswers.mockResolvedValue([
+      { code: 'Y', description: 'Yes' },
+      { code: 'N', description: 'No' },
+    ]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+
+    await screen.findByRole('button', { name: 'Edit' });
+    expect(screen.queryByText('Outstanding in this tab')).toBeNull();
+  });
+
+  it('lists what an untouched checklist owes, and tracks the stored record not the edit buffer', async () => {
+    // A brand-new checklist: only the read-only RESULTS values are populated. It still says what it
+    // owes — withholding that is least helpful to someone who has done the least.
     const untouched = {
       checklistId: '9001',
       grossArea: '50',
@@ -95,20 +121,26 @@ describe('BioOpeningView', () => {
     render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
 
     await screen.findByRole('button', { name: 'Edit' });
-    expect(screen.queryByText('Required fields missing')).toBeNull();
+    expect(screen.getByText('Outstanding in this tab')).toBeTruthy();
+    const listed = () =>
+      Array.from(document.querySelectorAll('.protocol-checklist__outstanding-list li')).map(
+        (li) => li.textContent,
+      );
+    expect(listed()).toContain('Location description, in the Opening identification section');
 
-    // Still nothing part-way through filling the form in. The gate reads the *stored* record, not the
-    // edit buffer — reading the buffer meant the first character typed raised a banner listing every
-    // field the user had not reached yet.
+    // Typing does not move the list: it describes the *stored* record, so it stays in step with the
+    // count on the tab. Reading the edit buffer instead would rewrite the list under the cursor.
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
     await userEvent.type(screen.getByLabelText(/Location description/), 'Block 12');
-    expect(screen.queryByText('Required fields missing')).toBeNull();
+    expect(listed()).toContain('Location description, in the Opening identification section');
 
-    // After the first save it speaks up, and keeps doing so on every later visit.
+    // The save is what moves it.
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(api.saveBiodiversityOpening).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
+    await waitFor(() =>
+      expect(listed()).not.toContain('Location description, in the Opening identification section'),
+    );
   });
 
   it('saves a blank Location description and warns that it is still required', async () => {
@@ -135,21 +167,22 @@ describe('BioOpeningView', () => {
     render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
 
     // Before any save, the tab already says what it owes.
-    expect(await screen.findByText('Required fields missing')).toBeTruthy();
+    expect(await screen.findByText('Outstanding in this tab')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(api.saveBiodiversityOpening).toHaveBeenCalledTimes(1);
-    // The banner now leads with the save, counts what is left and names the fields in tab order.
-    expect(await screen.findByText('Opening saved — required fields missing')).toBeTruthy();
-    expect(
-      screen.getByText('2 required fields to resolve before this checklist can be submitted:'),
-    ).toBeTruthy();
-    // Listed in tab order, one per line.
-    const listed = Array.from(document.querySelectorAll('.protocol-checklist__incomplete-list li'));
-    expect(listed.map((li) => li.textContent)).toEqual(['Location description', 'Rating']);
-    // A successful save closes the editor, so the inline field errors go with it — the banner is
+    // Listed in tab order, one per line. Opening is one form, so the items are ungrouped.
+    const listed = Array.from(
+      document.querySelectorAll('.protocol-checklist__outstanding-list li'),
+    );
+    expect(listed.map((li) => li.textContent)).toEqual([
+      'Location description, in the Opening identification section',
+      'Rating, in the Evaluator opinion section',
+    ]);
+    expect(document.querySelector('.protocol-checklist__outstanding-title')).toBeNull();
+    // A successful save closes the editor, so the inline field errors go with it — the panel is
     // what persists, and it is the reason the user can still find the gaps.
     expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
   });

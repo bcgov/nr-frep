@@ -1,5 +1,5 @@
 import { Edit } from '@carbon/icons-react';
-import { Button, InlineNotification } from '@carbon/react';
+import { Button } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import {
@@ -62,7 +62,6 @@ const OpeningInformation: FC<{
   const editAssessedByDisplay =
     editAssessedBy === assessedBy ? value.assessedByName || editAssessedBy : editAssessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
-  const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
   const beginEdit = () => {
     setDraft({
@@ -129,16 +128,6 @@ const OpeningInformation: FC<{
         <legend>Evaluation</legend>
         {editing ? (
           <>
-            {assignPending && (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                hideCloseButton
-                title="Save required"
-                subtitle="You must save the form to update the Evaluator value."
-                className="chr-checklist__assessed-by__notice"
-              />
-            )}
             <div className="rip-form__grid">
               <DateField
                 id="chr-evaluation-date"

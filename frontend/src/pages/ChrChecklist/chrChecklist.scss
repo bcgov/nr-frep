@@ -173,11 +173,6 @@
     }
   }
 
-  &__assessed-by__notice {
-    margin-bottom: 1rem;
-    max-width: none;
-  }
-
   // Two-column question/answer layout (Damage, Windthrow, Summary): paired cells flow left→right,
   // top-aligned so an answer field sits next to its question.
   &__two-col {

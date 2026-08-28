@@ -43,6 +43,12 @@ export const getCookie = (name: string): string => {
  * We therefore clear the {@code CognitoIdentityServiceProvider.<clientId>.*} keys from localStorage;
  * clearing cookies here would be a silent no-op and leave the local session intact after logout.
  */
+/**
+ * Set when the user signs out while offline, so the landing page can say that the sign-out was
+ * local only. Mirrors {@code SESSION_EXPIRED_FLAG}: sessionStorage, read-and-cleared once.
+ */
+export const OFFLINE_SIGNOUT_FLAG = 'frep.offlineSignOut';
+
 export const clearStoredTokens = (): void => {
   const prefix = `CognitoIdentityServiceProvider.${env.VITE_USER_POOLS_WEB_CLIENT_ID}`;
   try {

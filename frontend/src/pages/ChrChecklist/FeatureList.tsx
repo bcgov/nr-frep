@@ -301,10 +301,10 @@ const FeatureList: FC<{
               kind="tertiary"
               size="lg"
               className="bio-strata__add"
+              renderIcon={Add}
               disabled={busy}
               onClick={add}
             >
-              <Add size={16} className="bio-strata__add-icon" />
               Add feature
             </Button>
           </div>

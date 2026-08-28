@@ -41,7 +41,7 @@ const api = API.protocolChecklist as unknown as {
 describe('BioStratumView', () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('lists the tab\u2019s outstanding rules in a banner', async () => {
+  it('lists the tab\u2019s outstanding rules under the stratum they belong to', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
 
     render(
@@ -49,19 +49,45 @@ describe('BioStratumView', () => {
         checklistId="9001"
         canEdit
         submitted={false}
-        outstanding={['Stratum 1 — missing Stratum type', 'Stratum 1 — missing Mapped size']}
+        outstanding={[
+          { title: 'Stratum 1', items: ['missing Stratum type', 'missing Mapped size'] },
+        ]}
       />,
     );
 
-    expect(await screen.findByText('Required fields missing')).toBeTruthy();
-    expect(
-      screen.getByText('2 items to resolve before this checklist can be submitted:'),
-    ).toBeTruthy();
-    const listed = Array.from(document.querySelectorAll('.protocol-checklist__incomplete-list li'));
+    expect(await screen.findByText('Outstanding in this tab')).toBeTruthy();
+    // The heading carries the record, so each rule below it reads as that stratum's.
+    expect(document.querySelector('.protocol-checklist__outstanding-title')?.textContent).toBe(
+      'Stratum 1',
+    );
+    const listed = Array.from(
+      document.querySelectorAll('.protocol-checklist__outstanding-list li'),
+    );
     expect(listed.map((li) => li.textContent)).toEqual([
-      'Stratum 1 — missing Stratum type',
-      'Stratum 1 — missing Mapped size',
+      'missing Stratum type',
+      'missing Mapped size',
     ]);
+  });
+
+  it('folds the outstanding list away when the disclosure is clicked', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+
+    render(
+      <BioStratumView
+        checklistId="9001"
+        canEdit
+        submitted={false}
+        outstanding={[{ title: 'Stratum 1', items: ['missing Stratum type'] }]}
+      />,
+    );
+
+    // Open by default: the list is the answer to "why can't I submit?".
+    const toggle = await screen.findByRole('button', { name: /Outstanding in this tab/ });
+    expect(document.querySelectorAll('.protocol-checklist__outstanding-list li').length).toBe(1);
+
+    await userEvent.click(toggle);
+    expect(document.querySelectorAll('.protocol-checklist__outstanding-list li').length).toBe(0);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('saves a stratum that is missing its number, type and size', async () => {

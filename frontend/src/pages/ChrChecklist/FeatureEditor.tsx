@@ -223,6 +223,11 @@ const FeatureEditor: FC<{
   const ind = (field: string): Indicator | undefined => feature[field] as Indicator | undefined;
   const str = (field: string): string | undefined => feature[field] as string | undefined;
   const on = (field: string): boolean => ind(field) === 'true';
+
+  // An explicit "not a composite". The submit rule compares the indicator to the string "false", so
+  // a feature whose composite box has never been touched owes neither code — and must not be
+  // marked as if it did.
+  const notComposite = feature.compositeFeatureInd === 'false';
   const chk = (field: string, label: string) => (
     <IndicatorCheckbox
       id={`feat-${field}`}
@@ -387,10 +392,10 @@ const FeatureEditor: FC<{
         {/* Description */}
         <fieldset className="rip-form__group">
           <legend>Feature description</legend>
-          <div className="rip-form__grid">
+          <div className="rip-form__grid rip-form__grid--wide">
             <TextField
               id="feat-label"
-              labelText="Feature label"
+              labelText={requiredLabel('Feature label', true)}
               value={str('featureLabel')}
               maxLength={FEATURE_SINGLE_LINE_MAX.featureLabel}
               disabled={readOnly}
@@ -398,7 +403,10 @@ const FeatureEditor: FC<{
             />
             <CodeSelect
               id="feat-class"
-              labelText="Feature class"
+              // Owed only by an explicit non-composite, exactly as the submit rule asks for it: a
+              // composite is described through its members, and a feature whose composite box has
+              // never been touched is not asked either.
+              labelText={requiredLabel('Feature class', notComposite)}
               value={str('featureDescriptionCode')}
               options={FEATURE_CLASS_CODES}
               includeBlank
@@ -407,7 +415,7 @@ const FeatureEditor: FC<{
             />
             <CodeSelect
               id="feat-source"
-              labelText="Information source"
+              labelText={requiredLabel('Information source', notComposite)}
               value={str('featureInfoSourceCode')}
               options={INFORMATION_SOURCE_CODES}
               includeBlank
@@ -539,7 +547,7 @@ const FeatureEditor: FC<{
         onHeadingClick={() => toggleSection('Location')}
       >
         {/* Location */}
-        <div className="rip-form__grid chr-checklist__check-grid">
+        <div className="rip-form__grid rip-form__grid--wide chr-checklist__check-grid">
           {chk('inharvestedarea', 'In harvested area')}
           {chk('adjacenttoblock', 'Adjacent to block')}
           {chk('adjacenttowater', 'Adjacent to water')}
@@ -592,7 +600,7 @@ const FeatureEditor: FC<{
           {on('sitePermitIssued') && (
             <TextField
               id="feat-permit"
-              labelText="Permit number"
+              labelText={requiredLabel('Permit number', true)}
               value={str('permit')}
               maxLength={FEATURE_SINGLE_LINE_MAX.permit}
               disabled={readOnly}
@@ -631,9 +639,9 @@ const FeatureEditor: FC<{
                     kind="tertiary"
                     size="lg"
                     className="bio-strata__add"
+                    renderIcon={Add}
                     onClick={addStrategy}
                   >
-                    <Add size={16} className="bio-strata__add-icon" />
                     Add strategy
                   </Button>
                 </div>
@@ -721,7 +729,7 @@ const FeatureEditor: FC<{
         onHeadingClick={() => toggleSection('Effectiveness')}
       >
         {/* Effectiveness */}
-        <div className="rip-form__grid chr-checklist__check-grid">
+        <div className="rip-form__grid rip-form__grid--wide chr-checklist__check-grid">
           {isComposite &&
             chk('forCompositeFeaturesInd', 'Same strategy for all features (composite)')}
           {!isComposite && chk('unabletoLocate', 'Unable to locate feature')}
@@ -918,7 +926,7 @@ const FeatureEditor: FC<{
                 {on('isthereevidenceofdamage') && (
                   <TextField
                     id="feat-trail-len"
-                    labelText="Estimated trail damage (%)"
+                    labelText={requiredLabel('Estimated trail damage (%)', true)}
                     value={str('trailLength')}
                     disabled={readOnly}
                     onChange={(v) => onPatch({ trailLength: v })}

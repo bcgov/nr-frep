@@ -62,13 +62,37 @@ const put = (errors: Record<string, string>, key: string, message: string): void
 
 type Getter = (key: string) => string;
 
-const utmErrors = (e: Record<string, string>, g: Getter, noUtm: boolean): void => {
-  if (noUtm) return;
-  if (isBlank(g('utmZone'))) e.utmZone = 'Zone is required.';
-  if (isBlank(g('utmEasting'))) e.utmEasting = 'Easting is required.';
-  else if (!/^\d{6}$/.test(g('utmEasting'))) e.utmEasting = 'Easting must be exactly 6 digits.';
-  if (isBlank(g('utmNorthing'))) e.utmNorthing = 'Northing is required.';
-  else if (!/^\d{7}$/.test(g('utmNorthing'))) e.utmNorthing = 'Northing must be exactly 7 digits.';
+/**
+ * UTM coordinates, owed only when the plot affirmatively records a signal.
+ *
+ * `signalled` is the plot saying "yes, there was a signal" — `utm_signal = 'Y'`, which is the
+ * "No UTM signal available" box left unchecked. A blank signal is *not* treated as a yes: the column
+ * is nullable and rows predating this app never answered the question, so reading silence as "there
+ * was a signal" demanded coordinates from records nothing else has ever asked for. Neither the
+ * column (`UTM_ZONE`/`UTM_EASTING`/`UTM_NORTHING` are all nullable) nor
+ * `FREP_BIODIVERSITY_PLOT.VALIDATE` requires them, and legacy tested the same `'Y'` — see
+ * Frep212ValidationManager's UtmSignalCompleteValidator.
+ *
+ * The checklist-wide rule is separate and unaffected: `FREP_TOMBSTONE` still refuses a submit unless
+ * at least one plot really holds all three (`frep.submit.biodiversity.plot.utmrequired`).
+ */
+const utmErrors = (e: Record<string, string>, g: Getter, signalled: boolean): void => {
+  // Owed only on an affirmative signal.
+  if (signalled) {
+    if (isBlank(g('utmZone'))) e.utmZone = 'Zone is required.';
+    if (isBlank(g('utmEasting'))) e.utmEasting = 'Easting is required.';
+    if (isBlank(g('utmNorthing'))) e.utmNorthing = 'Northing is required.';
+  }
+  // Shape is checked whatever the signal says: a value the evaluator actually typed is wrong
+  // regardless of whether it was owed, and legacy registered its Easting/Northing field validators
+  // unconditionally for the same reason. This is the file's standing rule — only a *blank* field is
+  // ever exempted (see ADVISORY_WHEN_BLANK).
+  if (!isBlank(g('utmEasting')) && !/^\d{6}$/.test(g('utmEasting'))) {
+    e.utmEasting = 'Easting must be exactly 6 digits.';
+  }
+  if (!isBlank(g('utmNorthing')) && !/^\d{7}$/.test(g('utmNorthing'))) {
+    e.utmNorthing = 'Northing must be exactly 7 digits.';
+  }
 };
 
 const bearingErrors = (e: Record<string, string>, g: Getter): void => {
@@ -161,8 +185,8 @@ const measurementMethodErrors = (
 };
 
 /**
- * Plot-header field errors keyed by field key. Legacy parity: UTM (conditional on the "no signal"
- * toggle), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
+ * Plot-header field errors keyed by field key. Legacy parity: UTM (only when the plot records a
+ * signal — see {@link utmErrors}), bearings (required + 0–359), Evaluated by required, Plot # / BAF / fixed-area / full-count
  * numeric ranges and decimals, comment length, and the "exactly one measurement method" rule
  * (clear-cut → fixed-area radius only). Split into rule groups to keep each simple.
  *
@@ -182,7 +206,7 @@ export const plotHeaderErrors = (
     const raw = (plot as Record<string, unknown>)[k];
     return typeof raw === 'string' ? raw.trim() : '';
   };
-  utmErrors(e, g, g('utmSignal') === 'N');
+  utmErrors(e, g, g('utmSignal') === 'Y');
   bearingErrors(e, g);
   plotNumberErrors(e, g, takenPlotNumbers);
   measurementMethodErrors(e, g, stratumType);

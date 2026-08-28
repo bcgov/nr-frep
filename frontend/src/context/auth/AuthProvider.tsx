@@ -2,7 +2,7 @@ import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AuthContext, type AuthContextType } from './AuthContext';
-import { clearStoredTokens, parseToken } from './authUtils';
+import { OFFLINE_SIGNOUT_FLAG, clearStoredTokens, parseToken } from './authUtils';
 import { buildFederatedLogoutUrl } from './logoutChain';
 
 import type { FamLoginUser, LoginProvider } from './types';
@@ -75,6 +75,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const logout = useCallback(() => {
+    // Offline the federated chain cannot be reached. window.location.assign() lands on the browser's
+    // ERR_INTERNET_DISCONNECTED page — outside the app, with the local tokens already cleared — and
+    // the user has to find their own way back. Sign out locally instead and stay put: clearing the
+    // user swaps AppRoutes to the offline route set, whose catch-all returns to the landing.
+    //
+    // This clears the app session only. The upstream IDIR / Keycloak / Cognito sessions are
+    // untouched and cannot be reached from here, so signing in again once back online may not
+    // re-prompt for credentials — the landing page says so (OFFLINE_SIGNOUT_FLAG).
+    if (!navigator.onLine) {
+      sessionStorage.setItem(OFFLINE_SIGNOUT_FLAG, '1');
+      clearStoredTokens();
+      setUser(undefined);
+      return;
+    }
+
     // Primary path: drive the BC-Gov federated logout chain ourselves (Siteminder → Keycloak →
     // Cognito → app) so the upstream IDIR/Keycloak/Cognito sessions are cleared — not just the local
     // app tokens (which is all Amplify's signOut() reliably does here). We clear the Amplify token

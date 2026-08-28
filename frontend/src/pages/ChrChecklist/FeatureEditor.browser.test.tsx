@@ -147,3 +147,43 @@ describe('FeatureEditor — browser autofill', () => {
     expect(stillAutofillable()).toEqual([]);
   });
 });
+
+describe('FeatureEditor — required markers', () => {
+  /** The asterisk `requiredLabel` appends, read off the rendered label. */
+  const marked = (label: string): boolean =>
+    Array.from(document.querySelectorAll('label, .cds--label')).some(
+      (el) => el.textContent?.startsWith(label) && el.querySelector('.required-asterisk') != null,
+    );
+
+  it('marks the fields the submit rules ask a plain feature for', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ compositeFeatureInd: 'false' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    await waitFor(() => expect(marked('Feature label')).toBe(true));
+    expect(marked('Feature class')).toBe(true);
+    expect(marked('Information source')).toBe(true);
+    // Borden is only format-checked when it has a value, so it is not owed and is not marked.
+    expect(marked('Borden number')).toBe(false);
+  });
+
+  it('does not ask a composite for the two codes it is never validated on', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ compositeFeatureInd: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // A composite is described through its members; the submit rule skips both codes, so the form
+    // must not promise an error that never comes.
+    await waitFor(() => expect(marked('Feature label')).toBe(true));
+    expect(marked('Feature class')).toBe(false);
+    expect(marked('Information source')).toBe(false);
+  });
+});

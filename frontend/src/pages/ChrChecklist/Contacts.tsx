@@ -190,10 +190,10 @@ const Contacts: FC<{
               kind="tertiary"
               size="lg"
               className="bio-strata__add"
+              renderIcon={Add}
               disabled={busy}
               onClick={openAdd}
             >
-              <Add size={16} className="bio-strata__add-icon" />
               Add contact
             </Button>
           </div>

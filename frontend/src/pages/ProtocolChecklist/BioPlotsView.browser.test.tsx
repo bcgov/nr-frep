@@ -147,7 +147,7 @@ describe('BioPlotsView', () => {
     expect(screen.getByText('Northing is required.')).toBeTruthy();
   });
 
-  it('shows an inline error when "Trees exist" is checked but the stand table is empty', async () => {
+  it('still saves a plot whose "Trees exist" box is checked with no stand rows', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.listBioPlots.mockResolvedValue([]);
     api.saveBioPlot.mockResolvedValue({ plotId: 'P1', stratumId: 'S1', revisionCount: '1' });
@@ -159,11 +159,14 @@ describe('BioPlotsView', () => {
     await userEvent.type(screen.getByLabelText('2nd leg', { exact: false }), '240');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
 
-    // Trees exist but no stand rows → marked inline and counted against submit, but the plot still
-    // saves. A stand row the user has *added* must be complete, because every column of
+    // Trees exist but no stand rows is a legitimate saved state — a plot recorded before the trees
+    // are measured still stores. The proc refuses it at submit
+    // (`frep.submit.biodiversity.plot.notrees`), which the tab count and the outstanding panel
+    // report; the form itself says nothing, so it does not add a third voice to the same fact.
+    // A stand row the user has *added* must be complete, because every column of
     // BIODIVERSITY_STAND_DETAIL is NOT NULL — that is covered by the row-level rules.
     await userEvent.type(screen.getByLabelText('Plot #', { exact: false }), '1');
-    expect(screen.getByText('Stand table required')).toBeTruthy();
+    expect(screen.queryByText('Stand table required')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.saveBioPlot).toHaveBeenCalledTimes(1);
   });
@@ -208,7 +211,11 @@ describe('BioPlotsView', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Add new row' }));
+    // With no rows there is no table at all — the Add button is the whole empty state, and pressing
+    // it brings the first row and the header with it.
+    expect(document.querySelector('.rip-field-grid')).toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add stand table (tree)' }));
+    expect(document.querySelector('.rip-field-grid')).not.toBeNull();
 
     // The "Spp." dropdown shows the code prefixed — not just the description.
     expect(screen.getByRole('option', { name: 'FD - Douglas-fir' })).toBeTruthy();
@@ -311,5 +318,38 @@ describe('BioPlotsView — duplicate plot number', () => {
     // Same exclusion the proc makes: the plot being saved is not compared against itself.
     expect(screen.queryByText(/already exists in this stratum/)).toBeNull();
     expect(api.saveBioPlot).toHaveBeenCalled();
+  });
+});
+
+describe('BioPlotsView — sub-table required columns', () => {
+  it('marks the stand columns every row owes, and only those', async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Trees exist' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add stand table (tree)' }));
+
+    const marked = (label: string): boolean =>
+      Array.from(document.querySelectorAll('th')).some(
+        (th) => th.textContent?.startsWith(label) && th.querySelector('.required-asterisk') != null,
+      );
+
+    // Every column of BIODIVERSITY_STAND_DETAIL is NOT NULL bar the comment; the row number is
+    // generated, so neither is asked for.
+    for (const label of ['Spp.', 'WT Class', 'DBH (cm)', 'Ht (m)']) {
+      expect(marked(label)).toBe(true);
+    }
+    expect(marked('Tree #')).toBe(false);
+    expect(marked('Comments')).toBe(false);
+
+    // The table as a whole is owed too — the proc refuses a submit while "Trees exist" is ticked
+    // and no rows exist — so the section heading carries the marker as well as the columns.
+    const legend = Array.from(document.querySelectorAll('legend')).find((el) =>
+      el.textContent?.startsWith('Stand table (trees)'),
+    );
+    expect(legend?.querySelector('.required-asterisk')).not.toBeNull();
   });
 });

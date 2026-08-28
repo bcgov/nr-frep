@@ -22,9 +22,10 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import OutstandingPanel from './OutstandingPanel';
 import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
-import TabIncompleteBanner from './TabIncompleteBanner';
 
+import type { OutstandingGroup } from './tabStatus';
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
@@ -49,10 +50,12 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
-  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
-  outstanding?: string[];
+  /** Outstanding submit rules for this tab, grouped by stratum (see OutstandingPanel). */
+  outstanding?: OutstandingGroup[];
   /** Called after a save or delete lands, so the tab-completion dots re-derive. */
   onSaved?: () => void;
+  /** `error` once a submit has been refused — see OutstandingPanel. */
+  tone?: 'neutral' | 'error';
 };
 
 type FieldDef = { key: string; label: string };
@@ -594,11 +597,9 @@ const BioStratumView: FC<Props> = ({
   submitted,
   onSaved,
   outstanding = [],
+  tone,
 }) => {
   const { display } = useNotification();
-  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
-  // a tab the user has not touched yet.
-  const [justSaved, setJustSaved] = useState(false);
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
@@ -919,7 +920,6 @@ const BioStratumView: FC<Props> = ({
       setComputed(null);
       await loadList();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -942,7 +942,6 @@ const BioStratumView: FC<Props> = ({
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');
       await loadList();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -966,8 +965,24 @@ const BioStratumView: FC<Props> = ({
   // Read-only display of a Yes/No indicator field.
   const yesNo = (key: string): string => (get(key) === 'Y' ? 'Yes' : 'No');
 
+  /**
+   * Whether the field is owed, for the asterisk.
+   *
+   * {@link REQUIRED_KEYS} covers the fields that are always owed. The two sizes are conditional —
+   * which one applies depends on the map-consistency answer — so they are decided here, on the same
+   * test the validation below uses, rather than being left unmarked because a static set could not
+   * express them.
+   */
+  const isRequired = (key: string): boolean => {
+    if (REQUIRED_KEYS.has(key)) return true;
+    const consistent = get('consistentMapInd');
+    if (key === 'size') return consistent === 'Y';
+    if (key === 'estimatedSize') return consistent === 'N' || consistent === 'M';
+    return false;
+  };
+
   const field = (key: string, label: string): ReactNode => {
-    const lbl = requiredLabel(label, REQUIRED_KEYS.has(key));
+    const lbl = requiredLabel(label, isRequired(key));
     const opts = optionsFor(key);
     const disabled = disabledKey(key);
     const onChange = onChangeFor(key);
@@ -1135,7 +1150,7 @@ const BioStratumView: FC<Props> = ({
 
   return (
     <div className="rip-form">
-      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Stratum" />
+      <OutstandingPanel groups={outstanding} tone={tone} />
       {/* The strata table and the stratum form are mutually exclusive — each takes the
           full width; the table is hidden while a stratum form is open. */}
       <div>
@@ -1149,17 +1164,15 @@ const BioStratumView: FC<Props> = ({
                   kind="tertiary"
                   size="lg"
                   className="bio-strata__add"
+                  renderIcon={Add}
                   disabled={busy}
                   onClick={() => void addStratum()}
                 >
-                  <Add size={16} className="bio-strata__add-icon" />
                   Add stratum
                 </Button>
               </div>
             )}
-            {rows.length === 0 ? (
-              <p>No strata yet.</p>
-            ) : (
+            {rows.length > 0 && (
               <Table size="sm" className="bio-strata__table">
                 <TableHead>
                   <TableRow>
@@ -1231,10 +1244,14 @@ const BioStratumView: FC<Props> = ({
               {/* Stratum Summary (legacy frep211StratumSummary.jsp top block) */}
               <fieldset className="rip-form__group">
                 <legend>Stratum summary</legend>
+                {/* Two rows of three: the stratum's identity, then its plots and size. Left as one
+                    row the six ran the width of the page and read as an undifferentiated strip. */}
                 <div className="rip-form__grid">
                   {field('stratumNumber', 'Stratum Id')}
                   {field('strataTypeCode', 'Stratum type')}
                   {roCell('NAR', computed?.nar ?? '')}
+                </div>
+                <div className="rip-form__grid">
                   {field('plotCount', '# of plots in stratum')}
                   {roCell('# of plots completed', computed?.plotsCompleted ?? '')}
                   {field('size', 'Mapped stratum size (ha)')}
@@ -1285,7 +1302,9 @@ const BioStratumView: FC<Props> = ({
               {/* Harvest area */}
               <fieldset className="rip-form__group">
                 <legend>Harvest area</legend>
-                <div className="rip-form__grid">{field('harvestAreaCode', 'Tick one of')}</div>
+                <div className="rip-form__grid rip-form__grid--wide">
+                  {field('harvestAreaCode', 'Tick one of')}
+                </div>
               </fieldset>
 
               {/* Patch / Dispersed Summary */}
@@ -1315,7 +1334,11 @@ const BioStratumView: FC<Props> = ({
                     </span>
                   </div>
                 ) : (
-                  <div className="rip-form__grid">
+                  /* "Other" joins the treatments it belongs with rather than sitting on a row of
+                     its own. Bottom-aligned so the checkboxes line up with the input beside them:
+                     they carry no label above, so a top-aligned row left them floating a label's
+                     height clear of it. */
+                  <div className="rip-form__grid rip-form__grid--checks">
                     {WINDTHROW_TREATMENT_OPTIONS.map((o) => (
                       <Checkbox
                         key={o.code}
@@ -1326,9 +1349,9 @@ const BioStratumView: FC<Props> = ({
                         onChange={(_e, { checked }) => toggleTreatment(o.code, checked)}
                       />
                     ))}
+                    {field('otherWindthrowTreatment', 'Other')}
                   </div>
                 )}
-                <div className="rip-form__grid">{field('otherWindthrowTreatment', 'Other')}</div>
               </fieldset>
 
               {/* Reserve Constraints | Ecological Anchors (two-column, legacy layout) */}

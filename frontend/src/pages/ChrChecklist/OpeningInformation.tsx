@@ -8,6 +8,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import RequiredLegend from '@/pages/ProtocolChecklist/RequiredLegend';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
@@ -123,6 +124,8 @@ const OpeningInformation: FC<{
           </>
         )}
       </div>
+      {/* Only while editing — the read-only view marks nothing required. */}
+      {editing && <RequiredLegend />}
 
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
@@ -167,12 +170,14 @@ const OpeningInformation: FC<{
                 maxLength={200}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
-              <IndicatorCheckbox
-                id="chr-targeted"
-                labelText="Targeted site"
-                value={draft.targeted}
-                onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
-              />
+              <div className="chr-checklist__grid-check">
+                <IndicatorCheckbox
+                  id="chr-targeted"
+                  labelText="Targeted site"
+                  value={draft.targeted}
+                  onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
+                />
+              </div>
             </div>
             <TextAreaField
               id="chr-general-location"

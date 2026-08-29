@@ -94,8 +94,33 @@ public class ConfigurationApiController implements ConfigurationApiEndpoint {
   }
 
   @Override
-  public ResponseEntity<List<CodeOptionResponse>> getResourceValueStatusCodes() {
-    return ResponseEntity.ok(configurationService.getResourceValueStatusCodes());
+  public ResponseEntity<List<CodeOptionResponse>> getResourceValueStatusCodes(String exclude) {
+    return ResponseEntity.ok(configurationService.getResourceValueStatusCodes(exclude));
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getChrFeatureClassCodes() {
+    return ResponseEntity.ok(configurationService.getChrFeatureClassCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getChrFeatureInfoSourceCodes() {
+    return ResponseEntity.ok(configurationService.getChrFeatureInfoSourceCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getChrReserveTypeCodes() {
+    return ResponseEntity.ok(configurationService.getChrReserveTypeCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getChrSiteEvaluationCodes() {
+    return ResponseEntity.ok(configurationService.getChrSiteEvaluationCodes());
+  }
+
+  @Override
+  public ResponseEntity<List<CodeOptionResponse>> getChrParticipantRoleCodes() {
+    return ResponseEntity.ok(configurationService.getChrParticipantRoleCodes());
   }
 
   @Override

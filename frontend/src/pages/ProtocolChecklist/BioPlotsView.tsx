@@ -20,6 +20,7 @@ import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import OutstandingPanel from './OutstandingPanel';
+import RequiredLegend from './RequiredLegend';
 
 import type { OutstandingGroup } from './tabStatus';
 import type { CodeOption } from '@/types/configuration';
@@ -620,7 +621,7 @@ const BioPlotsView: FC<Props> = ({
         invalidText={error}
         onChange={(e) => set(key, e.target.value)}
       >
-        <SelectItem value="" text="—" />
+        <SelectItem value="" text="Choose an option" />
         {options.map((o) => (
           <SelectItem key={o.code} value={o.code} text={o.description} />
         ))}
@@ -935,6 +936,10 @@ const BioPlotsView: FC<Props> = ({
               Cancel
             </Button>
           </div>
+
+          {/* Under the buttons, directly above the fields it describes — and only where fields are
+              marked, which is the open form, not the list behind it. */}
+          {!readOnly && <RequiredLegend />}
 
           {stratumInfo(true)}
 

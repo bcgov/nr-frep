@@ -183,21 +183,87 @@ public class CodeListRepositoryImpl extends AbstractFrepRepository implements Co
   }
 
   /**
-   * Resource-value status codes for the biodiversity data-extract report filter
-   * ({@code p_resource_val}). Direct SELECT (no proc), mirroring the legacy JCRS input control:
-   * {@code frep_resource_value_stat_code} + {@code description}, excluding {@code REJ}.
+   * CHR code tables, as active options for the checklist's dropdowns.
+   *
+   * <p>Direct SELECT rather than a proc: {@code FREP_CODE_LISTS} exposes 37 procedures and not one
+   * of them is CHR, so there is nothing to call. SELECT is granted on every one of these to
+   * {@code FSA_FREP_READ_WRITE_ROLE}, which is the role behind the app's proxy user.
+   *
+   * <p>"Active" is the same test the package's own helper applies — {@code SYSDATE BETWEEN
+   * effective_date AND expiry_date}. It is not cosmetic: ten of these codes expired in 2019 and are
+   * duplicates of ones still in use (PC of PCOM, "S - CMT" of CMTS, A of ARCH), so returning them
+   * would put pairs of near-identical options in front of the evaluator.
+   *
+   * @param table the code table, and {@code codeColumn} its primary key — both compile-time
+   *     constants from the callers below, never anything a request can influence
    */
-  public List<Map<String, Object>> getResourceValueStatusCode() {
+  private List<Map<String, Object>> activeCodes(String table, String codeColumn) {
     return jdbcTemplate.query(
-        "SELECT frep_resource_value_stat_code AS code, description "
-            + "FROM the.frep_resource_value_stat_code "
-            + "WHERE frep_resource_value_stat_code <> 'REJ' ORDER BY description",
+        "SELECT " + codeColumn + " AS code, description FROM the." + table
+            + " WHERE SYSDATE BETWEEN effective_date AND expiry_date ORDER BY description",
         (rs, n) -> {
           Map<String, Object> row = new LinkedHashMap<>(2);
           row.put("code", rs.getString("code"));
           row.put("description", rs.getString("description"));
           return row;
         });
+  }
+
+  /** Feature-class options for the CHR feature "Feature class" dropdown. */
+  public List<Map<String, Object>> getChrFeatureClassCode() {
+    return activeCodes("chr_feature_class_code", "chr_feature_class_code");
+  }
+
+  /** Information-source options for the CHR feature "Information source" dropdown. */
+  public List<Map<String, Object>> getChrFeatureInfoSourceCode() {
+    return activeCodes("chr_feature_info_source_code", "chr_feature_info_source_code");
+  }
+
+  /** Reserve-type options for the CHR location and management-strategy reserve dropdowns. */
+  public List<Map<String, Object>> getChrReserveTypeCode() {
+    return activeCodes("chr_reserve_type_code", "chr_reserve_type_code");
+  }
+
+  /**
+   * Rating options for the CHR feature and block-summary "Rating" dropdowns.
+   *
+   * <p>Not to be confused with {@link #getEvaluationCode()}: that reads
+   * {@code frep_site_evaluation_code}, a different table serving the SLR opening tab. Reusing it
+   * here would be a silent wrong-values bug rather than a failure.
+   */
+  public List<Map<String, Object>> getChrSiteEvaluationCode() {
+    return activeCodes("chr_site_evaluation_code", "chr_site_evaluation_code");
+  }
+
+  /** Role options for the CHR contacts "Role" dropdown. */
+  public List<Map<String, Object>> getChrParticipantRoleCode() {
+    return activeCodes("chr_participant_role_code", "chr_participant_role_code");
+  }
+
+  /**
+   * Resource-value status codes. Direct SELECT (no proc) over
+   * {@code frep_resource_value_stat_code} + {@code description}.
+   *
+   * <p>The exclusion is a parameter rather than part of the query. The biodiversity data-extract
+   * report hides {@code REJ}, mirroring the legacy JCRS input control — but Site Details edits the
+   * status and has to offer every one of them. Baking the report's filter into the SQL made this
+   * look like a general code list while quietly serving only one caller's needs.
+   */
+  public List<Map<String, Object>> getResourceValueStatusCode(String excludeStatusCode) {
+    boolean excluding = excludeStatusCode != null && !excludeStatusCode.isBlank();
+    String sql = "SELECT frep_resource_value_stat_code AS code, description "
+        + "FROM the.frep_resource_value_stat_code "
+        + (excluding ? "WHERE frep_resource_value_stat_code <> ? " : "")
+        + "ORDER BY description";
+    org.springframework.jdbc.core.RowMapper<Map<String, Object>> mapper = (rs, n) -> {
+      Map<String, Object> row = new LinkedHashMap<>(2);
+      row.put("code", rs.getString("code"));
+      row.put("description", rs.getString("description"));
+      return row;
+    };
+    return excluding
+        ? jdbcTemplate.query(sql, mapper, excludeStatusCode)
+        : jdbcTemplate.query(sql, mapper);
   }
 
   /**

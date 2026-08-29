@@ -698,6 +698,15 @@
   flex: 0 0 auto;
 }
 
+/* The "* Required fields" key (see RequiredLegend). Sits under the heading it explains, at the
+   label size — it is a note about the form, not a statement in it. */
+.protocol-checklist__required-legend {
+  @include type.type-style('label-01');
+
+  margin: 0 0 1.5rem;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+}
+
 /* Page-level tally above the tab strip (see OutstandingSummary). */
 .protocol-checklist__outstanding-summary {
   max-inline-size: 100%;

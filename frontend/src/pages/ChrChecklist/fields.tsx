@@ -45,6 +45,9 @@ export const TextField: FC<{
   invalid?: boolean;
   invalidText?: string;
   maxLength?: number;
+  /** Placement only. Carbon puts this on the `.cds--form-item` wrapper — the grid item itself, so
+   *  the field stays a direct child of the grid and keeps its reserved label height. */
+  className?: string;
 }> = ({
   id,
   labelText,
@@ -56,9 +59,11 @@ export const TextField: FC<{
   invalid,
   invalidText,
   maxLength,
+  className,
 }) => (
   <TextInput
     autoComplete="off"
+    className={className}
     id={id}
     labelText={labelText}
     value={value ?? ''}
@@ -218,7 +223,9 @@ export const CodeSelect: FC<{
     invalidText={invalidText}
     onChange={(e) => onChange(e.target.value)}
   >
-    {includeBlank && <SelectItem value="" text="—" />}
+    {/* A form select invites a choice by name. In a table cell (`hideLabel`) the column header
+        already names the field and there is no width to spare, so the dash stays. */}
+    {includeBlank && <SelectItem value="" text={hideLabel ? '—' : 'Choose an option'} />}
     {options.map((opt) => (
       <SelectItem key={`${id}-${opt.code}`} value={opt.code} text={opt.label} />
     ))}

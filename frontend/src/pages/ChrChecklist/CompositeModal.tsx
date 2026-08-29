@@ -17,14 +17,12 @@ import { CodeSelect } from '@/pages/ChrChecklist/fields';
 import type { CompositeDraft } from '@/pages/ChrChecklist/composites';
 import type { Feature } from '@/types/chrChecklist';
 
-import { FEATURE_CLASS_CODES, INFORMATION_SOURCE_CODES } from '@/pages/ChrChecklist/codeLists';
+import { isCompositeAnchor, nextFeatureLabel, sameLabel } from '@/pages/ChrChecklist/composites';
 import {
-  classLabel,
-  isCompositeAnchor,
-  nextFeatureLabel,
-  sameLabel,
-  sourceLabel,
-} from '@/pages/ChrChecklist/composites';
+  labelFor,
+  useFeatureClassCodes,
+  useInformationSourceCodes,
+} from '@/pages/ChrChecklist/useChrCodeLists';
 
 /** Every table cell reads the same way when it has nothing to show. */
 const orDash = (value?: string) => (value?.trim() ? value : '—');
@@ -89,6 +87,10 @@ const CompositeRow: FC<{
   onPatch: (patch: Partial<Feature>) => void;
   onRemove: () => void;
 }> = ({ feature, index, added, checked, busy, showAction, onToggle, onPatch, onRemove }) => {
+  const featureClassCodes = useFeatureClassCodes();
+  const informationSourceCodes = useInformationSourceCodes();
+  const classLabel = (code?: string) => labelFor(featureClassCodes, code);
+  const sourceLabel = (code?: string) => labelFor(informationSourceCodes, code);
   const label = feature.featureLabel;
   const editable = added && label != null;
   return (
@@ -111,7 +113,7 @@ const CompositeRow: FC<{
             labelText={`Feature class for feature ${label}`}
             hideLabel
             value={feature.featureDescriptionCode}
-            options={FEATURE_CLASS_CODES}
+            options={featureClassCodes}
             includeBlank
             disabled={busy}
             onChange={(v) => onPatch({ featureDescriptionCode: v })}
@@ -127,7 +129,7 @@ const CompositeRow: FC<{
             labelText={`Information source for feature ${label}`}
             hideLabel
             value={feature.featureInfoSourceCode}
-            options={INFORMATION_SOURCE_CODES}
+            options={informationSourceCodes}
             includeBlank
             disabled={busy}
             onChange={(v) => onPatch({ featureInfoSourceCode: v })}
@@ -174,6 +176,8 @@ const CompositeModal: FC<{
   onSubmit: (draft: CompositeDraft) => void;
   onCancel: () => void;
 }> = ({ features, anchor, anchorName, busy, onSubmit, onCancel }) => {
+  const featureClassCodes = useFeatureClassCodes();
+  const informationSourceCodes = useInformationSourceCodes();
   const editing = anchor != null;
 
   const [featureClass, setFeatureClass] = useState(anchor?.featureDescriptionCode ?? '');
@@ -312,7 +316,7 @@ const CompositeModal: FC<{
                 </>
               }
               value={featureClass}
-              options={FEATURE_CLASS_CODES}
+              options={featureClassCodes}
               includeBlank
               disabled={busy}
               invalid={Boolean(classError)}
@@ -327,7 +331,7 @@ const CompositeModal: FC<{
                 </>
               }
               value={infoSource}
-              options={INFORMATION_SOURCE_CODES}
+              options={informationSourceCodes}
               includeBlank
               disabled={busy}
               invalid={Boolean(sourceError)}

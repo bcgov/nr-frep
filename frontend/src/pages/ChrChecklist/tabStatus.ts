@@ -57,6 +57,16 @@ const has = (value?: string): boolean => value != null && `${value}`.trim() !== 
 const isYes = (value?: string): boolean => `${value ?? ''}`.trim().toLowerCase() === 'true';
 
 /**
+ * Whether a coded answer is Yes.
+ *
+ * Q3 stores a FREP_CHECKLIST_ANSWER_CODE — Y / N / D — not an indicator, so it needs its own test.
+ * Reading it with `isYes` made the rule below unreachable: "Y" is never "true". Only Yes obliges a
+ * cause; No and Don't know assert no damage to attribute, and Q1 already covers damage that exists
+ * without being irreversible.
+ */
+const isAnswerYes = (value?: string): boolean => `${value ?? ''}`.trim().toUpperCase() === 'Y';
+
+/**
  * Read one field off a feature by name.
  *
  * By name rather than by property because the rules below work over groups of a dozen-plus
@@ -108,7 +118,9 @@ const Q2_CAUSE_FIELDS = [
   'otherQ2Wheredamagehasoccurredwhatisthemostlikelycause',
 ] as const;
 
-// Management strategies the "No management applied" box contradicts.
+// Management strategies the "No management applied" box contradicts. Indicators only —
+// `otherActivities` is deliberately absent because it holds the description itself, not "true"; see
+// anyStrategyUsed.
 const USED_STRATEGY_FIELDS = [
   'partiallytemporaryreserve',
   'fullyconservedintemporaryreserve',
@@ -122,8 +134,19 @@ const USED_STRATEGY_FIELDS = [
   'leftStanding',
   'stubbed',
   'alteredsilviculture',
-  'otherActivities',
 ] as const;
+
+/**
+ * Whether the feature records any management strategy at all.
+ *
+ * Twelve of the thirteen strategies are indicators holding "true"/"false". `otherActivities` is the
+ * odd one out: it stores the free-text description (persisted as the OTH used-strategy row), and its
+ * tick box is derived from whether that text is present. So presence, not the literal "true", is
+ * what "selected" means for it — testing it the same way as the others let a feature claim both "no
+ * management applied" and an other-activity description, here and in the legacy app.
+ */
+const anyStrategyUsed = (f: Feature): boolean =>
+  anyYes(f, USED_STRATEGY_FIELDS) || has(field(f, 'otherActivities'));
 
 // Windthrow techniques the "None" box contradicts.
 const WINDTHROW_OTHER_FIELDS = [
@@ -426,7 +449,7 @@ const effectivenessItems = (f: Feature): FeatureRule[] => {
   wholeNumber(items, f.bufferWidthMeter, 'Buffer size (m)', 'Effectiveness');
   wholeNumber(items, f.trailLength, 'Estimated trail damage (%)', 'Windthrow');
 
-  if (isYes(f.noManagement) && anyYes(f, USED_STRATEGY_FIELDS)) {
+  if (isYes(f.noManagement) && anyStrategyUsed(f)) {
     items.push({
       text: 'Clear the strategies, or untick “No management applied”',
       section: 'Effectiveness',
@@ -436,7 +459,7 @@ const effectivenessItems = (f: Feature): FeatureRule[] => {
     items.push({ text: 'Q1 is Yes — tick at least one Q2 cause', section: 'Damage' });
   }
   if (
-    isYes(f.q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse) &&
+    isAnswerYes(f.q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse) &&
     !anyYes(f, Q2_CAUSE_FIELDS)
   ) {
     items.push({ text: 'Q3 is Yes — tick at least one Q2 cause', section: 'Damage' });

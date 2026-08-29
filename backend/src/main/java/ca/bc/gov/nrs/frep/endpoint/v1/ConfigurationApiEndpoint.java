@@ -58,7 +58,28 @@ public interface ConfigurationApiEndpoint {
   ResponseEntity<List<CodeOptionResponse>> getStrataTypes();
 
   @GetMapping("/resource-value-status-codes")
-  ResponseEntity<List<CodeOptionResponse>> getResourceValueStatusCodes();
+  ResponseEntity<List<CodeOptionResponse>> getResourceValueStatusCodes(
+      @RequestParam(name = "exclude", required = false) String exclude);
+
+  /*
+   * CHR code lists. Prefixed `chr-` deliberately: `/site-evaluation-codes` above already serves
+   * SLR from FREP_SITE_EVALUATION_CODE, and CHR's ratings come from a different table entirely.
+   */
+
+  @GetMapping("/chr-feature-class-codes")
+  ResponseEntity<List<CodeOptionResponse>> getChrFeatureClassCodes();
+
+  @GetMapping("/chr-feature-info-source-codes")
+  ResponseEntity<List<CodeOptionResponse>> getChrFeatureInfoSourceCodes();
+
+  @GetMapping("/chr-reserve-type-codes")
+  ResponseEntity<List<CodeOptionResponse>> getChrReserveTypeCodes();
+
+  @GetMapping("/chr-site-evaluation-codes")
+  ResponseEntity<List<CodeOptionResponse>> getChrSiteEvaluationCodes();
+
+  @GetMapping("/chr-participant-role-codes")
+  ResponseEntity<List<CodeOptionResponse>> getChrParticipantRoleCodes();
 
   @GetMapping("/checklist-status-codes")
   ResponseEntity<List<CodeOptionResponse>> getChecklistStatusCodes();

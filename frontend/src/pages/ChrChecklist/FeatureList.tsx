@@ -32,17 +32,20 @@ import type { Feature } from '@/types/chrChecklist';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import {
   addComposite,
-  classLabel,
   featureRows,
   membersOf,
   nextFeatureLabel,
-  sourceLabel,
   undescribedMembers,
   ungroupComposite,
   ungroupDiscardingUndescribed,
   updateComposite,
 } from '@/pages/ChrChecklist/composites';
 import { featureHasErrors } from '@/pages/ChrChecklist/featureValidation';
+import {
+  labelFor,
+  useFeatureClassCodes,
+  useInformationSourceCodes,
+} from '@/pages/ChrChecklist/useChrCodeLists';
 
 /** Every table cell reads the same way when it has nothing to show. */
 const orDash = (value?: string) => (value?.trim() ? value : '—');
@@ -61,6 +64,12 @@ const FeatureList: FC<{
   readOnly: boolean;
   busy: boolean;
 }> = ({ features, onChange, onSave, readOnly, busy }) => {
+  // The feature tables print the class and source of every row, so they need the same fetched
+  // lists the dropdowns use — a code with no matching option falls back to the code itself.
+  const featureClassCodes = useFeatureClassCodes();
+  const informationSourceCodes = useInformationSourceCodes();
+  const classLabel = (code?: string) => labelFor(featureClassCodes, code);
+  const sourceLabel = (code?: string) => labelFor(informationSourceCodes, code);
   const confirm = useConfirm();
   const [selected, setSelected] = useState<number | null>(null);
   // The full feature array as it was when the editor opened, restored on Cancel.
@@ -118,6 +127,18 @@ const FeatureList: FC<{
     setSelected(index);
   };
 
+  /**
+   * The labels held by every feature *except* the one at `index`.
+   *
+   * Excluding the feature under edit matters: it already owns its own label, and comparing against
+   * the whole list would have it clash with itself the moment the editor opened.
+   */
+  const otherLabels = (index: number | null): string[] =>
+    features
+      .filter((_, i) => i !== index)
+      .map((f) => f.featureLabel ?? '')
+      .filter((label) => label.trim() !== '');
+
   const cancel = () => {
     setShowErrors(false);
     if (snapshot.current) onChange(snapshot.current);
@@ -131,7 +152,7 @@ const FeatureList: FC<{
     // save; only a value the column cannot store does (see featureValidation.ts).
     setShowErrors(true);
     const editing = selected === null ? undefined : features[selected];
-    if (editing && featureHasErrors(editing)) return;
+    if (editing && featureHasErrors(editing, otherLabels(selected))) return;
     if (await onSave(features)) {
       snapshot.current = null;
       setSelected(null);
@@ -253,6 +274,10 @@ const FeatureList: FC<{
         </div>
         <FeatureEditor
           key={current.id ?? `feature-${selected}`}
+          takenLabels={otherLabels(selected)}
+          // Named as the table and the outstanding list name it: its label when it has one, else
+          // its position.
+          title={`Feature ${current.featureLabel?.trim() || (selected ?? 0) + 1}`}
           feature={current}
           onPatch={patchSelected}
           readOnly={readOnly}

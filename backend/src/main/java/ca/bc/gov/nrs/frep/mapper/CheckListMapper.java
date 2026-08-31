@@ -312,7 +312,10 @@ public final class CheckListMapper extends FrepMapper {
 					Iterator<ChrFeatWindthrTreatXref> itrChrFeatWindthrTreatXref = hsetChrFeatWindthrTreatXref.iterator();
 					while(itrChrFeatWindthrTreatXref.hasNext()) {
 						ChrFeatWindthrTreatXref cFeatWindthrTreatXref = (ChrFeatWindthrTreatXref)itrChrFeatWindthrTreatXref.next();
-						mapForChrFeatWindthrTreatXref(feature, cFeatWindthrTreatXref.getChrWindthrowTreatmentCode().getChrWindthrowTreatmentCode(), feature.getIfotherpleasedescribe());
+						// The row's own description, not feature.getIfotherpleasedescribe() — that reads back
+						// off the half-built struct, which is empty at this point, so the saved text was
+						// overwritten with nothing on every load. Legacy has the same line.
+						mapForChrFeatWindthrTreatXref(feature, cFeatWindthrTreatXref.getChrWindthrowTreatmentCode().getChrWindthrowTreatmentCode(), cFeatWindthrTreatXref.getOtherDescription());
 					}
 				}
 

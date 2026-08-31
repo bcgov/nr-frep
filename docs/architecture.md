@@ -8,7 +8,7 @@ master-list year; the app supports site selection, checklist capture/edit, searc
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19 + TypeScript, Vite 7, Carbon Design System (`@carbon/react`, `@carbon/charts`) |
+| Frontend | React 19 + TypeScript, Vite 7, Carbon Design System (`@carbon/react`) |
 | Routing / data | `react-router-dom` 7, TanStack Query 5 (server state; no global store — auth/page-title via React Context) |
 | Offline / maps | Dexie (IndexedDB) + `vite-plugin-pwa` for offline CHR; Leaflet for maps |
 | Backend | Spring Boot 3.5, Java 21, Undertow (Tomcat excluded), Maven |

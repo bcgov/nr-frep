@@ -14,6 +14,7 @@ import type { BreakpointType } from '@/hooks/useBreakpoint/types';
 import type { FC } from 'react';
 
 import { APP_FULL_NAME, APP_NAME } from '@/constants/appName';
+import { OFFLINE_SIGNOUT_FLAG } from '@/context/auth/authUtils';
 import { useAuth } from '@/context/auth/useAuth';
 import { useTheme } from '@/context/theme/useTheme';
 import { env } from '@/env';
@@ -32,6 +33,7 @@ const LandingPage: FC = () => {
   // logout (SessionTimeout stashes the flag before signing out). Read-and-clear
   // so a manual refresh of the login page doesn't keep showing it.
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [offlineSignOut, setOfflineSignOut] = useState(false);
   const [requestAccessOpen, setRequestAccessOpen] = useState(false);
 
   /**
@@ -46,6 +48,10 @@ const LandingPage: FC = () => {
     if (sessionStorage.getItem(SESSION_EXPIRED_FLAG) === '1') {
       setSessionExpired(true);
       sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+    }
+    if (sessionStorage.getItem(OFFLINE_SIGNOUT_FLAG) === '1') {
+      setOfflineSignOut(true);
+      sessionStorage.removeItem(OFFLINE_SIGNOUT_FLAG);
     }
   }, []);
 
@@ -80,6 +86,18 @@ const LandingPage: FC = () => {
             <h2 data-testid="landing-subtitle" className="landing-subtitle">
               {APP_FULL_NAME}
             </h2>
+
+            {offlineSignOut && (
+              <InlineNotification
+                kind="info"
+                lowContrast
+                hideCloseButton
+                className="landing-session-expired"
+                data-testid="landing-offline-signout"
+                title="Signed out on this device"
+                subtitle="You were offline, so only this app was signed out. Your BC Government login may still be active — sign out again once you're back online to end it everywhere."
+              />
+            )}
 
             {sessionExpired && (
               <InlineNotification

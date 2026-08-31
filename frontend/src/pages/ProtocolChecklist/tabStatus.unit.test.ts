@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   openingMissingCount,
+  openingOutstanding,
   openingStatus,
   plotsOutstanding,
   plotsStatus,
@@ -33,6 +34,7 @@ const goodPlot = (over: Partial<BioPlot> = {}): BioPlot => ({
   utmNorthing: '1234567',
   firstLegTransect: '090',
   secondLegTransect: '180',
+  assessorName: 'TESTER',
   basalAreaFactor: '5',
   treeIndicator: 'N',
   cwdTransectIndicator: 'N',
@@ -44,7 +46,9 @@ const goodPlot = (over: Partial<BioPlot> = {}): BioPlot => ({
 const stratum = (over: Partial<BioStratum> = {}): BioStratum => ({
   stratumId: '1',
   stratumNumber: '1',
-  strataTypeCode: 'CC',
+  // Not 'CC': a clear-cut stratum must use a fixed-area radius, and the plot fixture carries a BAF.
+  // Still NAR-capped, so the combined-size rules below are unaffected.
+  strataTypeCode: 'DO',
   consistentMapInd: 'Y',
   size: '10',
   plotCount: '1',
@@ -61,14 +65,24 @@ const bundle = (
 });
 
 describe('openingStatus / openingMissingCount', () => {
-  it('stays empty until something has been saved on the tab', () => {
-    // Read-only RESULTS values arrive on every record and must not count as progress, so a record
-    // carrying only those is still untouched — no red count on a checklist nobody has opened.
+  it('drops a label\u2019s trailing question mark, which the section clause reads past', () => {
+    // The form words several of these as questions; the outstanding list uses the label as the
+    // subject of a sentence, where "…present?, in the Invasive plants section" reads as a stray mark.
+    expect(openingOutstanding({})).toContain(
+      'Invasive plant species present, in the Invasive plants section',
+    );
+    expect(openingOutstanding({}).some((item: string) => item.includes('?,'))).toBe(false);
+  });
+
+  it('reports the count on a tab nobody has touched, and on one never read at all', () => {
+    // The count is no longer withheld until the tab has been saved. A brand-new checklist owes every
+    // required field, and that is exactly when saying so is most useful — see the note on TabStatus.
     const untouched = { grossArea: '50', netArea: '40', harvestDate: '2025-06-01' };
-    expect(openingStatus(untouched)).toBe('empty');
-    expect(openingStatus(null)).toBe('empty');
-    // The count itself is still computed — it is the status that holds it back.
+    expect(openingStatus(untouched)).toBe('errors');
     expect(openingMissingCount(untouched)).toBe(6);
+    // A record that could not be read at all still owes the unconditional fields rather than
+    // reading as complete.
+    expect(openingStatus(null)).toBe('errors');
   });
 
   it('shows the count once any editable field has been saved', () => {
@@ -105,10 +119,10 @@ describe('openingStatus / openingMissingCount', () => {
 });
 
 describe('stratumStatus / stratumOutstanding', () => {
-  it('reads as empty with no strata, but still owes one', () => {
-    // The tab is quiet (nothing saved on it yet); the submit pre-flight still gets the item, since
-    // `frep.submit.biodiversity.stratum.mandatory` would refuse the checklist.
-    expect(stratumStatus([], completeOpening)).toBe('empty');
+  it('counts the missing stratum on a tab with none', () => {
+    // `frep.submit.biodiversity.stratum.mandatory` would refuse the checklist, so the tab owes one
+    // from the outset rather than staying quiet until a stratum has been added.
+    expect(stratumStatus([], completeOpening)).toBe('errors');
     expect(stratumOutstanding([], completeOpening)).toEqual([
       'No strata have been added — at least one is required',
     ]);
@@ -117,12 +131,14 @@ describe('stratumStatus / stratumOutstanding', () => {
   it('lists a plot count that disagrees with the Plots tab', () => {
     const items = stratumOutstanding([bundle({ plotCount: '2' })], completeOpening);
     expect(stratumStatus([bundle({ plotCount: '2' })], completeOpening)).toBe('errors');
-    expect(items).toEqual(['Stratum 1 — “# of plots in stratum” says 2, but 1 plot exists']);
+    expect(items).toEqual([
+      'Stratum 1 — “# of plots in stratum” says 2, but 1 plot exists, in the Stratum summary section',
+    ]);
   });
 
   it('lists a blank plot count', () => {
     expect(stratumOutstanding([bundle({ plotCount: undefined })], completeOpening)).toEqual([
-      'Stratum 1 — missing “# of plots in stratum”',
+      'Stratum 1 — # of plots in stratum, in the Stratum summary section',
     ]);
   });
 
@@ -132,9 +148,9 @@ describe('stratumStatus / stratumOutstanding', () => {
       completeOpening,
     );
     expect(items).toEqual([
-      'Stratum 1 — missing Stratum number',
-      'Stratum 1 — missing Stratum type',
-      'Stratum 1 — missing Mapped size',
+      'Stratum 1 — Stratum number, in the Stratum summary section',
+      'Stratum 1 — Stratum type, in the Stratum summary section',
+      'Stratum 1 — Mapped size, in the Map consistency section',
     ]);
   });
 
@@ -161,7 +177,9 @@ describe('stratumStatus / stratumOutstanding', () => {
   it('lists a NAR-capped type that exceeds the NAR', () => {
     // netArea 40; mapped size 45 on a CC stratum.
     const items = stratumOutstanding([bundle({ size: '45' })], completeOpening);
-    expect(items).toContain('Stratum 1 — mapped size (45 ha) is over the NAR (40 ha)');
+    expect(items).toContain(
+      'Stratum 1 — Mapped size (45 ha) is over the NAR (40 ha), in the Map consistency section',
+    );
   });
 
   it('leaves other stratum types uncapped by the NAR', () => {
@@ -177,16 +195,20 @@ describe('stratumStatus / stratumOutstanding', () => {
 });
 
 describe('plotsStatus / plotsOutstanding', () => {
-  it('reads as empty with no plots, but still owes the UTM rule', () => {
+  it('counts the UTM rule on a tab with no plots', () => {
     // `frep.submit.biodiversity.plot.utmrequired` is checklist-wide and fires with zero plots too.
-    expect(plotsStatus([bundle({}, [])])).toBe('empty');
+    expect(plotsStatus([bundle({}, [])])).toBe('errors');
     expect(plotsOutstanding([bundle({}, [])])).toEqual([
       'No plot has UTM coordinates — one plot needs Zone, Easting and Northing',
     ]);
   });
 
   it('counts missing UTM once for the tab, not once per plot', () => {
-    const plots = [goodPlot({ utmSignal: 'N' }), goodPlot({ plotId: '2', utmSignal: 'N' })];
+    // Distinct plot numbers: sharing one would now be reported too, by the tab's uniqueness rule.
+    const plots = [
+      goodPlot({ utmSignal: 'N' }),
+      goodPlot({ plotId: '2', plotNumber: '2', utmSignal: 'N' }),
+    ];
     const items = plotsOutstanding([bundle({ plotCount: '2' }, plots)]);
     expect(plotsStatus([bundle({ plotCount: '2' }, plots)])).toBe('errors');
     expect(items).toEqual([
@@ -199,16 +221,34 @@ describe('plotsStatus / plotsOutstanding', () => {
     expect(plotsStatus([bundle({ plotCount: '2' }, plots)])).toBe('complete');
   });
 
-  it('lists a missing bearing leg', () => {
+  it('lists a missing bearing leg, naming the leg', () => {
+    // The tab's own save rule names which leg; the submit mirror could only say "one of the two".
     expect(plotsOutstanding([bundle({}, [goodPlot({ secondLegTransect: '' })])])).toEqual([
-      'Plot 1 (Stratum 1) — missing Bearing 1st leg / 2nd leg',
+      'Plot 1 (Stratum 1) — 2nd leg is required.',
     ]);
   });
 
   it('lists a plot with no measurement method', () => {
     expect(plotsOutstanding([bundle({}, [goodPlot({ basalAreaFactor: '' })])])).toEqual([
-      'Plot 1 (Stratum 1) — no BAF, fixed-area radius or full-count area entered',
+      'Plot 1 (Stratum 1) — Enter exactly one of BAF, fixed area radius, or full count area.',
     ]);
+  });
+
+  it('counts the tab\u2019s own save rules, not only the ones the proc enforces', () => {
+    // A plot the proc would accept but the tab would refuse to save: no evaluator, a duplicate plot
+    // number within the stratum, and an easting of the wrong width. None of these are submit rules.
+    const plots = [
+      goodPlot(),
+      goodPlot({ plotId: '2', assessorName: undefined, utmEasting: '123' }),
+    ];
+    const items = plotsOutstanding([bundle({ plotCount: '2' }, plots)]);
+    expect(items).toContain(
+      'Plot 1 (Stratum 1) — An evaluator is required — use "Assign it to me".',
+    );
+    expect(items).toContain('Plot 1 (Stratum 1) — Easting must be exactly 6 digits.');
+    expect(items).toContain(
+      'Plot 1 (Stratum 1) — Plot 1 already exists in this stratum. Use a different number.',
+    );
   });
 
   it('lists "Trees exist" with no stand-table rows', () => {

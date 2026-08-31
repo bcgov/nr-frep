@@ -1,5 +1,5 @@
 import { Edit } from '@carbon/icons-react';
-import { Button, InlineNotification } from '@carbon/react';
+import { Button } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import {
@@ -8,6 +8,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import RequiredLegend from '@/pages/ProtocolChecklist/RequiredLegend';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
@@ -62,7 +63,6 @@ const OpeningInformation: FC<{
   const editAssessedByDisplay =
     editAssessedBy === assessedBy ? value.assessedByName || editAssessedBy : editAssessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
-  const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
   const beginEdit = () => {
     setDraft({
@@ -124,21 +124,13 @@ const OpeningInformation: FC<{
           </>
         )}
       </div>
+      {/* Only while editing — the read-only view marks nothing required. */}
+      {editing && <RequiredLegend />}
 
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
         {editing ? (
           <>
-            {assignPending && (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                hideCloseButton
-                title="Save required"
-                subtitle="You must save the form to update the Evaluator value."
-                className="chr-checklist__assessed-by__notice"
-              />
-            )}
             <div className="rip-form__grid">
               <DateField
                 id="chr-evaluation-date"
@@ -178,12 +170,14 @@ const OpeningInformation: FC<{
                 maxLength={200}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
-              <IndicatorCheckbox
-                id="chr-targeted"
-                labelText="Targeted site"
-                value={draft.targeted}
-                onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
-              />
+              <div className="chr-checklist__grid-check">
+                <IndicatorCheckbox
+                  id="chr-targeted"
+                  labelText="Targeted site"
+                  value={draft.targeted}
+                  onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
+                />
+              </div>
             </div>
             <TextAreaField
               id="chr-general-location"

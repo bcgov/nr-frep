@@ -22,7 +22,9 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import type { RejectionReason } from '@/types/configuration';
+import { ExternalLink } from '@/components/core/ExternalLink';
+
+import type { CodeOption, RejectionReason } from '@/types/configuration';
 import type { SiteDetail, SiteResource } from '@/types/siteDetail';
 
 import { useAuth } from '@/context/auth/useAuth';
@@ -120,6 +122,7 @@ function renderEditableCell(
   index: number,
   patchRow: (index: number, patch: Partial<SiteResource>) => void,
   rejectionReasons: RejectionReason[],
+  statusCodes: CodeOption[],
   errors: RowErrors | undefined,
 ): React.ReactNode {
   if (key === 'statusCode') {
@@ -133,9 +136,12 @@ function renderEditableCell(
         onChange={(e) => patchRow(index, { statusCode: e.target.value })}
       >
         <SelectItem value="" text="" />
-        <SelectItem value="ACC" text="Accepted" />
-        <SelectItem value="REJ" text="Rejected" />
-        <SelectItem value="TAR" text="Targeted" />
+        {/* From FREP_RESOURCE_VALUE_STATUS_CODE rather than three literals. The codes themselves
+            still appear in the rules below — a rejected row owing a reason is behaviour, not a
+            list of options, and does not belong to the code table. */}
+        {statusCodes.map((option) => (
+          <SelectItem key={option.code} value={option.code} text={option.description} />
+        ))}
       </Select>
     );
   }
@@ -281,13 +287,7 @@ const HeaderRow: FC<{
   <div className="site-detail__field">
     <span className="site-detail__field-label">{label}</span>
     <span className="site-detail__field-value">
-      {value && href ? (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {value}
-        </a>
-      ) : (
-        (value ?? '—')
-      )}
+      {value && href ? <ExternalLink href={href}>{value}</ExternalLink> : (value ?? '—')}
     </span>
   </div>
 );
@@ -314,6 +314,7 @@ const SiteDetailPage: FC = () => {
   const [draft, setDraft] = useState<SiteResource[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [rejectionReasons, setRejectionReasons] = useState<RejectionReason[]>([]);
+  const [statusCodes, setStatusCodes] = useState<CodeOption[]>([]);
 
   // Inline validation runs live off the draft: a field's error shows as soon as the row is invalid
   // (e.g. status set to Rejected with no reason) and clears the moment it's fixed. Empty-status and
@@ -452,6 +453,14 @@ const SiteDetailPage: FC = () => {
         // Non-fatal: the dropdown just renders empty if reasons can't be loaded.
         if (!cancelled) setRejectionReasons([]);
       });
+    API.configuration
+      .getResourceValueStatusCodes()
+      .then((codes) => {
+        if (!cancelled) setStatusCodes(codes);
+      })
+      .catch(() => {
+        if (!cancelled) setStatusCodes([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -575,6 +584,7 @@ const SiteDetailPage: FC = () => {
                                       index,
                                       patchRow,
                                       rejectionReasons,
+                                      statusCodes,
                                       rowErrors[index],
                                     )
                                   : renderResourceCell(header.key, resource)}

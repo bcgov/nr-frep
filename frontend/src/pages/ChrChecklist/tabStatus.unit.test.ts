@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { addComposite } from './composites';
 import {
   attachmentsOutstanding,
   blockSummaryOutstanding,
@@ -38,10 +39,12 @@ const completeChecklist = (over: Partial<CheckList> = {}): CheckList => ({
 
 describe('openingOutstanding', () => {
   it('names every required Opening field on an empty checklist, in tab order', () => {
+    // Each names the field as the form labels it, and the fieldset holding it. Harvest completion
+    // year has none: the Opening tab does not edit it — it arrives with the record.
     expect(openingOutstanding({})).toEqual([
-      'Evaluation date',
-      'Evaluator — use “Assign it to me”',
-      'General location',
+      'Evaluation date, in the Evaluation section',
+      'Evaluator — use “Assign it to me”, in the Evaluation section',
+      'General location, in the Evaluation section',
       'Harvest completion year',
     ]);
   });
@@ -53,7 +56,7 @@ describe('openingOutstanding', () => {
 
 describe('blockSummaryOutstanding', () => {
   it('requires a rating', () => {
-    expect(blockSummaryOutstanding({})).toEqual(['Rating']);
+    expect(blockSummaryOutstanding({})).toEqual(['Rating, in the Block rating section']);
   });
 
   it('requires a description only for a question answered Yes', () => {
@@ -62,7 +65,9 @@ describe('blockSummaryOutstanding', () => {
         q8WerethereoperationalfactorsthatlimitedCHRmanagementoptionsonthisblock: 'true',
       }),
     );
-    expect(items).toEqual(['Q8 — description of the limiting operational factors']);
+    expect(items).toEqual([
+      'Q8 — description of the limiting operational factors, in the Operational review section',
+    ]);
   });
 });
 
@@ -81,14 +86,15 @@ describe('featuresOutstanding', () => {
     const items = featuresOutstanding(
       completeChecklist({ features: [completeFeature({ featureRating: undefined })] }),
     );
-    expect(items).toEqual(['Feature 1 — Provide a Rating in Feature Summary.']);
+    // Named as the editor labels the field, and pointing at the accordion section holding it.
+    expect(items).toEqual(['Feature 1 — Feature rating, in the Summary section']);
   });
 
   it('falls back to the position when a feature has no label', () => {
     const items = featuresOutstanding(
       completeChecklist({ features: [completeFeature({ featureLabel: '' })] }),
     );
-    expect(items).toContain('Feature 1 — Each feature must have a feature label.');
+    expect(items).toContain('Feature 1 — Feature label, in the Description section');
   });
 
   it('requires a feature type and an age', () => {
@@ -98,8 +104,8 @@ describe('featuresOutstanding', () => {
       }),
     );
     expect(items).toEqual([
-      'Feature 1 — Select at least one feature description.',
-      'Feature 1 — Select at least one item for the Age of this feature.',
+      'Feature 1 — Tick at least one type of feature, in the Description section',
+      'Feature 1 — Select an age, in the Age section',
     ]);
   });
 
@@ -109,7 +115,7 @@ describe('featuresOutstanding', () => {
         features: [completeFeature({ compositeFeatureInd: 'true' })],
       }),
     );
-    expect(items[0]).toContain('A composite feature must include at least two features');
+    expect(items[0]).toContain('A composite needs at least two features');
   });
 
   it('accepts a composite once two features point at it, matching the label loosely', () => {
@@ -145,8 +151,9 @@ describe('featuresOutstanding', () => {
         features: [completeFeature({ q1Isthereevidenceofdamagetothesiteorfeature: 'true' })],
       }),
     );
+    // Damage has its own accordion section, even though the rule lives in the effectiveness chain.
     expect(items).toEqual([
-      'Feature 1 — Q1 is answered Yes — select at least one Q2 damage cause.',
+      'Feature 1 — Q1 is Yes — tick at least one Q2 cause, in the Damage section',
     ]);
   });
 
@@ -159,11 +166,58 @@ describe('featuresOutstanding', () => {
     expect(items[0]).toContain('“No management applied”');
   });
 
+  it('flags "No management applied" contradicting an other-activity description', () => {
+    // otherActivities holds the description, never "true" — presence is what "selected" means for
+    // it, so this contradiction has to be caught by text, not by the indicator test.
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [completeFeature({ noManagement: 'true', otherActivities: 'Fenced' })],
+      }),
+    );
+    expect(items[0]).toContain('“No management applied”');
+  });
+
+  it('leaves "No management applied" alone when the other-activity box is blank', () => {
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [completeFeature({ noManagement: 'true', otherActivities: '   ' })],
+      }),
+    );
+    expect(items).toEqual([]);
+  });
+
+  it('requires a Q2 cause once Q3 is answered Yes', () => {
+    // Q3 is a coded answer, not an indicator — testing it as a boolean left this rule unreachable.
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [
+          completeFeature({
+            q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse: 'Y',
+          }),
+        ],
+      }),
+    );
+    expect(items[0]).toContain('Q3 is Yes');
+  });
+
+  it.each(['N', 'D', ''])('asks for no Q2 cause when Q3 is %s', (answer) => {
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [
+          completeFeature({
+            q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse: answer,
+          }),
+        ],
+      }),
+    );
+    expect(items).toEqual([]);
+  });
+
   it('requires a permit number once the AIA permit box is checked', () => {
     const items = featuresOutstanding(
       completeChecklist({ features: [completeFeature({ sitePermitIssued: 'true' })] }),
     );
-    expect(items[0]).toContain('permit number');
+    expect(items[0]).toContain('Permit number');
   });
 
   it('requires every "Other" planned strategy to have a source and a unique description', () => {
@@ -181,8 +235,9 @@ describe('featuresOutstanding', () => {
       }),
     );
     expect(items).toEqual([
-      'Feature 1 — “Other” management strategy “Fenced” is defined more than once — each description must be unique.',
-      'Feature 1 — “Other” management strategy “Signed” must have a source (FN, AIA or SP).',
+      'Feature 1 — Other strategy “Fenced” is entered more than once — each must be unique, ' +
+        'in the Planning section',
+      'Feature 1 — Other strategy “Signed” — tick FN, AIA/SAP or Site plan, in the Planning section',
     ]);
   });
 });
@@ -203,13 +258,24 @@ describe('attachmentsOutstanding', () => {
 });
 
 describe('chrTabStatuses', () => {
-  it('reads a brand-new checklist as not started rather than as a fault', () => {
-    const { statuses, counts } = chrTabStatuses({});
-    expect(statuses.opening).toBe('empty');
-    expect(statuses.blockSummary).toBe('empty');
-    expect(statuses.features).toBe('empty');
-    // The count is still there for the page to reveal once Submit has been pressed.
+  it('reports what a brand-new checklist owes, without waiting to be started', () => {
+    const { statuses, counts, items } = chrTabStatuses({});
+    expect(statuses.opening).toBe('errors');
+    expect(statuses.blockSummary).toBe('errors');
+    expect(statuses.features).toBe('errors');
     expect(counts.opening).toBe(4);
+    // Opening items are ungrouped — the tab is one form, so there is no record to head them with.
+    expect(items.opening.every((item) => item.group === undefined)).toBe(true);
+  });
+
+  it('attributes each feature rule to the feature it belongs to', () => {
+    const { items, outstanding } = chrTabStatuses(
+      completeChecklist({ features: [{ featureLabel: '1', compositeFeatureInd: 'false' }] }),
+    );
+    // The heading is carried as its own field so the panel can group on it...
+    expect(items.features.every((item) => item.group === 'Feature 1')).toBe(true);
+    // ...while the flat form the submit pre-flight reads is unchanged.
+    expect(outstanding.features[0]).toMatch(/^Feature 1 — /);
   });
 
   it('turns a started but incomplete tab red, with the number outstanding', () => {
@@ -223,18 +289,85 @@ describe('chrTabStatuses', () => {
     expect(statuses).toEqual({
       opening: 'complete',
       blockSummary: 'complete',
-      contacts: 'complete',
       features: 'complete',
-      notes: 'complete',
-      attachments: 'complete',
+      // Rule-less tabs report `none`, not `complete`: both are silent in the strip, but only one
+      // of them means "every rule passed" — see chrTabStatuses.
+      contacts: 'none',
+      notes: 'none',
+      attachments: 'none',
     });
   });
 
-  it('treats Contacts and Notes as never outstanding — they have no submit rules', () => {
+  it('gives Contacts and Notes no indicator at all — they carry no rules of either kind', () => {
     const { statuses, outstanding } = chrTabStatuses({});
-    expect(statuses.contacts).toBe('complete');
-    expect(statuses.notes).toBe('complete');
+    expect(statuses.contacts).toBe('none');
+    expect(statuses.notes).toBe('none');
     expect(outstanding.contacts).toEqual([]);
     expect(outstanding.notes).toEqual([]);
+  });
+
+  it('counts a feature\u2019s over-long free text, which blocks the save but never reaches the proc', () => {
+    const feature = {
+      featureLabel: '1',
+      compositeFeatureInd: 'false',
+      featureComment: 'x'.repeat(600),
+    };
+    const { outstanding } = chrTabStatuses(completeChecklist({ features: [feature] }));
+    expect(outstanding.features.some((item) => item.includes('Too long'))).toBe(true);
+  });
+});
+
+describe('composites in the outstanding list', () => {
+  it('names a composite by the number the feature table shows', () => {
+    const features = addComposite(
+      [
+        { featureLabel: '1', compositeFeatureInd: 'false' },
+        { featureLabel: '2', compositeFeatureInd: 'false' },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    const items = featuresOutstanding({ features } as CheckList);
+
+    // The anchor took label 3, and that is what the table shows — no invented name to chase.
+    expect(items.some((i) => i.startsWith('Feature 3 — '))).toBe(true);
+  });
+
+  it('does not ask a member for the assessment its composite carries', () => {
+    const features = addComposite(
+      [
+        {
+          featureLabel: '1',
+          compositeFeatureInd: 'false',
+          featureDescriptionCode: 'CMT',
+          featureInfoSourceCode: 'AIA',
+        },
+        {
+          featureLabel: '2',
+          compositeFeatureInd: 'false',
+          featureDescriptionCode: 'CT',
+          featureInfoSourceCode: 'SP',
+        },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    const items = featuresOutstanding({ features } as CheckList);
+
+    expect(items.some((i) => i.startsWith('Feature 1 — '))).toBe(false);
+    expect(items.some((i) => i.startsWith('Feature 2 — '))).toBe(false);
+  });
+
+  it('does not report a well-formed composite as short of members', () => {
+    const features = addComposite(
+      [
+        { featureLabel: '1', compositeFeatureInd: 'false' },
+        { featureLabel: '2', compositeFeatureInd: 'false' },
+      ],
+      { memberLabels: ['1', '2'], additions: [] },
+    );
+    expect(
+      featuresOutstanding({ features } as CheckList).some((i) =>
+        i.includes('at least two features'),
+      ),
+    ).toBe(false);
   });
 });

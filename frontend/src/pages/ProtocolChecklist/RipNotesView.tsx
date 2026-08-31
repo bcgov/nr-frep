@@ -179,6 +179,7 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
         // never truncate, and let the count sit bottom-right under the box.
         <div className="frep-field">
           <TextArea
+            autoComplete="off"
             id="rip-note"
             labelText="Notes"
             rows={10}

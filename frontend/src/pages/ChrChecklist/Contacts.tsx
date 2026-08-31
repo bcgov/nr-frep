@@ -15,10 +15,8 @@ import { CodeSelect, DateField, IndicatorCheckbox, TextField } from '@/pages/Chr
 import type { Contact } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
-import { CONTACT_ROLE_CODES } from '@/pages/ChrChecklist/codeLists';
+import { labelFor, useContactRoleCodes } from '@/pages/ChrChecklist/useChrCodeLists';
 
-const roleLabel = (code?: string) =>
-  CONTACT_ROLE_CODES.find((r) => r.code === code)?.label ?? code ?? '';
 const fullName = (c: Contact) => `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
 
 /** A contact form session: editing an existing row (index ≥ 0) or adding a new one (index null). */
@@ -36,6 +34,9 @@ const Contacts: FC<{
   readOnly: boolean;
   busy: boolean;
 }> = ({ contacts, onSave, readOnly, busy }) => {
+  // The roles come from CHR_PARTICIPANT_ROLE_CODE, so the table's label lookup needs them too.
+  const roleCodes = useContactRoleCodes();
+  const roleLabel = (code?: string) => labelFor(roleCodes, code);
   const confirm = useConfirm();
   const [form, setForm] = useState<FormState | null>(null);
   // Errors stay hidden until a save is attempted, matching the other CHR tabs.
@@ -138,25 +139,30 @@ const Contacts: FC<{
               id="contact-role"
               labelText="Role"
               value={draft.roleCode}
-              options={CONTACT_ROLE_CODES}
+              options={roleCodes}
               disabled={readOnly}
               onChange={(v) => setField({ roleCode: v })}
             />
+            {/* Organization starts the second row: the name fields and the role are who the contact
+                is, the rest is what has happened with them. */}
             <TextField
               id="contact-org"
+              className="chr-checklist__row-break"
               labelText="Organization"
               value={draft.organization}
               disabled={readOnly}
               maxLength={60}
               onChange={(v) => setField({ organization: v })}
             />
-            <IndicatorCheckbox
-              id="contact-contacted"
-              labelText="Contacted"
-              value={draft.contactedInd}
-              disabled={readOnly}
-              onToggle={(v) => setField({ contactedInd: v })}
-            />
+            <div className="chr-checklist__grid-check">
+              <IndicatorCheckbox
+                id="contact-contacted"
+                labelText="Contacted"
+                value={draft.contactedInd}
+                disabled={readOnly}
+                onToggle={(v) => setField({ contactedInd: v })}
+              />
+            </div>
             {/* Contacted date shows only once the contact has been contacted (legacy parity). */}
             {draft.contactedInd === 'true' && (
               <DateField
@@ -167,13 +173,15 @@ const Contacts: FC<{
                 onChange={(v) => setField({ contactedDate: v })}
               />
             )}
-            <IndicatorCheckbox
-              id="contact-attending"
-              labelText="Attending on site"
-              value={draft.attendingOnSiteInd}
-              disabled={readOnly}
-              onToggle={(v) => setField({ attendingOnSiteInd: v })}
-            />
+            <div className="chr-checklist__grid-check">
+              <IndicatorCheckbox
+                id="contact-attending"
+                labelText="Attending on site"
+                value={draft.attendingOnSiteInd}
+                disabled={readOnly}
+                onToggle={(v) => setField({ attendingOnSiteInd: v })}
+              />
+            </div>
           </div>
         </fieldset>
       </div>
@@ -190,10 +198,10 @@ const Contacts: FC<{
               kind="tertiary"
               size="lg"
               className="bio-strata__add"
+              renderIcon={Add}
               disabled={busy}
               onClick={openAdd}
             >
-              <Add size={16} className="bio-strata__add-icon" />
               Add contact
             </Button>
           </div>
@@ -207,7 +215,7 @@ const Contacts: FC<{
                 <TableHeader>Name</TableHeader>
                 <TableHeader>Role</TableHeader>
                 <TableHeader>Organization</TableHeader>
-                <TableHeader>Actions</TableHeader>
+                <TableHeader>Action</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -216,26 +224,26 @@ const Contacts: FC<{
                   <TableCell>{fullName(contact) || '—'}</TableCell>
                   <TableCell>{roleLabel(contact.roleCode) || '—'}</TableCell>
                   <TableCell>{contact.organization || '—'}</TableCell>
-                  <TableCell>
+                  <TableCell className="table-actions">
                     <Button
                       kind="ghost"
                       size="sm"
                       renderIcon={Edit}
-                      iconDescription="Edit"
-                      hasIconOnly
                       disabled={busy}
                       onClick={() => openEdit(index)}
-                    />
+                    >
+                      Edit
+                    </Button>
                     {!readOnly && (
                       <Button
                         kind="danger--ghost"
                         size="sm"
                         renderIcon={TrashCan}
-                        iconDescription="Delete"
-                        hasIconOnly
                         disabled={busy}
                         onClick={() => void remove(index)}
-                      />
+                      >
+                        Delete
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>

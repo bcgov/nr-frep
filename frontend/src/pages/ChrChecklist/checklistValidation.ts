@@ -50,6 +50,25 @@ const BLOCK_EDITABLE_FIELDS = [
  * though it arrives with the record rather than being typed — a blank one has to be raised
  * somewhere, and this is the tab that carries the rest of the block's identity.
  */
+/**
+ * The fieldset each required field is edited in, keyed as the label maps below.
+ *
+ * `yearOfHarvest` is absent because the Opening tab does not edit it — it arrives with the record
+ * and is shown in the tombstone, so there is no section to send the reader to.
+ */
+export const OPENING_REQUIRED_SECTIONS: Record<string, string> = {
+  evaluationDate: 'Evaluation',
+  assessedBy: 'Evaluation',
+  generalLocation: 'Evaluation',
+};
+
+export const BLOCK_REQUIRED_SECTIONS: Record<string, string> = {
+  q8Comments: 'Operational review',
+  q9Comments: 'Operational review',
+  q10Comments: 'Operational review',
+  rating: 'Block rating',
+};
+
 export const OPENING_REQUIRED_LABELS: Record<string, string> = {
   evaluationDate: 'Evaluation date',
   assessedBy: 'Evaluator — use “Assign it to me”',

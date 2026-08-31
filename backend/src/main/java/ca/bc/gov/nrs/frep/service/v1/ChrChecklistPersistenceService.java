@@ -798,9 +798,12 @@ public class ChrChecklistPersistenceService {
     detail.setEvidenceOfDamageInd(
         ChrStringUtils.booleanToIndictor(feature.getQ1Isthereevidenceofdamagetothesiteorfeature()));
     detail.setDamageDescription(feature.getDescriptionofdamage());
-    FrepChecklistAnswerCode answer = entityManager.find(
-        FrepChecklistAnswerCode.class,
-        feature.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse());
+    // DAMAGE_IRREVERSIBLE_ANSWER_CD is NOT NULL, so an unanswered Q3 still has to be written as
+    // something and "N" is the least-claiming code available. Reached only when the answer is
+    // genuinely absent or unrecognised — `find` is not called with a null key, which throws.
+    String q3 = feature.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse();
+    FrepChecklistAnswerCode answer =
+        q3 == null || q3.isBlank() ? null : entityManager.find(FrepChecklistAnswerCode.class, q3);
     if (answer == null) {
       answer = entityManager.find(FrepChecklistAnswerCode.class, "N");
     }

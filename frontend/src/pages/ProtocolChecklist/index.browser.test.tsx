@@ -87,6 +87,9 @@ const readyChecklist = () => {
   api.getBioPlot.mockResolvedValue({
     plotId: '1',
     plotNumber: '1',
+    // NOT NULL on BIODIVERSITY_PLOT, so a stored plot always has one — and the tab's own save rules
+    // are now counted alongside the proc's, which means a plot without it would block the submit.
+    assessorName: 'TESTER',
     utmSignal: 'Y',
     utmZone: '10',
     utmEasting: '123456',
@@ -148,7 +151,7 @@ describe('ProtocolChecklistPage submit', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
     // Submit now pre-flights every tab first, so the call happens a couple of awaits later.
     await vi.waitFor(() => expect(api.submit).toHaveBeenCalledWith('bio', '9001'));
@@ -162,42 +165,48 @@ describe('ProtocolChecklistPage submit', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
     // frep.submit.common.teamlead is mapped to friendly text (title "Opening info" + detail).
     expect(await screen.findByText('an evaluator is required.')).toBeTruthy();
   });
 
-  it('blocks submit and names the outstanding work before calling the proc', async () => {
-    // The case this exists for: the evaluator never opened the Opening tab, so its dot has been
-    // deliberately quiet. Pressing Submit has to be the moment that stops being true.
+  it('blocks submit and turns the whole page red before calling the proc', async () => {
+    // A refused submit escalates every place the outstanding items are reported — page banner, tab
+    // counts, per-tab disclosure — so the page reads as one answer rather than three remarks.
     api.getChecklist.mockResolvedValue({ ...activeChecklist });
     api.getBiodiversityOpening.mockResolvedValue({ checklistId: '9001', grossArea: '50' });
     api.listBioStrata.mockResolvedValue([]);
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
 
-    // One page-level banner naming the tabs at fault — the items themselves stay on those tabs.
-    await screen.findByText("This checklist isn't ready to submit");
+    // One page-level banner, and it has replaced the informational tally rather than joining it.
+    await screen.findByText('Checklist not submitted');
     expect(api.submit).not.toHaveBeenCalled();
     expect(
       screen.getByText(
-        'Opening info, Stratum summary and Plots have required fields outstanding. ' +
-          'Fix the items listed on each tab, then submit again.',
+        'All required items must be complete before it can be submitted. ' +
+          'The tab counts show what is still outstanding.',
       ),
     ).toBeTruthy();
+    expect(screen.queryByText(/required items outstanding across/)).toBeNull();
 
-    // Each tab now lists its own outstanding work, including the ones that had never been opened.
+    // The tab count and the tab's own disclosure carry the refusal too.
+    // Queried as the badge itself: the svg carries both an aria-label and a <title>, so a text
+    // lookup matches the element and its tab panel alike.
+    expect(
+      document.querySelector('.protocol-checklist__tab-status')?.getAttribute('aria-label'),
+    ).toBe('Opening info: 6 items outstanding, blocking submit');
+    expect(document.querySelector('.protocol-checklist__outstanding-toggle--error')).not.toBeNull();
+
+    // Each tab lists its own outstanding work in its disclosure panel.
     const listed = Array.from(
-      document.querySelectorAll('.protocol-checklist__incomplete-list li'),
+      document.querySelectorAll('.protocol-checklist__outstanding-list li'),
     ).map((li) => li.textContent);
-    expect(listed).toContain('Evaluation date');
+    expect(listed).toContain('Evaluation date, in the Evaluation section');
     expect(listed).toContain('No strata have been added — at least one is required');
-
-    // ...and the counts they were holding back.
-    expect(await screen.findByLabelText('Opening info: 6 required fields missing')).toBeTruthy();
   });
 
   it('renders a historical SLB record read-only with no submit/unsubmit controls', async () => {
@@ -215,7 +224,7 @@ describe('ProtocolChecklistPage submit', () => {
         'This is a historical Stand Level Retention (SLB) record and is read-only.',
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Unsubmit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unsubmit checklist' })).toBeNull();
   });
 });

@@ -89,6 +89,7 @@ const ClientCombo: FC<Props> = ({
 
   return (
     <ComboBox
+      autoComplete="off"
       id={id}
       className="client-combo"
       disabled={disabled}

@@ -1,38 +1,47 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  flattenOutstanding,
   openingMissingCount,
-  openingOutstanding,
+  openingOutstandingItems,
   openingStatus,
-  plotsOutstanding,
+  plotsOutstandingItems,
   plotsStatus,
-  stratumOutstanding,
+  stratumOutstandingItems,
   stratumStatus,
 } from './tabStatus';
 
-import type { StratumBundle, TabStatus } from './tabStatus';
+import type { OutstandingItem, StratumBundle, TabStatus } from './tabStatus';
 
 import API from '@/services/APIs';
 
 /**
  * Completion state for every tab in the checklist strip, keyed by the backend section id.
  *
- * Notes and Attachments have no required fields and never block submit, so they always read as
- * complete — the indicator is there to answer "is anything outstanding?", and an optional tab is
- * never outstanding.
+ * Notes and Attachments carry no rules of either kind — nothing on them is required to save, and
+ * nothing on them blocks submit — so they report `none` and draw no indicator at all. A tab that can
+ * never be outstanding has no state worth a glyph.
  */
 const OPTIONAL_SECTIONS: Record<string, TabStatus> = {
-  notes: 'complete',
-  attachments: 'complete',
+  notes: 'none',
+  attachments: 'none',
 };
 
 export type TabStatusSnapshot = {
   statuses: Record<string, TabStatus>;
   counts: Record<string, number>;
+  /** Grouped for the per-tab panel — stratum and plot rules carry their record as the heading. */
+  items: Record<string, OutstandingItem[]>;
+  /** The same items flattened, for the submit pre-flight. */
   outstanding: Record<string, string[]>;
 };
 
-const EMPTY_SNAPSHOT: TabStatusSnapshot = { statuses: {}, counts: {}, outstanding: {} };
+const EMPTY_SNAPSHOT: TabStatusSnapshot = {
+  statuses: {},
+  counts: {},
+  items: {},
+  outstanding: {},
+};
 
 /**
  * Read the checklist and derive every tab's state from it.
@@ -66,9 +75,9 @@ const readChecklist = async (checklistId: string): Promise<TabStatusSnapshot> =>
       }),
   );
 
-  const openingItems = openingOutstanding(opening);
-  const stratumItems = stratumOutstanding(bundles, opening);
-  const plotItems = plotsOutstanding(bundles);
+  const openingItems = openingOutstandingItems(opening);
+  const stratumItems = stratumOutstandingItems(bundles, opening);
+  const plotItems = plotsOutstandingItems(bundles);
 
   return {
     statuses: {
@@ -82,7 +91,12 @@ const readChecklist = async (checklistId: string): Promise<TabStatusSnapshot> =>
       stratum: stratumItems.length,
       plots: plotItems.length,
     },
-    outstanding: { opening: openingItems, stratum: stratumItems, plots: plotItems },
+    items: { opening: openingItems, stratum: stratumItems, plots: plotItems },
+    outstanding: {
+      opening: flattenOutstanding(openingItems),
+      stratum: flattenOutstanding(stratumItems),
+      plots: flattenOutstanding(plotItems),
+    },
   };
 };
 

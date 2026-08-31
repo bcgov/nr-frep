@@ -1,30 +1,49 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FeatureEditor from './FeatureEditor';
+import { clearCodeListCache } from './useCodeList';
 
 import type { Feature } from '@/types/chrChecklist';
+
+import { autofillableCount, stillAutofillable } from '@/testing/autofill';
+
+// The dropdowns come from the code tables now, so anything mounting a form needs them stubbed.
+vi.mock('@/services/APIs', async () => {
+  const { chrCodeListApi } = await import('@/testing/chrCodeListApi');
+  return { default: { configuration: chrCodeListApi() } };
+});
+
+beforeEach(() => clearCodeListCache());
 
 const baseFeature = (over: Partial<Feature> = {}): Feature =>
   ({ featureLabel: 'Feature 1', ...over }) as Feature;
 
-describe('FeatureEditor — composite-feature help', () => {
-  it('renders the "What is a composite feature?" disclosure with its explanation', () => {
-    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
-
-    expect(screen.getByText('What is a composite feature?')).toBeTruthy();
-    expect(
-      screen.getByText(/group of two or more associated cultural heritage features/i),
-    ).toBeTruthy();
-    expect(screen.getByText(/cultural trail and an adjacent berry harvesting area/i)).toBeTruthy();
-  });
-});
-
 describe('FeatureEditor — Age single-select', () => {
-  it('disables the other ages once one is selected', async () => {
+  it('shows the age as one question rather than four boxes', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ post1846: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // A feature has one age, so it is asked once. The four checkboxes this replaced had to disable
+    // each other, and switching age meant unticking the old one first.
+    expect(screen.getByText('Select age for this feature')).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: 'Pre-1846' })).toBeNull();
+    expect((screen.getByRole('radio', { name: 'Post-1846' }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    for (const name of ['Pre-1846', 'Age unknown', 'Historical use']) {
+      expect((screen.getByRole('radio', { name }) as HTMLInputElement).disabled).toBe(false);
+    }
+  });
+
+  it('moves the selection in one step, clearing the age it replaces', async () => {
     const onPatch = vi.fn();
-    // Feature already has Post-1846 selected.
     render(
       <FeatureEditor
         feature={baseFeature({ post1846: 'true' })}
@@ -33,164 +52,449 @@ describe('FeatureEditor — Age single-select', () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Age' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Age unknown' }));
 
-    // The selected age stays enabled; the other three are disabled until it is unchecked.
-    expect((screen.getByRole('checkbox', { name: 'Post-1846' }) as HTMLInputElement).disabled).toBe(
-      false,
-    );
-    expect((screen.getByRole('checkbox', { name: 'Pre-1846' }) as HTMLInputElement).disabled).toBe(
-      true,
-    );
-    expect(
-      (screen.getByRole('checkbox', { name: 'Age unknown' }) as HTMLInputElement).disabled,
-    ).toBe(true);
-    expect(
-      (screen.getByRole('checkbox', { name: 'Historical use' }) as HTMLInputElement).disabled,
-    ).toBe(true);
+    // Every indicator is written, so the old one cannot be left behind as a second true.
+    expect(onPatch).toHaveBeenCalledWith({
+      pre1846: 'false',
+      post1846: 'false',
+      ageUnknown: 'true',
+      historicalUse: 'false',
+    });
   });
 
-  it('enables all ages when none is selected', async () => {
+  it('starts with no age chosen', async () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    for (const name of ['Pre-1846', 'Post-1846', 'Age unknown', 'Historical use']) {
+      expect((screen.getByRole('radio', { name }) as HTMLInputElement).checked).toBe(false);
+    }
+  });
+});
+
+describe('FeatureEditor — composites', () => {
+  it('does not offer to make a feature a composite', () => {
+    // Composites are built, edited and dissolved from the feature table. Leaving a second way in
+    // here would let a feature be flagged a composite with no members, which fails submit against
+    // itself ("must include at least two features").
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    expect(screen.queryByRole('checkbox', { name: 'Composite feature' })).toBeNull();
+    expect(screen.queryByLabelText('Composite of (feature label)')).toBeNull();
+  });
+
+  it('does not explain composites here — that belongs where they are created', () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+    expect(screen.queryByText('What is a composite feature?')).toBeNull();
+    expect(screen.queryByText(/culturally, spatially, or functionally connected/)).toBeNull();
+  });
+});
+
+describe('FeatureEditor — browser autofill', () => {
+  /**
+   * Every feature field keeps a stable `id`, so without this the browser treats the next feature's
+   * field as one it has seen before and offers what was typed on the last one — and accepting a
+   * single suggestion cascades into the rest of the group it infers. These are per-feature
+   * evaluation values, so a repeat of the previous feature is always wrong.
+   *
+   * Covers the shared builders in fields.tsx, which is where every CHR field is rendered.
+   */
+  it('leaves no field for the browser to autofill from the previous feature', async () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    // Every section is on the page at once, so there is nothing to expand before checking.
+    expect(autofillableCount()).toBeGreaterThan(5);
+    expect(stillAutofillable()).toEqual([]);
+  });
+});
+
+describe('FeatureEditor — required markers', () => {
+  /** The asterisk `requiredLabel` appends, read off the rendered label. */
+  const marked = (label: string): boolean =>
+    Array.from(document.querySelectorAll('label, .cds--label')).some(
+      (el) => el.textContent?.startsWith(label) && el.querySelector('.required-asterisk') != null,
+    );
+
+  it('marks the fields the submit rules ask a plain feature for', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ compositeFeatureInd: 'false' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    await waitFor(() => expect(marked('Feature label')).toBe(true));
+    expect(marked('Feature class')).toBe(true);
+    expect(marked('Information source')).toBe(true);
+    // Borden is only format-checked when it has a value, so it is not owed and is not marked.
+    expect(marked('Borden number')).toBe(false);
+  });
+
+  it('does not ask a composite for the two codes it is never validated on', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ compositeFeatureInd: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // A composite is described through its members; the submit rule skips both codes, so the form
+    // must not promise an error that never comes.
+    await waitFor(() => expect(marked('Feature label')).toBe(true));
+    expect(marked('Feature class')).toBe(false);
+    expect(marked('Information source')).toBe(false);
+  });
+});
+
+describe('FeatureEditor — Planning sources', () => {
+  const headers = (): (string | null)[] =>
+    Array.from(document.querySelectorAll('.chr-checklist__planning th')).map(
+      (th) => th.textContent,
+    );
+
+  it('shows no strategy table until a source is named', async () => {
+    render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
+
+    // The table asks "who recommended this?", which has no answer before a box is ticked.
+    expect(document.querySelector('.chr-checklist__planning')).toBeNull();
+    expect(screen.getByText('Applies to this feature')).toBeTruthy();
+  });
+
+  it('carries a column only for the sources that apply', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ managementStrategyFN: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // AIA used to stand on every feature regardless, asking for strategies from an assessment that
+    // may never have happened.
+    expect(headers()).toEqual(['Strategy', 'FN']);
+  });
+
+  it('adds each source’s column as it is named', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({
+          managementStrategyFN: 'true',
+          managementStrategySP: 'true',
+          sitePermitIssued: 'true',
+        })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    expect(headers()).toEqual(['Strategy', 'FN', 'AIA/SAP', 'Site plan']);
+  });
+
+  it('clears everything recorded under a source when it is unticked', async () => {
+    const onPatch = vi.fn();
+    render(
+      <FeatureEditor
+        feature={baseFeature({
+          managementStrategyFN: 'true',
+          modifyBlockBoundaryFN: 'true',
+          retainBufferFN: 'true',
+          bufferLengthFN: '25',
+          otherPlannedManagementStrategy: [
+            { otherStrategy: 'Fenced', fnInd: 'true', aiaInd: 'true', spInd: 'false' },
+          ],
+        })}
+        onPatch={onPatch}
+        readOnly={false}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'FN management recommendations provided' }),
+    );
+
+    // The column goes, so what it held has to go with it — otherwise the values stay stored and
+    // counted with nothing on the form able to show or clear them.
+    const patch = onPatch.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(patch.managementStrategyFN).toBe('false');
+    expect(patch.modifyBlockBoundaryFN).toBe('false');
+    expect(patch.retainBufferFN).toBe('false');
+    expect(patch.bufferLengthFN).toBe('');
+    // The free-text strategies are shared across columns: the row survives, this column's tick does not.
+    expect(patch.otherPlannedManagementStrategy).toEqual([
+      { otherStrategy: 'Fenced', fnInd: 'false', aiaInd: 'true', spInd: 'false' },
+    ]);
+  });
+
+  it('clears the permit number when the AIA source is unticked', async () => {
+    const onPatch = vi.fn();
+    render(
+      <FeatureEditor
+        feature={baseFeature({ sitePermitIssued: 'true', permit: 'ABC-123' })}
+        onPatch={onPatch}
+        readOnly={false}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'AIA / site-alteration permit issued' }),
+    );
+
+    const patch = onPatch.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(patch.sitePermitIssued).toBe('false');
+    expect(patch.permit).toBe('');
+  });
+
+  it('asks for a permit number, marked required, once the AIA box is ticked', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ sitePermitIssued: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    const label = Array.from(document.querySelectorAll('label')).find((el) =>
+      el.textContent?.startsWith('Permit number'),
+    );
+    expect(label).toBeTruthy();
+    expect(label?.querySelector('.required-asterisk')).not.toBeNull();
+  });
+});
+
+describe('FeatureEditor — Additional management strategies', () => {
+  const oneRow = (over: Partial<Feature> = {}): Partial<Feature> => ({
+    otherPlannedManagementStrategy: [
+      { otherStrategy: '', fnInd: 'false', aiaInd: 'false', spInd: 'false' },
+    ],
+    ...over,
+  });
+
+  const headers = (): (string | null)[] =>
+    Array.from(document.querySelectorAll('.chr-checklist__additional th')).map(
+      (th) => th.textContent,
+    );
+
+  const sources = (): (string | null)[] =>
+    Array.from(
+      document.querySelectorAll('.chr-checklist__additional-sources .cds--checkbox-label-text'),
+    ).map((el) => el.textContent);
+
+  it('lists a strategy as Name, Source and Action', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature(oneRow({ sitePermitIssued: 'true' }))}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // The sources are one answer about the strategy, not a column each — with three columns, two
+    // sat empty on most features.
+    expect(headers()).toEqual(['Name *', 'Source *', 'Action']);
+  });
+
+  it('offers only the sources that apply to the feature', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature(oneRow({ sitePermitIssued: 'true' }))}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+    expect(sources()).toEqual(['AIA/SAP']);
+  });
+
+  it('offers all three once all three sources apply', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature(
+          oneRow({
+            managementStrategyFN: 'true',
+            managementStrategySP: 'true',
+            sitePermitIssued: 'true',
+          }),
+        )}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+    expect(sources()).toEqual(['FN', 'AIA/SAP', 'Site plan']);
+  });
+
+  it('says what belongs here while empty, and states the rule once it is not', async () => {
+    const { rerender } = render(
+      <FeatureEditor
+        feature={baseFeature({ sitePermitIssued: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByText(/None added\. Add any management strategy/)).toBeTruthy();
+
+    rerender(
+      <FeatureEditor
+        feature={baseFeature(oneRow({ sitePermitIssued: 'true' }))}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByText('Select at least one source for each strategy.')).toBeTruthy();
+  });
+});
+
+describe('FeatureEditor — duplicate feature label', () => {
+  it('flags a label another feature already uses', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ featureLabel: '2' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+        showErrors
+        takenLabels={['1', '2', '3']}
+      />,
+    );
+
+    // CHFID_UK is UNIQUE (CHR_CHECKLIST_ID, FEATURE_LABEL): without this the save round-trips and
+    // comes back as a failed save, after the rest of the feature has been filled in.
+    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
+  });
+
+  it('flags the clash without waiting for a save attempt', async () => {
+    // Every other field error waits for Save (showErrors). A duplicate label is a clash with
+    // another record, and the user is typing the very value that clashes.
+    render(
+      <FeatureEditor
+        feature={baseFeature({ featureLabel: '2' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+        takenLabels={['2']}
+      />,
+    );
+
+    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
+  });
+
+  it('does not flag a feature against its own label', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ featureLabel: '2' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+        showErrors
+        takenLabels={['1', '3']}
+      />,
+    );
+
+    expect(screen.queryByText('Already used by another feature.')).toBeNull();
+  });
+
+  it('treats labels differing only in case as the same', async () => {
+    // Stricter than the constraint on purpose: Oracle would allow "A" and "a", but composite
+    // membership matches labels case-insensitively, so the pair would be indistinguishable.
+    render(
+      <FeatureEditor
+        feature={baseFeature({ featureLabel: 'a' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+        showErrors
+        takenLabels={['A']}
+      />,
+    );
+
+    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
+  });
+});
+
+describe('FeatureEditor — questions that reveal their fields', () => {
+  it('asks the registered-site question with an explicit No, and reveals Borden only on Yes', async () => {
     const onPatch = vi.fn();
     render(<FeatureEditor feature={baseFeature()} onPatch={onPatch} readOnly={false} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Age' }));
+    // Unanswered: neither radio is chosen and nothing is revealed. An unticked box could not say
+    // whether the site is unregistered or the question was skipped.
+    expect(screen.getByRole('radio', { name: 'Yes' })).toBeTruthy();
+    expect((screen.getByRole('radio', { name: 'No' }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByLabelText(/Borden number/)).toBeNull();
 
-    for (const name of ['Pre-1846', 'Post-1846', 'Age unknown', 'Historical use']) {
-      expect((screen.getByRole('checkbox', { name }) as HTMLInputElement).disabled).toBe(false);
-    }
-
-    // Selecting one just sets that field; the others are disabled on the next render.
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Age unknown' }));
-    expect(onPatch).toHaveBeenCalledWith({ ageUnknown: 'true' });
+    await userEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    expect(onPatch).toHaveBeenCalledWith({ chrRegisteredSite: 'true' });
   });
 
-  it('unchecking the active age clears it (re-enabling the group)', async () => {
-    const onPatch = vi.fn();
+  it('shows the Borden field once the answer is Yes', async () => {
     render(
       <FeatureEditor
-        feature={baseFeature({ post1846: 'true' })}
-        onPatch={onPatch}
+        feature={baseFeature({ chrRegisteredSite: 'true' })}
+        onPatch={vi.fn()}
         readOnly={false}
       />,
     );
-
-    await userEvent.click(screen.getByRole('button', { name: 'Age' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Post-1846' }));
-
-    expect(onPatch).toHaveBeenCalledWith({ post1846: 'false' });
-  });
-});
-
-describe('FeatureEditor — Summary section stays open', () => {
-  const summaryButton = () => screen.getByRole('button', { name: /Summary/ });
-
-  it('does not collapse the Summary section when the required Feature rating is filled', async () => {
-    const onPatch = vi.fn();
-    // A bare feature has no Feature rating → a Summary error → once errors are shown (i.e. after a
-    // save attempt) the section auto-opens.
-    const { rerender } = render(
-      <FeatureEditor feature={baseFeature()} onPatch={onPatch} readOnly={false} showErrors />,
-    );
-    await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'true'));
-
-    // Parent applies the rating (controlled component) — the error clears.
-    rerender(
-      <FeatureEditor
-        feature={baseFeature({ featureRating: '2' })}
-        onPatch={onPatch}
-        readOnly={false}
-        showErrors
-      />,
-    );
-
-    // The section must remain open (sticky), not snap shut now that the error is gone.
-    await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getByLabelText(/Borden number/)).toBeTruthy();
   });
 
-  it('leaves the Summary section closed before a save is attempted', async () => {
-    // Opening a feature must not greet the user with auto-opened sections and error badges for
-    // fields they have not been asked to fill yet — errors surface only on Save (showErrors).
+  it('opens no size fields until the unit has been chosen', async () => {
     render(<FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />);
 
-    await waitFor(() => expect(summaryButton()).toHaveAttribute('aria-expanded', 'false'));
-    expect(screen.queryByText('Feature rating is required.')).toBeNull();
+    // Defaulting to metres put an empty Width and Length on every new feature, which reads as two
+    // fields owed rather than a question not yet answered.
+    expect(screen.queryByLabelText('Width (m)')).toBeNull();
+    expect(screen.queryByLabelText('Length (m)')).toBeNull();
+    expect(screen.queryByLabelText('Area (ha)')).toBeNull();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Metres (width × length)' }));
+    expect(screen.getByLabelText('Width (m)')).toBeTruthy();
+    expect(screen.getByLabelText('Length (m)')).toBeTruthy();
+  });
+
+  it('opens the hectares field for a feature already recorded in hectares', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ areaofFeature: '2.5' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByLabelText('Area (ha)')).toBeTruthy();
+    expect(screen.queryByLabelText('Width (m)')).toBeNull();
   });
 });
 
-describe('FeatureEditor — Composite of (sibling-label dropdown)', () => {
-  it('renders "Composite of" as a dropdown of the sibling features for a composite feature', () => {
-    render(
+describe('FeatureEditor — Effectiveness follow-ups', () => {
+  it('asks for a reserve type only once its strategy is ticked', async () => {
+    const { rerender } = render(
+      <FeatureEditor feature={baseFeature()} onPatch={vi.fn()} readOnly={false} />,
+    );
+    expect(screen.queryByLabelText(/Full temporary reserve type/)).toBeNull();
+
+    rerender(
       <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
+        feature={baseFeature({ fullyconservedintemporaryreserve: 'true' })}
         onPatch={vi.fn()}
         readOnly={false}
-        siblingLabels={['2', '3']}
       />,
     );
-
-    const select = screen.getByLabelText('Composite of (feature label)');
-    expect(select.tagName).toBe('SELECT'); // dropdown, not a free-text input
-    expect(screen.getByRole('option', { name: 'Feature 2' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Feature 3' })).toBeTruthy();
+    expect(screen.getByLabelText(/Full temporary reserve type/)).toBeTruthy();
   });
 
-  it('excludes siblings already in a composite (uses compositeCandidateLabels)', () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={['2', '3']}
-        compositeCandidateLabels={['2']} // Feature 3 is already in a composite → not a candidate
-      />,
-    );
-
-    expect(screen.getByRole('option', { name: 'Feature 2' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Feature 3' })).toBeNull();
-  });
-
-  it('selecting a sibling patches compositeFeature with the raw label', async () => {
+  it('treats "Other activities" as a tick over its own free text', async () => {
     const onPatch = vi.fn();
     render(
       <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
+        feature={baseFeature({ otherActivities: 'Fenced' })}
         onPatch={onPatch}
         readOnly={false}
-        siblingLabels={['2', '3']}
       />,
     );
 
-    await userEvent.selectOptions(screen.getByLabelText('Composite of (feature label)'), '3');
-    expect(onPatch).toHaveBeenCalledWith({ compositeFeature: '3' });
-  });
+    // There is no indicator column for it — the strategy is stored as an OTH row carrying the
+    // description, so text present is the tick.
+    const box = screen.getByRole('checkbox', { name: 'Other activities' }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(screen.getByLabelText(/Description/)).toBeTruthy();
 
-  it('hides the composite control and shows a hint when there are no other features', () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature()}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={[]}
-      />,
-    );
-
-    expect(screen.queryByRole('checkbox', { name: 'Composite feature' })).toBeNull();
-    expect(screen.getByText('Add another feature to create a composite.')).toBeTruthy();
-  });
-
-  it('keeps the composite checkbox for an already-composite feature even with no siblings', () => {
-    // A stale composite (its siblings were deleted) must still be editable so it can be undone.
-    render(
-      <FeatureEditor
-        feature={baseFeature({ compositeFeatureInd: 'true' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        siblingLabels={[]}
-      />,
-    );
-
-    expect(screen.getByRole('checkbox', { name: 'Composite feature' })).toBeTruthy();
-    expect(screen.queryByText('Add another feature to create a composite.')).toBeNull();
+    // Unticking clears the text, which is what removes the row.
+    await userEvent.click(box);
+    expect(onPatch).toHaveBeenCalledWith({ otherActivities: '' });
   });
 });

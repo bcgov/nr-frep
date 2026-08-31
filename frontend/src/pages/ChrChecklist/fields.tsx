@@ -14,6 +14,7 @@ import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
 import type { FC, ReactNode } from 'react';
 
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
@@ -44,6 +45,9 @@ export const TextField: FC<{
   invalid?: boolean;
   invalidText?: string;
   maxLength?: number;
+  /** Placement only. Carbon puts this on the `.cds--form-item` wrapper — the grid item itself, so
+   *  the field stays a direct child of the grid and keeps its reserved label height. */
+  className?: string;
 }> = ({
   id,
   labelText,
@@ -55,8 +59,11 @@ export const TextField: FC<{
   invalid,
   invalidText,
   maxLength,
+  className,
 }) => (
   <TextInput
+    autoComplete="off"
+    className={className}
     id={id}
     labelText={labelText}
     value={value ?? ''}
@@ -112,6 +119,7 @@ export const DateField: FC<{
     }}
   >
     <DatePickerInput
+      {...NO_AUTOFILL}
       id={id}
       labelText={labelText}
       placeholder={placeholder}
@@ -156,6 +164,7 @@ export const TextAreaField: FC<{
   const over = limit !== undefined && used > limit;
   const field = (
     <TextArea
+      autoComplete="off"
       id={id}
       labelText={labelText}
       value={value ?? ''}
@@ -188,6 +197,9 @@ export const CodeSelect: FC<{
   includeBlank?: boolean;
   invalid?: boolean;
   invalidText?: string;
+  /** Keep the label for screen readers but take it out of the layout — for a select in a table
+   *  cell, where the column header already names the field. */
+  hideLabel?: boolean;
 }> = ({
   id,
   labelText,
@@ -198,17 +210,22 @@ export const CodeSelect: FC<{
   includeBlank,
   invalid,
   invalidText,
+  hideLabel,
 }) => (
   <Select
+    autoComplete="off"
     id={id}
     labelText={labelText}
+    hideLabel={hideLabel}
     value={value ?? ''}
     disabled={disabled}
     invalid={invalid}
     invalidText={invalidText}
     onChange={(e) => onChange(e.target.value)}
   >
-    {includeBlank && <SelectItem value="" text="—" />}
+    {/* A form select invites a choice by name. In a table cell (`hideLabel`) the column header
+        already names the field and there is no width to spare, so the dash stays. */}
+    {includeBlank && <SelectItem value="" text={hideLabel ? '—' : 'Choose an option'} />}
     {options.map((opt) => (
       <SelectItem key={`${id}-${opt.code}`} value={opt.code} text={opt.label} />
     ))}

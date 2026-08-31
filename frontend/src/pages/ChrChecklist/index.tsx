@@ -16,13 +16,15 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
 import BlockSummary from '@/pages/ChrChecklist/BlockSummary';
 import Contacts from '@/pages/ChrChecklist/Contacts';
 import FeatureList from '@/pages/ChrChecklist/FeatureList';
 import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
-import TabIncompleteBanner from '@/pages/ProtocolChecklist/TabIncompleteBanner';
+import OutstandingPanel from '@/pages/ProtocolChecklist/OutstandingPanel';
+import OutstandingSummary from '@/pages/ProtocolChecklist/OutstandingSummary';
 import TabStatusIcon from '@/pages/ProtocolChecklist/TabStatusIcon';
 
 import { useAuth } from '@/context/auth/useAuth';
@@ -32,6 +34,7 @@ import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import { chrTabStatuses, type ChrTabKey } from '@/pages/ChrChecklist/tabStatus';
+import { groupOutstanding } from '@/pages/ProtocolChecklist/tabStatus';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 import {
@@ -188,27 +191,34 @@ const ChrChecklistPage: FC = () => {
   // Outstanding work found by the submit pre-flight, keyed by tab. Set when Submit is pressed and the
   // checklist is not ready; cleared on the next attempt.
   const [preflight, setPreflight] = useState<Partial<Record<ChrTabKey, string[]>>>({});
-  // Once Submit has been pressed, every tab shows its count — including the ones held back for never
-  // having been started. The user has asked the question, so the answer stops being a nag.
-  const [countsRevealed, setCountsRevealed] = useState(false);
-  // Tabs that have had a save land in this session, so their banner can lead with "saved" rather than
-  // reporting gaps in a record the user has not touched yet.
-  const [savedTabs, setSavedTabs] = useState<Partial<Record<ChrTabKey, boolean>>>({});
+
+  /**
+   * Features being edited but not yet saved.
+   *
+   * The Features tab edits the whole list at once — a composite's membership and the cross-feature
+   * associations are both edited from inside one feature — so it needs the live array, and it used to
+   * write that straight back into `checkList`. Holding the pending list here keeps `checkList`
+   * meaning "what the server (or the local record) actually holds", which is what a save sends and
+   * what Cancel reverts to.
+   *
+   * The tab counts deliberately do *not* read this list: they describe what is stored, so they move
+   * when a save lands rather than as the editor is used.
+   */
+  const [draftFeatures, setDraftFeatures] = useState<Feature[] | null>(null);
 
   /**
    * Per-tab completion state, derived from the checklist the page is already holding.
    *
    * No requests: CHR keeps the whole document — features included — in client state, so every submit
-   * rule can be answered from memory. The dots therefore move the moment a save lands and keep
+   * rule can be answered from memory. The counts therefore move the moment an edit lands and keep
    * working on an offline copy.
+   *
+   * Read from the stored checklist, never from the pending edits — the same rule Opening info and
+   * Block summary follow. The count answers "what does this checklist still owe?", which is a
+   * question about what is kept, not about what is currently on screen; recomputing it under the
+   * cursor would move the number while the user is still deciding.
    */
   const tabState = useMemo(() => chrTabStatuses(checkList), [checkList]);
-
-  /** Record that a section save landed, for that tab's banner wording. */
-  const markSaved = useCallback(
-    (key: ChrTabKey) => setSavedTabs((prev) => ({ ...prev, [key]: true })),
-    [],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -318,19 +328,6 @@ const ChrChecklistPage: FC = () => {
   const offlineOutOfDate =
     isOfflineCopy && offlineStaleness != null && isStale(offlineStaleness.verdict);
 
-  /**
-   * Features being edited but not yet saved.
-   *
-   * The Features tab edits the whole list at once — a composite's membership and the cross-feature
-   * associations are both edited from inside one feature — so it needs the live array, and it used to
-   * write that straight back into `checkList`. That made a feature added seconds ago look stored, and
-   * greeted the user with a banner listing everything they had not typed yet. Holding the pending
-   * list here keeps `checkList` meaning "what the server (or the local record) actually holds", which
-   * is what the tab dots and banners describe. It also puts Features on the same footing as Opening
-   * info and Block summary, whose drafts have always been local to the tab until Save.
-   */
-  const [draftFeatures, setDraftFeatures] = useState<Feature[] | null>(null);
-
   const reportError = useCallback(
     (title: string, err: unknown) =>
       display({
@@ -351,7 +348,6 @@ const ChrChecklistPage: FC = () => {
   // saves the whole document locally. Returns true on success so per-tab Save can exit edit mode.
   const persistSection = useCallback(
     async (
-      section: ChrTabKey,
       endpoint: (checklistId: string, cl: CheckList) => Promise<CheckList>,
       merged: CheckList,
       applyBack: (prev: CheckList, saved: CheckList) => CheckList,
@@ -367,7 +363,6 @@ const ChrChecklistPage: FC = () => {
           setCheckList((prev) => (prev ? applyBack(prev, saved) : prev));
           display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
         }
-        markSaved(section);
         return true;
       } catch (err) {
         reportError('Save failed', err);
@@ -376,7 +371,7 @@ const ChrChecklistPage: FC = () => {
         setBusy(false);
       }
     },
-    [id, isOfflineCopy, display, reportError, markSaved],
+    [id, isOfflineCopy, display, reportError],
   );
 
   // Opening / Block summary are buffered (Edit → Save): they pass their committed draft, which we
@@ -385,7 +380,6 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
-        'opening',
         (cid, cl) => API.chrChecklist.saveOpening(cid, cl),
         { ...checkList, ...draft },
         // assessedBy is decided server-side (set-once / assign-to-me), so reflect its truth.
@@ -404,7 +398,6 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
-        'blockSummary',
         (cid, cl) => API.chrChecklist.saveBlockSummary(cid, cl),
         { ...checkList, ...draft },
         (prev, saved) => ({
@@ -424,7 +417,6 @@ const ChrChecklistPage: FC = () => {
     (draft: Partial<CheckList>): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
-        'notes',
         (cid, cl) => API.chrChecklist.saveBlockSummary(cid, cl),
         { ...checkList, ...draft },
         (prev, saved) => ({ ...prev, ...draft, revisionCount: saved.revisionCount }),
@@ -440,7 +432,6 @@ const ChrChecklistPage: FC = () => {
     (contacts: ContactDto[]): Promise<boolean> => {
       if (!checkList) return Promise.resolve(false);
       return persistSection(
-        'contacts',
         (cid, cl) => API.chrChecklist.saveContacts(cid, cl),
         { ...checkList, contacts },
         (prev, saved) => ({
@@ -457,7 +448,6 @@ const ChrChecklistPage: FC = () => {
     async (features: Feature[]): Promise<boolean> => {
       if (!checkList) return false;
       const saved = await persistSection(
-        'features',
         (cid, cl) => API.chrChecklist.saveFeatures(cid, cl),
         { ...checkList, features },
         (prev, stored) => ({
@@ -642,7 +632,6 @@ const ChrChecklistPage: FC = () => {
       ) as Partial<Record<ChrTabKey, string[]>>;
       if (Object.keys(blocking).length > 0) {
         setPreflight(blocking);
-        setCountsRevealed(true);
         display({ kind: 'warning', title: 'Submit blocked by validation', timeout: 6000 });
         return;
       }
@@ -667,7 +656,6 @@ const ChrChecklistPage: FC = () => {
       // so carry the loaded page over. (A check-in flips isOfflineCopy, which re-runs the photo
       // effect — these online status changes don't, so they must preserve it here.)
       setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
-      setCountsRevealed(false);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
     } catch (err) {
       const validation = extractValidationErrors(err);
@@ -785,11 +773,6 @@ const ChrChecklistPage: FC = () => {
     }
   };
 
-  const mrva = useMemo(
-    () => calculateMrvaRatingCode(checkList?.rating, checkList?.features),
-    [checkList?.rating, checkList?.features],
-  );
-
   if (loading) {
     return (
       <Grid fullWidth className="default-grid">
@@ -852,43 +835,31 @@ const ChrChecklistPage: FC = () => {
       <div key="Opening ID">
         <span className="protocol-checklist__label">Opening ID</span>
         <span>
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {value}
-          </a>
+          <ExternalLink href={href}>{value}</ExternalLink>
         </span>
       </div>
     );
   };
   const orgUnit = [checkList.orgUnitCode, checkList.orgUnitName].filter(Boolean).join(' - ');
 
-  // A tab held back for never having been started starts showing its count once Submit has been
-  // pressed — at that point the silence would be hiding the very thing the user asked about.
-  const statusFor = (key: ChrTabKey) => {
-    const status = tabState.statuses[key];
-    return countsRevealed && status === 'empty' && tabState.counts[key] > 0 ? 'errors' : status;
-  };
+  // Which tabs draw no indicator is decided next to the rules (they report `none`), not listed
+  // here, so a tab that gains a rule lights up on its own.
+  const statusFor = (key: ChrTabKey) => tabState.statuses[key];
 
-  // A tab lists its outstanding items exactly when its dot is red. That keeps the two in step: a
-  // quiet dot on a never-opened tab means a quiet tab, and pressing Submit turns both on at once.
-  const visibleOutstanding = (key: ChrTabKey): string[] =>
-    statusFor(key) === 'errors' ? tabState.outstanding[key] : [];
+  // The page-level tally. Counted across every tab, including the two without an indicator: a total
+  // that silently omitted a tab would read as "nothing left" while submit still refused.
+  const outstandingTotal = Object.values(tabState.counts).reduce((sum, count) => sum + count, 0);
+  const outstandingTabs = Object.values(tabState.counts).filter((count) => count > 0).length;
 
-  // The tabs the pre-flight objected to, named in the page-level banner. The items themselves stay
-  // on the tabs that own them, so there is one place to read them and one place to fix them.
-  const preflightTabNames = (() => {
-    const names = TABS.filter((t) => preflight[t.key]?.length).map((t) => t.title);
-    if (names.length <= 1) return names[0] ?? 'A tab';
-    return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-  })();
+  // A submit has been turned away for these items. Everything that reports them — the page banner,
+  // the tab counts, each tab's disclosure — turns red together, so the page reads as one answer to
+  // "why didn't it submit?" rather than three separate remarks.
+  const submitRefused = Object.keys(preflight).length > 0;
+  const tone = submitRefused ? 'error' : 'neutral';
 
-  /** The per-tab "you can save this, but you can't submit it yet" banner. */
-  const tabBanner = (key: ChrTabKey, sectionLabel: string, noun?: string) => (
-    <TabIncompleteBanner
-      items={visibleOutstanding(key)}
-      saved={Boolean(savedTabs[key])}
-      sectionLabel={sectionLabel}
-      noun={noun}
-    />
+  /** The per-tab disclosure listing everything the tab still owes. */
+  const tabBanner = (key: ChrTabKey) => (
+    <OutstandingPanel groups={groupOutstanding(tabState.items[key])} tone={tone} />
   );
 
   return (
@@ -905,8 +876,13 @@ const ChrChecklistPage: FC = () => {
           </button>
           <div className="chr-checklist__title-row">
             <h1>{`${checkList.checklistID}-Cultural Heritage`}</h1>
-            {/* The status itself lives in the tombstone grid below; an offline copy is your editable
-                local copy (always RDO under the hood), so flag that here instead. */}
+            {/* Status reads beside the heading rather than as the last cell of the tombstone grid:
+                it governs what the whole page allows, so it belongs where the eye lands first. */}
+            <Tag type={statusTagType(checkList.status)} size="sm">
+              {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
+            </Tag>
+            {/* An offline copy is your editable local copy (always RDO under the hood), so it is
+                flagged separately from the server-side status above. */}
             {isOfflineCopy && (
               <Tag type="teal" size="sm">
                 Offline copy
@@ -917,9 +893,6 @@ const ChrChecklistPage: FC = () => {
                 No network connection
               </Tag>
             )}
-            <Tag type="cool-gray" size="sm">
-              MRVA {mrva || '—'}
-            </Tag>
             {/* Every checklist-level action lives here, at the top of the page rather than below
                 the tombstone tile. Most are mutually exclusive — Sync changes and Remove from
                 device only ever appear on an offline copy, Reactivate only on a checked-out one —
@@ -927,7 +900,7 @@ const ChrChecklistPage: FC = () => {
             <div className="chr-checklist__title-actions">
               {!readOnly && online && !offlineOutOfDate && (
                 <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
-                  Submit
+                  Submit checklist
                 </Button>
               )}
               {!isOfflineCopy && online && !readOnly && (
@@ -942,7 +915,7 @@ const ChrChecklistPage: FC = () => {
                 canEditThisChr &&
                 checkList.status === CHR_STATUS.SUBMITTED && (
                   <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
+                    Unsubmit checklist
                   </Button>
                 )}
               {/* Admin-only recovery for a checklist stuck "Checked out" on another device. */}
@@ -991,7 +964,13 @@ const ChrChecklistPage: FC = () => {
           );
         })()}
 
-      {!canEditThisChr && (
+      {/* Not shown for an offline copy — the same reasoning readOnly above already applies. Holding
+          the copy at all proves the district check passed at checkout
+          (@chrAuth.canEditChecklist gates POST /checklists/{id}/offline), and the role check cannot
+          be evaluated offline anyway: there is no session to read the districts from, so it would
+          always report "view only" and contradict a form that is genuinely editable. Anything that
+          did slip through is refused server-side on sync. */}
+      {!canEditThisChr && !isOfflineCopy && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
@@ -1016,6 +995,14 @@ const ChrChecklistPage: FC = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
+        <OutstandingSummary
+          total={outstandingTotal}
+          tabs={outstandingTabs}
+          refused={submitRefused}
+        />
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
         <Tile className="protocol-checklist__summary">
           <div className="protocol-checklist__summary-grid">
             {/* Tombstone header laid out like the Biodiversity checklist (same fields, same order). */}
@@ -1030,34 +1017,11 @@ const ChrChecklistPage: FC = () => {
             {headerCell('Cutting permit', checkList.cuttingPermit)}
             {headerCell('Cut block', checkList.block)}
             {headerCell('Year of harvest', checkList.yearOfHarvest)}
-            <div>
-              <span className="protocol-checklist__label">Status</span>
-              <Tag type={statusTagType(checkList.status)} size="sm">
-                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
-              </Tag>
-            </div>
             {headerCell('Evaluator', checkList.assessedByName || checkList.assessedBy)}
             {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
           </div>
         </Tile>
       </Column>
-
-      {/* What the submit pre-flight found, named by tab. The items themselves are listed on the tabs
-          that own them — this says which tabs to go and look at. */}
-      {Object.keys(preflight).length > 0 && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineNotification
-            className="protocol-checklist__preflight"
-            kind="error"
-            hideCloseButton
-            lowContrast
-            title="This checklist isn't ready to submit"
-            subtitle={`${preflightTabNames} ${
-              Object.keys(preflight).length === 1 ? 'has' : 'have'
-            } required fields outstanding. Fix the items listed on each tab, then submit again.`}
-          />
-        </Column>
-      )}
 
       {/* Submit validation errors returned by the server, shown inline (mirrors the Biodiversity
           checklist's submit-validation panel) rather than behind a tab. */}
@@ -1087,19 +1051,20 @@ const ChrChecklistPage: FC = () => {
             {TABS.map((section) => (
               <Tab key={section.key}>
                 <span className="protocol-checklist__tab-label">
+                  {section.title}
                   <TabStatusIcon
                     status={statusFor(section.key)}
                     count={tabState.counts[section.key]}
                     section={section.title}
+                    tone={tone}
                   />
-                  {section.title}
                 </span>
               </Tab>
             ))}
           </TabList>
           <TabPanels>
             <TabPanel>
-              {tabBanner('opening', 'Opening', 'required field')}
+              {tabBanner('opening')}
               <OpeningInformation
                 value={checkList}
                 onSave={saveOpening}
@@ -1108,7 +1073,7 @@ const ChrChecklistPage: FC = () => {
               />
             </TabPanel>
             <TabPanel>
-              {tabBanner('blockSummary', 'Block summary', 'required field')}
+              {tabBanner('blockSummary')}
               <BlockSummary
                 value={checkList}
                 onSave={saveBlockSummary}
@@ -1125,7 +1090,7 @@ const ChrChecklistPage: FC = () => {
               />
             </TabPanel>
             <TabPanel>
-              {tabBanner('features', 'Feature')}
+              {tabBanner('features')}
               <FeatureList
                 features={draftFeatures ?? checkList.features ?? []}
                 onChange={setDraftFeatures}
@@ -1138,7 +1103,7 @@ const ChrChecklistPage: FC = () => {
               <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
             </TabPanel>
             <TabPanel>
-              {tabBanner('attachments', 'Photo')}
+              {tabBanner('attachments')}
               <Photos
                 pictures={
                   isOfflineCopy

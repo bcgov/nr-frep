@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
 import ClientCombo from '@/components/core/ClientCombo';
+import { ExternalLink } from '@/components/core/ExternalLink';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
 
 import type { MasterListYear, OrgUnit, Protocol } from '@/types/configuration';
@@ -523,9 +524,7 @@ const ChecklistSearchPage: FC = () => {
                               return (
                                 <TableCell key={cell.id}>
                                   {silvaHref ? (
-                                    <a href={silvaHref} target="_blank" rel="noopener noreferrer">
-                                      {cell.value}
-                                    </a>
+                                    <ExternalLink href={silvaHref}>{cell.value}</ExternalLink>
                                   ) : (
                                     cell.value
                                   )}

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import type { StalenessVerdict } from '@/services/offline/chrStaleness';
+
 import {
   classifyStaleness,
   formatUpdatedBy,
   isStale,
   stalenessBanner,
 } from '@/services/offline/chrStaleness';
-
-import type { StalenessVerdict } from '@/services/offline/chrStaleness';
 
 describe('classifyStaleness', () => {
   it('is CURRENT when the server checkout still matches the local guid', () => {

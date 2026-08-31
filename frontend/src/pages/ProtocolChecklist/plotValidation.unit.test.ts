@@ -31,6 +31,23 @@ describe('plotHeaderErrors', () => {
     expect(withSignal.utmNorthing).toMatch(/required/);
   });
 
+  it('exempts a plot that never answered the UTM question', () => {
+    // Legacy rows: UTM_SIGNAL is nullable and predates this app, which always writes 'Y' or 'N'.
+    // Silence is not a yes — neither the columns, nor FREP_BIODIVERSITY_PLOT.VALIDATE, nor legacy's
+    // UtmSignalCompleteValidator (which tested `equals("Y")`) ever asked those rows for coordinates.
+    expect(plotHeaderErrors(validHeader({ utmSignal: undefined }), 'DO')).toEqual({});
+    expect(plotHeaderErrors(validHeader({ utmSignal: '' }), 'DO')).toEqual({});
+  });
+
+  it('still checks the shape of a coordinate that was entered, whatever the signal says', () => {
+    // Exempt from being *required* is not exempt from being right: legacy registered its
+    // Easting/Northing field validators unconditionally, and only a blank field is ever excused.
+    const e = plotHeaderErrors(validHeader({ utmSignal: undefined, utmEasting: '123' }), 'DO');
+    expect(e.utmEasting).toMatch(/exactly 6 digits/);
+    expect(e.utmZone).toBeUndefined();
+    expect(e.utmNorthing).toBeUndefined();
+  });
+
   it('checks easting/northing digit counts', () => {
     const e = plotHeaderErrors(
       validHeader({ utmSignal: 'Y', utmZone: '10', utmEasting: '123', utmNorthing: '12' }),
@@ -152,5 +169,41 @@ describe('cwdRowErrors', () => {
         logLength: '3.5',
       }),
     ).toEqual({});
+  });
+});
+
+describe('plotHeaderErrors — plot number uniqueness', () => {
+  it('reports a number another plot in the stratum already holds', () => {
+    // Otherwise FREP_BIODIVERSITY_PLOT.VALIDATE rejects the save with
+    // frep.web.usr.database.record.plot.number.already.exists, costing a round-trip.
+    const e = plotHeaderErrors(validHeader({ plotNumber: '2' }), 'DO', ['1', '2', '3']);
+    expect(e.plotNumber).toBe('Plot 2 already exists in this stratum. Use a different number.');
+  });
+
+  it('accepts a number no other plot holds', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['1', '2', '3'])).toEqual({});
+  });
+
+  it('compares numerically, the way the column does', () => {
+    // PLOT_NUMBER is NUMBER(3), so "01" and "1" are the same plot number to Oracle. Comparing as
+    // text would pass this straight through to the proc.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '01' }), 'DO', ['1']).plotNumber).toMatch(
+      /already exists/,
+    );
+  });
+
+  it('says the number is invalid before it says it is taken', () => {
+    // "Plot # must be a whole number" is the more useful of the two messages.
+    const e = plotHeaderErrors(validHeader({ plotNumber: 'abc' }), 'DO', ['abc']);
+    expect(e.plotNumber).not.toMatch(/already exists/);
+  });
+
+  it('ignores blanks among the taken numbers', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['', ' '])).toEqual({});
+  });
+
+  it('reports nothing when no other plots are passed', () => {
+    // The default keeps every existing caller behaving exactly as before.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO')).toEqual({});
   });
 });

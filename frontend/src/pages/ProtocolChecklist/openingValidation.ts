@@ -100,6 +100,22 @@ export const openingTouched = (data?: BiodiversityOpening | null): boolean =>
  * the same here — marked with an asterisk, counted on the tab, and named after a save — because to
  * an evaluator they are all just answers still owed.
  */
+/**
+ * The fieldset each required field is edited in, keyed as {@link OPENING_REQUIRED_LABELS}.
+ *
+ * `teamLeadNameId` is deliberately absent: the Evaluator widget sits above the first fieldset, so
+ * there is no section to send the reader to and the label stands on its own.
+ */
+export const OPENING_REQUIRED_SECTIONS: Record<string, string> = {
+  evaluationDate: 'Evaluation',
+  locationDescription: 'Opening identification',
+  innovativePracticeInd: 'Innovative practices',
+  innovativePracticesComment: 'Innovative practices',
+  frepSiteEvaluationCode: 'Evaluator opinion',
+  invasivePlantIndicator: 'Invasive plants',
+  invasivePlantComment: 'Invasive plants',
+};
+
 export const OPENING_REQUIRED_LABELS: Record<string, string> = {
   evaluationDate: 'Evaluation date',
   teamLeadNameId: 'Evaluator',

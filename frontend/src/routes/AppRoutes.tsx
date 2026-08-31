@@ -19,7 +19,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
  * Top-level router. Switches between three route sets based on auth state:
  * public (Landing, 404), no-role (only /unauthorized), and protected
  * (Dashboard, Projects, etc.). A user who authenticates but lacks both
- * FREP_ADMIN, FREP_EDITOR, or FREP_VIEW_ONLY lands on /unauthorized rather than NotFound.
+ * FREP_ADMIN or FREP_EDITOR lands on /unauthorized rather than NotFound.
  */
 const AppRoutes: FC = () => {
   const { isLoggedIn, isLoading, user } = useAuth();

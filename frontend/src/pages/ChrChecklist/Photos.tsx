@@ -397,7 +397,7 @@ const Photos: FC<{
               <th scope="col">Preview</th>
               <th scope="col">Description</th>
               <th scope="col">Date</th>
-              <th scope="col">Actions</th>
+              <th scope="col">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -431,26 +431,26 @@ const Photos: FC<{
                   </td>
                   <td>{picture.description || '—'}</td>
                   <td>{formatShortDate(picture.date) || '—'}</td>
-                  <td>
+                  <td className="table-actions">
                     <Button
                       kind="ghost"
                       size="sm"
-                      hasIconOnly
                       renderIcon={Download}
-                      iconDescription="Download"
                       disabled={busy}
                       onClick={() => download(picture)}
-                    />
+                    >
+                      Download
+                    </Button>
                     {!readOnly && (
                       <Button
                         kind="danger--ghost"
                         size="sm"
-                        hasIconOnly
                         renderIcon={TrashCan}
-                        iconDescription="Delete"
                         disabled={busy}
                         onClick={() => void removeAt(index)}
-                      />
+                      >
+                        Delete
+                      </Button>
                     )}
                   </td>
                 </tr>

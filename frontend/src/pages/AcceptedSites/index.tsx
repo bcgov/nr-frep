@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
 import PrintableTable from '@/components/core/PrintableTable';
 import TableHeaderBar from '@/components/core/TableHeaderBar';
 import OpeningMapModal from '@/components/OpeningMapModal';
@@ -269,13 +270,7 @@ const AcceptedSitesPage: FC = () => {
       const href = silvaOpeningUrl(cell.value, user?.idpProvider);
       return (
         <TableCell key={cell.id}>
-          {href ? (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {cell.value}
-            </a>
-          ) : (
-            cell.value
-          )}
+          {href ? <ExternalLink href={href}>{cell.value}</ExternalLink> : cell.value}
         </TableCell>
       );
     }
@@ -405,7 +400,7 @@ const AcceptedSitesPage: FC = () => {
                         {/* Add Target Site: enabled once a district is selected (legacy gate). */}
                         <Button
                           kind="tertiary"
-                          size="md"
+                          size="lg"
                           renderIcon={Add}
                           onClick={goToAddTargetSite}
                           disabled={configLoading || !orgUnit}

@@ -31,7 +31,7 @@ describe('ProtectedRoute', () => {
 
   it('redirects to /unauthorized if user lacks required role', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
-      user: { roles: ['FREP_VIEW_ONLY'] },
+      user: { roles: [] },
     });
 
     const { container } = render(
@@ -46,7 +46,7 @@ describe('ProtectedRoute', () => {
 
   it('renders children if user is authenticated and has required role', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
-      user: { roles: ['FREP_ADMIN', 'FREP_VIEW_ONLY'] },
+      user: { roles: ['FREP_ADMIN'] },
     });
 
     const { getByText } = render(

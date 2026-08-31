@@ -56,13 +56,16 @@
 .protocol-checklist__title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   width: 100%;
 
+  /* Pushed to the end by margin rather than `justify-content: space-between`: the row now holds a
+     third child (the status tag), and space-between would strand it midway between the heading and
+     the actions instead of keeping it with the heading it describes. */
   .protocol-checklist__actions {
     flex: 0 0 auto;
+    margin-inline-start: auto;
   }
 }
 
@@ -71,7 +74,9 @@
    `:is()` takes the specificity of its most specific argument, making that rule (0,2,0). */
 .default-grid .protocol-checklist__title-row h1 {
   width: auto;
-  flex: 1 1 auto;
+  /* Sized to its text, not grown: `flex: 1 1 auto` made the heading swallow the free space and
+     carried the status tag along to the far right, away from the title. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -136,9 +141,28 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  // Read-only label/value cells are shorter than input cells; top-align them so their
-  // labels line up with the input labels even when the grid is bottom-aligned (align-items: end).
+  // Read-only label/value cells are shorter than input cells; top-align them so their labels line
+  // up with the input labels. The grid itself is top-aligned now, so this only matters where a
+  // read-only field sits in a container that is not.
   align-self: start;
+}
+
+/* A read-only value sitting in a row of inputs.
+   The cell is label-over-text while its neighbours are label-over-box, so the value sat against the
+   top of the row while the inputs' contents sat 40px lower — "NAR 2.8" floating above the boxes it
+   belongs beside. Giving the value the height of an input and centring it in that space lines the
+   two up on the same optical row. Scoped to the editable grid: a fully read-only tab has no inputs
+   to line up with and keeps its tighter spacing. */
+.rip-form__grid > .protocol-checklist__field {
+  /* Carbon puts 0.5rem under its labels; this cell's own gap is 0.25rem, which left the value four
+     pixels high of its neighbours even once it had an input's height. */
+  gap: 0.5rem;
+
+  > .protocol-checklist__value {
+    display: flex;
+    align-items: center;
+    min-height: 2.5rem;
+  }
 }
 
 .protocol-checklist__multiline {
@@ -180,11 +204,6 @@
 .bio-strata__toolbar {
   display: flex;
   justify-content: flex-end;
-}
-
-// + icon leads the label, with a slim gap so the button stays compact.
-.bio-strata__add-icon {
-  margin-right: 0.25rem;
 }
 
 .bio-strata__table {
@@ -375,10 +394,80 @@
 
 .rip-form__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  /* Tracks are capped rather than sharing the row out as `1fr`.
+     With `1fr`, two fields on a row each took half the page — a three-digit bearing ran to some
+     700px, and capping the control instead left the pair marooned at opposite ends of the row.
+     Bounding the track keeps the fields the size of the answers they hold *and* next to each other,
+     with the leftover space falling at the end of the row where it belongs. */
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 12rem));
   gap: 1rem 2rem;
-  align-items: end;
+  // Top-aligned so every label in a row starts on the same line. This was `end`, which lines the
+  // cells up by their bottoms — indistinguishable while Carbon's inline errors were absolutely
+  // positioned and every cell was therefore the same height. Once the errors took real height (see
+  // the .cds--form-requirement rule below), one field's two-line error pushed its neighbours' labels
+  // and inputs down the page.
+  align-items: start;
   margin-bottom: 1rem;
+}
+
+/* A row whose control carries long option text — "Harvest area with dispersed retention" will not
+   fit the standard column, and a select truncates rather than wraps, so the choice the evaluator
+   made reads as "Harvest area with…" and the two harvest options become indistinguishable. */
+.rip-form__grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 26rem));
+}
+
+/* A cell that holds more than a value — an evaluator's name alongside "Assign it to me" — takes two
+   tracks. In one it wrapped the name onto three lines next to a button, which reads as a fault
+   rather than as a field. */
+.rip-form__grid > .rip-form__cell--wide {
+  grid-column: span 2;
+}
+
+/* A row mixing bare checkboxes with a label-over-input field.
+   A checkbox has no label above it, so on the top-aligned default it floated a label's height clear
+   of the input beside it. Aligning the row by its bottoms puts the boxes on the input's line.
+   The margin does two jobs: it lifts the boxes so their centres meet the input's rather than their
+   bottoms, and it normalises Carbon's own spacing — the last checkbox is given a smaller bottom
+   margin than the rest, which left it a few pixels low. The doubled class out-specifies
+   `.cds--form-item.cds--checkbox-wrapper:last-of-type`. Measured against a 40px input: bottoms
+   aligned leaves the boxes 14px low, which this margin takes back. */
+.rip-form__grid--checks {
+  align-items: end;
+
+  .#{vars.$bcgov-prefix}--checkbox-wrapper.#{vars.$bcgov-prefix}--checkbox-wrapper {
+    margin-block-end: 1.25rem;
+  }
+}
+
+/* Labels reserve two lines, so the controls under them line up.
+   The row is top-aligned, which keeps every label starting on the same line — but a label that wraps
+   then pushes its own control a line lower than its neighbours', and "Patch location" sat 16px above
+   "Estimated age of oldest trees in reserve (other than Vets)". Reserving the second line puts every
+   control on the same row whether its label needed it or not. Bottom-aligning the labels instead
+   would trade one misalignment for another; this keeps both ends tidy.
+
+   Two lines rather than the tallest label in the row, which only subgrid can express — a third line
+   is rare enough at these widths to leave alone. */
+/* Descendant, not child: Carbon nests the label a level down — inside
+   `.cds--text-input__label-wrapper` for an input, `.cds--select` for a select. Checkbox labels carry
+   `.cds--checkbox-label` and are untouched, which is right: they sit beside their box, not above. */
+.rip-form__grid > .#{vars.$bcgov-prefix}--form-item .#{vars.$bcgov-prefix}--label,
+.rip-form__grid > .protocol-checklist__field > .protocol-checklist__label {
+  /* The reserved line goes *above* the text, not below it: the label sits at the bottom of its box,
+     hard against the field it names, and the slack it is holding for a possible second line opens
+     upwards where nothing else is. Set the other way the label floated a line clear of its own
+     input, which read as a bigger gap than the one between the fields. */
+  display: flex;
+  align-items: flex-end;
+  min-height: 2rem;
+}
+
+/* Free text is the exception to the capped track: a comment box is sized for the paragraph it
+   holds, not for the label above it, so it spans the row instead of sitting in one column. Where
+   `:has()` is unsupported the textarea simply keeps a single track — narrow rather than broken. */
+.rip-form__grid > *:has(textarea) {
+  grid-column: 1 / -1;
 }
 
 // The Bio Evaluation grid holds only two cells, so the shared 1fr column would stretch the date
@@ -409,7 +498,12 @@
   gap: 1.5rem;
 }
 
+/* Guidance beside a group of fields — "Fill in one of:", "* Decimal place means measured".
+   Set at the label size: these caption the controls under them rather than making a statement of
+   their own, and at body size they carried more weight than the fields they describe. */
 .rip-form__hint {
+  @include type.type-style('label-01');
+
   margin: 0.75rem 0 0;
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
@@ -590,8 +684,10 @@
   }
 }
 
-/* Tab labels carry a leading completion dot (see TabStatusIcon) instead of the old decorative
-   section icon, so the label and the dot have to share a baseline-ish row inside Carbon's tab. */
+/* Tab labels carry a trailing count badge (see TabStatusIcon) in place of the old decorative
+   section icon, so the label and the badge have to share a baseline-ish row inside Carbon's tab.
+   The badge follows the label so the tab still reads as its name first, and so the strip's left
+   edges stay aligned whether or not a tab has a badge at all. */
 .protocol-checklist__tab-label {
   display: inline-flex;
   align-items: center;
@@ -602,41 +698,146 @@
   flex: 0 0 auto;
 }
 
-/* "Saved but incomplete" banner at the top of the Opening tab. */
-.bio-opening__incomplete {
-  max-inline-size: 100%;
-  margin-block-end: 1rem;
+/* The "* Required fields" key (see RequiredLegend). Sits under the heading it explains, at the
+   label size — it is a note about the form, not a statement in it. */
+.protocol-checklist__required-legend {
+  @include type.type-style('label-01');
+
+  margin: 0 0 1.5rem;
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
 
-/* Outstanding-rules list inside the "saved but incomplete" banner. */
-.protocol-checklist__incomplete {
+/* Page-level tally above the tab strip (see OutstandingSummary). */
+.protocol-checklist__outstanding-summary {
   max-inline-size: 100%;
   margin-block-end: 1rem;
 
-  /* _overrides.scss sets the notification text wrapper to `flex-wrap: nowrap`, to keep a title and
-     subtitle on one line. This banner adds a third child — the list — and with nowrap it shares the
-     row and squeezes the subtitle to one character per line. Wrapping is restored here only: the
-     title and subtitle still fit one row on their own, and the list (basis 100%) takes the next. */
+  /* _overrides.scss sets the notification text wrapper to `flex-wrap: nowrap` so a short title and
+     subtitle share one line. Here the subtitle is a full sentence, and on one row it wraps around
+     the title into a ragged block. Wrapping is restored for this banner only, and the subtitle is
+     given a full-width basis so it always starts on its own line under the title. */
   .#{vars.$bcgov-prefix}--inline-notification__text-wrapper {
     flex-wrap: wrap;
   }
+
+  .#{vars.$bcgov-prefix}--inline-notification__subtitle {
+    flex: 0 0 100%;
+    margin-block-start: 0.125rem;
+  }
 }
 
+/* Per-tab disclosure listing what the tab still owes (see OutstandingPanel). It deliberately wears
+   no notification chrome: this is reference material the evaluator consults while working down the
+   form, not an alert, and a full-width coloured band at the top of every tab drowns the form it is
+   describing. The summary banner above the strip carries the page-level signal instead. */
+.protocol-checklist__outstanding {
+  margin-block-end: 1.5rem;
+}
 
-.protocol-checklist__incomplete-list {
-  /* Carbon's notification text wrapper is a wrapping flex row, so the list would otherwise sit
-     alongside the subtitle and only wrap once it ran out of room. A full-width basis puts it on its
-     own row every time. The type matches `.cds--inline-notification__subtitle`, which the list
-     reads as a continuation of — without it the list inherits the page body size and looks larger
-     than the sentence introducing it. */
+/* Styled as a link rather than a button: it reveals text in place, which is what a link-looking
+   control is read to do, and a bordered button here would compete with the tab's own Edit/Save. */
+.protocol-checklist__outstanding-toggle {
   @include type.type-style('body-compact-01');
 
-  flex: 0 0 100%;
-  margin-block-start: 0.375rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--cds-link-primary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--cds-link-primary-hover);
+    text-decoration: underline;
+  }
+
+  /* Carbon's own focus treatment — the control sits on the page background, not on a field. */
+  &:focus-visible {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Refused-submit tone: the same control, in the colour the tab counts and the page banner take once
+   a submit has actually been turned away. The icon rides with it so the state survives for anyone
+   who cannot tell the two colours apart. */
+.protocol-checklist__outstanding-toggle--error {
+  color: var(--cds-text-error);
+
+  &:hover {
+    color: var(--cds-text-error);
+  }
+
+  svg {
+    fill: var(--cds-support-error);
+  }
+}
+
+.protocol-checklist__outstanding-body {
+  margin-block-start: 0.5rem;
+}
+
+/* Groups stack with a gap rather than margins on each heading, so a run of single-item groups does
+   not accumulate double spacing between them. */
+.protocol-checklist__outstanding-group + .protocol-checklist__outstanding-group {
+  margin-block-start: 0.75rem;
+}
+
+/* The record each rule below belongs to — "Stratum 1", "Feature 3". Bold and in the body face: it
+   is a label within a list, not a section heading competing with the form's own. */
+.protocol-checklist__outstanding-title {
+  @include type.type-style('body-compact-01');
+
+  font-weight: 600;
+  margin-block-end: 0.125rem;
+}
+
+.protocol-checklist__outstanding-list {
+  @include type.type-style('body-compact-01');
+
   padding-inline-start: 1.125rem;
   list-style: disc;
 
   li {
     margin-block-end: 0.125rem;
   }
+}
+
+/* Shared "Action" column treatment. Every table that offers row actions labels them — Edit, Delete,
+   Download — rather than relying on a bare glyph, so three ghost buttons in a row stay tellable
+   apart and the destructive one says so. Defined here because ChrChecklist imports this stylesheet
+   too, keeping one definition for both protocols. */
+.table-actions {
+  // Left, so the buttons line up under the "Action" header. The attachments cell previously used
+  // `rip-grid__choice`, which centres — correct for its checkbox cells, wrong for a labelled action
+  // that has to sit under its own column heading.
+  text-align: start;
+  white-space: nowrap;
+
+  .#{vars.$bcgov-prefix}--btn {
+    padding-inline: 0.5rem;
+  }
+}
+
+/* The secondary actions on a fieldset (BEC catalogue search, copy from the previous stratum) sit on
+   one row so neither reads as the group's primary action. */
+.rip-form__group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Carbon positions the inline error (`.cds--form-requirement`) absolutely, so it contributes no
+   height and the field's row never grows to hold it. A one-line message is absorbed by the grid's
+   row gap and looks fine; a message that wraps — "Plot 1 already exists in this stratum. Use a
+   different number." in a narrow column — prints its second line straight over the next row's
+   label.
+
+   Putting it back in flow makes the field, and therefore the grid row, grow to fit whatever the
+   message needs. Rows only grow while an error is showing. */
+.rip-form__grid .#{vars.$bcgov-prefix}--form-requirement {
+  position: static;
 }

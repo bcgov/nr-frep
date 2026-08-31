@@ -49,6 +49,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.DisplayName;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class ProtocolChecklistServiceTest {
@@ -693,5 +698,37 @@ class ProtocolChecklistServiceTest {
     // A negative size means "not found in object storage" and must surface as null, not "-1".
     assertEquals(null, page.attachments().get(1).fileSize());
     assertEquals(2, page.totalCount());
+  }
+
+  @Nested
+  @DisplayName("getBioPlot id validation")
+  class GetBioPlotIdValidation {
+
+    /**
+     * BIODIVERSITY_PLOT_ID is a NUMBER. Binding a blank or non-numeric string fails inside Oracle as
+     * "Invalid Input Number", which reached the evaluator as "A database error occurred… contact the
+     * FREP help desk" and was logged as a system fault naming nothing.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "bio", "107a", "undefined"})
+    @DisplayName("rejects a non-numeric plot id as a 400 that quotes it")
+    void rejectsNonNumericPlotId(String plotId) {
+      ResponseStatusException thrown =
+          assertThrows(ResponseStatusException.class, () -> service.getBioPlot(plotId));
+
+      assertThat(thrown.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(thrown.getReason()).contains(plotId);
+      // Never reaches the driver, so no "Database error" and no 500.
+      verifyNoInteractions(writeRepository);
+    }
+
+    @Test
+    @DisplayName("still reads a numeric plot id")
+    void acceptsNumericPlotId() {
+      when(writeRepository.getBioPlot("107")).thenReturn(null);
+
+      assertThrows(ResponseStatusException.class, () -> service.getBioPlot("107"));
+      verify(writeRepository).getBioPlot("107");
+    }
   }
 }

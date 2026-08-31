@@ -22,9 +22,11 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import OutstandingPanel from './OutstandingPanel';
+import RequiredLegend from './RequiredLegend';
 import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
-import TabIncompleteBanner from './TabIncompleteBanner';
 
+import type { OutstandingGroup } from './tabStatus';
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
 
@@ -32,6 +34,7 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
@@ -48,10 +51,12 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
-  /** Outstanding submit rules for this tab, listed in the banner (see TabIncompleteBanner). */
-  outstanding?: string[];
+  /** Outstanding submit rules for this tab, grouped by stratum (see OutstandingPanel). */
+  outstanding?: OutstandingGroup[];
   /** Called after a save or delete lands, so the tab-completion dots re-derive. */
   onSaved?: () => void;
+  /** `error` once a submit has been refused — see OutstandingPanel. */
+  tone?: 'neutral' | 'error';
 };
 
 type FieldDef = { key: string; label: string };
@@ -333,6 +338,20 @@ const CONSTRAINT_ECO_ROWS: {
   },
 ];
 
+/**
+ * The fields that make up a BEC combination, in form order. One list so the catalogue search and
+ * the copy-from-previous action can never drift apart.
+ */
+const BEC_KEYS = [
+  'bgcZoneCode',
+  'bgcSubzoneCode',
+  'bgcVariant',
+  'bgcPhase',
+  'becSiteSeriesCd',
+  'siteSeriesPhaseCd',
+  'seral',
+] as const;
+
 // BEC search modal criteria fields.
 const BEC_CRITERIA: FieldDef[] = [
   { key: 'zone', label: 'BGC zone' },
@@ -579,11 +598,9 @@ const BioStratumView: FC<Props> = ({
   submitted,
   onSaved,
   outstanding = [],
+  tone,
 }) => {
   const { display } = useNotification();
-  // A save landed in this session, so the banner can lead with it rather than reporting gaps in
-  // a tab the user has not touched yet.
-  const [justSaved, setJustSaved] = useState(false);
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
   const [current, setCurrent] = useState<BioStratum | null>(null);
@@ -600,6 +617,11 @@ const BioStratumView: FC<Props> = ({
   const [becCriteria, setBecCriteria] = useState<Record<string, string>>({});
   const [becResults, setBecResults] = useState<BecRow[]>([]);
   const [becBusy, setBecBusy] = useState(false);
+
+  // "Copy BEC from another stratum" dialog.
+  const [becCopyOpen, setBecCopyOpen] = useState(false);
+  const [becCopyBusy, setBecCopyBusy] = useState(false);
+  const [becCopyRows, setBecCopyRows] = useState<{ stratumNumber: string; bec: BioStratum }[]>([]);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -789,22 +811,69 @@ const BioStratumView: FC<Props> = ({
       setBecBusy(false);
     }
   };
-  const applyBec = (r: BecRow) => {
+  /**
+   * Set the whole BEC combination from a source that carries the same field names — a catalogue row
+   * or another stratum.
+   *
+   * All seven together, never a subset: `FREP_VALIDATE_BGC` validates the combination, so a
+   * half-copied BEC is a validation failure rather than a head start.
+   */
+  const applyBecFrom = (source: Partial<Record<(typeof BEC_KEYS)[number], string | undefined>>) =>
     setCurrent((prev) =>
-      prev
-        ? {
-            ...prev,
-            bgcZoneCode: r.bgcZoneCode ?? '',
-            bgcSubzoneCode: r.bgcSubzoneCode ?? '',
-            bgcVariant: r.bgcVariant ?? '',
-            bgcPhase: r.bgcPhase ?? '',
-            becSiteSeriesCd: r.becSiteSeriesCd ?? '',
-            siteSeriesPhaseCd: r.siteSeriesPhaseCd ?? '',
-            seral: r.seral ?? '',
-          }
-        : prev,
+      prev ? { ...prev, ...Object.fromEntries(BEC_KEYS.map((k) => [k, source[k] ?? ''])) } : prev,
     );
+
+  const applyBec = (r: BecRow) => {
+    applyBecFrom(r);
     setBecOpen(false);
+  };
+
+  /** The other strata on this checklist — the ones whose BEC can be copied. */
+  const otherRows = rows.filter((r) => !current?.stratumId || r.stratumId !== current.stratumId);
+
+  /**
+   * Load the BEC every other stratum is using, so the user can pick any of them rather than only
+   * the one immediately before this stratum.
+   *
+   * Fetched when the dialog opens, not when the form does: the list rows carry no BEC fields, so
+   * this is one read per stratum and most stratum edits never ask for it.
+   *
+   * Strata within one block usually share a BEC, which is why the browser's own autofill was being
+   * used for it — but that fills whatever else it infers belongs to the same group, and the rest of
+   * a stratum is per-stratum evaluation data. Copying only the seven named BEC fields makes it
+   * impossible for this to touch anything else. See utils/autofill.ts for the other half of that fix.
+   */
+  const openBecCopy = async () => {
+    setBecCopyOpen(true);
+    setBecCopyBusy(true);
+    try {
+      const loaded = await Promise.all(
+        otherRows
+          .filter((r) => r.stratumId)
+          .map(async (r) => ({
+            stratumNumber: r.stratumNumber ?? r.stratumId ?? '',
+            bec: await API.protocolChecklist.getBioStratum(r.stratumId as string),
+          })),
+      );
+      // Only strata that actually have a BEC, and one entry per distinct combination — repeating
+      // the same BEC once per stratum would make the list longer without offering another choice.
+      const seen = new Set<string>();
+      setBecCopyRows(
+        loaded
+          .filter(({ bec }) => (bec.bgcZoneCode ?? '').trim() !== '')
+          .filter(({ bec }) => {
+            const key = BEC_KEYS.map((k) => (bec[k] ?? '').trim().toLowerCase()).join('|');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }),
+      );
+    } catch (err) {
+      reportError("We couldn't load the other strata's BEC", err);
+      setBecCopyRows([]);
+    } finally {
+      setBecCopyBusy(false);
+    }
   };
 
   // Mirror Frep211ValidationManager + the proc's validate(). Returns a field-keyed map (one message
@@ -852,7 +921,6 @@ const BioStratumView: FC<Props> = ({
       setComputed(null);
       await loadList();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -875,7 +943,6 @@ const BioStratumView: FC<Props> = ({
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');
       await loadList();
       onSaved?.();
-      setJustSaved(true);
       display({ kind: 'success', title: 'Stratum deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -899,8 +966,24 @@ const BioStratumView: FC<Props> = ({
   // Read-only display of a Yes/No indicator field.
   const yesNo = (key: string): string => (get(key) === 'Y' ? 'Yes' : 'No');
 
+  /**
+   * Whether the field is owed, for the asterisk.
+   *
+   * {@link REQUIRED_KEYS} covers the fields that are always owed. The two sizes are conditional —
+   * which one applies depends on the map-consistency answer — so they are decided here, on the same
+   * test the validation below uses, rather than being left unmarked because a static set could not
+   * express them.
+   */
+  const isRequired = (key: string): boolean => {
+    if (REQUIRED_KEYS.has(key)) return true;
+    const consistent = get('consistentMapInd');
+    if (key === 'size') return consistent === 'Y';
+    if (key === 'estimatedSize') return consistent === 'N' || consistent === 'M';
+    return false;
+  };
+
   const field = (key: string, label: string): ReactNode => {
-    const lbl = requiredLabel(label, REQUIRED_KEYS.has(key));
+    const lbl = requiredLabel(label, isRequired(key));
     const opts = optionsFor(key);
     const disabled = disabledKey(key);
     const onChange = onChangeFor(key);
@@ -917,6 +1000,7 @@ const BioStratumView: FC<Props> = ({
       }
       return (
         <Select
+          autoComplete="off"
           key={key}
           id={`stratum-${key}`}
           labelText={lbl}
@@ -926,7 +1010,7 @@ const BioStratumView: FC<Props> = ({
           invalidText={fieldErrors[key]}
           onChange={(e) => onChange(e.target.value)}
         >
-          <SelectItem value="" text="—" />
+          <SelectItem value="" text="Choose an option" />
           {opts.map((o) => (
             <SelectItem key={o.code} value={o.code} text={o.description} />
           ))}
@@ -948,6 +1032,7 @@ const BioStratumView: FC<Props> = ({
           }
         >
           <DatePickerInput
+            {...NO_AUTOFILL}
             id={`stratum-${key}`}
             labelText={lbl}
             placeholder="YYYY-MM-DD"
@@ -970,6 +1055,12 @@ const BioStratumView: FC<Props> = ({
     const inputProps = {
       key,
       id: `stratum-${key}`,
+      // Off across the checklist forms: every field keeps a stable id across strata / plots /
+      // features, so the browser treats the next one as the same field and offers what was typed
+      // last time. Accepting one suggestion then cascades into the rest of the group — these are
+      // per-record evaluation values, never a repeat of the previous record.
+      autoComplete: 'off',
+
       labelText: lbl,
       value: get(key),
       // Undefined for anything not in the map — notably patchGeneralComment, which uses the byte
@@ -1011,6 +1102,7 @@ const BioStratumView: FC<Props> = ({
       get(key) || '—'
     ) : (
       <TextInput
+        autoComplete="off"
         id={`stratum-${key}`}
         labelText={LABELS[key] ?? key}
         hideLabel
@@ -1059,7 +1151,7 @@ const BioStratumView: FC<Props> = ({
 
   return (
     <div className="rip-form">
-      <TabIncompleteBanner items={outstanding} saved={justSaved} sectionLabel="Stratum" />
+      <OutstandingPanel groups={outstanding} tone={tone} />
       {/* The strata table and the stratum form are mutually exclusive — each takes the
           full width; the table is hidden while a stratum form is open. */}
       <div>
@@ -1073,23 +1165,21 @@ const BioStratumView: FC<Props> = ({
                   kind="tertiary"
                   size="lg"
                   className="bio-strata__add"
+                  renderIcon={Add}
                   disabled={busy}
                   onClick={() => void addStratum()}
                 >
-                  <Add size={16} className="bio-strata__add-icon" />
                   Add stratum
                 </Button>
               </div>
             )}
-            {rows.length === 0 ? (
-              <p>No strata yet.</p>
-            ) : (
+            {rows.length > 0 && (
               <Table size="sm" className="bio-strata__table">
                 <TableHead>
                   <TableRow>
                     <TableHeader>Stratum number</TableHeader>
                     <TableHeader>Stratum type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
+                    <TableHeader>Action</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1097,26 +1187,26 @@ const BioStratumView: FC<Props> = ({
                     <TableRow key={row.stratumId}>
                       <TableCell>{row.stratumNumber || row.stratumId}</TableCell>
                       <TableCell>{strataTypeLabel(row.strataTypeCode)}</TableCell>
-                      <TableCell>
+                      <TableCell className="table-actions">
                         <Button
                           kind="ghost"
                           size="sm"
                           renderIcon={Edit}
-                          iconDescription="Edit"
-                          hasIconOnly
                           disabled={busy}
                           onClick={() => void select(row.stratumId ?? '')}
-                        />
+                        >
+                          Edit
+                        </Button>
                         {!readOnly && (
                           <Button
                             kind="danger--ghost"
                             size="sm"
                             renderIcon={TrashCan}
-                            iconDescription="Delete"
-                            hasIconOnly
                             disabled={busy}
                             onClick={() => void deleteRow(row)}
-                          />
+                          >
+                            Delete
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>
@@ -1152,13 +1242,21 @@ const BioStratumView: FC<Props> = ({
                 </Button>
               </div>
 
+              {/* Under the buttons, directly above the fields it describes — and only where fields
+                  are marked, which is the open form, not the list behind it. */}
+              {!readOnly && <RequiredLegend />}
+
               {/* Stratum Summary (legacy frep211StratumSummary.jsp top block) */}
               <fieldset className="rip-form__group">
                 <legend>Stratum summary</legend>
+                {/* Two rows of three: the stratum's identity, then its plots and size. Left as one
+                    row the six ran the width of the page and read as an undifferentiated strip. */}
                 <div className="rip-form__grid">
                   {field('stratumNumber', 'Stratum Id')}
                   {field('strataTypeCode', 'Stratum type')}
                   {roCell('NAR', computed?.nar ?? '')}
+                </div>
+                <div className="rip-form__grid">
                   {field('plotCount', '# of plots in stratum')}
                   {roCell('# of plots completed', computed?.plotsCompleted ?? '')}
                   {field('size', 'Mapped stratum size (ha)')}
@@ -1178,9 +1276,22 @@ const BioStratumView: FC<Props> = ({
                   {field('seral', 'Seral')}
                 </div>
                 {!readOnly && (
-                  <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
-                    Search BEC catalogue…
-                  </Button>
+                  <div className="rip-form__group-actions">
+                    <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
+                      Search BEC
+                    </Button>
+                    {/* Only offered when there is another stratum to copy from. */}
+                    {otherRows.length > 0 && (
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void openBecCopy()}
+                      >
+                        Same BEC as another stratum
+                      </Button>
+                    )}
+                  </div>
                 )}
               </fieldset>
 
@@ -1196,7 +1307,9 @@ const BioStratumView: FC<Props> = ({
               {/* Harvest area */}
               <fieldset className="rip-form__group">
                 <legend>Harvest area</legend>
-                <div className="rip-form__grid">{field('harvestAreaCode', 'Tick one of')}</div>
+                <div className="rip-form__grid rip-form__grid--wide">
+                  {field('harvestAreaCode', 'Tick one of')}
+                </div>
               </fieldset>
 
               {/* Patch / Dispersed Summary */}
@@ -1226,7 +1339,11 @@ const BioStratumView: FC<Props> = ({
                     </span>
                   </div>
                 ) : (
-                  <div className="rip-form__grid">
+                  /* "Other" joins the treatments it belongs with rather than sitting on a row of
+                     its own. Bottom-aligned so the checkboxes line up with the input beside them:
+                     they carry no label above, so a top-aligned row left them floating a label's
+                     height clear of it. */
+                  <div className="rip-form__grid rip-form__grid--checks">
                     {WINDTHROW_TREATMENT_OPTIONS.map((o) => (
                       <Checkbox
                         key={o.code}
@@ -1237,9 +1354,9 @@ const BioStratumView: FC<Props> = ({
                         onChange={(_e, { checked }) => toggleTreatment(o.code, checked)}
                       />
                     ))}
+                    {field('otherWindthrowTreatment', 'Other')}
                   </div>
                 )}
-                <div className="rip-form__grid">{field('otherWindthrowTreatment', 'Other')}</div>
               </fieldset>
 
               {/* Reserve Constraints | Ecological Anchors (two-column, legacy layout) */}
@@ -1278,6 +1395,7 @@ const BioStratumView: FC<Props> = ({
                           get('otherConstraint') || '—'
                         ) : (
                           <TextInput
+                            autoComplete="off"
                             id="stratum-otherConstraint"
                             labelText="Other constraint"
                             hideLabel
@@ -1308,6 +1426,7 @@ const BioStratumView: FC<Props> = ({
                           get('otherEcoAnchorDesc') || '—'
                         ) : (
                           <TextInput
+                            autoComplete="off"
                             id="stratum-otherEcoAnchorDesc"
                             labelText="Other eco anchor"
                             hideLabel
@@ -1334,6 +1453,67 @@ const BioStratumView: FC<Props> = ({
       </div>
 
       <Modal
+        // Its own class as well as the shared one: the button that opens this dialog carries the
+        // same words as its heading, so the dialog needs an identifier that is not its text.
+        className="bec-modal bec-copy-modal"
+        open={becCopyOpen}
+        modalHeading="Same BEC as another stratum"
+        passiveModal
+        onRequestClose={() => setBecCopyOpen(false)}
+        size="lg"
+      >
+        <p>
+          Pick the stratum whose BEC this one shares. Only the BEC is copied — everything else on
+          this stratum is its own evaluation.
+        </p>
+        {becCopyRows.length > 0 ? (
+          <table className="rip-field-grid" style={{ marginTop: '1rem' }}>
+            <thead>
+              <tr>
+                <th scope="col">Stratum</th>
+                <th scope="col">Zone</th>
+                <th scope="col">Subzone</th>
+                <th scope="col">Variant</th>
+                <th scope="col">Phase</th>
+                <th scope="col">Site series</th>
+                <th scope="col">Seral</th>
+                <th scope="col" aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {becCopyRows.map(({ stratumNumber, bec }) => (
+                <tr key={`bec-copy-${stratumNumber}`}>
+                  <td>{stratumNumber || '—'}</td>
+                  <td>{bec.bgcZoneCode || '—'}</td>
+                  <td>{bec.bgcSubzoneCode || '—'}</td>
+                  <td>{bec.bgcVariant || '—'}</td>
+                  <td>{bec.bgcPhase || '—'}</td>
+                  <td>{bec.becSiteSeriesCd || '—'}</td>
+                  <td>{bec.seral || '—'}</td>
+                  <td>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => {
+                        applyBecFrom(bec);
+                        setBecCopyOpen(false);
+                      }}
+                    >
+                      Select
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ marginTop: '1rem' }}>
+            {becCopyBusy ? 'Loading…' : 'None of the other strata have a BEC recorded yet.'}
+          </p>
+        )}
+      </Modal>
+
+      <Modal
         className="bec-modal"
         open={becOpen}
         modalHeading="Search the BEC catalogue"
@@ -1347,6 +1527,7 @@ const BioStratumView: FC<Props> = ({
         <div className="rip-form__grid">
           {BEC_CRITERIA.map((c) => (
             <TextInput
+              autoComplete="off"
               key={c.key}
               id={`bec-${c.key}`}
               labelText={c.label}

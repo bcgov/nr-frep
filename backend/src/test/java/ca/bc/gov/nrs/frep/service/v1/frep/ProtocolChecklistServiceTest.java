@@ -386,6 +386,50 @@ class ProtocolChecklistServiceTest {
         "2", List.of());
   }
 
+  /**
+   * The constrained total only ever *guarded* the two cross-field rules below it, so a value outside
+   * 0-100 — or not a number at all — skipped every check and went to the proc.
+   * {@code CALC_CONSTRAINED_TOTAL} is NUMBER(3), so "500" stored as nonsense and "abc" failed as a
+   * conversion error.
+   */
+  @Test
+  void saveBioStratumRejectsAConstrainedTotalOutsideItsRange() {
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("500")));
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("abc")));
+  }
+
+  @Test
+  void saveBioStratumAcceptsAConstrainedTotalInRange() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioStratum ok = stratumWithConstrainedTotal("0");
+    when(writeRepository.saveBioStratum(ok, "u")).thenReturn(ok);
+
+    service.saveBioStratum(ok);
+
+    verify(writeRepository).saveBioStratum(ok, "u");
+  }
+
+  /** A valid stratum carrying one constrained total. */
+  private static BioStratum stratumWithConstrainedTotal(String total) {
+    BioStratum base = stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+    return new BioStratum(
+        base.stratumId(), base.checklistId(), base.strataTypeCode(), base.stratumNumber(),
+        base.summaryDate(), base.assessorName(), base.plotCount(), base.size(),
+        base.consistentMapInd(), base.estimatedSize(),
+        null, null, null, null, null, null,
+        base.harvestAreaCode(),
+        null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null,
+        null, null,
+        base.bgcZoneCode(), base.bgcSubzoneCode(),
+        null, null, null, null, null, null, null, total,
+        base.revisionCount(), List.of());
+  }
+
   @Test
   void saveBioStratumRejectsMissingRequiredFields() {
     BioStratum bad = stratum(null, null, null, null, null, null, null, null, null);
@@ -496,6 +540,36 @@ class ProtocolChecklistServiceTest {
       String treeIndicator, List<BioStandRow> standTable) {
     return new BioPlot("P1", "S1", "1", assessorName, "N", null, null, null, treeIndicator, baf,
         null, null, "N", firstLeg, secondLeg, null, "1", standTable, List.of(), null);
+  }
+
+  /**
+   * {@code BIODIVERSITY_PLOT.UTM_ZONE} is NUMBER(2) and had no rule at all: the picker only offers
+   * 7-11, but the API is open to any client and the offline check-in path reaches the same code, so
+   * a non-numeric zone went to Oracle and came back as "A database error occurred" naming nothing.
+   */
+  @Test
+  void saveBioPlotRejectsAZoneTheColumnCannotHold() {
+    BioPlot bad = plotWithZone("abc");
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(plotWithZone("100")));
+  }
+
+  @Test
+  void saveBioPlotAcceptsAZoneOutsideThePickerButInsideTheColumn() {
+    // Bounded by the column, not by the five BC zones: a legacy row on another zone still re-saves.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot ok = plotWithZone("12");
+    when(writeRepository.saveBioPlot(ok, "u")).thenReturn(ok);
+
+    service.saveBioPlot(ok);
+
+    verify(writeRepository).saveBioPlot(ok, "u");
+  }
+
+  /** A valid plot carrying one UTM zone, with a signal recorded. */
+  private static BioPlot plotWithZone(String zone) {
+    return new BioPlot("P1", "S1", "1", "IDIR\\JDOE", "Y", zone, "123456", "1234567", "N", "5",
+        null, null, "N", "120", "240", null, "1", List.of(), List.of(), null);
   }
 
   @Test

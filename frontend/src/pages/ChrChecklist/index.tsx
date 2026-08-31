@@ -722,9 +722,15 @@ const ChrChecklistPage: FC = () => {
   const handleRemoveOfflineCopy = async () => {
     if (
       !(await confirm({
-        title: 'Remove from device?',
-        message:
-          'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        title: 'Are you sure you want to remove this checklist from your device?',
+        // Not a deletion — the checklist stays on the server — so this one says what is actually
+        // lost rather than borrowing the "permanently deleted" wording.
+        message: (
+          <>
+            <strong>This offline copy</strong> will be removed from this device. Any changes that
+            have not been synced will be lost.
+          </>
+        ),
         confirmButtonText: 'Remove',
       }))
     ) {

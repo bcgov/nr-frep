@@ -1,6 +1,8 @@
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import { isNumberInProgress } from '@/utils/validation';
 
 // Mirrors the legacy FREP210 Frep210ValidationManager "Save" chain so a bad save is caught inline
 // (matching field-level messages) rather than only at the proc.
@@ -41,14 +43,19 @@ const todayIso = (): string => new Date().toISOString().slice(0, 10);
 const conditionalCommentMissing = (indicator?: string, comment?: string): boolean =>
   indicator === 'Y' && isBlank(comment);
 
-const validateOverride = (value: string | undefined): string | null => {
+const validateOverride = (value: string | undefined, mode: ValidationMode): string | null => {
   if (isBlank(value)) return null;
   const text = value!.trim();
+  // "12." and a lone sign are a number half-typed rather than a malformed one.
+  if (mode === 'typing' && isNumberInProgress(text)) return null;
   if (!/^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text))
     return 'FREP gross area override must be a number.';
   const number = Number(text);
-  if (number < OVERRIDE_MIN || number > OVERRIDE_MAX) {
-    return `FREP gross area override must be between ${OVERRIDE_MIN} and ${OVERRIDE_MAX}.`;
+  // The floor is settled-only: 0.5 is on its way to 0.55, and every value under 0.01 begins as one
+  // the user is still typing. The ceiling is reported straight away — no further digit lowers it.
+  if (number > OVERRIDE_MAX) return `FREP gross area override must be at most ${OVERRIDE_MAX}.`;
+  if (mode === 'settled' && number < OVERRIDE_MIN) {
+    return `FREP gross area override must be at least ${OVERRIDE_MIN}.`;
   }
   const dot = text.indexOf('.');
   if (dot >= 0 && text.length - dot - 1 > 2) {
@@ -172,7 +179,10 @@ export const openingRequiredErrors = (data: BiodiversityOpening): Record<string,
  * save — the backend rejects them with a 400 and the database would raise ORA-12899 — so the user
  * has to fix them before anything is written.
  */
-export const openingFormatErrors = (data: BiodiversityOpening): Record<string, string> => {
+export const openingFormatErrors = (
+  data: BiodiversityOpening,
+  mode: ValidationMode = 'settled',
+): Record<string, string> => {
   const errors: Record<string, string> = {};
 
   if (!isBlank(data.locationDescription) && byteLength(data.locationDescription) > LOCATION_MAX) {
@@ -198,11 +208,19 @@ export const openingFormatErrors = (data: BiodiversityOpening): Record<string, s
       overLimitError(data.evaluatorOpinionComment, RATIONALE_MAX),
     )}`;
   }
-  const override = validateOverride(data.frepWtpOverride);
+  const override = validateOverride(data.frepWtpOverride, mode);
   if (override) errors.frepWtpOverride = override;
 
   return errors;
 };
+
+/**
+ * The errors safe to show while the user is still typing — the format set minus the rules a
+ * half-finished value trips on its way to being right. Required fields stay out of it: they are
+ * gaps, reported on the tab and at submit rather than nagged about mid-edit.
+ */
+export const openingTypingErrors = (data: BiodiversityOpening): Record<string, string> =>
+  openingFormatErrors(data, 'typing');
 
 /**
  * The one edit the write path cannot express: removing an evaluation date that is already stored.

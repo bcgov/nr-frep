@@ -149,6 +149,75 @@ class ChrChecklistPersistenceServiceTest {
   }
 
   /**
+   * Regression for the save that answered with the JVM's own parse failure.
+   *
+   * <p>{@code NumberFormatException} is an {@link IllegalArgumentException}, which the REST exception
+   * handler answers as a bad request carrying the exception's text — so a percentage typed as "tset"
+   * reached the user as {@code For input string: "tset"}, naming neither the field nor the feature.
+   * The feature editor blocks this before the save now, but the offline check-in path reaches the
+   * same code with no editor in front of it.
+   */
+  @Test
+  void aNonNumericPercentageIsRefusedByNameRatherThanAsAParseFailure() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setTrailLength("tset")));
+
+    assertTrue(ex.getMessage().contains("Estimated trail damage (%) for feature 1"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("tset"), ex.getMessage());
+  }
+
+  /**
+   * A number too wide for its column, told apart from a malformed one. {@code EST_WINDTHROW_PERCENT}
+   * is {@code NUMBER(3)}: five digits parse as a Short only to fail at insert with ORA-01438, and
+   * "must be a whole number" would be the wrong thing to tell someone who typed a number.
+   */
+  @Test
+  void aPercentageWiderThanItsColumnIsRefusedBeforeTheInsert() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setEstwindthrow("40000")));
+
+    assertTrue(ex.getMessage().contains("must be from 0 to 999"), ex.getMessage());
+  }
+
+  /** Same for the decimal side: past the precision of {@code AREA_HECTARES}, ORA-01438 at insert. */
+  @Test
+  void anAreaWiderThanItsColumnIsRefusedBeforeTheInsert() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setAreaofFeature("12345678.5")));
+
+    assertTrue(ex.getMessage().contains("Area (ha) for feature 1"), ex.getMessage());
+  }
+
+  /** Decimals within the column's scale are ordinary values, not errors. */
+  @Test
+  void anAreaWithinItsColumnIsStored() {
+    saveWith(f -> f.setAreaofFeature("2.5"));
+
+    ChrFeatureDetail detail = persisted.stream()
+        .filter(ChrFeatureDetail.class::isInstance)
+        .map(ChrFeatureDetail.class::cast)
+        .findFirst()
+        .orElseThrow();
+    assertEquals(new BigDecimal("2.5"), detail.getAreaHectares());
+  }
+
+  /** One feature, saved through the section port, with whatever the caller sets on it. */
+  private void saveWith(java.util.function.Consumer<Feature> setUp) {
+    Feature feature = new Feature();
+    feature.setFeatureLabel("1");
+    feature.setCompositeFeatureInd("false");
+    setUp.accept(feature);
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>(List.of(feature)));
+
+    service.saveChecklist(resource, "IDIR\\tester");
+  }
+
+  /**
    * Regression for values that could be entered but never removed.
    *
    * <p>An existing feature's {@code CHR_FEATURE_DETAIL} row (and its identity row, and the checklist

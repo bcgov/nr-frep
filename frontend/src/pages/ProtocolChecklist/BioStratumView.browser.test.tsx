@@ -435,3 +435,62 @@ describe('BioStratumView — same BEC as another stratum', () => {
     expect(screen.queryByRole('button', { name: /Same BEC as another stratum/ })).toBeNull();
   });
 });
+
+/**
+ * A value the column cannot hold is wrong the moment it is on screen, so it is marked as the user
+ * types rather than held back until Save. The rules a correct entry passes through on its way in
+ * still wait — see utils/validation.ts for the split.
+ */
+describe('BioStratumView — errors while the user is still typing', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const openEditor = async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: 'AB' }]);
+    api.getBioStratum.mockResolvedValue({
+      stratumId: 'S1',
+      checklistId: '9001',
+      stratumNumber: 'AB',
+      strataTypeCode: 'CC',
+      plotCount: '5',
+      windthrowTreatments: [],
+      revisionCount: '2',
+    });
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+  };
+
+  it('marks a plot count past its maximum without waiting for Save', async () => {
+    await openEditor();
+    const plots = screen.getByLabelText(/# of plots in stratum/i);
+
+    await userEvent.clear(plots);
+    await userEvent.type(plots, '500');
+
+    expect(await screen.findByText(/must be at most 99/)).toBeTruthy();
+    expect(api.saveBioStratum).not.toHaveBeenCalled();
+  });
+
+  it('leaves a Stratum Id alone until it is finished, then names it once the field is left', async () => {
+    // "A" is the first keystroke of every valid stratum number, so the pattern is judged on blur.
+    await openEditor();
+    const id = screen.getByLabelText(/Stratum Id/i);
+
+    await userEvent.clear(id);
+    await userEvent.type(id, '1');
+    expect(screen.queryByText(/1-3 letters then 0-2 digits/)).toBeNull();
+
+    await userEvent.tab();
+    expect(await screen.findByText(/1-3 letters then 0-2 digits/)).toBeTruthy();
+  });
+
+  it('says nothing about a field left blank', async () => {
+    await openEditor();
+    const plots = screen.getByLabelText(/# of plots in stratum/i);
+
+    // Emptied and tabbed past: a gap, reported on the tab and at Save, not because it was visited.
+    await userEvent.clear(plots);
+    await userEvent.tab();
+
+    expect(screen.queryByText(/Plot count is required/i)).toBeNull();
+  });
+});

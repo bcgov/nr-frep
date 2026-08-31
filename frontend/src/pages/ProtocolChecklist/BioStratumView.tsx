@@ -29,14 +29,17 @@ import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratu
 import type { OutstandingGroup } from './tabStatus';
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import { useSettledFields } from '@/hooks/useSettledFields';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import { errorsForSettledFields, isNumberInProgress } from '@/utils/validation';
 
 /**
  * Biodiversity Stratum Summary section (FREP211) — edited inline in place. Master-detail editor with
@@ -413,12 +416,29 @@ const checkRange = (
   min: number,
   max: number,
   integer: boolean,
+  mode: ValidationMode = 'settled',
 ) => {
   if (e[k] || !v(k)) return;
-  const ok = integer ? isIntInRange(v(k), min, max) : isNumInRange(v(k), min, max);
-  if (!ok) {
-    const kind = integer ? 'a whole number' : 'a number';
-    e[k] = `${LABELS[k] ?? k} must be ${kind} from ${min} to ${max}.`;
+  const text = v(k);
+  const ok = integer ? isIntInRange(text, min, max) : isNumInRange(text, min, max);
+  if (ok) return;
+  // While the user is still typing, hold back the one failure more typing can fix: a value below
+  // the floor is on its way up. Anything malformed, or already past the ceiling, is said at once.
+  if (mode === 'typing') {
+    if (isNumberInProgress(text)) return;
+    const n = Number(text);
+    if (Number.isFinite(n) && n < min) return;
+  }
+  // Name the end that actually failed. One message covering shape and both bounds ran to "Wetland %
+  // must be a whole number from 1 to 100." — too long for the bare table cells these percentages and
+  // counts live in, where it was clipped mid-sentence, and it described three rules to someone who
+  // broke one.
+  const label = LABELS[k] ?? k;
+  const n = Number(text);
+  if (!Number.isFinite(n) || (integer && !Number.isInteger(n))) {
+    e[k] = `${label} must be ${integer ? 'a whole number' : 'a number'}.`;
+  } else {
+    e[k] = n > max ? `${label} must be at most ${max}.` : `${label} must be at least ${min}.`;
   }
 };
 
@@ -479,14 +499,14 @@ const checkSizeConsistency = (e: StratumErrors, v: ValueReader) => {
   }
 };
 
-const checkNumericRanges = (e: StratumErrors, v: ValueReader) => {
-  checkRange(e, v, 'plotCount', 0, 99, true);
-  checkRange(e, v, 'size', 0.01, 9999.99, false);
-  checkRange(e, v, 'estimatedSize', 0.01, 9999.99, false);
-  checkRange(e, v, 'patchEstimatedOldestTreeAge', 0, 999, true);
-  checkRange(e, v, 'patchWindthrowPct', 0, 100, false);
-  CONSTRAINT_PCT_KEYS.forEach((k) => checkRange(e, v, k, 1, 100, true));
-  ECO_COUNT_KEYS.forEach((k) => checkRange(e, v, k, 1, 999, true));
+const checkNumericRanges = (e: StratumErrors, v: ValueReader, mode: ValidationMode) => {
+  checkRange(e, v, 'plotCount', 0, 99, true, mode);
+  checkRange(e, v, 'size', 0.01, 9999.99, false, mode);
+  checkRange(e, v, 'estimatedSize', 0.01, 9999.99, false, mode);
+  checkRange(e, v, 'patchEstimatedOldestTreeAge', 0, 999, true, mode);
+  checkRange(e, v, 'patchWindthrowPct', 0, 100, false, mode);
+  CONSTRAINT_PCT_KEYS.forEach((k) => checkRange(e, v, k, 1, 100, true, mode));
+  ECO_COUNT_KEYS.forEach((k) => checkRange(e, v, k, 1, 999, true, mode));
 };
 
 const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
@@ -530,14 +550,18 @@ const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
   }
 };
 
-const checkConstrainedTotal = (e: StratumErrors, v: ValueReader) => {
+const checkConstrainedTotal = (e: StratumErrors, v: ValueReader, mode: ValidationMode) => {
   // Total constrained: 0–100, ≥ largest single %, and ≥1 constraint if total > 0.
   const totalStr = v('constrainedTotal');
   if (!totalStr || e.constrainedTotal) return;
   if (!isIntInRange(totalStr, 0, 100)) {
-    e.constrainedTotal = 'Total constrained % must be a whole number from 0 to 100.';
+    if (mode === 'typing' && isNumberInProgress(totalStr)) return;
+    e.constrainedTotal = 'Total constrained % must be a whole number, 0 to 100.';
     return;
   }
+  // The two rules below compare this field against the constraint percentages, so they read as an
+  // accusation while one of those is still being typed. They wait for Save.
+  if (mode === 'typing') return;
   const total = Number(totalStr);
   const maxSingle = Math.max(0, ...CONSTRAINT_PCT_KEYS.map((k) => Number(v(k)) || 0));
   if (total > 0 && total < maxSingle) {
@@ -758,6 +782,7 @@ const BioStratumView: FC<Props> = ({
       setCurrent(s);
       setComputed(c);
       setShowErrors(false);
+      resetSettled();
     } catch (err) {
       reportError('Could not load the stratum', err);
     } finally {
@@ -767,6 +792,7 @@ const BioStratumView: FC<Props> = ({
 
   const addStratum = async () => {
     setShowErrors(false);
+    resetSettled();
     // The legacy `add_new` default was a sequence value that always failed its own
     // format validation, so we don't prefill the Stratum Id. Seed the full windthrow
     // code list (all unchecked) — SAVE_STRATUM loops the VARRAY and crashes on empty.
@@ -880,15 +906,20 @@ const BioStratumView: FC<Props> = ({
   // per field) so each error renders inline on its own input; the first rule to flag a field wins.
   // Orchestrates the rule groups (each a small module-level function); the first rule to flag a
   // field wins. Mirrors Frep211ValidationManager + the proc's validate().
-  const validate = (): Record<string, string> => {
+  const validate = (mode: ValidationMode = 'settled'): Record<string, string> => {
     const e: StratumErrors = {};
     const v: ValueReader = (k) => get(k).trim();
-    checkRequiredAndFormat(e, v);
-    checkSizeConsistency(e, v);
-    checkNumericRanges(e, v);
+    // Blank required fields, the stratum-number pattern and the size/type consistency rules are all
+    // states a correct entry passes through, so they are held back while the user is still typing.
+    // Ranges and decimal places run in both modes — the mode decides which half of a range applies.
+    if (mode === 'settled') {
+      checkRequiredAndFormat(e, v);
+      checkSizeConsistency(e, v);
+    }
+    checkNumericRanges(e, v, mode);
     checkDecimalsAndLengths(e, v);
-    checkConstrainedTotal(e, v);
-    checkCrossField(e, v, treatmentChecked);
+    checkConstrainedTotal(e, v, mode);
+    if (mode === 'settled') checkCrossField(e, v, treatmentChecked);
     return e;
   };
 
@@ -897,7 +928,16 @@ const BioStratumView: FC<Props> = ({
   // same gate in BioOpeningView. `allErrors` drives the save guard, `fieldErrors` the rendering, so
   // every `invalid`/`invalidText` site below is gated without touching each one.
   const allErrors: Record<string, string> = current && !readOnly ? validate() : {};
-  const fieldErrors = showErrors ? allErrors : {};
+  // Before the first save attempt, only the errors no further typing can rescue — see the same gate
+  // in BioPlotsView and utils/validation.ts.
+  const typingErrors: Record<string, string> = current && !readOnly ? validate('typing') : {};
+  // Between the two: once a field has been filled in and left, it is finished enough to judge
+  // against the full rules — the Stratum Id's pattern, a size below its floor. Blank fields are
+  // exempt, so tabbing through an empty stratum marks nothing.
+  const { settled, markSettled, resetSettled } = useSettledFields();
+  const fieldErrors = showErrors
+    ? allErrors
+    : { ...typingErrors, ...errorsForSettledFields(allErrors, settled, (key) => get(key)) };
 
   // Which of those errors actually stop the save. A blank field in ADVISORY_WHEN_BLANK is a gap —
   // marked, counted on the tab and blocking submit, but stored happily. A field that *has* a value
@@ -933,8 +973,13 @@ const BioStratumView: FC<Props> = ({
     if (!row.stratumId) return;
     if (
       !(await confirm({
-        title: 'Delete stratum?',
-        message: `Delete stratum ${row.stratumNumber || row.stratumId}? This can't be undone.`,
+        title: 'Are you sure you want to delete this stratum?',
+        message: (
+          <>
+            <strong>Stratum {row.stratumNumber || row.stratumId}</strong> will be permanently
+            deleted from this checklist. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;
@@ -1069,6 +1114,7 @@ const BioStratumView: FC<Props> = ({
       disabled,
       invalid: Boolean(fieldErrors[key]),
       invalidText: fieldErrors[key],
+      onBlur: () => markSettled(key),
       onChange: (e: { target: { value: string } }) => set(key, e.target.value),
     };
     const input = MULTILINE_KEYS.has(key) ? (
@@ -1111,6 +1157,7 @@ const BioStratumView: FC<Props> = ({
         disabled={disabledKey(key)}
         invalid={Boolean(fieldErrors[key])}
         invalidText={fieldErrors[key]}
+        onBlur={() => markSettled(key)}
         onChange={(e) => set(key, e.target.value)}
       />
     );

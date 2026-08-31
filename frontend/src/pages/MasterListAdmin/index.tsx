@@ -280,8 +280,13 @@ const MasterListAdminPage: FC = () => {
   const handleDelete = async () => {
     if (
       !(await confirm({
-        title: 'Delete master list?',
-        message: `Delete the generated master list for ${effectiveYear}? This can't be undone.`,
+        title: 'Are you sure you want to delete this master list?',
+        message: (
+          <>
+            The generated master list for <strong>{effectiveYear}</strong> will be permanently
+            deleted. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;

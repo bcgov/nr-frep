@@ -370,8 +370,13 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
     if (!row.checklistAttachmentId) return;
     if (
       !(await confirm({
-        title: 'Delete attachment?',
-        message: `Delete ${row.fileName || 'this attachment'}? This can't be undone.`,
+        title: 'Are you sure you want to delete this attachment?',
+        message: (
+          <>
+            <strong>{row.fileName || 'This attachment'}</strong> will be permanently deleted from
+            this checklist. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;

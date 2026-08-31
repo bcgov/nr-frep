@@ -399,3 +399,52 @@ export const ERROR_MESSAGES = {
   bothOrNeither: (field1: string, field2: string) =>
     `${field1} and ${field2} must either be both blank, or both specified.`,
 } as const;
+
+/**
+ * Shared vocabulary for validation that runs while the user is still typing.
+ *
+ * A field's rules fall into two families, and only one of them can be shown on every keystroke:
+ *
+ * - **Too much** — a letter in a number, a fourth decimal place, a value above the maximum. No
+ *   continuation of the text makes it valid, so saying so immediately is always right.
+ * - **Too little** — below a minimum, short of an exact length, part-way through a pattern. Typing
+ *   more characters may well fix it, so reporting it now marks a field red for everyone who fills it
+ *   in the ordinary way.
+ *
+ * Rules take a {@link ValidationMode} and skip the second family in `'typing'`. The same rule set
+ * runs in both modes, so the two can never disagree about what a field allows — `'settled'` is the
+ * full check that guards the save.
+ */
+export type ValidationMode = 'typing' | 'settled';
+
+/**
+ * True while `text` is a number the user is part way through writing: empty, a lone sign, or digits
+ * ending in a decimal point ("12."). Only consulted in `'typing'` mode — a value left like this is
+ * genuinely malformed once the user is done with it.
+ *
+ * A finished number is deliberately *not* "in progress", digits alone included: "100" is a complete
+ * value, and a range rule has to be free to say so while it is on screen.
+ */
+export const isNumberInProgress = (text: string): boolean => /^[+-]?(?:\d*\.)?$/.test(text.trim());
+
+/**
+ * The errors to show for fields the user has finished with: those on a field that has been left
+ * *and* holds a value.
+ *
+ * The value test is what keeps this from nagging. A blank field is a gap — reported on the tab and
+ * at Save, never because the user tabbed past it — while a field with something in it has been
+ * given an answer, so telling them the answer will not store is help rather than interruption.
+ *
+ * Fed the `'settled'` error set, since that is the full check; the caller merges the result over
+ * whatever `'typing'` already had to say.
+ */
+export const errorsForSettledFields = (
+  settledErrors: Record<string, string>,
+  settled: ReadonlySet<string>,
+  valueOf: (key: string) => string | undefined,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(settledErrors).filter(
+      ([key]) => settled.has(key) && (valueOf(key) ?? '').trim() !== '',
+    ),
+  );

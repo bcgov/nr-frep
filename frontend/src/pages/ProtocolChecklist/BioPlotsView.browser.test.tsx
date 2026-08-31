@@ -353,3 +353,52 @@ describe('BioPlotsView — sub-table required columns', () => {
     expect(legend?.querySelector('.required-asterisk')).not.toBeNull();
   });
 });
+
+/**
+ * The middle gate: a field the user has filled in and moved on from is finished enough to judge
+ * against the full rules, so those errors arrive on blur rather than at Save. A field still blank is
+ * exempt — tabbing through an empty plot must not turn it red. See utils/validation.ts.
+ */
+describe('BioPlotsView — errors when a field is left', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const openNewPlot = async () => {
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+  };
+
+  it('holds a part-typed Easting until the field is left', async () => {
+    await openNewPlot();
+    const easting = await screen.findByLabelText('Easting', { exact: false });
+
+    await userEvent.type(easting, '123');
+    // Still typing: every six-digit Easting passes through three digits.
+    expect(screen.queryByText(/Easting must be exactly 6 digits/)).toBeNull();
+
+    await userEvent.tab();
+    expect(await screen.findByText(/Easting must be exactly 6 digits/)).toBeTruthy();
+  });
+
+  it('says nothing about a field left blank', async () => {
+    await openNewPlot();
+
+    // Tabbing straight through the plot number leaves a gap, not a bad value.
+    await userEvent.click(screen.getByLabelText('Plot #', { exact: false }));
+    await userEvent.tab();
+
+    expect(screen.queryByText(/Plot # is required/)).toBeNull();
+  });
+
+  it('holds a measurement below its floor until the field is left', async () => {
+    await openNewPlot();
+    const baf = await screen.findByLabelText('BAF', { exact: false });
+
+    await userEvent.type(baf, '0');
+    expect(screen.queryByText(/BAF must be at least 1/)).toBeNull();
+
+    await userEvent.tab();
+    expect(await screen.findByText(/BAF must be at least 1/)).toBeTruthy();
+  });
+});

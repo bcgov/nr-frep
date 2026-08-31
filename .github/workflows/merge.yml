@@ -70,142 +70,112 @@ jobs:
     with:
       target: test
 
-  # ── PROD deploy + monitor + promote: ENABLED 2026-08-31 ═══════════════
+  # ── PROD deploy + monitor + promote: DISABLED AGAIN UNTIL GO-LIVE ═════
   #
-  # These three jobs were disabled from 2026-08-10 under a standing "no PROD
-  # deploys until go-live (~2026-09-07)" policy, after one deliberate
-  # pre-go-live verification run (vanity cert + URL, Sysdig alert delivery,
-  # replica counts, timezone). PROD was then scaled to zero, so the
-  # Deployments, Secrets and vanity Route survived untouched.
+  # History, because the on/off has now happened three times:
+  #   2026-08-10  Disabled. Standing policy: no PROD deploys until go-live.
+  #               PROD was scaled to zero; Deployments, Secrets and the vanity
+  #               Route survived, so bringing it back is a scale-up.
+  #   2026-08-31  Re-enabled to deploy the BIO attachment migration — PROD's
+  #               image predated it, so the scheduler was not in the running
+  #               application and could not be armed. Ran with the backend
+  #               pinned to 1 and the frontend at 0 to keep PROD closed during
+  #               the window. Migration passed its gate the same day.
+  #   2026-08-31  Disabled again, below. Re-enable at go-live (~2026-09-02).
   #
-  # Re-enabled ahead of go-live to deploy the BIO attachment migration
-  # (PR #96, merged 2026-08-24) — PROD's image predated it, so the migration
-  # scheduler was not present in the running application and could not be
-  # armed. See backend/tools/bio-attachment-migration-runbook.md.
+  # Replicas are back at "3"/"3" — the migration pin is gone. Those values are
+  # inert while these jobs are commented out; the live cluster was restored
+  # with `oc` at the same time, so the template and the cluster agree.
   #
-  # This ships everything merged to main since 2026-08-10, not just the
-  # migration, and scales PROD back up from zero.
+  # To re-enable at go-live: uncomment ALL THREE together and merge. Both
+  # `monitor-prod` and `promote` declare `needs: [deploy-prod]`, so leaving
+  # either one active on its own makes the WHOLE workflow file invalid —
+  # every run fails, including TEST.
   #
-  # ⚠ `backend_replicas` is temporarily "1" for the migration run — see the
-  # note on it below. It MUST go back to "3" before go-live.
+  # ⚠ Before that merge, re-run the BIO attachment migration. The legacy
+  # application kept writing to PROD through go-live, and any row it wrote
+  # after 2026-08-31 has no object. A re-run over an already-migrated corpus
+  # is minutes. See backend/tools/bio-attachment-migration-runbook.md.
   #
-  # All three belong together: `monitor-prod` and `promote` declare
-  # `needs: [deploy-prod]`, so commenting out any one of them on its own
-  # makes the WHOLE workflow file invalid — every run fails, including TEST.
-
-  deploy-prod:
-    name: PROD Deploys (${{ needs.init.outputs.pr }})
-    needs: [tests, init]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/reusable-deploy.yml
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      oc_token: ${{ secrets.oc_token }}
-      database_user: ${{ secrets.database_user }}
-      database_password: ${{ secrets.database_password }}
-      database_host: ${{ secrets.database_host }}
-      database_service_name: ${{ secrets.database_service_name }}
-      keystore_secret: ${{ secrets.keystore_secret }}
-      object_storage_host: ${{ secrets.object_storage_host }}
-      object_storage_bucket: ${{ secrets.object_storage_bucket }}
-      object_storage_access_key: ${{ secrets.object_storage_access_key }}
-      object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
-      # CLAMAV_HOST is `required: true` in backend/openshift.deploy.yml, so
-      # omitting it makes `oc process` fail outright — not a soft default.
-      # clamd does NOT run in a tools namespace, and not in FREP's own
-      # project set either: FREP PROD is c2d443-prod, while clamd lives in
-      # bd657f-prod. That cross-project-set hop needs NetworkPolicy on BOTH
-      # sides — backend egress here, plus a matching ingress rule in
-      # bd657f-prod that is maintained out of band.
-      clamav_host: ${{ secrets.CLAMAV_HOST }}
-      # PROD vanity Route (frep.nrs.gov.bc.ca) — the ONLY public URL on prod.
-      # Consumed only when the `prod` environment also defines the VANITY_HOST
-      # variable; the deploy step skips itself otherwise, which would leave
-      # prod with no route at all. See frontend/openshift.vanity-route.yml.
-      vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
-      vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
-      vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
-    with:
-      environment: prod
-      target: prod
-      tag: ${{ needs.init.outputs.pr }}
-      # ⚠ TEMPORARY — 1, not 3. RESTORE TO "3" BEFORE GO-LIVE. ⚠
-      #
-      # backend_replicas drives Deployment.spec.replicas AND both ends of the
-      # HPA (MIN_REPLICAS = MAX_REPLICAS, reusable-deploy.yml:170-171), so this
-      # brings PROD up on exactly one backend pod and holds it there.
-      #
-      # Why: @Scheduled fires on every pod, so the BIO attachment migration
-      # would otherwise run on all three at once. Harmless to the data — same
-      # key, same bytes, and a row is skipped once its object exists — but at
-      # ~5,000 writes over 20-45 minutes the pods overlap for the whole run,
-      # turning ~15,000 object-storage requests into ~45,000 against the one
-      # component that has already pushed back on us. Pinning at deploy time
-      # rather than patching the HPA afterwards also avoids a live-cluster
-      # step during the window.
-      #
-      # Safe only because there are no PROD users before go-live. Once the
-      # migration gate passes, set this back to "3" and merge — that redeploy
-      # also drops the BIO_ATTACHMENT_MIGRATION_* env vars (they are set with
-      # `oc set env`, never in openshift.deploy.yml), so it doubles as the
-      # "turn the migration off" step in the runbook.
-      backend_replicas: "1"
-      # ⚠ TEMPORARY — 0, not 3. RESTORE TO "3" BEFORE GO-LIVE. ⚠
-      #
-      # Zero frontend pods closes PROD to users for the migration window. The
-      # frontend is the ONLY ingress: it reverse-proxies /api* to the backend
-      # (frontend/Caddyfile:33), the backend template publishes a Service but
-      # no Route, and PROD gets no default cluster route — only the vanity one.
-      # So 0 here means no UI and no API, which is the point: users are already
-      # being onboarded ahead of go-live and must not reach a half-migrated
-      # application.
-      #
-      # The migration itself needs none of it — the scheduler runs in-process on
-      # the backend pod, armed with `oc set env` and read through `oc logs`.
-      #
-      # Restore with the same merge that puts backend_replicas back to "3".
-      frontend_replicas: "0"
-
-  # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
-  # unset — adoption is gradual. Alert templates live in monitoring/alerts/.
-  monitor-prod:
-    name: Sysdig Monitor (PROD)
-    needs: [deploy-prod]
-    runs-on: ubuntu-24.04
-    environment: prod
-    permissions:
-      contents: read
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-      # Consolidated from bcgov/action-sysdig-monitor into the bcgov/actions
-      # suite. v0.5.0 is the first release carrying sysdig-monitor, and it
-      # keeps the __APP__ template substitution that monitoring/alerts/*.json
-      # depend on — don't downgrade this pin.
-      - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
-        with:
-          sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
-          oc_namespace: ${{ secrets.oc_namespace }}
-          app: nr-frep
-
-  # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
-  # record of "this is the image running in production right now" and a
-  # rollback target.
-  promote:
-    name: Promote Images
-    needs: [deploy-prod, init]
-    runs-on: ubuntu-slim
-    permissions:
-      packages: write
-    strategy:
-      matrix:
-        package: [backend, frontend]
-    timeout-minutes: 1
-    steps:
-      - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-        with:
-          registry: ghcr.io
-          repository: ${{ github.repository }}/${{ matrix.package }}
-          target: ${{ needs.init.outputs.pr }}
-          tags: prod
+  # deploy-prod:
+  #   name: PROD Deploys (${{ needs.init.outputs.pr }})
+  #   needs: [tests, init]
+  #   permissions:
+  #     contents: read
+  #   uses: ./.github/workflows/reusable-deploy.yml
+  #   secrets:
+  #     oc_namespace: ${{ secrets.oc_namespace }}
+  #     oc_token: ${{ secrets.oc_token }}
+  #     database_user: ${{ secrets.database_user }}
+  #     database_password: ${{ secrets.database_password }}
+  #     database_host: ${{ secrets.database_host }}
+  #     database_service_name: ${{ secrets.database_service_name }}
+  #     keystore_secret: ${{ secrets.keystore_secret }}
+  #     object_storage_host: ${{ secrets.object_storage_host }}
+  #     object_storage_bucket: ${{ secrets.object_storage_bucket }}
+  #     object_storage_access_key: ${{ secrets.object_storage_access_key }}
+  #     object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
+  #     # CLAMAV_HOST is `required: true` in backend/openshift.deploy.yml, so
+  #     # omitting it makes `oc process` fail outright — not a soft default.
+  #     # clamd does NOT run in a tools namespace, and not in FREP's own
+  #     # project set either: FREP PROD is c2d443-prod, while clamd lives in
+  #     # bd657f-prod. That cross-project-set hop needs NetworkPolicy on BOTH
+  #     # sides — backend egress here, plus a matching ingress rule in
+  #     # bd657f-prod that is maintained out of band.
+  #     clamav_host: ${{ secrets.CLAMAV_HOST }}
+  #     # PROD vanity Route (frep.nrs.gov.bc.ca) — the ONLY public URL on prod.
+  #     # Consumed only when the `prod` environment also defines the VANITY_HOST
+  #     # variable; the deploy step skips itself otherwise, which would leave
+  #     # prod with no route at all. See frontend/openshift.vanity-route.yml.
+  #     vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
+  #     vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
+  #     vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
+  #   with:
+  #     environment: prod
+  #     target: prod
+  #     tag: ${{ needs.init.outputs.pr }}
+  #     backend_replicas: "3"
+  #     frontend_replicas: "3"
+  #
+  # # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
+  # # unset — adoption is gradual. Alert templates live in monitoring/alerts/.
+  # monitor-prod:
+  #   name: Sysdig Monitor (PROD)
+  #   needs: [deploy-prod]
+  #   runs-on: ubuntu-24.04
+  #   environment: prod
+  #   permissions:
+  #     contents: read
+  #   timeout-minutes: 5
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     # Consolidated from bcgov/action-sysdig-monitor into the bcgov/actions
+  #     # suite. v0.5.0 is the first release carrying sysdig-monitor, and it
+  #     # keeps the __APP__ template substitution that monitoring/alerts/*.json
+  #     # depend on — don't downgrade this pin.
+  #     - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
+  #       with:
+  #         sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
+  #         oc_namespace: ${{ secrets.oc_namespace }}
+  #         app: nr-frep
+  #
+  # # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
+  # # record of "this is the image running in production right now" and a
+  # # rollback target.
+  # promote:
+  #   name: Promote Images
+  #   needs: [deploy-prod, init]
+  #   runs-on: ubuntu-slim
+  #   permissions:
+  #     packages: write
+  #   strategy:
+  #     matrix:
+  #       package: [backend, frontend]
+  #   timeout-minutes: 1
+  #   steps:
+  #     - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
+  #       with:
+  #         registry: ghcr.io
+  #         repository: ${{ github.repository }}/${{ matrix.package }}
+  #         target: ${{ needs.init.outputs.pr }}
+  #         tags: prod

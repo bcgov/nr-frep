@@ -4,7 +4,12 @@ import { expectNoGlobalError, gotoProtected, waitForSettled } from './utils';
 
 /**
  * Regression for the CHR Features → Age fix (reported bug: two age types could be selected at once).
- * Age is single-select: once one box is checked, the other three are disabled until it's unchecked.
+ * A feature has one age, so it is asked as one: a radio group, not four checkboxes.
+ *
+ * The original fix kept the checkboxes and disabled the other three once one was ticked, which meant
+ * switching age required unticking the old one first. #104 replaced them with radios, so single-select
+ * is now structural — and this spec asserts the behaviour that replaced it: selecting a different age
+ * *moves* the selection, and the unselected options stay enabled rather than becoming disabled.
  *
  * Runs against deployed DEV: discovers an Active CHR checklist via Checklist Search (no hardcoded id),
  * opens the Features tab, and adds a throwaway feature so the editor is reachable regardless of the
@@ -15,7 +20,7 @@ import { expectNoGlobalError, gotoProtected, waitForSettled } from './utils';
 const AGE_LABELS = ['Pre-1846', 'Post-1846', 'Age unknown', 'Historical use'] as const;
 
 test.describe('CHR Features — Age is single-select', () => {
-  test('selecting one age disables the other three', async ({ page }) => {
+  test('selecting an age moves the selection rather than adding to it', async ({ page }) => {
     // 1. Find an Active CHR checklist through the search page.
     await gotoProtected(page, '/search/checklists');
     await page.getByLabel('Protocol', { exact: true }).selectOption('CHR');
@@ -31,31 +36,37 @@ test.describe('CHR Features — Age is single-select', () => {
       await page.getByRole('tab', { name: 'Features' }).click();
       const addFeature = page.getByRole('button', { name: 'Add feature' });
       if (await addFeature.isVisible().catch(() => false)) {
-        // 3. Add a throwaway feature to reach the editor, then open the Age accordion.
-        //    `exact` is required: substring name matching also hits the "Damage" accordion (…d-am-AGE).
+        // 3. Add a throwaway feature to reach the editor. The Age options are in a plain section —
+        //    #104 replaced the accordions with flat sections, so there is nothing to expand first.
         await addFeature.click();
-        await page.getByRole('button', { name: 'Age', exact: true }).click();
 
-        const ageBox = (name: string) => page.getByRole('checkbox', { name, exact: true });
+        const ageRadio = (name: string) => page.getByRole('radio', { name, exact: true });
 
-        // All four start enabled (no age selected yet).
+        // All four are offered and none is selected on a new feature.
         for (const label of AGE_LABELS) {
-          await expect(ageBox(label)).toBeEnabled();
+          await expect(ageRadio(label)).toBeEnabled();
+          await expect(ageRadio(label)).not.toBeChecked();
         }
 
-        // 4. Select the first age — the other three must become disabled. `force` is required: Carbon
-        //    renders the real <input> visually hidden/offscreen, so Playwright can't scroll it into
-        //    the viewport to click — but it's still the checkbox and the change handler still fires.
-        await ageBox('Pre-1846').check({ force: true });
-        await expect(ageBox('Pre-1846')).toBeChecked();
+        // 4. Select the first age. `force` is required: Carbon renders the real <input> visually
+        //    hidden/offscreen, so Playwright can't scroll it into the viewport to click — but it's
+        //    still the radio and the change handler still fires.
+        await ageRadio('Pre-1846').check({ force: true });
+        await expect(ageRadio('Pre-1846')).toBeChecked();
+
+        // The other three are unselected — and, unlike the checkbox version this replaced, still
+        // enabled. Asserting that is the point: it is what makes step 5 possible in one click.
         for (const label of ['Post-1846', 'Age unknown', 'Historical use']) {
-          await expect(ageBox(label)).toBeDisabled();
+          await expect(ageRadio(label)).not.toBeChecked();
+          await expect(ageRadio(label)).toBeEnabled();
         }
 
-        // 5. Unchecking the active age re-enables the whole group.
-        await ageBox('Pre-1846').uncheck({ force: true });
-        for (const label of AGE_LABELS) {
-          await expect(ageBox(label)).toBeEnabled();
+        // 5. Switching age moves the selection. Two ages must never be selected at once — the
+        //    original bug — and no unticking step is needed to get here.
+        await ageRadio('Age unknown').check({ force: true });
+        await expect(ageRadio('Age unknown')).toBeChecked();
+        for (const label of ['Pre-1846', 'Post-1846', 'Historical use']) {
+          await expect(ageRadio(label)).not.toBeChecked();
         }
 
         // 6. Discard the throwaway feature — no save, so DEV data is untouched.

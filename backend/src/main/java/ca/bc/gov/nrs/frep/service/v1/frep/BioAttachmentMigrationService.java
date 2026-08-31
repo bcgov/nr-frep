@@ -40,8 +40,10 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
  * {@code BIODIVERSITY_ATTACH_CONTENT}, because it could not use the definer-rights package. Reading
  * bytes via {@code GET_BLOB} sidesteps the grant entirely.
  *
- * <p><b>Sizing (measured in PROD 2026-08-17):</b> 5,005 attachment rows, 2.0 GB total, largest single
- * BLOB 3.3 MB, 3 rows with an empty BLOB. So 5,002 objects to write. At that size the work is bounded
+ * <p><b>Sizing (measured in PROD 2026-08-24):</b> 5,008 attachment rows, 2.0 GB total, largest single
+ * BLOB 3.3 MB, 3 rows with an empty BLOB. So 5,005 objects to write — and still climbing, because the
+ * legacy application is writing to PROD until go-live. Re-measure before the run; the migration must
+ * be repeated after legacy writes stop, or rows created in between will have no object. At that size the work is bounded
  * enough to run in the serving pod during the cutover freeze: one attachment at a time, ~3.3 MB peak
  * against a 400 MB heap. It is deliberately NOT parallel — throughput is not the constraint, and
  * keeping it serial keeps the memory ceiling equal to the largest single file.
@@ -56,7 +58,6 @@ public class BioAttachmentMigrationService {
 
   private static final Logger log = LoggerFactory.getLogger(BioAttachmentMigrationService.class);
 
-  private static final String KEY_PREFIX = "slr/";
   private static final int MAX_BATCH = 1000;
 
   /**
@@ -100,9 +101,20 @@ public class BioAttachmentMigrationService {
     this.objectStorage = objectStorage;
   }
 
-  /** Object key for an attachment; must match the read path exactly or migrated bytes are invisible. */
+  /**
+   * Object key for an attachment — resolved through {@link ObjectStorageService#bioObjectKey}, the
+   * same call the download makes.
+   *
+   * <p>This must be the read path's derivation, not a copy of it, and the reason is that a copy
+   * could drift without anything failing. The download falls back to the Oracle BLOB whenever the
+   * object is absent, and the migration copies bytes rather than moving them, so every migrated row
+   * still has its BLOB. A migration writing to a key the download never reads would therefore serve
+   * correct files, pass the gate, and orphan every object it wrote — surfacing only when Phase 4b
+   * removes the fallback and the downloads start 404ing. Sharing the function makes that
+   * unrepresentable instead of merely tested for.
+   */
   private static String objectKey(String attachmentId) {
-    return KEY_PREFIX + attachmentId.trim();
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   private static int clampLimit(int limit) {

@@ -775,9 +775,15 @@ public class ProtocolChecklistService {
     return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
 
-  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  /**
+   * Object key for a Biodiversity attachment; resolved through {@link
+   * ObjectStorageService#bioObjectKey} so the size shown in the list is HEADed from the same key the
+   * download reads. This one previously skipped the {@code trim()} the write path applies — harmless
+   * in practice, since ids come from a NUMBER column, but it meant a blank size rather than a failed
+   * download would have been the only symptom if that ever stopped holding.
+   */
   private static String bioObjectKey(String attachmentId) {
-    return "slr/" + attachmentId;
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   /** A page of attachment metadata plus the total, for the pager. */

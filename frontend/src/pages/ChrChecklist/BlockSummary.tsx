@@ -3,6 +3,7 @@ import { Button, Tag } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import { CodeSelect, IndicatorCheckbox, TextAreaField } from '@/pages/ChrChecklist/fields';
+import RequiredLegend from '@/pages/ProtocolChecklist/RequiredLegend';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
@@ -11,8 +12,9 @@ import {
   blockSummaryFormatErrors,
   blockSummaryRequiredErrors,
 } from '@/pages/ChrChecklist/checklistValidation';
-import { RATING_CODES, calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
+import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import { BLOCK_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
+import { labelFor, useRatingCodes } from '@/pages/ChrChecklist/useChrCodeLists';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -23,8 +25,6 @@ const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
 
 const yesNo = (v?: string) => (v === 'true' ? 'Yes' : 'No');
 const isYes = (v?: string) => v === 'true';
-
-const ratingLabel = (code?: string) => RATING_CODES.find((r) => r.code === code)?.label ?? code;
 
 // Verbatim question text from the legacy CHR Block Summary (frep-frontend BlockSummary.vue).
 const Q8_LABEL =
@@ -85,9 +85,9 @@ const EditQaRow: FC<{
   commentLimit,
   onCommentChange,
 }) => (
-  <>
+  <div className="chr-block-qa__question">
     <IndicatorCheckbox id={id} labelText={labelText} value={value} onToggle={onToggle} />
-    {isYes(value) ? (
+    {isYes(value) && (
       <TextAreaField
         id={commentId}
         labelText={requiredLabel(commentLabel, true)}
@@ -97,10 +97,8 @@ const EditQaRow: FC<{
         invalidText={commentError}
         onChange={onCommentChange}
       />
-    ) : (
-      <div className="chr-block-qa__spacer" aria-hidden="true" />
     )}
-  </>
+  </div>
 );
 
 /** Read-only counterpart of {@link EditQaRow}: Yes/No plus the description, shown only when Yes. */
@@ -110,14 +108,10 @@ const ReadOnlyQaRow: FC<{
   commentLabel: string;
   comment?: string;
 }> = ({ label, value, commentLabel, comment }) => (
-  <>
+  <div className="chr-block-qa__question">
     <RoField label={label} value={yesNo(value)} />
-    {isYes(value) ? (
-      <RoField label={commentLabel} value={comment} />
-    ) : (
-      <div className="chr-block-qa__spacer" aria-hidden="true" />
-    )}
-  </>
+    {isYes(value) && <RoField label={commentLabel} value={comment} />}
+  </div>
 );
 
 /**
@@ -131,6 +125,9 @@ const BlockSummary: FC<{
   readOnly: boolean;
   busy: boolean;
 }> = ({ value, onSave, readOnly, busy }) => {
+  // CHR_SITE_EVALUATION_CODE — the read-only Rating row reads its label from the same list.
+  const ratingCodes = useRatingCodes();
+  const ratingLabel = (code?: string) => labelFor(ratingCodes, code);
   const [editing, setEditing] = useState(false);
   // Errors stay hidden until a save is attempted on this edit.
   const [showErrors, setShowErrors] = useState(false);
@@ -180,6 +177,49 @@ const BlockSummary: FC<{
   };
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
+  /* The derivation table is 32rem wide and the grid's tracks are capped at 12rem, so it is
+     rendered as its own full-width row rather than inside the MRVA cell — where it was
+     squeezed into one column and started halfway across the page. */
+  const mrvaHelp = (
+    <details className="chr-mrva-help">
+      <summary>How is the MRVA rating determined?</summary>
+      <p>
+        The Most Restrictive Value Assessment is derived from the block rating (and the per-feature
+        ratings). NA = not applicable.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Block rating</th>
+            <th>MRVA</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Don&apos;t know</td>
+            <td>NUL</td>
+          </tr>
+          <tr>
+            <td>Poorly / Very Poorly</td>
+            <td>High</td>
+          </tr>
+          <tr>
+            <td>Moderately</td>
+            <td>Medium if any feature is Poorly/Very Poorly, otherwise Low</td>
+          </tr>
+          <tr>
+            <td>Well</td>
+            <td>Low if any feature is Poorly/Very Poorly, otherwise Very Low</td>
+          </tr>
+          <tr>
+            <td>Very Well</td>
+            <td>Very Low</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  );
+
   const mrvaCell = (
     <div className="protocol-checklist__field">
       <span className="protocol-checklist__label">MRVA rating (computed)</span>
@@ -188,43 +228,6 @@ const BlockSummary: FC<{
           {mrva ? (MRVA_LABELS[mrva] ?? mrva) : '—'}
         </Tag>
       </span>
-      <details className="chr-mrva-help">
-        <summary>How is the MRVA rating determined?</summary>
-        <p>
-          The Most Restrictive Value Assessment is derived from the block rating (and the
-          per-feature ratings). NA = not applicable.
-        </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Block rating</th>
-              <th>MRVA</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Don&apos;t know</td>
-              <td>NUL</td>
-            </tr>
-            <tr>
-              <td>Poorly / Very Poorly</td>
-              <td>High</td>
-            </tr>
-            <tr>
-              <td>Moderately</td>
-              <td>Medium if any feature is Poorly/Very Poorly, otherwise Low</td>
-            </tr>
-            <tr>
-              <td>Well</td>
-              <td>Low if any feature is Poorly/Very Poorly, otherwise Very Low</td>
-            </tr>
-            <tr>
-              <td>Very Well</td>
-              <td>Very Low</td>
-            </tr>
-          </tbody>
-        </table>
-      </details>
     </div>
   );
 
@@ -257,13 +260,15 @@ const BlockSummary: FC<{
           </>
         )}
       </div>
+      {/* Only while editing — the read-only view marks nothing required. */}
+      {editing && <RequiredLegend />}
 
       {editing ? (
         <>
           <fieldset className="rip-form__group">
             <legend>Operational review</legend>
-            {/* Each question sits beside its description; the description appears only when the
-                question is Yes (legacy parity), otherwise a spacer keeps the 2-column rhythm. */}
+            {/* Each question carries its description directly beneath it; the description appears
+                only when the question is Yes (legacy parity). */}
             <div className="chr-block-qa">
               <EditQaRow
                 id="chr-q8"
@@ -332,13 +337,14 @@ const BlockSummary: FC<{
                 id="chr-block-rating"
                 labelText={requiredLabel('Rating', true)}
                 value={draft.rating}
-                options={RATING_CODES}
+                options={ratingCodes}
                 includeBlank
                 invalid={Boolean(fieldErrors.rating)}
                 invalidText={fieldErrors.rating}
                 onChange={(v) => set({ rating: v })}
               />
               {mrvaCell}
+              {mrvaHelp}
             </div>
             <TextAreaField
               id="chr-rating-rationale"
@@ -389,6 +395,7 @@ const BlockSummary: FC<{
             <div className="rip-form__grid">
               <RoField label="Rating" value={ratingLabel(value.rating)} />
               {mrvaCell}
+              {mrvaHelp}
             </div>
             <RoField label="Rating rationale" value={value.ratingRationale} />
           </fieldset>

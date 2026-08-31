@@ -23,6 +23,7 @@ import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import OutstandingPanel from './OutstandingPanel';
+import RequiredLegend from './RequiredLegend';
 import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
 
 import type { OutstandingGroup } from './tabStatus';
@@ -1009,7 +1010,7 @@ const BioStratumView: FC<Props> = ({
           invalidText={fieldErrors[key]}
           onChange={(e) => onChange(e.target.value)}
         >
-          <SelectItem value="" text="—" />
+          <SelectItem value="" text="Choose an option" />
           {opts.map((o) => (
             <SelectItem key={o.code} value={o.code} text={o.description} />
           ))}
@@ -1240,6 +1241,10 @@ const BioStratumView: FC<Props> = ({
                   Cancel
                 </Button>
               </div>
+
+              {/* Under the buttons, directly above the fields it describes — and only where fields
+                  are marked, which is the open form, not the list behind it. */}
+              {!readOnly && <RequiredLegend />}
 
               {/* Stratum Summary (legacy frep211StratumSummary.jsp top block) */}
               <fieldset className="rip-form__group">

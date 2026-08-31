@@ -15,6 +15,7 @@ import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import OutstandingPanel from './OutstandingPanel';
+import RequiredLegend from './RequiredLegend';
 
 import type { CodeOption } from '@/types/configuration';
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
@@ -381,7 +382,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
         invalid={Boolean(fieldErrors[key])}
         invalidText={fieldErrors[key]}
       >
-        <SelectItem value="" text="—" />
+        <SelectItem value="" text="Choose an option" />
         {options.map((o) => (
           <SelectItem key={o.code} value={o.code} text={o.description} />
         ))}
@@ -437,6 +438,9 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
           </>
         )}
       </div>
+      {/* Only while editing: the read-only view marks nothing required, so the key would explain
+          a symbol that is not on the page. */}
+      {editing && <RequiredLegend />}
 
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>

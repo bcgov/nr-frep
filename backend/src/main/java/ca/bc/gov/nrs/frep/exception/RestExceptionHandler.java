@@ -182,7 +182,7 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    */
   @ExceptionHandler(TransactionSystemException.class)
   protected ResponseEntity<Object> handleTransactionSystem(TransactionSystemException ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Transaction could not be committed", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -195,11 +195,11 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    * Any other data-access failure (e.g. ORA-00942 from a native query, a missing grant). The raw
    * Oracle message is logged but NOT returned — the client gets a generic message instead. The one
    * exception is a column overflow, which is reported as a field-length problem (see
-   * {@link #overflowResponse}).
+   * {@link #rejectResponse}).
    */
   @ExceptionHandler(DataAccessException.class)
   protected ResponseEntity<Object> handleDataAccess(DataAccessException ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Database error", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -211,7 +211,7 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   /** Catch-all. Returns a generic message so internal detail never leaks to the UI. */
   @ExceptionHandler(Exception.class)
   protected ResponseEntity<Object> handleUnexpected(Exception ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Unexpected error", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -229,6 +229,26 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   private Optional<ResponseEntity<Object>> overflowResponse(Exception ex) {
     return ColumnOverflow.describe(ex).map(message -> {
       log.warn("Column overflow rejected: {}", message, ex);
+      return buildResponseEntity(new ApiError(BAD_REQUEST, message, ex));
+    });
+  }
+
+  /**
+   * A 400 naming what the user has to change, when the failure is one the database can explain: an
+   * over-long value (ORA-12899) or a duplicate of something that has to be unique (ORA-00001).
+   *
+   * <p>Checked at all three generic handlers because the same failure arrives by different routes —
+   * commit-time flush, a translated JDBC failure, or an untranslated one. Without this a duplicate
+   * feature label surfaced as "Unexpected system error", which named neither the field nor the
+   * problem.
+   */
+  private Optional<ResponseEntity<Object>> rejectResponse(Exception ex) {
+    Optional<ResponseEntity<Object>> overflow = overflowResponse(ex);
+    if (overflow.isPresent()) {
+      return overflow;
+    }
+    return DuplicateRecord.describe(ex).map(message -> {
+      log.warn("Duplicate rejected: {}", message, ex);
       return buildResponseEntity(new ApiError(BAD_REQUEST, message, ex));
     });
   }

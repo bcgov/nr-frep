@@ -18,6 +18,12 @@ vi.mock('@/services/APIs', () => ({
         { code: 'OTH', description: 'Other' },
         { code: 'DUP', description: 'Duplicate' },
       ]),
+      // The status options come from FREP_RESOURCE_VALUE_STATUS_CODE rather than three literals.
+      getResourceValueStatusCodes: vi.fn().mockResolvedValue([
+        { code: 'ACC', description: 'Accepted' },
+        { code: 'REJ', description: 'Rejected' },
+        { code: 'TAR', description: 'Targeted' },
+      ]),
     },
   },
 }));

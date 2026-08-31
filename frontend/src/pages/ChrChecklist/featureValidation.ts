@@ -152,11 +152,38 @@ export const featureBlockingErrors = (f: Feature): Record<string, string> => {
  * Every field-level error on the feature editor — what to show the user, blocking or not. A blocking
  * error wins over a required one on the same field, since it names a value the user actually typed.
  */
-export const featureErrors = (f: Feature): Record<string, string> => ({
+export const featureErrors = (
+  f: Feature,
+  takenLabels: readonly string[] = [],
+): Record<string, string> => ({
   ...featureRequiredErrors(f),
   ...featureBlockingErrors(f),
+  ...duplicateLabelError(f, takenLabels),
 });
 
 /** True when the feature cannot be stored as it stands (used to block Save). */
-export const featureHasErrors = (f: Feature): boolean =>
-  Object.keys(featureBlockingErrors(f)).length > 0;
+export const featureHasErrors = (f: Feature, takenLabels: readonly string[] = []): boolean =>
+  Object.keys(featureBlockingErrors(f)).length > 0 ||
+  Object.keys(duplicateLabelError(f, takenLabels)).length > 0;
+
+/**
+ * A label already used by another feature on this checklist.
+ *
+ * `CHFID_UK` is `UNIQUE (CHR_CHECKLIST_ID, FEATURE_LABEL)`, so a repeat is refused at the database
+ * and comes back as a failed save. Caught here instead, next to the field, because the whole list is
+ * already in front of us — the round trip told the user only that something went wrong, and only
+ * after they had filled the rest of the feature in.
+ *
+ * Compared case-insensitively, which is stricter than the constraint: Oracle would allow "A" and
+ * "a" side by side, but composite membership matches labels case-insensitively (see
+ * `matchesCompositeLabel`), so the pair would be indistinguishable to the thing that reads them.
+ */
+export const duplicateLabelError = (
+  f: Feature,
+  takenLabels: readonly string[],
+): Record<string, string> => {
+  const label = (f.featureLabel ?? '').trim().toLowerCase();
+  if (label === '') return {};
+  const clash = takenLabels.some((other) => (other ?? '').trim().toLowerCase() === label);
+  return clash ? { featureLabel: 'Already used by another feature.' } : {};
+};

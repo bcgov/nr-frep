@@ -45,12 +45,17 @@ public class ChrSubmitValidationService {
     "otherQ2Wheredamagehasoccurredwhatisthemostlikelycause",
   };
 
+  /**
+   * Management strategies the "No management applied" box contradicts. Indicators only —
+   * {@code otherActivities} is deliberately absent because it holds the description itself rather
+   * than "true"; see {@link #anyStrategyUsed}.
+   */
   private static final String[] USED_STRATEGY_FIELDS = {
     "partiallytemporaryreserve", "fullyconservedintemporaryreserve",
     "partiallyconservedinpermanentreserve", "fullyconservedinpermanentreserve",
     "modifiedblockboundary", "retainabuffer", "compledCrownorstandmodification",
     "datedthefeature", "retainedinharvestareanobuffer", "leftStanding", "stubbed",
-    "alteredsilviculture", "otherActivities",
+    "alteredsilviculture",
   };
 
   private static final String[] WINDTHROW_OTHER_FIELDS = {
@@ -300,7 +305,7 @@ public class ChrSubmitValidationService {
     integer(errors, ref, "trailLength", f.getTrailLength(),
         "Provide a valid estimated percentage of the trail length affected.");
 
-    if (isTrue(f.getNoManagement()) && anyTrue(values(f, USED_STRATEGY_FIELDS))) {
+    if (isTrue(f.getNoManagement()) && anyStrategyUsed(f)) {
       errors.add(err(ref, "noManagement",
           "Management strategies are selected while \"No management applied\" is checked. Clear the "
               + "strategies, or uncheck \"No management applied\"."));
@@ -309,9 +314,9 @@ public class ChrSubmitValidationService {
         && !anyTrue(values(f, Q2_CAUSE_FIELDS))) {
       errors.add(err(ref, "q2MostLikelyCause", "Provide at least one answer in Q2 if Q1 is selected."));
     }
-    if (isTrue(f.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse())
+    if (isAnswerYes(f.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse())
         && !anyTrue(values(f, Q2_CAUSE_FIELDS))) {
-      errors.add(err(ref, "q2MostLikelyCause", "Provide at least one answer in Q2 if Q3 is selected."));
+      errors.add(err(ref, "q2MostLikelyCause", "Provide at least one answer in Q2 if Q3 is Yes."));
     }
     if (isTrue(f.getWindthrowManagement()) && isTrue(f.getWindthrowTechniqueNone())
         && anyTrue(values(f, WINDTHROW_OTHER_FIELDS))) {
@@ -399,6 +404,34 @@ public class ChrSubmitValidationService {
 
   private static boolean isTrue(String value) {
     return "true".equalsIgnoreCase(value);
+  }
+
+  /**
+   * Whether a coded answer is Yes.
+   *
+   * <p>Q3 stores a {@code FREP_CHECKLIST_ANSWER_CODE} — Y / N / D — not an indicator, so it needs
+   * its own test. Reading it with {@link #isTrue} made the rule unreachable: "Y" is never "true",
+   * so a feature could submit answering Q3 Yes with no cause named in Q2. Only Yes obliges a
+   * cause; No and Don't know assert no damage to attribute, and Q1 already covers damage that
+   * exists without being irreversible.
+   */
+  private static boolean isAnswerYes(String value) {
+    return value != null && "Y".equalsIgnoreCase(value.trim());
+  }
+
+  /**
+   * Whether the feature records any management strategy at all.
+   *
+   * <p>Twelve of the thirteen strategies are indicators holding "true"/"false".
+   * {@code otherActivities} is the odd one out: it carries the free-text description, persisted as
+   * the OTH row in {@code CHR_MGMT_STRATEGY_USED}, and its tick box is derived from whether that
+   * text is present. So presence, not the literal "true", is what "selected" means for it — testing
+   * it the same way as the others let a feature submit claiming both "no management applied" and an
+   * other-activity description, a gap shared with the legacy app.
+   */
+  private static boolean anyStrategyUsed(Feature f) {
+    return anyTrue(values(f, USED_STRATEGY_FIELDS))
+        || (f.getOtherActivities() != null && !f.getOtherActivities().isBlank());
   }
 
   private static boolean anyTrue(String[] values) {

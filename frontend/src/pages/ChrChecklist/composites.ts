@@ -1,6 +1,5 @@
 import type { Feature } from '@/types/chrChecklist';
 
-import { FEATURE_CLASS_CODES, INFORMATION_SOURCE_CODES } from '@/pages/ChrChecklist/codeLists';
 import { AGE_FIELDS, FEATURE_TYPE_FIELDS } from '@/pages/ChrChecklist/tabStatus';
 
 /**
@@ -71,12 +70,6 @@ export const nextFeatureLabel = (features: Feature[]): string => {
   const numbers = features.map((f) => Number(f.featureLabel)).filter((n) => Number.isFinite(n));
   return String((numbers.length > 0 ? Math.max(...numbers) : 0) + 1);
 };
-
-export const classLabel = (code?: string): string =>
-  FEATURE_CLASS_CODES.find((c) => c.code === code)?.label ?? code ?? '';
-
-export const sourceLabel = (code?: string): string =>
-  INFORMATION_SOURCE_CODES.find((c) => c.code === code)?.label ?? code ?? '';
 
 /** What the composite dialog hands back when the user creates or edits a group. */
 export type CompositeDraft = {

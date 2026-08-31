@@ -1,15 +1,24 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The dialog's footer overrides Carbon, so the geometry case below needs the real stylesheets.
 import '@/styles/index.scss';
 import './chrChecklist.scss';
 
 import FeatureList from './FeatureList';
+import { clearCodeListCache } from './useCodeList';
 
 import type { Feature } from '@/types/chrChecklist';
+
+// The dropdowns come from the code tables now, so anything mounting a form needs them stubbed.
+vi.mock('@/services/APIs', async () => {
+  const { chrCodeListApi } = await import('@/testing/chrCodeListApi');
+  return { default: { configuration: chrCodeListApi() } };
+});
+
+beforeEach(() => clearCodeListCache());
 
 vi.mock('@/context/confirm/useConfirm', () => ({
   useConfirm: () => vi.fn().mockResolvedValue(true),
@@ -51,11 +60,13 @@ const renderList = (initial: Feature[] = [featureA, featureB]) => {
 };
 
 describe('FeatureList table', () => {
-  it('shows the class, information source, description and associations per row', () => {
+  it('shows the class, information source, description and associations per row', async () => {
     renderList();
 
     const row = screen.getByText('Trail along the ridge').closest('tr') as HTMLElement;
-    expect(within(row).getByText('Cultural Trail')).toBeTruthy();
+    // The class and source labels come from the code tables, so the row shows the bare code until
+    // the fetch settles.
+    expect(await within(row).findByText('Cultural Trail')).toBeTruthy();
     expect(within(row).getByText('SP - Site Plan')).toBeTruthy();
     // Nothing associated yet — every empty cell reads the same way.
     expect(within(row).getAllByText('—').length).toBeGreaterThan(0);

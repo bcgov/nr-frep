@@ -166,6 +166,53 @@ describe('featuresOutstanding', () => {
     expect(items[0]).toContain('“No management applied”');
   });
 
+  it('flags "No management applied" contradicting an other-activity description', () => {
+    // otherActivities holds the description, never "true" — presence is what "selected" means for
+    // it, so this contradiction has to be caught by text, not by the indicator test.
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [completeFeature({ noManagement: 'true', otherActivities: 'Fenced' })],
+      }),
+    );
+    expect(items[0]).toContain('“No management applied”');
+  });
+
+  it('leaves "No management applied" alone when the other-activity box is blank', () => {
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [completeFeature({ noManagement: 'true', otherActivities: '   ' })],
+      }),
+    );
+    expect(items).toEqual([]);
+  });
+
+  it('requires a Q2 cause once Q3 is answered Yes', () => {
+    // Q3 is a coded answer, not an indicator — testing it as a boolean left this rule unreachable.
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [
+          completeFeature({
+            q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse: 'Y',
+          }),
+        ],
+      }),
+    );
+    expect(items[0]).toContain('Q3 is Yes');
+  });
+
+  it.each(['N', 'D', ''])('asks for no Q2 cause when Q3 is %s', (answer) => {
+    const items = featuresOutstanding(
+      completeChecklist({
+        features: [
+          completeFeature({
+            q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse: answer,
+          }),
+        ],
+      }),
+    );
+    expect(items).toEqual([]);
+  });
+
   it('requires a permit number once the AIA permit box is checked', () => {
     const items = featuresOutstanding(
       completeChecklist({ features: [completeFeature({ sitePermitIssued: 'true' })] }),

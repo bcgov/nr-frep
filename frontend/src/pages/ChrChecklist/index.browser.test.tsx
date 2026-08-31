@@ -9,7 +9,8 @@ import * as useAuthorizationModule from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 
-vi.mock('@/services/APIs', () => ({
+// The checklist's dropdowns read their options from the code tables.
+vi.mock('@/services/APIs', async () => ({
   default: {
     chrChecklist: {
       getChecklist: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/services/APIs', () => ({
       unsubmit: vi.fn(),
       activate: vi.fn(),
     },
+    configuration: (await import('@/testing/chrCodeListApi')).chrCodeListApi(),
   },
 }));
 
@@ -209,19 +211,16 @@ describe('ChrChecklistPage', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Age' }));
 
     // Pending feature edits live outside `checkList` (see draftFeatures) — this is the round trip
-    // that proves the editor still sees its own writes: toggle a box, and the box is ticked.
-    const pre1846 = screen.getByRole('checkbox', { name: 'Pre-1846' });
+    // that proves the editor still sees its own writes: choose an age, and it stays chosen.
+    const pre1846 = screen.getByRole('radio', { name: 'Pre-1846' });
     await userEvent.click(pre1846);
     expect((pre1846 as HTMLInputElement).checked).toBe(true);
 
-    // Age is single-select: the other three lock once one is chosen.
+    // Age is one question: choosing it leaves the rest unselected rather than disabled.
     for (const label of ['Post-1846', 'Age unknown', 'Historical use']) {
-      expect((screen.getByRole('checkbox', { name: label }) as HTMLInputElement).disabled).toBe(
-        true,
-      );
+      expect((screen.getByRole('radio', { name: label }) as HTMLInputElement).checked).toBe(false);
     }
   });
 

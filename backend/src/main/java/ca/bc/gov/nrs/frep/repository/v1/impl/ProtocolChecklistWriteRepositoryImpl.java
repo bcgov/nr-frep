@@ -920,21 +920,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
 
   private static final String ATTACH_PKG = "FREP_CHECKLIST_ATTACHMENTS";
 
+  private static boolean isBioAttachment(String resourceType) {
+    return isBiodiversity(resourceType);
+  }
+
   /**
    * Biodiversity attachment bytes live in shared object storage, not the Oracle BLOB. Metadata
    * still goes through {@code FREP_CHECKLIST_ATTACHMENTS} (list/insert/remove); only the file content
    * moves. Keyed by the unique attachment id under an {@code slr/} prefix — collision-free vs the CHR
    * photo keys and independent of the DB resource type (SLB legacy / SLR go-forward). Other protocols
    * (RIP/WTR) keep using the Oracle BLOB path unchanged.
+   *
+   * <p>Delegates to {@link ObjectStorageService#bioObjectKey} rather than holding its own prefix, so
+   * the download, upload, delete and the one-time BLOB migration cannot drift apart.
    */
-  private static final String BIO_OBJECT_PREFIX = "slr/";
-
-  private static boolean isBioAttachment(String resourceType) {
-    return isBiodiversity(resourceType);
-  }
-
   private static String bioObjectKey(String attachmentId) {
-    return BIO_OBJECT_PREFIX + attachmentId.trim();
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   /**

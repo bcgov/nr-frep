@@ -2,6 +2,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// The button's own geometry is under test, so it needs the global Carbon overrides as well as the
+// page styles that ./index brings with it.
+import '@/styles/index.scss';
+
 import LandingPage from './index';
 
 import { APP_FULL_NAME } from '@/constants/appName';
@@ -59,6 +63,30 @@ describe('LandingPage', () => {
 
     fireEvent.click(bceid);
     expect(mockLogin).toHaveBeenCalledWith('bceid');
+  });
+
+  it('keeps the login icon beside its label rather than at the far edge', () => {
+    // The buttons are a fixed 20rem wide, so their contents have to be positioned deliberately.
+    // `space-between` pushed the label to one edge and the icon to the other, which read as a hole
+    // once the icon moved to the left of the label.
+    renderPage();
+
+    const button = screen.getByTestId('landing-button__idir');
+    const icon = button.querySelector('svg') as SVGElement;
+    const text = Array.from(button.childNodes).find(
+      (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim(),
+    ) as Text;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+
+    const gap = range.getBoundingClientRect().left - icon.getBoundingClientRect().right;
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThan(16); // the 0.5rem flex gap, not a 10rem hole
+
+    // And the pair sits against the left edge rather than centred. Asserted on the computed style:
+    // the button only reaches its 20rem in the real layout, so in here a centred and a left-aligned
+    // button measure the same and geometry cannot tell them apart.
+    expect(getComputedStyle(button).justifyContent).toBe('flex-start');
   });
 
   it('spells out the app name under the acronym', () => {

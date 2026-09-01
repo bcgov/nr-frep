@@ -52,7 +52,13 @@
         .login-btn {
           width: 20rem;
           max-width: 100%;
-          justify-content: space-between;
+          // The width is fixed, so the contents have to be told where to sit. `space-between` put
+          // the label against one edge and the icon against the other — fine while Carbon pinned
+          // the icon right, but it leaves a 10rem hole now that the icon leads the label
+          // (see the button-icon ordering in styles/_overrides.scss). Both buttons start their
+          // icon at the same left edge, so the pair reads as a column rather than two centred
+          // labels of different lengths.
+          justify-content: flex-start;
         }
       }
 

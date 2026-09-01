@@ -21,9 +21,13 @@ const loadModule = async () => {
 
 let assigned: string[] = [];
 
+const setOnline = (online: boolean) =>
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online });
+
 beforeEach(() => {
   vi.clearAllMocks();
   assigned = [];
+  setOnline(true);
   // jsdom refuses a real navigation; capture the assignment instead.
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -90,5 +94,43 @@ describe('handleUnauthorized', () => {
 
     await expect(handleUnauthorized()).resolves.toBe(false);
     expect(assigned).toEqual([]);
+  });
+});
+
+/**
+ * Offline the app deliberately runs signed out, on device-local checklists. A redirect to the login
+ * page there is both useless (IDIR login needs a network) and self-perpetuating: it reloads the
+ * page, the page calls the API, and the redirect fires again — the loop reported from the field.
+ */
+describe('while offline', () => {
+  it('does not redirect when there is no token to refresh', async () => {
+    setOnline(false);
+    fetchAuthSessionMock.mockResolvedValue(withoutSession());
+    const { ensureSessionFresh } = await loadModule();
+
+    await ensureSessionFresh();
+
+    expect(assigned).toEqual([]);
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect when the refresh itself cannot reach the network', async () => {
+    setOnline(false);
+    fetchAuthSessionMock.mockRejectedValue(new Error('Network request failed'));
+    const { ensureSessionFresh } = await loadModule();
+
+    await ensureSessionFresh();
+
+    expect(assigned).toEqual([]);
+  });
+
+  it('still redirects once back online', async () => {
+    setOnline(true);
+    fetchAuthSessionMock.mockResolvedValue(withoutSession());
+    const { ensureSessionFresh } = await loadModule();
+
+    await ensureSessionFresh();
+
+    expect(assigned).toEqual(['https://frep.example/']);
   });
 });

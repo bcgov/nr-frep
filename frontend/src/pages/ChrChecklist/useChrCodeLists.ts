@@ -1,7 +1,7 @@
 import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { CodeOption as FetchedCode } from '@/types/configuration';
 
-import useCodeList from '@/pages/ChrChecklist/useCodeList';
+import useCodeList, { primeCodeList } from '@/pages/ChrChecklist/useCodeList';
 import API from '@/services/APIs';
 
 /**
@@ -129,3 +129,25 @@ export const useContactRoleCodes = (): CodeOption[] => [
 /** Look a code up in a fetched list, falling back to the raw code when it is not there. */
 export const labelFor = (options: CodeOption[], code?: string): string =>
   options.find((o) => o.code === code)?.label ?? code ?? '';
+
+/**
+ * Warm every CHR code list into the on-disk cache.
+ *
+ * Called when a checklist is taken offline: from then on the device may have no connection for the
+ * rest of the day, and these lists are the only thing a device-local checklist still needs the API
+ * for. Without them the feature editor's dropdowns are empty and a feature cannot be given a class
+ * or an information source in the field.
+ *
+ * Keys must match the hooks above — a mismatch would warm a cache nothing reads.
+ */
+export const prefetchChrCodeLists = async (): Promise<void> => {
+  await Promise.all([
+    primeCodeList('chr-feature-class', () => API.configuration.getChrFeatureClassCodes()),
+    primeCodeList('chr-info-source', () => API.configuration.getChrFeatureInfoSourceCodes()),
+    primeCodeList('chr-reserve-type', () => API.configuration.getChrReserveTypeCodes()),
+    primeCodeList('chr-site-evaluation', () => API.configuration.getChrSiteEvaluationCodes()),
+    primeCodeList('chr-participant-role', () => API.configuration.getChrParticipantRoleCodes()),
+    // The feature editor's Q3 answers, fetched with the same key it uses.
+    primeCodeList('checklist-answers:NA', () => API.configuration.getChecklistAnswers('NA')),
+  ]);
+};

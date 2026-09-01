@@ -80,8 +80,15 @@ const Contacts: FC<{
     const name = fullName(contacts[index]) || 'this contact';
     if (
       !(await confirm({
-        title: 'Delete contact?',
-        message: `Delete ${name}? This can't be undone.`,
+        title: 'Are you sure you want to delete this contact?',
+        // "Removed", not "deleted": what goes is this person's place on the checklist, not any
+        // record of the person themselves.
+        message: (
+          <>
+            <strong>{name}</strong> will be permanently removed from this checklist. This action
+            cannot be undone.
+          </>
+        ),
       }))
     )
       return;

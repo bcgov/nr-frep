@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FeatureEditor from './FeatureEditor';
@@ -496,5 +497,109 @@ describe('FeatureEditor — Effectiveness follow-ups', () => {
     // Unticking clears the text, which is what removes the row.
     await userEvent.click(box);
     expect(onPatch).toHaveBeenCalledWith({ otherActivities: '' });
+  });
+});
+
+describe('FeatureEditor — numbers the column can hold', () => {
+  /**
+   * Every one of these used to be reported by the database rather than the form. The percentages are
+   * `NUMBER(3)` columns parsed to a Short on save, the size-of-area fields `NUMBER(8,2)`/`NUMBER(10,4)`
+   * parsed to a BigDecimal; a value neither could take came back as a failed save carrying the JVM's
+   * own message — `For input string: "tset"` — with nothing marked on the field that caused it.
+   */
+  const showing = (over: Partial<Feature>) =>
+    render(
+      <FeatureEditor feature={baseFeature(over)} onPatch={vi.fn()} readOnly={false} showErrors />,
+    );
+
+  it('names a non-numeric windthrow estimate on the field', () => {
+    showing({ windthrowManagement: 'true', windthrow: 'false', estwindthrow: 'lots' });
+
+    expect(screen.getByText('Estimated windthrow (%) must be a whole number.')).toBeTruthy();
+  });
+
+  it('holds a percentage to 0–100', () => {
+    // The column would take three digits; a percentage still cannot be 500.
+    showing({ trailfeatures: 'true', isthereevidenceofdamage: 'true', trailLength: '500' });
+
+    expect(screen.getByText('Estimated trail damage (%) must be at most 100.')).toBeTruthy();
+  });
+
+  it('keeps an area inside the precision of its column', () => {
+    showing({ areaofFeature: '12345678.5' });
+
+    expect(
+      screen.getByText('Area (ha) must have at most 6 digits before the decimal point.'),
+    ).toBeTruthy();
+  });
+
+  it('leaves a decimal the column does carry alone', () => {
+    showing({ areaofFeature: '2.5' });
+
+    expect(screen.queryByText(/^Area \(ha\) must/)).toBeNull();
+  });
+});
+
+describe('FeatureEditor — before a save has been attempted', () => {
+  /**
+   * The editor opens quiet, but not silent: a value the column cannot hold is wrong the moment it is
+   * typed, and saying so only at Save sends the user back to a field they had finished with. What
+   * still waits is everything a correct entry passes through — blanks, minimums, half-typed patterns.
+   */
+  const quiet = (over: Partial<Feature>) =>
+    render(<FeatureEditor feature={baseFeature(over)} onPatch={vi.fn()} readOnly={false} />);
+
+  it('marks a value the column cannot hold straight away', () => {
+    quiet({ trailfeatures: 'true', isthereevidenceofdamage: 'true', trailLength: 'tset' });
+
+    expect(screen.getByText('Estimated trail damage (%) must be a whole number.')).toBeTruthy();
+  });
+
+  it('says nothing about a required field left blank', () => {
+    quiet({ trailfeatures: 'true', isthereevidenceofdamage: 'true', trailLength: '' });
+
+    // The label still reads "Estimated trail damage (%)" — it is the message after it that must not
+    // be there yet.
+    expect(screen.queryByText(/Estimated trail damage \(%\) (?:must|is)/)).toBeNull();
+    expect(screen.queryByText('A rating is required.')).toBeNull();
+  });
+});
+
+describe('FeatureEditor — errors when a field is left', () => {
+  /**
+   * Borden is the CHR rule a correct value trips on its way in — "Aa", "AaBb", "AaBb-" are all
+   * steps towards a valid number — so it is judged once the field has been left rather than on
+   * every keystroke. See utils/validation.ts.
+   */
+  /** The editor is controlled, so typing only reaches it through a harness that holds the feature. */
+  const Editing = ({ initial }: { initial: Partial<Feature> }) => {
+    const [feature, setFeature] = useState<Feature>(baseFeature(initial));
+    return (
+      <FeatureEditor
+        feature={feature}
+        onPatch={(patch) => setFeature((prev) => ({ ...prev, ...patch }))}
+        readOnly={false}
+      />
+    );
+  };
+
+  it('holds a half-typed Borden number until the field is left', async () => {
+    render(<Editing initial={{ chrRegisteredSite: 'true' }} />);
+
+    const borden = screen.getByLabelText(/Borden number/);
+    await userEvent.type(borden, 'AaBb');
+    expect(screen.queryByText('Must match the Borden format, e.g. AaBb-0000.')).toBeNull();
+
+    await userEvent.tab();
+    expect(await screen.findByText('Must match the Borden format, e.g. AaBb-0000.')).toBeTruthy();
+  });
+
+  it('says nothing about a Borden field left blank', async () => {
+    render(<Editing initial={{ chrRegisteredSite: 'true' }} />);
+
+    await userEvent.click(screen.getByLabelText(/Borden number/));
+    await userEvent.tab();
+
+    expect(screen.queryByText('Must match the Borden format, e.g. AaBb-0000.')).toBeNull();
   });
 });

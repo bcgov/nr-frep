@@ -13,7 +13,12 @@ import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { Feature, Indicator, OtherPlannedManagementStrategy } from '@/types/chrChecklist';
 
-import { duplicateLabelError, featureErrors } from '@/pages/ChrChecklist/featureValidation';
+import { useSettledFields } from '@/hooks/useSettledFields';
+import {
+  duplicateLabelError,
+  featureErrors,
+  featureTypingErrors,
+} from '@/pages/ChrChecklist/featureValidation';
 import { FEATURE_SINGLE_LINE_MAX, FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import {
   useFeatureClassCodes,
@@ -23,6 +28,7 @@ import {
 } from '@/pages/ChrChecklist/useChrCodeLists';
 import useCodeList from '@/pages/ChrChecklist/useCodeList';
 import API from '@/services/APIs';
+import { errorsForSettledFields } from '@/utils/validation';
 
 type PatchFn = (patch: Partial<Feature>) => void;
 
@@ -30,10 +36,20 @@ type PatchFn = (patch: Partial<Feature>) => void;
 // an error badge and stay expanded while any of its fields is invalid (otherwise a blocked Save
 // leaves the error hidden inside a collapsed section). Sections not listed never carry these errors.
 const SECTION_ERROR_FIELDS: Record<string, string[]> = {
-  Description: ['borden', 'ofCMTsNumber', 'standofMonumentalCedar', 'otherdescription'],
-  Location: ['locationOtherDescription', 'locationReservetype'],
-  Effectiveness: ['bufferWidthMeter'],
-  Summary: ['q4Description', 'q5Description', 'q6Description', 'featureRating'],
+  'Description': [
+    'borden',
+    'ofCMTsNumber',
+    'standofMonumentalCedar',
+    'otherdescription',
+    'widthofFeature',
+    'lengthofFeature',
+    'areaofFeature',
+  ],
+  'Location': ['locationOtherDescription', 'locationReservetype'],
+  'Effectiveness': ['bufferWidthMeter'],
+  'Windthrow': ['estwindthrow'],
+  'Trail features': ['trailLength'],
+  'Summary': ['q4Description', 'q5Description', 'q6Description', 'featureRating'],
 };
 
 /** A management-strategy row rendered as FN / AIA / SP checkboxes. */
@@ -305,16 +321,38 @@ const FeatureEditor: FC<{
   // Live inline validation (lightweight high-value subset; the full rule set runs server-side at
   // submit). Empty when read-only. Save is blocked in FeatureList while any error remains. Memoised
   // on the feature so the auto-open effect below only re-runs when the data actually changes.
+  //
+  // Before the first save attempt only the typing-safe subset is shown: a value that no further
+  // typing can rescue — a letter in a number, a decimal place too many, a figure above the maximum —
+  // is wrong the moment it is on screen, and waiting for Save to say so sends the user back to a
+  // field they had finished with. Everything else (blank required fields, and the rules a
+  // half-finished value trips on its way to being right) waits for Save.
+  //
+  // Between the two sits the field the user has filled in and moved on from: once it has been left,
+  // the rules a half-finished value would have tripped can be judged, so they are shown then rather
+  // than held to Save. Only for a field that holds a value — see errorsForSettledFields.
+  const { settled, markSettled } = useSettledFields();
   const fieldErrors: Record<string, string> = useMemo(
     () => ({
-      ...(readOnly || !showErrors ? {} : featureErrors(feature)),
+      ...(readOnly
+        ? {}
+        : showErrors
+          ? featureErrors(feature)
+          : {
+              ...featureTypingErrors(feature),
+              ...errorsForSettledFields(
+                featureErrors(feature),
+                settled,
+                (key) => feature[key] as string | undefined,
+              ),
+            }),
       // Shown as soon as it is true, without waiting for a save attempt: a duplicate label is a
       // clash with another record rather than a field left unfinished, and the user is typing the
       // very value that clashes. Holding it back until Save meant retyping a label they had already
       // moved on from.
       ...(readOnly ? {} : duplicateLabelError(feature, takenLabels)),
     }),
-    [readOnly, showErrors, feature, takenLabels],
+    [readOnly, showErrors, feature, takenLabels, settled],
   );
   const err = (key: string): string | undefined => fieldErrors[key];
 
@@ -815,6 +853,7 @@ const FeatureEditor: FC<{
                   helperText="Format: AaBb-0000"
                   invalid={Boolean(err('borden'))}
                   invalidText={err('borden')}
+                  onBlur={() => markSettled('borden')}
                   onChange={(v) => onPatch({ borden: v })}
                 />
               )}
@@ -848,6 +887,8 @@ const FeatureEditor: FC<{
                     labelText="Width (m)"
                     value={str('widthofFeature')}
                     disabled={readOnly}
+                    invalid={Boolean(err('widthofFeature'))}
+                    invalidText={err('widthofFeature')}
                     onChange={(v) => onPatch({ widthofFeature: v })}
                   />
                   <TextField
@@ -855,6 +896,8 @@ const FeatureEditor: FC<{
                     labelText="Length (m)"
                     value={str('lengthofFeature')}
                     disabled={readOnly}
+                    invalid={Boolean(err('lengthofFeature'))}
+                    invalidText={err('lengthofFeature')}
                     onChange={(v) => onPatch({ lengthofFeature: v })}
                   />
                 </>
@@ -864,6 +907,8 @@ const FeatureEditor: FC<{
                   labelText="Area (ha)"
                   value={str('areaofFeature')}
                   disabled={readOnly}
+                  invalid={Boolean(err('areaofFeature'))}
+                  invalidText={err('areaofFeature')}
                   onChange={(v) => onPatch({ areaofFeature: v })}
                 />
               )}
@@ -1155,7 +1200,7 @@ const FeatureEditor: FC<{
       </section>
 
       <section className="feature-section">
-        <h3 className="feature-section__title">Windthrow</h3>
+        <h3 className="feature-section__title">{sectionTitle('Windthrow')}</h3>
         {/* Both windthrow and trail features are one question that opens a short form. Everything
             the tick reveals is indented under it, so the follow-ups read as belonging to the answer
             rather than as further questions of their own. */}
@@ -1169,6 +1214,8 @@ const FeatureEditor: FC<{
                 labelText="Estimated windthrow (%)"
                 value={str('estwindthrow')}
                 disabled={readOnly}
+                invalid={Boolean(err('estwindthrow'))}
+                invalidText={err('estwindthrow')}
                 onChange={(v) => onPatch({ estwindthrow: v })}
               />
             )}
@@ -1192,7 +1239,7 @@ const FeatureEditor: FC<{
       </section>
 
       <section className="feature-section">
-        <h3 className="feature-section__title">Trail features</h3>
+        <h3 className="feature-section__title">{sectionTitle('Trail features')}</h3>
         {chk('trailfeatures', 'Trail features applicable')}
         {on('trailfeatures') && (
           <div className="chr-checklist__reveal">
@@ -1205,6 +1252,8 @@ const FeatureEditor: FC<{
                 labelText={requiredLabel('Estimated trail damage (%)', true)}
                 value={str('trailLength')}
                 disabled={readOnly}
+                invalid={Boolean(err('trailLength'))}
+                invalidText={err('trailLength')}
                 onChange={(v) => onPatch({ trailLength: v })}
               />
             )}

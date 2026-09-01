@@ -448,6 +448,9 @@ const effectivenessItems = (f: Feature): FeatureRule[] => {
   );
   wholeNumber(items, f.bufferWidthMeter, 'Buffer size (m)', 'Effectiveness');
   wholeNumber(items, f.trailLength, 'Estimated trail damage (%)', 'Windthrow');
+  // The one percentage with no rule of its own: nothing here, nothing in the backend's submit
+  // validation, so a non-numeric windthrow estimate could only ever surface as a failed save.
+  wholeNumber(items, f.estwindthrow, 'Estimated windthrow (%)', 'Windthrow');
 
   if (isYes(f.noManagement) && anyStrategyUsed(f)) {
     items.push({

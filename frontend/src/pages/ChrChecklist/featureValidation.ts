@@ -1,7 +1,9 @@
 import type { Feature } from '@/types/chrChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { FEATURE_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { addTextLimitErrors } from '@/utils/textLimits';
+import { isNumberInProgress } from '@/utils/validation';
 
 // Lightweight, high-value feature validation mirroring the most important CHR submit checks, for live
 // inline feedback. The full rule set (at-least-one groups, FN/AIA/SP planning, windthrow/damage
@@ -18,12 +20,17 @@ export const BORDEN_RE = /^[A-U][a-l][A-W][a-x]-\d{1,4}$/;
 const isYes = (v?: string) => v === 'true';
 const isBlank = (v?: string) => v == null || `${v}`.trim() === '';
 
-/** A whole number within [0, max]; returns an error or '' (blank is handled by the caller). */
+/**
+ * A whole number within [0, max]; returns an error or '' (blank is handled by the caller).
+ *
+ * Every rule in this file counts from zero, so a range failure is always a value that is too big —
+ * which no further typing can fix. Both halves are therefore reported in either mode.
+ */
 const intRange = (value: string | undefined, label: string, max: number): string => {
   const v = (value ?? '').trim();
   if (!v) return '';
   if (!/^\d+$/.test(v)) return `${label} must be a whole number.`;
-  return Number(v) > max ? `${label} must be from 0 to ${max}.` : '';
+  return Number(v) > max ? `${label} must be at most ${max}.` : '';
 };
 
 /** A numeric field that is required only when its gating checkbox is Yes. Blank only — advisory. */
@@ -46,6 +53,48 @@ const gatedNumberFormat = (
   max: number,
 ) => {
   const err = intRange(value, label, max);
+  if (err) e[key] = err;
+};
+
+/**
+ * A decimal the column can actually hold: digits only, within its precision and scale. The
+ * size-of-area columns are `NUMBER(8,2)` (width, length) and `NUMBER(10,4)` (hectares), so each
+ * holds six digits ahead of the point; more than that is ORA-01438 at insert time.
+ */
+const decimalRange = (
+  value: string | undefined,
+  label: string,
+  units: number,
+  places: number,
+  mode: ValidationMode,
+): string => {
+  const v = (value ?? '').trim();
+  if (!v) return '';
+  // "12." is a number half-typed, not a malformed one. Every other shape failure here is a
+  // character that cannot belong in the field at all, so it is reported straight away.
+  if (mode === 'typing' && isNumberInProgress(v)) return '';
+  if (!/^\d+(\.\d+)?$/.test(v)) return `${label} must be a number.`;
+  const [whole, fraction = ''] = v.split('.');
+  if (whole.replace(/^0+(?=\d)/, '').length > units) {
+    return `${label} must have at most ${units} digits before the decimal point.`;
+  }
+  if (fraction.length > places) {
+    return `${label} must have at most ${places} decimal places.`;
+  }
+  return '';
+};
+
+/** The shape rule for a decimal field. Blocking, like its whole-number counterpart. */
+const decimalFormat = (
+  e: Record<string, string>,
+  key: string,
+  value: string | undefined,
+  label: string,
+  units: number,
+  places: number,
+  mode: ValidationMode,
+) => {
+  const err = decimalRange(value, label, units, places, mode);
   if (err) e[key] = err;
 };
 
@@ -121,10 +170,16 @@ export const featureRequiredErrors = (f: Feature): Record<string, string> => {
  * not a whole number or is out of range, or free text past its byte-semantic column limit. These
  * <b>do</b> block the save.
  */
-export const featureBlockingErrors = (f: Feature): Record<string, string> => {
+export const featureBlockingErrors = (
+  f: Feature,
+  mode: ValidationMode = 'settled',
+): Record<string, string> => {
   const e: Record<string, string> = {};
 
+  // Settled-only: every Borden number passes through "Aa", "AaBb" and "AaBb-" on its way to being
+  // right, so marking it while those are on screen marks it for everyone who types one.
   if (
+    mode === 'settled' &&
     isYes(f.chrRegisteredSite) &&
     (f.borden ?? '').length > 0 &&
     !BORDEN_RE.test(f.borden ?? '')
@@ -141,12 +196,32 @@ export const featureBlockingErrors = (f: Feature): Record<string, string> => {
   );
   gatedNumberFormat(e, 'bufferWidthMeter', f.bufferWidthMeter, 'Buffer size (m)', 9999);
 
+  // Windthrow and trail percentages. Both are `NUMBER(3)` columns the save parses to a Short, so a
+  // non-numeric entry used to reach the user as the JVM's own message ("For input string: ...") on a
+  // failed save, with nothing marked on the field that caused it. Capped at 100 because they are
+  // percentages, which is stricter than the three digits the column would take.
+  gatedNumberFormat(e, 'estwindthrow', f.estwindthrow, 'Estimated windthrow (%)', 100);
+  gatedNumberFormat(e, 'trailLength', f.trailLength, 'Estimated trail damage (%)', 100);
+
+  // Size of area — decimal columns rather than counts, so these carry a scale as well as a width.
+  decimalFormat(e, 'widthofFeature', f.widthofFeature, 'Width (m)', 6, 2, mode);
+  decimalFormat(e, 'lengthofFeature', f.lengthofFeature, 'Length (m)', 6, 2, mode);
+  decimalFormat(e, 'areaofFeature', f.areaofFeature, 'Area (ha)', 6, 4, mode);
+
   // Free-text length. Enforced here rather than left to the database: these columns are byte-limited
   // and nothing else checks them, so an over-long entry used to surface only as a failed save.
   addTextLimitErrors(e, f as Record<string, unknown>, FEATURE_TEXT_LIMITS);
 
   return e;
 };
+
+/**
+ * The errors safe to show while the user is still typing: the blocking set minus the rules a
+ * half-finished value trips on its way to being right. A required field left blank is not here —
+ * that is a gap, and reporting it before the user says the feature is finished is nagging.
+ */
+export const featureTypingErrors = (f: Feature): Record<string, string> =>
+  featureBlockingErrors(f, 'typing');
 
 /**
  * Every field-level error on the feature editor — what to show the user, blocking or not. A blocking

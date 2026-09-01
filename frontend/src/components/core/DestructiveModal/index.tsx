@@ -92,7 +92,6 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
       modalHeading={title}
       passiveModal
       size={size}
-      className="add-contact-modal"
       aria-label={title}
       preventCloseOnClickOutside={loading}
       onRequestClose={onCancel}
@@ -107,8 +106,8 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
           {message}
         </p>
       </div>
-      <div className="add-contact-modal__actions destructive-modal__actions">
-        <Button kind="secondary" size="md" onClick={onCancel} disabled={loading}>
+      <div className="destructive-modal__actions">
+        <Button kind="tertiary" size="md" onClick={onCancel} disabled={loading}>
           {cancelButtonText}
         </Button>
         <Button kind="danger" size="md" onClick={onConfirm} disabled={loading}>

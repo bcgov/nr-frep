@@ -63,7 +63,7 @@ describe('plotHeaderErrors', () => {
     );
     expect(
       plotHeaderErrors(validHeader({ secondLegTransect: '400' }), 'DO').secondLegTransect,
-    ).toMatch(/from 0 to 359/);
+    ).toMatch(/at most 359/);
   });
 
   it('requires Evaluated by', () => {
@@ -75,7 +75,7 @@ describe('plotHeaderErrors', () => {
   it('requires Plot # and enforces 0–999 when present', () => {
     expect(plotHeaderErrors(validHeader({ plotNumber: '' }), 'DO').plotNumber).toMatch(/required/);
     expect(plotHeaderErrors(validHeader({ plotNumber: '1000' }), 'DO').plotNumber).toMatch(
-      /from 0 to 999/,
+      /at most 999/,
     );
   });
 
@@ -92,7 +92,7 @@ describe('plotHeaderErrors', () => {
 
   it('enforces BAF / fixed-area / full-count ranges and decimals', () => {
     expect(plotHeaderErrors(validHeader({ basalAreaFactor: '0' }), 'DO').basalAreaFactor).toMatch(
-      /from 1 to 99/,
+      /at least 1/,
     );
     expect(
       plotHeaderErrors(validHeader({ basalAreaFactor: '', fixedAreaRadius: '1.234' }), 'DO')
@@ -101,7 +101,7 @@ describe('plotHeaderErrors', () => {
     expect(
       plotHeaderErrors(validHeader({ basalAreaFactor: '', fullCountArea: '0' }), 'DO')
         .fullCountArea,
-    ).toMatch(/between 0.01 and 9999.99/);
+    ).toMatch(/at least 0.01/);
   });
 
   it('requires exactly one measurement method (non clear-cut)', () => {
@@ -134,9 +134,9 @@ describe('standRowErrors', () => {
   });
 
   it('enforces DBH/height range and 1 decimal', () => {
-    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/greater than 12.5/);
+    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/must be over 12.5/);
     expect(standRowErrors({ dbh: '20.55' }).dbh).toMatch(/1 decimal place/);
-    expect(standRowErrors({ height: '0.5' }).height).toMatch(/between 1.4 and 99.9/);
+    expect(standRowErrors({ height: '0.5' }).height).toMatch(/at least 1.4/);
   });
 
   it('passes a complete row', () => {
@@ -156,8 +156,8 @@ describe('cwdRowErrors', () => {
   });
 
   it('enforces diameter/length ranges (length must be > 0)', () => {
-    expect(cwdRowErrors({ logDiameter: '5' }).logDiameter).toMatch(/between 7.6 and 400/);
-    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/greater than 0/);
+    expect(cwdRowErrors({ logDiameter: '5' }).logDiameter).toMatch(/at least 7.6/);
+    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/must be over 0/);
   });
 
   it('passes a complete row', () => {
@@ -205,5 +205,58 @@ describe('plotHeaderErrors — plot number uniqueness', () => {
   it('reports nothing when no other plots are passed', () => {
     // The default keeps every existing caller behaving exactly as before.
     expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO')).toEqual({});
+  });
+});
+
+/**
+ * What may be said on every keystroke, and what has to wait for Save. A value no further typing can
+ * rescue is reported at once; a value that is merely unfinished is not. See utils/validation.ts.
+ */
+describe('plot rules while the user is still typing', () => {
+  const typing = (over: Partial<BioPlot>) =>
+    plotHeaderErrors(validHeader(over), 'DO', [], 'typing');
+
+  it('holds an Easting that is only part-typed, and names one that has overshot', () => {
+    // Every six-digit Easting is typed through one, two and three digits first.
+    expect(typing({ utmSignal: 'Y', utmEasting: '123' }).utmEasting).toBeUndefined();
+    expect(typing({ utmSignal: 'Y', utmEasting: '1234567' }).utmEasting).toMatch(/exactly 6/);
+    expect(typing({ utmSignal: 'Y', utmEasting: '12x' }).utmEasting).toMatch(/exactly 6/);
+  });
+
+  it('names a bearing past the compass straight away', () => {
+    expect(typing({ firstLegTransect: '400' }).firstLegTransect).toMatch(/at most 359/);
+  });
+
+  it('holds a plot number that clashes until the save', () => {
+    // "1" is a legitimate step towards "12"; the clash is reported once the number is finished.
+    expect(
+      plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO', ['1'], 'typing').plotNumber,
+    ).toBeUndefined();
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO', ['1']).plotNumber).toMatch(
+      /already exists/,
+    );
+  });
+
+  it('holds a measurement value below its floor, and names one above its ceiling', () => {
+    expect(typing({ basalAreaFactor: '0' }).basalAreaFactor).toBeUndefined();
+    expect(typing({ basalAreaFactor: '100' }).basalAreaFactor).toMatch(/at most 99/);
+  });
+
+  it('says nothing about a blank the plot still owes', () => {
+    expect(plotHeaderErrors({ utmSignal: 'N' } as BioPlot, 'DO', [], 'typing')).toEqual({});
+  });
+
+  it('holds a stand row below its minimum, and names a decimal place too many', () => {
+    // DBH starts at 12.5, so "1" is the first keystroke of every valid entry.
+    expect(standRowErrors({ dbh: '1', height: '10' }, 'typing').dbh).toBeUndefined();
+    expect(standRowErrors({ dbh: '20.55', height: '10' }, 'typing').dbh).toMatch(/1 decimal place/);
+    expect(standRowErrors({ dbh: '20', height: '10' }, 'typing').speciesCode).toBeUndefined();
+  });
+
+  it('holds a CWD length that is still being typed', () => {
+    expect(cwdRowErrors({ logDiameter: '1', logLength: '2.' }, 'typing')).toEqual({});
+    expect(cwdRowErrors({ logDiameter: '1', logLength: '2.' }).logLength).toMatch(
+      /must be a number/,
+    );
   });
 });

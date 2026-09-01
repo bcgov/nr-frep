@@ -11,6 +11,7 @@ import FeatureList from './FeatureList';
 import { clearCodeListCache } from './useCodeList';
 
 import type { Feature } from '@/types/chrChecklist';
+import type { ReactNode } from 'react';
 
 // The dropdowns come from the code tables now, so anything mounting a form needs them stubbed.
 vi.mock('@/services/APIs', async () => {
@@ -20,8 +21,10 @@ vi.mock('@/services/APIs', async () => {
 
 beforeEach(() => clearCodeListCache());
 
+// One shared spy so a test can read the options a call site passed, not just that it confirmed.
+const { confirmSpy } = vi.hoisted(() => ({ confirmSpy: vi.fn().mockResolvedValue(true) }));
 vi.mock('@/context/confirm/useConfirm', () => ({
-  useConfirm: () => vi.fn().mockResolvedValue(true),
+  useConfirm: () => confirmSpy,
 }));
 
 const featureA: Feature = {
@@ -222,6 +225,47 @@ const compositeLabel = (): string | null => {
 const submitCreate = async (user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) =>
   user.click(within(dialog).getByRole('button', { name: 'Create composite' }));
 
+describe('FeatureList — button icons', () => {
+  it('puts the icon to the left of the label', async () => {
+    // Carbon renders renderIcon as the button's last child, so "Add feature" came out as
+    // "Add feature +". The app-wide override in styles/_overrides.scss reorders it.
+    renderList([featureA, featureB]);
+
+    const button = screen.getByRole('button', { name: /Add feature/ });
+    const icon = button.querySelector('svg') as SVGElement;
+    // The label is a bare text node, so it is measured with a Range rather than a bounding box.
+    const text = Array.from(button.childNodes).find(
+      (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim(),
+    ) as Text;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+
+    expect(icon).toBeTruthy();
+    expect(range.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(icon.getBoundingClientRect().right).toBeLessThanOrEqual(
+      range.getBoundingClientRect().left,
+    );
+  });
+});
+
+describe('FeatureList — deleting a feature', () => {
+  it('names the feature and what deleting it costs', async () => {
+    const user = userEvent.setup();
+    renderList([featureA, featureB]);
+
+    await user.click(screen.getAllByRole('button', { name: /Delete/ })[1]);
+
+    const options = confirmSpy.mock.calls.at(-1)?.[0] as { title: string; message: ReactNode };
+    expect(options.title).toBe('Are you sure you want to delete this feature?');
+
+    // The message is a node, so read it the way the modal will render it.
+    const { container } = render(<>{options.message}</>);
+    expect(container.textContent).toBe(
+      'Feature 2 will be permanently deleted from this checklist. This action cannot be undone.',
+    );
+  });
+});
+
 describe('FeatureList composites', () => {
   it('groups the chosen features and shows them under the composite', async () => {
     const user = userEvent.setup();
@@ -235,8 +279,8 @@ describe('FeatureList composites', () => {
     expect(anchor.featureDescriptionCode).toBe('ARCH');
     expect(saved.filter((f) => f.compositeFeature === anchor.featureLabel)).toHaveLength(2);
 
-    // The composite shows its own feature number, not an invented name.
-    expect(compositeLabel()).toBe(anchor.featureLabel);
+    // Named for what it is, keeping its own feature number rather than an invented name.
+    expect(compositeLabel()).toBe(`Composite ${anchor.featureLabel}`);
     expect(screen.getByText('2 features assessed as one unit')).toBeTruthy();
   });
 
@@ -261,6 +305,23 @@ describe('FeatureList composites', () => {
     // rather than leaving a dead button.
     expect(within(dialog).getByRole('alert').textContent).toMatch(/Select at least two features/);
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('marks the two required codes with the same red asterisk as every other field', async () => {
+    // These two labels carried their own bare "*", which inherited the label colour and read grey
+    // beside the red markers on the legend and the "Features in this composite" heading above them.
+    const user = userEvent.setup();
+    renderList([featureA, featureB]);
+
+    await user.click(screen.getByRole('button', { name: /Create composite/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    for (const label of ['Feature class', 'Information source']) {
+      const marker = Array.from(dialog.querySelectorAll('.cds--label, label')).find((el) =>
+        el.textContent?.startsWith(label),
+      );
+      expect(marker?.querySelector('.required-asterisk')).toBeTruthy();
+    }
   });
 
   it('names the required fields left blank instead of blocking the button', async () => {
@@ -593,5 +654,23 @@ describe('Create composite guidance', () => {
     expect(
       within(dialog).queryByText(/culturally, spatially, or functionally connected/),
     ).toBeNull();
+  });
+});
+
+describe('FeatureList — a value the column cannot store', () => {
+  it('marks a non-numeric trail damage on its field instead of sending the save', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderList([
+      { ...featureA, trailfeatures: 'true', isthereevidenceofdamage: 'true', trailLength: 'tset' },
+      featureB,
+    ]);
+
+    await user.click(screen.getAllByRole('button', { name: /Edit/ })[0]);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    // The save used to go out and come back as a toast reading `For input string: "tset"`, which
+    // named neither the field nor the feature it came from.
+    expect(screen.getByText('Estimated trail damage (%) must be a whole number.')).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

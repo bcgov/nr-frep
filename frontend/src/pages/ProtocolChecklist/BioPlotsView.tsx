@@ -31,10 +31,12 @@ import type {
   BioStandRow,
   BioStratumRow,
 } from '@/types/protocolChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import { useSettledFields } from '@/hooks/useSettledFields';
 import {
   PLOT_TEXT_LIMITS,
   cwdRowErrors,
@@ -45,6 +47,7 @@ import {
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { byteLength } from '@/utils/textLimits';
+import { errorsForSettledFields } from '@/utils/validation';
 
 /**
  * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
@@ -352,6 +355,7 @@ const BioPlotsView: FC<Props> = ({
     try {
       setCurrent(await API.protocolChecklist.getBioPlot(plotId));
       setShowErrors(false);
+      resetSettled();
     } catch (err) {
       reportError('Could not load the plot', err);
     } finally {
@@ -361,6 +365,7 @@ const BioPlotsView: FC<Props> = ({
 
   const addPlot = () => {
     setShowErrors(false);
+    resetSettled();
     setCurrent({
       stratumId,
       // Default "Evaluated by" to the checklist's Evaluator; claimable via "Assign it to me".
@@ -406,19 +411,55 @@ const BioPlotsView: FC<Props> = ({
 
   const headerErrors: Record<string, string> =
     current && !readOnly ? plotHeaderErrors(current, stratumType, takenPlotNumbers) : {};
-  const plotFieldError = (key: string): string => (showErrors ? (headerErrors[key] ?? '') : '');
+  // Before the first save attempt the same rules run in 'typing' mode, which keeps only what no
+  // further typing can rescue: a letter in a number, a decimal place too many, a value over the
+  // maximum, an Easting already past six digits. Minimums, exact lengths, the duplicate plot number
+  // and every blank required field wait for Save — each is a state a correct value passes through.
+  const typingErrors: Record<string, string> =
+    current && !readOnly ? plotHeaderErrors(current, stratumType, takenPlotNumbers, 'typing') : {};
+  // Between the two: a field the user has filled in and moved on from is finished enough to judge
+  // against the full rules — a short Easting, a measurement below its floor, a plot number already
+  // taken. A field still blank is exempt, so tabbing through an empty plot marks nothing.
+  const { settled, markSettled, resetSettled } = useSettledFields();
+  const settledErrors = errorsForSettledFields(headerErrors, settled, (key) =>
+    typeof (current as Record<string, unknown> | null)?.[key] === 'string'
+      ? ((current as Record<string, string>)[key] ?? '')
+      : '',
+  );
+  const plotFieldError = (key: string): string =>
+    (showErrors ? headerErrors[key] : (settledErrors[key] ?? typingErrors[key])) ?? '';
+  /** One sub-table cell, on the same three-way gate as a header field. */
+  const rowError = (
+    caption: string,
+    rows: Array<Record<string, string | undefined>>,
+    rules: (
+      row: Record<string, string | undefined>,
+      mode?: ValidationMode,
+    ) => Record<string, string>,
+    index: number,
+    colKey: string,
+  ): string => {
+    const row = rows[index] ?? {};
+    if (showErrors) return rules(row)[colKey] ?? '';
+    const left = settled.has(`${caption}-${index}-${colKey}`) && (row[colKey] ?? '').trim() !== '';
+    return (left ? rules(row)[colKey] : rules(row, 'typing')[colKey]) ?? '';
+  };
   const standError = (index: number, colKey: string): string =>
-    showErrors
-      ? (standRowErrors(
-          ((current?.standTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
-        )[colKey] ?? '')
-      : '';
+    rowError(
+      'Stand',
+      (current?.standTable ?? []) as Array<Record<string, string | undefined>>,
+      standRowErrors,
+      index,
+      colKey,
+    );
   const cwdError = (index: number, colKey: string): string =>
-    showErrors
-      ? (cwdRowErrors(
-          ((current?.cwdTable ?? [])[index] ?? {}) as Record<string, string | undefined>,
-        )[colKey] ?? '')
-      : '';
+    rowError(
+      'CWD',
+      (current?.cwdTable ?? []) as Array<Record<string, string | undefined>>,
+      cwdRowErrors,
+      index,
+      colKey,
+    );
 
   // Blocks Save while any header/sub-table error remains (incl. the legacy "Trees exist ⇒ ≥1 stand
   // row" consistency check). See plotHasBlockingErrors.
@@ -453,8 +494,13 @@ const BioPlotsView: FC<Props> = ({
     if (!row.plotId) return;
     if (
       !(await confirm({
-        title: 'Delete plot?',
-        message: `Delete plot ${row.plotNumber || row.plotId}? This can't be undone.`,
+        title: 'Are you sure you want to delete this plot?',
+        message: (
+          <>
+            <strong>Plot {row.plotNumber || row.plotId}</strong> will be permanently deleted from
+            this stratum. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;
@@ -580,6 +626,7 @@ const BioPlotsView: FC<Props> = ({
       maxLength,
       disabled,
       onChange: (e: { target: { value: string } }) => set(key, e.target.value),
+      onBlur: () => markSettled(key),
       invalid: error !== '',
       invalidText: error,
     };
@@ -745,6 +792,7 @@ const BioPlotsView: FC<Props> = ({
         maxLength={col.maxLength}
         value={value}
         invalid={error !== ''}
+        onBlur={() => markSettled(`${caption}-${index}-${col.key}`)}
         onChange={(e) => onChange(index, col.key, e.target.value)}
       />,
       error,

@@ -358,3 +358,48 @@ describe('BioOpeningView — browser autofill', () => {
     expect(stillAutofillable()).toEqual([]);
   });
 });
+
+/**
+ * The override is the tab's one typed number. A value it cannot store is named as it is typed; the
+ * floor it passes through on the way up waits until the field is left. See utils/validation.ts.
+ */
+describe('BioOpeningView — the FREP gross area override', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const openEditor = async () => {
+    api.getBiodiversityOpening.mockResolvedValue({
+      checklistId: '9001',
+      evaluationDate: '2024-06-01',
+      teamLeadNameId: 'IDIR\\ME',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
+      locationDescription: 'A block by the lake',
+      revisionCount: '3',
+    });
+    config.getChecklistAnswers.mockResolvedValue([{ code: 'N', description: 'No' }]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    return screen.getByLabelText(/FREP gross area override/i);
+  };
+
+  it('names a letter as it is typed', async () => {
+    const override = await openEditor();
+
+    await userEvent.type(override, 'lots');
+
+    expect(await screen.findByText(/must be a number/)).toBeTruthy();
+  });
+
+  it('holds a value still below the floor until the field is left', async () => {
+    const override = await openEditor();
+
+    await userEvent.type(override, '0');
+    // 0 is the first keystroke of 0.5.
+    expect(screen.queryByText(/must be at least/)).toBeNull();
+
+    await userEvent.tab();
+    expect(await screen.findByText(/must be at least 0.01/)).toBeTruthy();
+  });
+});

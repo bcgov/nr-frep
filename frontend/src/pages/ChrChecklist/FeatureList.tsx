@@ -205,8 +205,15 @@ const FeatureList: FC<{
     const label = features[index]?.featureLabel;
     if (
       !(await confirm({
-        title: 'Delete feature?',
-        message: `Delete feature ${label ?? index + 1}? This can't be undone.`,
+        title: 'Are you sure you want to delete this feature?',
+        // The feature is named in bold and the consequence spelled out: the row is about to leave
+        // the checklist for good, and "this can't be undone" alone does not say what goes.
+        message: (
+          <>
+            <strong>Feature {label ?? index + 1}</strong> will be permanently deleted from this
+            checklist. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;
@@ -357,7 +364,11 @@ const FeatureList: FC<{
                     // row cannot contain rows, so they follow it and are tied to it visually.
                     <Fragment key={anchor.id ?? `composite-${anchor.featureLabel}`}>
                       <TableRow className="chr-features__composite-row">
-                        <TableCell>{name}</TableCell>
+                        {/* Named for what it is. The row still carries the composite's own feature
+                            number — the caption beneath it says how many features are grouped — but
+                            beside the plain numbers around it, a bare "11" gave no clue that this
+                            row is the group rather than another feature. */}
+                        <TableCell>{name ? `Composite ${name}` : 'Composite'}</TableCell>
                         <TableCell>{orDash(classLabel(anchor.featureDescriptionCode))}</TableCell>
                         <TableCell>{orDash(sourceLabel(anchor.featureInfoSourceCode))}</TableCell>
                         <TableCell>{orDash(anchor.featureDescription)}</TableCell>

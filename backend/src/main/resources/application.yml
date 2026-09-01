@@ -56,6 +56,27 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # Pin the decimal separator for every pooled connection.
+      #
+      # The legacy FREP_2xx packages declare every parameter VARCHAR2 and then hand the numeric ones
+      # to setters that take a NUMBER — e.g. FREP_210_BIO_OPENING.SAVE's p_frep_wtp_override goes to
+      # frep_biodiversity_checklist.set_frep_wtp_override(p_value IN NUMBER). That implicit
+      # VARCHAR2 -> NUMBER conversion runs under the *session's* NLS_NUMERIC_CHARACTERS, which the
+      # thin driver derives from the JVM's default locale unless it is set here. Where that decimal
+      # separator is not ".", every scalar decimal the app sends fails with
+      # "ORA-06502: PL/SQL: numeric or value error: character to number conversion error" while whole
+      # numbers save cleanly — confirmed against the Opening's FREP gross area override and the
+      # plot's fixed area radius. Stratum size, % windthrown, full count area and the rest of the
+      # scalar decimals ride the same path.
+      #
+      # Not the same path as the plot sub-tables: their numbers are VARRAY object attributes, parsed
+      # to BigDecimal in Java (AbstractFrepRepository#numberAttribute) and bound as real NUMBERs, so
+      # DBH and height were never affected. Reads are unaffected either way — numberString goes
+      # through BigDecimal#toPlainString.
+      #
+      # The value is decimal separator then group separator, so "." and "," — the ANSI default, and
+      # what every caller here already assumes.
+      connection-init-sql: "ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'"
       data-source-properties:
         javax.net.ssl.trustStoreType: JKS
         javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}

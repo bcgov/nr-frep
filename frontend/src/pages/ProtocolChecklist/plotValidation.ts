@@ -1,6 +1,8 @@
 import type { BioPlot } from '@/types/protocolChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import { isNumberInProgress } from '@/utils/validation';
 
 // Mirrors the legacy FREP212 Frep212ValidationManager save chains (plot header + stand-table and
 // CWD rows) so a bad save is caught inline rather than only at the proc.
@@ -13,11 +15,27 @@ const decimals = (text: string): number => {
   return dot < 0 ? 0 : text.length - dot - 1;
 };
 
-/** Whole number within [min, max]; rejects signs/decimals/letters. */
-const intError = (value: string, label: string, min: number, max: number): string => {
+/**
+ * Whole number within [min, max]; rejects signs/decimals/letters.
+ *
+ * In `'typing'` mode the floor is left alone — a value below it is one the user may still be part
+ * way through — while a value above the ceiling, or one carrying a character that can never belong
+ * in the field, is reported at once. See utils/validation.ts.
+ */
+const intError = (
+  value: string,
+  label: string,
+  min: number,
+  max: number,
+  mode: ValidationMode,
+): string => {
+  if (mode === 'typing' && isNumberInProgress(value)) return '';
   if (!/^-?\d+$/.test(value)) return `${label} must be a whole number.`;
   const n = Number(value);
-  if (n < min || n > max) return `${label} must be a whole number from ${min} to ${max}.`;
+  // Name the end that failed rather than restating the whole rule — these sit in table cells and
+  // beside short inputs, where a full-sentence range message is clipped.
+  if (n > max) return `${label} must be at most ${max}.`;
+  if (mode === 'settled' && n < min) return `${label} must be at least ${min}.`;
   return '';
 };
 
@@ -29,16 +47,19 @@ const floatError = (
   max: number,
   maxDecimals: number,
   exclusiveMin = false,
+  mode: ValidationMode = 'settled',
 ): string => {
+  // "12." is a number half-typed; every other malformed value here holds a character that cannot
+  // belong in the field, so it is reported straight away.
+  if (mode === 'typing' && isNumberInProgress(value)) return '';
   if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) return `${label} must be a number.`;
   if (decimals(value) > maxDecimals) {
     return `${label} can have at most ${maxDecimals} decimal place${maxDecimals === 1 ? '' : 's'}.`;
   }
   const n = Number(value);
-  if ((exclusiveMin ? n <= min : n < min) || n > max) {
-    return exclusiveMin
-      ? `${label} must be greater than ${min} and no more than ${max}.`
-      : `${label} must be between ${min} and ${max}.`;
+  if (n > max) return `${label} must be at most ${max}.`;
+  if (mode === 'settled' && (exclusiveMin ? n <= min : n < min)) {
+    return exclusiveMin ? `${label} must be over ${min}.` : `${label} must be at least ${min}.`;
   }
   return '';
 };
@@ -51,10 +72,12 @@ const requiredFloat = (
   max: number,
   maxDecimals: number,
   exclusiveMin = false,
-): string =>
-  isBlank(value)
-    ? `${label} is required.`
-    : floatError(value, label, min, max, maxDecimals, exclusiveMin);
+  mode: ValidationMode = 'settled',
+): string => {
+  // A blank field is a gap, not a bad value: reported when the user says the row is finished.
+  if (isBlank(value)) return mode === 'settled' ? `${label} is required.` : '';
+  return floatError(value, label, min, max, maxDecimals, exclusiveMin, mode);
+};
 
 const put = (errors: Record<string, string>, key: string, message: string): void => {
   if (message) errors[key] = message;
@@ -76,9 +99,14 @@ type Getter = (key: string) => string;
  * The checklist-wide rule is separate and unaffected: `FREP_TOMBSTONE` still refuses a submit unless
  * at least one plot really holds all three (`frep.submit.biodiversity.plot.utmrequired`).
  */
-const utmErrors = (e: Record<string, string>, g: Getter, signalled: boolean): void => {
+const utmErrors = (
+  e: Record<string, string>,
+  g: Getter,
+  signalled: boolean,
+  mode: ValidationMode,
+): void => {
   // Owed only on an affirmative signal.
-  if (signalled) {
+  if (signalled && mode === 'settled') {
     if (isBlank(g('utmZone'))) e.utmZone = 'Zone is required.';
     if (isBlank(g('utmEasting'))) e.utmEasting = 'Easting is required.';
     if (isBlank(g('utmNorthing'))) e.utmNorthing = 'Northing is required.';
@@ -87,18 +115,27 @@ const utmErrors = (e: Record<string, string>, g: Getter, signalled: boolean): vo
   // regardless of whether it was owed, and legacy registered its Easting/Northing field validators
   // unconditionally for the same reason. This is the file's standing rule — only a *blank* field is
   // ever exempted (see ADVISORY_WHEN_BLANK).
-  if (!isBlank(g('utmEasting')) && !/^\d{6}$/.test(g('utmEasting'))) {
-    e.utmEasting = 'Easting must be exactly 6 digits.';
-  }
-  if (!isBlank(g('utmNorthing')) && !/^\d{7}$/.test(g('utmNorthing'))) {
-    e.utmNorthing = 'Northing must be exactly 7 digits.';
-  }
+  //
+  // An exact length is the one shape rule a correct value fails on its way in — every six-digit
+  // Easting is typed through one, two, three digits first — so while the user is still typing it is
+  // reported only when the value has gone *past* the length or holds something that is not a digit.
+  const exactDigits = (key: string, label: string, digits: number) => {
+    const value = g(key);
+    if (isBlank(value) || new RegExp(`^\\d{${digits}}$`).test(value)) return;
+    const overshot = /^\d+$/.test(value) && value.length > digits;
+    if (mode === 'settled' || overshot || !/^\d*$/.test(value)) {
+      e[key] = `${label} must be exactly ${digits} digits.`;
+    }
+  };
+  exactDigits('utmEasting', 'Easting', 6);
+  exactDigits('utmNorthing', 'Northing', 7);
 };
 
-const bearingErrors = (e: Record<string, string>, g: Getter): void => {
+const bearingErrors = (e: Record<string, string>, g: Getter, mode: ValidationMode): void => {
   const leg = (key: string, label: string) => {
-    if (isBlank(g(key))) put(e, key, `${label} is required.`);
-    else put(e, key, intError(g(key), label, 0, 359));
+    if (isBlank(g(key))) {
+      if (mode === 'settled') put(e, key, `${label} is required.`);
+    } else put(e, key, intError(g(key), label, 0, 359, mode));
   };
   leg('firstLegTransect', 'Bearing 1st leg');
   leg('secondLegTransect', '2nd leg');
@@ -125,22 +162,25 @@ const plotNumberErrors = (
   e: Record<string, string>,
   g: Getter,
   takenPlotNumbers: readonly string[],
+  mode: ValidationMode,
 ): void => {
   // Matches the Opening tab's Evaluator error: name the remedy, since this field is read-only and
   // "Evaluated by is required" gives no hint that "Assign it to me" is how you fill it.
-  if (isBlank(g('assessorName'))) {
+  if (isBlank(g('assessorName')) && mode === 'settled') {
     e.assessorName = 'An evaluator is required — use "Assign it to me".';
   }
   // FREP_212_BIOPLOT.save_plot rejects a blank plot number (sil.error.usr.isrequired:Plot Number),
   // so enforce it here too; otherwise validate the range when present.
   if (isBlank(g('plotNumber'))) {
-    e.plotNumber = 'Plot # is required.';
+    if (mode === 'settled') e.plotNumber = 'Plot # is required.';
   } else {
-    put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999));
+    put(e, 'plotNumber', intError(g('plotNumber'), 'Plot #', 0, 999, mode));
     // Caught here rather than left to the proc: the number is unique per stratum, and finding that
     // out from a failed save costs the evaluator the round-trip. Only when the number is otherwise
     // valid — "Plot # must be a whole number" is the more useful of the two messages.
-    if (!e.plotNumber && isTaken(g('plotNumber'), takenPlotNumbers)) {
+    // Settled-only: "1" is a legitimate step towards "12", and a plot already numbered 1 would make
+    // every such keystroke a clash.
+    if (mode === 'settled' && !e.plotNumber && isTaken(g('plotNumber'), takenPlotNumbers)) {
       e.plotNumber = `Plot ${g('plotNumber')} already exists in this stratum. Use a different number.`;
     }
   }
@@ -148,17 +188,21 @@ const plotNumberErrors = (
     e.plotComment = `Comments — ${overLimitError(g('plotComment'), PLOT_TEXT_LIMITS.plotComment)}`;
   }
   if (!isBlank(g('basalAreaFactor'))) {
-    put(e, 'basalAreaFactor', intError(g('basalAreaFactor'), 'BAF', 1, 99));
+    put(e, 'basalAreaFactor', intError(g('basalAreaFactor'), 'BAF', 1, 99, mode));
   }
   if (!isBlank(g('fixedAreaRadius'))) {
     put(
       e,
       'fixedAreaRadius',
-      floatError(g('fixedAreaRadius'), 'Fixed area radius', 0.01, 999.99, 2),
+      floatError(g('fixedAreaRadius'), 'Fixed area radius', 0.01, 999.99, 2, false, mode),
     );
   }
   if (!isBlank(g('fullCountArea'))) {
-    put(e, 'fullCountArea', floatError(g('fullCountArea'), 'Full count area', 0.01, 9999.99, 2));
+    put(
+      e,
+      'fullCountArea',
+      floatError(g('fullCountArea'), 'Full count area', 0.01, 9999.99, 2, false, mode),
+    );
   }
 };
 
@@ -199,6 +243,7 @@ export const plotHeaderErrors = (
   stratumType: string,
   /** Plot numbers held by the other plots in this stratum — see {@link isTaken}. */
   takenPlotNumbers: readonly string[] = [],
+  mode: ValidationMode = 'settled',
 ): Record<string, string> => {
   const e: Record<string, string> = {};
   // Read a plot field as a trimmed string; non-string values (e.g. the table arrays) read as ''.
@@ -206,10 +251,12 @@ export const plotHeaderErrors = (
     const raw = (plot as Record<string, unknown>)[k];
     return typeof raw === 'string' ? raw.trim() : '';
   };
-  utmErrors(e, g, g('utmSignal') === 'Y');
-  bearingErrors(e, g);
-  plotNumberErrors(e, g, takenPlotNumbers);
-  measurementMethodErrors(e, g, stratumType);
+  utmErrors(e, g, g('utmSignal') === 'Y', mode);
+  bearingErrors(e, g, mode);
+  plotNumberErrors(e, g, takenPlotNumbers, mode);
+  // Settled-only: naming two measurement methods is a contradiction between fields rather than a bad
+  // value in the one being typed, and it reads as an accusation while the second is half-entered.
+  if (mode === 'settled') measurementMethodErrors(e, g, stratumType);
   return e;
 };
 
@@ -225,27 +272,37 @@ export const PLOT_TEXT_LIMITS: Record<string, number> = {
 
 /** Stand-table (tree) row errors keyed by column key: species + WT class required; DBH/height
  * required, ≤1 decimal, within range. */
-export const standRowErrors = (row: Row): Record<string, string> => {
+export const standRowErrors = (
+  row: Row,
+  mode: ValidationMode = 'settled',
+): Record<string, string> => {
   const e: Record<string, string> = {};
   const g = (k: string) => String(row[k] ?? '').trim();
-  if (isBlank(g('speciesCode'))) e.speciesCode = 'Species is required.';
-  if (isBlank(g('decayClassCode'))) e.decayClassCode = 'WT class is required.';
+  if (isBlank(g('speciesCode')) && mode === 'settled') e.speciesCode = 'Species is required.';
+  if (isBlank(g('decayClassCode')) && mode === 'settled') {
+    e.decayClassCode = 'WT class is required.';
+  }
   // DBH rule is "> 12.5 cm" (legacy help); with 1-decimal precision the smallest valid value is 12.6.
   // Exclusive-min 12.5 enforces exactly that while showing 12.5 (the threshold) in the message.
-  put(e, 'dbh', requiredFloat(g('dbh'), 'DBH', 12.5, 400, 1, true));
-  put(e, 'height', requiredFloat(g('height'), 'Height', 1.4, 99.9, 1));
+  put(e, 'dbh', requiredFloat(g('dbh'), 'DBH', 12.5, 400, 1, true, mode));
+  put(e, 'height', requiredFloat(g('height'), 'Height', 1.4, 99.9, 1, false, mode));
   return e;
 };
 
 /** CWD row errors keyed by column key: species + decay class required; diameter/length required,
  * ≤1 decimal, within range (length must be greater than 0). */
-export const cwdRowErrors = (row: Row): Record<string, string> => {
+export const cwdRowErrors = (
+  row: Row,
+  mode: ValidationMode = 'settled',
+): Record<string, string> => {
   const e: Record<string, string> = {};
   const g = (k: string) => String(row[k] ?? '').trim();
-  if (isBlank(g('speciesCode'))) e.speciesCode = 'Species is required.';
-  if (isBlank(g('decayClassCode'))) e.decayClassCode = 'Decay class is required.';
-  put(e, 'logDiameter', requiredFloat(g('logDiameter'), 'Diameter', 7.6, 400, 1));
-  put(e, 'logLength', requiredFloat(g('logLength'), 'Length', 0, 99.9, 1, true));
+  if (isBlank(g('speciesCode')) && mode === 'settled') e.speciesCode = 'Species is required.';
+  if (isBlank(g('decayClassCode')) && mode === 'settled') {
+    e.decayClassCode = 'Decay class is required.';
+  }
+  put(e, 'logDiameter', requiredFloat(g('logDiameter'), 'Diameter', 7.6, 400, 1, false, mode));
+  put(e, 'logLength', requiredFloat(g('logLength'), 'Length', 0, 99.9, 1, true, mode));
   return e;
 };
 

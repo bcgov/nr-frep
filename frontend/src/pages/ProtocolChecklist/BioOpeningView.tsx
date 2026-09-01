@@ -22,6 +22,7 @@ import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useNotification } from '@/context/notification/useNotification';
+import { useSettledFields } from '@/hooks/useSettledFields';
 import {
   OPENING_REQUIRED_LABELS,
   OPENING_REQUIRED_SECTIONS,
@@ -29,6 +30,7 @@ import {
   evaluationDateRemovalError,
   openingFormatErrors,
   openingRequiredErrors,
+  openingTypingErrors,
   validateOpening,
 } from '@/pages/ProtocolChecklist/openingValidation';
 import { inFormSection } from '@/pages/ProtocolChecklist/tabStatus';
@@ -37,6 +39,7 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength } from '@/utils/textLimits';
+import { errorsForSettledFields } from '@/utils/validation';
 
 /**
  * Biodiversity Opening section (FREP210) — read-only form mirroring the legacy layout, edited
@@ -103,7 +106,26 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
         : {},
     [editing, data, stored],
   );
-  const fieldErrors = showErrors ? allErrors : {};
+  // Before the first save attempt, only what no further typing can rescue: a letter in the override,
+  // a third decimal place, a figure above the ceiling. The rest — blank required fields, and the
+  // floor a value passes through on its way up — waits for Save. See utils/validation.ts.
+  const typingErrors = useMemo<Record<string, string>>(
+    () => (editing && data ? openingTypingErrors(data) : {}),
+    [editing, data],
+  );
+  // Between the two: a field the user has filled in and left is finished enough to judge against
+  // the full rules — the override's floor included. Blank fields stay exempt.
+  const { settled, markSettled, resetSettled } = useSettledFields();
+  const fieldErrors = showErrors
+    ? allErrors
+    : {
+        ...typingErrors,
+        ...errorsForSettledFields(
+          allErrors,
+          settled,
+          (key) => (data as Record<string, string | undefined> | null)?.[key],
+        ),
+      };
 
   // Only a value the column cannot store blocks the save (too long, future date, malformed
   // override) — plus removing an evaluation date the proc has no way to clear. A required field left
@@ -233,6 +255,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
       setData(fresh);
       setStored(fresh);
       setShowErrors(false);
+      resetSettled();
       setEditing(true);
     } catch (err) {
       reportError("We couldn't load the opening", err);
@@ -244,6 +267,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
   const cancel = () => {
     loadData();
     setShowErrors(false);
+    resetSettled();
     setEditing(false);
   };
 
@@ -272,6 +296,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
         labelText={label}
         value={get(key)}
         onChange={(e) => set(key, e.target.value)}
+        onBlur={() => markSettled(key)}
         invalid={Boolean(fieldErrors[key])}
         invalidText={fieldErrors[key]}
       />

@@ -280,8 +280,14 @@ const Photos: FC<{
   const removeAt = async (index: number) => {
     if (
       !(await confirm({
-        title: 'Delete photo?',
-        message: "Delete this photo? This can't be undone.",
+        title: 'Are you sure you want to delete this photo?',
+        // Named the way its card names it, so the dialog and the thing behind it agree.
+        message: (
+          <>
+            <strong>{pictures[index]?.fileName || 'Saved photo'}</strong> will be permanently
+            deleted from this checklist. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;

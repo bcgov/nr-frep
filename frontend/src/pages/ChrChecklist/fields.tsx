@@ -45,6 +45,8 @@ export const TextField: FC<{
   invalid?: boolean;
   invalidText?: string;
   maxLength?: number;
+  /** Called when the field is left, for rules that can only be judged on a finished value. */
+  onBlur?: () => void;
   /** Placement only. Carbon puts this on the `.cds--form-item` wrapper — the grid item itself, so
    *  the field stays a direct child of the grid and keeps its reserved label height. */
   className?: string;
@@ -59,6 +61,7 @@ export const TextField: FC<{
   invalid,
   invalidText,
   maxLength,
+  onBlur,
   className,
 }) => (
   <TextInput
@@ -73,6 +76,7 @@ export const TextField: FC<{
     invalid={invalid}
     invalidText={invalidText}
     maxLength={maxLength}
+    onBlur={onBlur}
     onChange={(e) => onChange(e.target.value)}
   />
 );

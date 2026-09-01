@@ -787,9 +787,10 @@ public class ChrChecklistPersistenceService {
     detail.setManagementAppliedInd(ChrStringUtils.booleanToIndictorInverseLogic(feature.getNoManagement()));
     detail.setRegdArchaeologicalSiteInd(ChrStringUtils.booleanToIndictor(feature.getChrRegisteredSite()));
     detail.setDescription(feature.getFeatureDescription());
-    detail.setAreaWidthMeters(toBigDecimal(feature.getWidthofFeature()));
-    detail.setAreaLengthMeters(toBigDecimal(feature.getLengthofFeature()));
-    detail.setAreaHectares(toBigDecimal(feature.getAreaofFeature()));
+    String onFeature = " for feature " + feature.getFeatureLabel();
+    detail.setAreaWidthMeters(toBigDecimal(feature.getWidthofFeature(), "Width (m)" + onFeature, 6));
+    detail.setAreaLengthMeters(toBigDecimal(feature.getLengthofFeature(), "Length (m)" + onFeature, 6));
+    detail.setAreaHectares(toBigDecimal(feature.getAreaofFeature(), "Area (ha)" + onFeature, 6));
     detail.setFnMgmtRecommendationsInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategyFN()));
     detail.setSitePlanStratsRecommndInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategySP()));
     detail.setPermitIssuedInd(ChrStringUtils.booleanToIndictorInverseLogic(feature.getSitePermitIssued()));
@@ -810,12 +811,14 @@ public class ChrChecklistPersistenceService {
     detail.setDamageIrreversibleAnswerCd(answer);
     detail.setWindthrowMgmtApplicableInd(ChrStringUtils.booleanToIndictor(feature.getWindthrowManagement()));
     detail.setAreaWindfirmInd(ChrStringUtils.booleanToIndictor(feature.getWindthrow()));
-    detail.setEstWindthrowPercent(toShort(feature.getEstwindthrow()));
+    detail.setEstWindthrowPercent(
+        toShort(feature.getEstwindthrow(), "Estimated windthrow (%)" + onFeature, 999));
     detail.setTrailFeaturesApplicableInd(ChrStringUtils.booleanToIndictor(feature.getTrailfeatures()));
     detail.setTrailLocatableInd(ChrStringUtils.booleanToIndictor(feature.getCanthetrailstillbelocated()));
     detail.setTrailLessPassableInd(ChrStringUtils.booleanToIndictor(feature.getHasthetrailbeenmadelesspassble()));
     detail.setTrailAreaDamagedInd(ChrStringUtils.booleanToIndictor(feature.getIsthereevidenceofdamage()));
-    detail.setEstTrailDamagePercent(toShort(feature.getTrailLength()));
+    detail.setEstTrailDamagePercent(
+        toShort(feature.getTrailLength(), "Estimated trail damage (%)" + onFeature, 999));
     detail.setLimitingOperatnlFactorsInd(ChrStringUtils.booleanToIndictor(
         feature.getQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature()));
     detail.setLimitingOperatnlFactorsDesc(feature.getQ4Description());
@@ -1258,16 +1261,70 @@ public class ChrChecklistPersistenceService {
     setUser.accept(userId);
   }
 
-  private BigDecimal toBigDecimal(String value) {
-    return ChrStringUtils.hasAValue(value) ? new BigDecimal(value) : null;
+  /**
+   * Parse a decimal feature field, naming the field when the value cannot be stored. Blank becomes
+   * null, for the same reason as {@link #toShort}.
+   *
+   * <p>Digits after the point are left alone: Oracle rounds them to the column's scale, and refusing
+   * a row over a rounding nicety would reject data the database would have taken. Digits before it
+   * are checked, because past the column's precision the insert fails with ORA-01438 — which reaches
+   * the caller as a database error naming neither the field nor the value.
+   */
+  private BigDecimal toBigDecimal(String value, String label, int units) {
+    if (!ChrStringUtils.hasAValue(value)) {
+      return null;
+    }
+    String entered = value.trim();
+    BigDecimal parsed;
+    try {
+      parsed = new BigDecimal(entered);
+    } catch (NumberFormatException ex) {
+      throw new InvalidParameterException(
+          label + " must be a number (received \"" + entered + "\").");
+    }
+    if (parsed.signum() < 0 || parsed.precision() - parsed.scale() > units) {
+      throw new InvalidParameterException(
+          label + " must be from 0 to " + "9".repeat(units) + " (received \"" + entered + "\").");
+    }
+    return parsed;
   }
 
   /**
-   * A blank value becomes null rather than being skipped, so clearing a number clears the column.
+   * Parse a whole-number feature field, naming the field when the value cannot be stored.
+   *
+   * <p>A blank value becomes null rather than being skipped, so clearing a number clears the column.
    * The detail row is loaded and updated in place, so anything not written keeps its old value.
+   *
+   * <p>{@link NumberFormatException} is an {@link IllegalArgumentException}, which the REST exception
+   * handler answers as a bad request carrying the exception's own text — so an entry of "tset" used
+   * to reach the user as {@code For input string: "tset"}, naming neither the field nor the feature.
+   * The feature editor blocks these before the save now; this is the backstop for the offline
+   * check-in path, which reaches the same code with no editor in front of it.
+   *
+   * <p>{@code max} is the column's range rather than the form's: the editor caps a percentage at 100,
+   * while anything a {@code NUMBER(3)} column holds is accepted here, so a legacy row carrying a
+   * larger value can still be saved. Without the check a five-digit entry parses and then fails at
+   * insert with ORA-01438, naming neither the field nor the value.
    */
-  private Short toShort(String value) {
-    return ChrStringUtils.hasAValue(value) ? Short.parseShort(value.trim()) : null;
+  private Short toShort(String value, String label, int max) {
+    if (!ChrStringUtils.hasAValue(value)) {
+      return null;
+    }
+    String entered = value.trim();
+    // Parsed wide, then range-checked: Short.parseShort reports a five-digit entry as a malformed
+    // number, which is the wrong thing to tell someone who typed a number that is merely too big.
+    long parsed;
+    try {
+      parsed = Long.parseLong(entered);
+    } catch (NumberFormatException ex) {
+      throw new InvalidParameterException(
+          label + " must be a whole number (received \"" + entered + "\").");
+    }
+    if (parsed < 0 || parsed > max) {
+      throw new InvalidParameterException(
+          label + " must be from 0 to " + max + " (received \"" + entered + "\").");
+    }
+    return (short) parsed;
   }
 
   private Date parseDate(String value) {

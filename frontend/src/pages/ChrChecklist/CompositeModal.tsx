@@ -13,6 +13,7 @@ import { useState, type FC } from 'react';
 
 import { Modal } from '@/components/Modal';
 import { CodeSelect } from '@/pages/ChrChecklist/fields';
+import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CompositeDraft } from '@/pages/ChrChecklist/composites';
 import type { Feature } from '@/types/chrChecklist';
@@ -310,11 +311,7 @@ const CompositeModal: FC<{
           <div className="chr-features__composite-codes">
             <CodeSelect
               id="composite-feature-class"
-              labelText={
-                <>
-                  Feature class <span aria-hidden="true">*</span>
-                </>
-              }
+              labelText={requiredLabel('Feature class', true)}
               value={featureClass}
               options={featureClassCodes}
               includeBlank
@@ -325,11 +322,7 @@ const CompositeModal: FC<{
             />
             <CodeSelect
               id="composite-info-source"
-              labelText={
-                <>
-                  Information source <span aria-hidden="true">*</span>
-                </>
-              }
+              labelText={requiredLabel('Information source', true)}
               value={infoSource}
               options={informationSourceCodes}
               includeBlank

@@ -22,9 +22,23 @@ let lastRefreshTime = 0;
  */
 let endingSession = false;
 
-/** Sign out and hard-redirect to the app root (re-entering the IDIR login flow). */
+/**
+ * Sign out and hard-redirect to the app root (re-entering the IDIR login flow).
+ *
+ * <p>Never while offline. Every API call runs {@link ensureSessionFresh} first, and offline that
+ * finds either no token (the user signed out locally — see AuthProvider's offline branch) or a
+ * refresh it cannot perform, because {@code fetchAuthSession} needs the network. Redirecting on
+ * either would drag the user out of the device-local workflow the offline route set exists to serve,
+ * and straight back again on the next request: the redirect reloads the page, the reloaded page
+ * calls the API, and round it goes. There is also nowhere useful to send them — IDIR login cannot
+ * run without a connection.
+ *
+ * <p>Offline the request simply proceeds and fails as a network error, which the callers already
+ * present as an offline state.
+ */
 async function signOutAndRedirect(): Promise<void> {
   if (endingSession) return;
+  if (!navigator.onLine) return;
   endingSession = true;
   try {
     await signOut();

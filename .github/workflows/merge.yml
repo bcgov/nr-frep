@@ -70,21 +70,32 @@ jobs:
     with:
       target: test
 
-  # ── PROD deploy + monitor + promote: DISABLED UNTIL GO-LIVE ═══════════
+  # ── PROD deploy + monitor + promote: DISABLED AGAIN UNTIL GO-LIVE ═════
   #
-  # Standing policy: NO deploys to PROD until go-live (~2026-09-07). Merges to
-  # main deploy TEST only.
+  # History, because the on/off has now happened three times:
+  #   2026-08-10  Disabled. Standing policy: no PROD deploys until go-live.
+  #               PROD was scaled to zero; Deployments, Secrets and the vanity
+  #               Route survived, so bringing it back is a scale-up.
+  #   2026-08-31  Re-enabled to deploy the BIO attachment migration — PROD's
+  #               image predated it, so the scheduler was not in the running
+  #               application and could not be armed. Ran with the backend
+  #               pinned to 1 and the frontend at 0 to keep PROD closed during
+  #               the window. Migration passed its gate the same day.
+  #   2026-08-31  Disabled again, below. Re-enable at go-live (~2026-09-02).
   #
-  # These three jobs were enabled once, deliberately, for the pre-go-live
-  # verification run — vanity cert + URL, Sysdig alert delivery, replica
-  # counts, timezone. That run passed and PROD was then scaled to zero, so the
-  # Deployments, Secrets and vanity Route all still exist and go-live is a
-  # scale-up rather than a rebuild.
+  # Replicas are back at "3"/"3" — the migration pin is gone. Those values are
+  # inert while these jobs are commented out; the live cluster was restored
+  # with `oc` at the same time, so the template and the cluster agree.
   #
   # To re-enable at go-live: uncomment ALL THREE together and merge. Both
   # `monitor-prod` and `promote` declare `needs: [deploy-prod]`, so leaving
   # either one active on its own makes the WHOLE workflow file invalid —
   # every run fails, including TEST.
+  #
+  # ⚠ Before that merge, re-run the BIO attachment migration. The legacy
+  # application kept writing to PROD through go-live, and any row it wrote
+  # after 2026-08-31 has no object. A re-run over an already-migrated corpus
+  # is minutes. See backend/tools/bio-attachment-migration-runbook.md.
   #
   # deploy-prod:
   #   name: PROD Deploys (${{ needs.init.outputs.pr }})

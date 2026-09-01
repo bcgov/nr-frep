@@ -30,6 +30,15 @@ const AppRoutes: FC = () => {
 
   const hasAnyRole = (user?.roles?.length ?? 0) > 0;
 
+  // Which of the four sets is in play. Also the RouterProvider key — see below.
+  const routeSetId = !isLoggedIn
+    ? online
+      ? 'public'
+      : 'offline'
+    : hasAnyRole
+      ? 'protected'
+      : 'no-role';
+
   const routesToUse = useMemo(() => {
     // Offline + not logged in: IDIR login can't run, so serve the offline route set (FREP IMS
     // landing + device-local CHR checklists) instead of the public marketing Landing.
@@ -61,7 +70,13 @@ const AppRoutes: FC = () => {
     // providers pass through to this one — see LayoutProvider.
     <LayoutProvider>
       <Suspense fallback={displayLoading()}>
-        <RouterProvider router={browserRouter} />
+        {/* Keyed so a change of route set remounts the provider. RouterProvider subscribes to the
+            router it is first given and ignores a later one, so swapping the prop alone left the
+            previous set's page on screen. Every other transition between sets happens through a
+            full page load (the federated logout chain, the OAuth redirect), which hid this — until
+            offline sign-out, which has to swap sets in place because a real navigation offline
+            depends on the service worker. Only fires when the set changes, never on navigation. */}
+        <RouterProvider key={routeSetId} router={browserRouter} />
       </Suspense>
     </LayoutProvider>
   );

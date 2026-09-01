@@ -11,11 +11,7 @@ export type JWT = AmplifyJWT;
  * or more per-district {@link CHR_DISTRICT_EDITOR_PREFIX} groups, and its privilege value carries the
  * district codes (a scoped role: `string[]` rather than `null`).
  */
-export const AVAILABLE_ROLES = [
-  'FREP_ADMIN',
-  'FREP_EDITOR',
-  'FREP_CHR_EDITOR',
-] as const;
+export const AVAILABLE_ROLES = ['FREP_ADMIN', 'FREP_EDITOR', 'FREP_CHR_EDITOR'] as const;
 
 export type ROLE_TYPE = (typeof AVAILABLE_ROLES)[number];
 

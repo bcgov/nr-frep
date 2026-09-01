@@ -85,6 +85,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // re-prompt for credentials — the landing page says so (OFFLINE_SIGNOUT_FLAG).
     if (!navigator.onLine) {
       sessionStorage.setItem(OFFLINE_SIGNOUT_FLAG, '1');
+      // Move to the landing *before* clearing the user, and without a page load.
+      //
+      // Clearing the user alone left the screen untouched, so signing out looked like a dead
+      // control: the offline route set still serves the page you were most likely on when you
+      // pressed it (/protocol-checklists/chr/:id, /chr/offline, /dashboard), so its catch-all never
+      // fires and nothing moves. The "signed out on this device" notice lives on the landing page,
+      // so it was never seen either.
+      //
+      // history.replaceState rather than location.assign: a real navigation offline depends on the
+      // service worker being active to serve index.html from cache, and being wrong about that
+      // strands the user on the browser's error page — the exact failure this branch exists to
+      // avoid. AppRoutes rebuilds the router when `user` changes, and the new router reads
+      // window.location, so the swap below lands on the landing with no network involved.
+      window.history.replaceState({}, '', env.VITE_BASE_PATH || '/');
       clearStoredTokens();
       setUser(undefined);
       return;

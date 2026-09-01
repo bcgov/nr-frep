@@ -78,6 +78,23 @@ describe('logout while offline', () => {
     expect(screen.getByRole('button').textContent).toBe('signed-out');
   });
 
+  it('moves to the landing so signing out is visible', async () => {
+    // Without this the screen never changed: the offline route set still serves the page the user
+    // was on (a CHR checklist, the offline list, the dashboard), so its catch-all never fires and
+    // logout reads as a dead control.
+    setOnline(false);
+    // The harness stubs window.location, so the move is observed on history instead.
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    await renderProvider();
+
+    await act(async () => screen.getByRole('button').click());
+
+    expect(replaceState).toHaveBeenCalledWith({}, '', '/');
+    // Still no page load — a real navigation offline depends on the service worker being active.
+    expect(assigned).toEqual([]);
+    replaceState.mockRestore();
+  });
+
   it('flags the local sign-out so the landing page can explain it', async () => {
     setOnline(false);
     await renderProvider();

@@ -40,6 +40,8 @@ export const TextField: FC<{
   value: string | undefined;
   onChange: (next: string) => void;
   disabled?: boolean;
+  /** Value is fixed and cannot be typed into — kept legible and focusable, unlike `disabled`. */
+  readOnly?: boolean;
   placeholder?: string;
   helperText?: string;
   invalid?: boolean;
@@ -56,6 +58,7 @@ export const TextField: FC<{
   value,
   onChange,
   disabled,
+  readOnly,
   placeholder,
   helperText,
   invalid,
@@ -71,6 +74,7 @@ export const TextField: FC<{
     labelText={labelText}
     value={value ?? ''}
     disabled={disabled}
+    readOnly={readOnly}
     placeholder={placeholder}
     helperText={helperText}
     invalid={invalid}

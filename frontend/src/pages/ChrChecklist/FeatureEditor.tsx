@@ -773,12 +773,19 @@ const FeatureEditor: FC<{
               beside two selects whose option text runs to fifty. See `__description-row`. */}
           <div className="chr-checklist__description-row">
             <div className="chr-checklist__short-field">
+              {/* System-assigned, never typed. The legacy app shows this as a read-only
+                  "Feature ID" (SummaryCulturalHeritages.vue) and CHR_FEATURE_IDENTITY's column
+                  comment says it is "to be automatically set". Making it editable here caused
+                  silent data loss: composite and association references travel as labels, and
+                  nothing re-points them on rename, so a renamed feature orphans its members and
+                  loses one direction of every association. */}
               <TextField
                 id="feat-label"
                 labelText={requiredLabel('Feature label', true)}
                 value={str('featureLabel')}
                 maxLength={FEATURE_SINGLE_LINE_MAX.featureLabel}
                 disabled={readOnly}
+                readOnly
                 invalid={Boolean(err('featureLabel'))}
                 invalidText={err('featureLabel')}
                 onChange={(v) => onPatch({ featureLabel: v })}

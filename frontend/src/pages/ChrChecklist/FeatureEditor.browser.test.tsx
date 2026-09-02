@@ -345,66 +345,25 @@ describe('FeatureEditor — Additional management strategies', () => {
   });
 });
 
-describe('FeatureEditor — duplicate feature label', () => {
-  it('flags a label another feature already uses', async () => {
+describe('FeatureEditor — feature label is system-assigned', () => {
+  it('does not let the label be typed into', async () => {
     render(
       <FeatureEditor
         feature={baseFeature({ featureLabel: '2' })}
         onPatch={vi.fn()}
         readOnly={false}
-        showErrors
-        takenLabels={['1', '2', '3']}
       />,
     );
 
-    // CHFID_UK is UNIQUE (CHR_CHECKLIST_ID, FEATURE_LABEL): without this the save round-trips and
-    // comes back as a failed save, after the rest of the feature has been filled in.
-    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
-  });
+    const input = await waitFor(() => document.getElementById('feat-label') as HTMLInputElement);
 
-  it('flags the clash without waiting for a save attempt', async () => {
-    // Every other field error waits for Save (showErrors). A duplicate label is a clash with
-    // another record, and the user is typing the very value that clashes.
-    render(
-      <FeatureEditor
-        feature={baseFeature({ featureLabel: '2' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        takenLabels={['2']}
-      />,
-    );
-
-    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
-  });
-
-  it('does not flag a feature against its own label', async () => {
-    render(
-      <FeatureEditor
-        feature={baseFeature({ featureLabel: '2' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        showErrors
-        takenLabels={['1', '3']}
-      />,
-    );
-
-    expect(screen.queryByText('Already used by another feature.')).toBeNull();
-  });
-
-  it('treats labels differing only in case as the same', async () => {
-    // Stricter than the constraint on purpose: Oracle would allow "A" and "a", but composite
-    // membership matches labels case-insensitively, so the pair would be indistinguishable.
-    render(
-      <FeatureEditor
-        feature={baseFeature({ featureLabel: 'a' })}
-        onPatch={vi.fn()}
-        readOnly={false}
-        showErrors
-        takenLabels={['A']}
-      />,
-    );
-
-    expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
+    // The legacy app shows this as a read-only "Feature ID" and CHR_FEATURE_IDENTITY's column
+    // comment says it is "to be automatically set". Editing it silently orphaned composite members
+    // and dropped one direction of every association, because both travel as labels and nothing
+    // re-points them on rename.
+    expect(input.readOnly).toBe(true);
+    // Read-only, not disabled: the value stays legible, focusable and announced.
+    expect(input.disabled).toBe(false);
   });
 });
 

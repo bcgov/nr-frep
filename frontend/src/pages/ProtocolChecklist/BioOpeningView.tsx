@@ -40,6 +40,8 @@ import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength } from '@/utils/textLimits';
 import { errorsForSettledFields } from '@/utils/validation';
+import FormLock from '@/components/core/FormLock';
+import ActionButton from '@/components/core/ActionButton';
 
 /**
  * Biodiversity Opening section (FREP210) — read-only form mirroring the legacy layout, edited
@@ -443,87 +445,87 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
 
   return (
     <div className="rip-form">
-      {incompleteBanner}
-      <div className="protocol-checklist__section-actions">
-        {!editing && showEditControls && (
-          <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
-            <span className="protocol-checklist__edit-label">
-              Edit <Edit />
-            </span>
-          </Button>
-        )}
-        {editing && (
-          <>
-            <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
-              Cancel
+      <FormLock busy={busy}>
+        {incompleteBanner}
+        <div className="protocol-checklist__section-actions">
+          {!editing && showEditControls && (
+            <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
+              <span className="protocol-checklist__edit-label">
+                Edit <Edit />
+              </span>
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void handleSave()}>
-              Save
-            </Button>
-          </>
-        )}
-      </div>
-      {/* Only while editing: the read-only view marks nothing required, so the key would explain
-          a symbol that is not on the page. */}
-      {editing && <RequiredLegend />}
-
-      <fieldset className="rip-form__group">
-        <legend>Evaluation</legend>
-        <div className="rip-form__grid bio-opening__evaluation-grid">
-          {dateField('evaluationDate', 'Evaluation date', true)}
-          {evaluatorField()}
-        </div>
-      </fieldset>
-
-      <fieldset className="rip-form__group">
-        <legend>Opening identification</legend>
-        <div className="rip-form__grid">
-          {/* Read-only RESULTS reference fields (from frep_selected_site) — never editable. */}
-          {cell('Harvest complete date', formatShortDate(get('harvestDate')))}
-          {cell('Net area to be reforested (ha)', get('netArea'))}
-          {cell('Gross area (ha)', get('grossArea'))}
-          {text('frepWtpOverride', 'FREP gross area override (ha)')}
-        </div>
-        {textarea('locationDescription', 'Location description', true)}
-      </fieldset>
-
-      <fieldset className="rip-form__group">
-        <legend>Innovative practices</legend>
-        <div className="rip-form__grid rip-form__grid--wide">
-          {select(
-            'innovativePracticeInd',
-            'Innovative / unique forest practices used?',
-            answers,
-            true,
+          )}
+          {editing && (
+            <>
+              <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+              <ActionButton busy={busy} onClick={() => void handleSave()} />
+            </>
           )}
         </div>
-        {textarea(
-          'innovativePracticesComment',
-          'Please describe',
-          get('innovativePracticeInd') === 'Y',
-        )}
-      </fieldset>
+        {/* Only while editing: the read-only view marks nothing required, so the key would explain
+            a symbol that is not on the page. */}
+        {editing && <RequiredLegend />}
 
-      <fieldset className="rip-form__group">
-        <legend>Evaluator opinion</legend>
-        <div className="rip-form__grid rip-form__grid--wide">
-          {select(
-            'frepSiteEvaluationCode',
-            'Rating (stand-level biodiversity maintained)',
-            ratings,
-            true,
+        <fieldset className="rip-form__group">
+          <legend>Evaluation</legend>
+          <div className="rip-form__grid bio-opening__evaluation-grid">
+            {dateField('evaluationDate', 'Evaluation date', true)}
+            {evaluatorField()}
+          </div>
+        </fieldset>
+
+        <fieldset className="rip-form__group">
+          <legend>Opening identification</legend>
+          <div className="rip-form__grid">
+            {/* Read-only RESULTS reference fields (from frep_selected_site) — never editable. */}
+            {cell('Harvest complete date', formatShortDate(get('harvestDate')))}
+            {cell('Net area to be reforested (ha)', get('netArea'))}
+            {cell('Gross area (ha)', get('grossArea'))}
+            {text('frepWtpOverride', 'FREP gross area override (ha)')}
+          </div>
+          {textarea('locationDescription', 'Location description', true)}
+        </fieldset>
+
+        <fieldset className="rip-form__group">
+          <legend>Innovative practices</legend>
+          <div className="rip-form__grid rip-form__grid--wide">
+            {select(
+              'innovativePracticeInd',
+              'Innovative / unique forest practices used?',
+              answers,
+              true,
+            )}
+          </div>
+          {textarea(
+            'innovativePracticesComment',
+            'Please describe',
+            get('innovativePracticeInd') === 'Y',
           )}
-        </div>
-        {textarea('evaluatorOpinionComment', 'Rationale')}
-      </fieldset>
+        </fieldset>
 
-      <fieldset className="rip-form__group">
-        <legend>Invasive plants</legend>
-        <div className="rip-form__grid rip-form__grid--wide">
-          {select('invasivePlantIndicator', 'Invasive plant species present?', answers, true)}
-        </div>
-        {textarea('invasivePlantComment', 'Comments', get('invasivePlantIndicator') === 'Y')}
-      </fieldset>
+        <fieldset className="rip-form__group">
+          <legend>Evaluator opinion</legend>
+          <div className="rip-form__grid rip-form__grid--wide">
+            {select(
+              'frepSiteEvaluationCode',
+              'Rating (stand-level biodiversity maintained)',
+              ratings,
+              true,
+            )}
+          </div>
+          {textarea('evaluatorOpinionComment', 'Rationale')}
+        </fieldset>
+
+        <fieldset className="rip-form__group">
+          <legend>Invasive plants</legend>
+          <div className="rip-form__grid rip-form__grid--wide">
+            {select('invasivePlantIndicator', 'Invasive plant species present?', answers, true)}
+          </div>
+          {textarea('invasivePlantComment', 'Comments', get('invasivePlantIndicator') === 'Y')}
+        </fieldset>
+      </FormLock>
     </div>
   );
 };

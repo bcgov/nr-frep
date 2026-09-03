@@ -16,6 +16,7 @@ import type { Contact } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { labelFor, useContactRoleCodes } from '@/pages/ChrChecklist/useChrCodeLists';
+import ActionButton from '@/components/core/ActionButton';
 
 const fullName = (c: Contact) => `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
 
@@ -102,9 +103,7 @@ const Contacts: FC<{
       <div className="rip-form">
         <div className="protocol-checklist__section-actions">
           {!readOnly && (
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           )}
           <Button
             kind="ghost"

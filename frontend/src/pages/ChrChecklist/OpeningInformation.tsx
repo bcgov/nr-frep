@@ -20,6 +20,7 @@ import {
 } from '@/pages/ChrChecklist/checklistValidation';
 import { OPENING_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
+import ActionButton from '@/components/core/ActionButton';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -118,9 +119,7 @@ const OpeningInformation: FC<{
             >
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           </>
         )}
       </div>

@@ -624,3 +624,20 @@ nav.#{variables.$bcgov-prefix}--side-nav,
 .cds--icon-tooltip > .cds--popover {
   display: none;
 }
+
+/* ------- FormLock -------
+   A fieldset used only to disable a section while its save is in flight, so it must not bring any
+   of a fieldset's own box with it. `min-width: 0` matters most: a fieldset's intrinsic minimum
+   width is its content, which breaks flex and grid children that expect to be allowed to shrink.
+------------------------- */
+.form-lock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  &[disabled] {
+    /* Says the section is not accepting input, without moving anything. */
+    opacity: 0.6;
+  }
+}

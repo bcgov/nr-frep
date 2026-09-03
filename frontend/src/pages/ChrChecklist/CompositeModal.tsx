@@ -1,4 +1,5 @@
 import { Add, TrashCan } from '@carbon/icons-react';
+import FormLock from '@/components/core/FormLock';
 import {
   Button,
   Checkbox,
@@ -264,127 +265,132 @@ const CompositeModal: FC<{
       primaryButtonText={editing ? 'Save' : 'Create composite'}
       secondaryButtonText="Cancel"
       primaryButtonDisabled={busy}
+      loadingStatus={busy ? 'active' : 'inactive'}
+      loadingDescription={editing ? 'Saving…' : 'Creating…'}
       size="md"
       onRequestSubmit={submit}
       onRequestClose={onCancel}
     >
-      {/* Editing membership is only about which features belong, so the composite's own class and
-          source are not restated here — those are the anchor's, edited through Edit. */}
-      {editing ? (
-        <>
-          <p className="chr-features__composite-intro">
-            {`Clear a selection to remove a feature from the composite. Selecting a feature from another composite moves it to ${anchorName ?? 'this composite'}.`}
-          </p>
-          {/* The requirement line doubles as the error: repeating "Select at least two features"
-              underneath itself in red says nothing the reader did not just read. */}
-          <p
-            className={`chr-features__composite-required${
-              memberError ? ' chr-features__composite-required--error' : ''
-            }`}
-            role={memberError ? 'alert' : undefined}
-          >
-            <span aria-hidden="true">*</span> Select at least two features.
-          </p>
-        </>
-      ) : (
-        <>
-          {/* Moved here from the feature editor: the concept needs explaining at the point someone
-              decides to group features, not while they are describing one. What a composite *is*
-              comes first, then the rule for using this dialog. */}
-          <p className="chr-features__composite-intro">
-            A composite feature is a group of two or more associated cultural heritage features that
-            are assessed together because they are culturally, spatially, or functionally connected.
-          </p>
-          <p className="chr-features__composite-intro">
-            <strong>Example:</strong> A cultural trail and an adjacent berry harvesting area that
-            occur together and are protected within the same area could be assessed as one composite
-            feature rather than as two separate features.
-          </p>
-          <p className="chr-features__composite-intro">
-            A composite is assessed as one record, so only group features that received the same
-            management and responded to it the same way.
-          </p>
-          <p className="chr-features__composite-required">
-            <span aria-hidden="true">*</span> Required field.
-          </p>
 
-          <div className="chr-features__composite-codes">
-            <CodeSelect
-              id="composite-feature-class"
-              labelText={requiredLabel('Feature class', true)}
-              value={featureClass}
-              options={featureClassCodes}
-              includeBlank
-              disabled={busy}
-              invalid={Boolean(classError)}
-              invalidText={classError}
-              onChange={setFeatureClass}
-            />
-            <CodeSelect
-              id="composite-info-source"
-              labelText={requiredLabel('Information source', true)}
-              value={infoSource}
-              options={informationSourceCodes}
-              includeBlank
-              disabled={busy}
-              invalid={Boolean(sourceError)}
-              invalidText={sourceError}
-              onChange={setInfoSource}
-            />
+      <FormLock busy={busy}>        {/* Editing membership is only about which features belong, so the composite's own class and
+            source are not restated here — those are the anchor's, edited through Edit. */}
+        {editing ? (
+          <>
+            <p className="chr-features__composite-intro">
+              {`Clear a selection to remove a feature from the composite. Selecting a feature from another composite moves it to ${anchorName ?? 'this composite'}.`}
+            </p>
+            {/* The requirement line doubles as the error: repeating "Select at least two features"
+                underneath itself in red says nothing the reader did not just read. */}
+            <p
+              className={`chr-features__composite-required${
+                memberError ? ' chr-features__composite-required--error' : ''
+              }`}
+              role={memberError ? 'alert' : undefined}
+            >
+              <span aria-hidden="true">*</span> Select at least two features.
+            </p>
+          </>
+        ) : (
+          <>
+            {/* Moved here from the feature editor: the concept needs explaining at the point someone
+                decides to group features, not while they are describing one. What a composite *is*
+                comes first, then the rule for using this dialog. */}
+            <p className="chr-features__composite-intro">
+              A composite feature is a group of two or more associated cultural heritage features that
+              are assessed together because they are culturally, spatially, or functionally connected.
+            </p>
+            <p className="chr-features__composite-intro">
+              <strong>Example:</strong> A cultural trail and an adjacent berry harvesting area that
+              occur together and are protected within the same area could be assessed as one composite
+              feature rather than as two separate features.
+            </p>
+            <p className="chr-features__composite-intro">
+              A composite is assessed as one record, so only group features that received the same
+              management and responded to it the same way.
+            </p>
+            <p className="chr-features__composite-required">
+              <span aria-hidden="true">*</span> Required field.
+            </p>
+
+            <div className="chr-features__composite-codes">
+              <CodeSelect
+                id="composite-feature-class"
+                labelText={requiredLabel('Feature class', true)}
+                value={featureClass}
+                options={featureClassCodes}
+                includeBlank
+                disabled={busy}
+                invalid={Boolean(classError)}
+                invalidText={classError}
+                onChange={setFeatureClass}
+              />
+              <CodeSelect
+                id="composite-info-source"
+                labelText={requiredLabel('Information source', true)}
+                value={infoSource}
+                options={informationSourceCodes}
+                includeBlank
+                disabled={busy}
+                invalid={Boolean(sourceError)}
+                invalidText={sourceError}
+                onChange={setInfoSource}
+              />
+            </div>
+
+            <h3 className="chr-features__composite-subhead">
+              <span aria-hidden="true">*</span> Features in this composite
+            </h3>
+            <p
+              className={`chr-features__composite-hint${
+                memberError ? ' chr-features__composite-required--error' : ''
+              }`}
+              role={memberError ? 'alert' : undefined}
+            >
+              Select at least two features. Add new ones if needed.
+            </p>
+          </>
+        )}
+
+        <div className="chr-features__composite-panel">
+          <div className="chr-features__composite-toolbar">
+            <span>{`${rows.length} feature${rows.length === 1 ? '' : 's'}`}</span>
+            <Button kind="tertiary" size="lg" renderIcon={Add} disabled={busy} onClick={addFeature}>
+              Add a new feature
+            </Button>
           </div>
-
-          <h3 className="chr-features__composite-subhead">
-            <span aria-hidden="true">*</span> Features in this composite
-          </h3>
-          <p
-            className={`chr-features__composite-hint${
-              memberError ? ' chr-features__composite-required--error' : ''
-            }`}
-            role={memberError ? 'alert' : undefined}
-          >
-            Select at least two features. Add new ones if needed.
-          </p>
-        </>
-      )}
-
-      <div className="chr-features__composite-panel">
-        <div className="chr-features__composite-toolbar">
-          <span>{`${rows.length} feature${rows.length === 1 ? '' : 's'}`}</span>
-          <Button kind="tertiary" size="lg" renderIcon={Add} disabled={busy} onClick={addFeature}>
-            Add a new feature
-          </Button>
+          <Table size="lg" className="chr-features__composite-table">
+            <TableHead>
+              <TableRow>
+                <TableHeader />
+                <TableHeader>Feature</TableHeader>
+                <TableHeader>Feature class</TableHeader>
+                <TableHeader>Information source</TableHeader>
+                {additions.length > 0 && <TableHeader>Action</TableHeader>}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((feature, index) => {
+                const label = feature.featureLabel;
+                return (
+                  <CompositeRow
+                    key={feature.id ?? `composite-row-${label ?? index}`}
+                    feature={feature}
+                    index={index}
+                    added={isAddition(feature)}
+                    checked={isChecked(label)}
+                    busy={busy}
+                    showAction={additions.length > 0}
+                    onToggle={() => toggle(label)}
+                    onPatch={(patch) => label && patchAddition(label, patch)}
+                    onRemove={() => label && removeAddition(label)}
+                  />
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
-        <Table size="lg" className="chr-features__composite-table">
-          <TableHead>
-            <TableRow>
-              <TableHeader />
-              <TableHeader>Feature</TableHeader>
-              <TableHeader>Feature class</TableHeader>
-              <TableHeader>Information source</TableHeader>
-              {additions.length > 0 && <TableHeader>Action</TableHeader>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((feature, index) => {
-              const label = feature.featureLabel;
-              return (
-                <CompositeRow
-                  key={feature.id ?? `composite-row-${label ?? index}`}
-                  feature={feature}
-                  index={index}
-                  added={isAddition(feature)}
-                  checked={isChecked(label)}
-                  busy={busy}
-                  showAction={additions.length > 0}
-                  onToggle={() => toggle(label)}
-                  onPatch={(patch) => label && patchAddition(label, patch)}
-                  onRemove={() => label && removeAddition(label)}
-                />
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      </FormLock>
+
     </Modal>
   );
 };

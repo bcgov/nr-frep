@@ -41,6 +41,8 @@ import {
   ungroupDiscardingUndescribed,
   updateComposite,
 } from '@/pages/ChrChecklist/composites';
+import ActionButton from '@/components/core/ActionButton';
+import FormLock from '@/components/core/FormLock';
 import { featureHasErrors } from '@/pages/ChrChecklist/featureValidation';
 import {
   labelFor,
@@ -394,9 +396,7 @@ const FeatureList: FC<{
       <div className="rip-form">
         <div className="protocol-checklist__section-actions">
           {!readOnly && (
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           )}
           <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
             Cancel
@@ -658,55 +658,60 @@ const FeatureList: FC<{
           primaryButtonText="Save associations"
           secondaryButtonText="Cancel"
           primaryButtonDisabled={busy}
+          loadingStatus={busy ? 'active' : 'inactive'}
+          loadingDescription="Saving…"
           size="md"
           onRequestSubmit={() => void saveAssociate()}
           onRequestClose={cancelAssociate}
         >
-          <p className="chr-features__associate-intro">
-            {`Choose which features Feature ${
-              features[associating]?.featureLabel ?? associating + 1
-            } is related to.`}
-          </p>
-          {/* Says what an association does and — as importantly — what it does not do. Grouping
-              features is not the same as grouping their assessments, and a composite is the thing
-              that does the latter. */}
-          <p className="chr-features__associate-intro">
-            Associated features are recorded as related to one another. Each one is still assessed
-            separately and can have a different outcome.
-          </p>
-          <Table size="lg" className="chr-features__associate-table">
-            <TableHead>
-              <TableRow>
-                <TableHeader />
-                <TableHeader>Feature</TableHeader>
-                <TableHeader>Feature class</TableHeader>
-                <TableHeader>Information source</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {features.map((f, i) => {
-                const label = f.featureLabel;
-                if (i === associating || !label) return null;
-                const checked = (features[associating]?.associatedFeatures ?? []).includes(label);
-                return (
-                  <TableRow key={f.id ?? `assoc-${i}`}>
-                    <TableCell>
-                      <Checkbox
-                        id={`assoc-row-${f.id ?? i}`}
-                        labelText={`Associate with feature ${label}`}
-                        hideLabel
-                        checked={checked}
-                        onChange={() => toggleAssociatedFor(associating, label)}
-                      />
-                    </TableCell>
-                    <TableCell>{label}</TableCell>
-                    <TableCell>{orDash(classLabel(f.featureDescriptionCode))}</TableCell>
-                    <TableCell>{orDash(sourceLabel(f.featureInfoSourceCode))}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <FormLock busy={busy}>
+            <p className="chr-features__associate-intro">
+              {`Choose which features Feature ${
+                features[associating]?.featureLabel ?? associating + 1
+              } is related to.`}
+            </p>
+            {/* Says what an association does and — as importantly — what it does not do. Grouping
+                features is not the same as grouping their assessments, and a composite is the thing
+                that does the latter. */}
+            <p className="chr-features__associate-intro">
+              Associated features are recorded as related to one another. Each one is still assessed
+              separately and can have a different outcome.
+            </p>
+            <Table size="lg" className="chr-features__associate-table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader />
+                  <TableHeader>Feature</TableHeader>
+                  <TableHeader>Feature class</TableHeader>
+                  <TableHeader>Information source</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {features.map((f, i) => {
+                  const label = f.featureLabel;
+                  if (i === associating || !label) return null;
+                  const checked = (features[associating]?.associatedFeatures ?? []).includes(label);
+                  return (
+                    <TableRow key={f.id ?? `assoc-${i}`}>
+                      <TableCell>
+                        <Checkbox
+                          id={`assoc-row-${f.id ?? i}`}
+                          labelText={`Associate with feature ${label}`}
+                          hideLabel
+                          checked={checked}
+                          onChange={() => toggleAssociatedFor(associating, label)}
+                        />
+                      </TableCell>
+                      <TableCell>{label}</TableCell>
+                      <TableCell>{orDash(classLabel(f.featureDescriptionCode))}</TableCell>
+                      <TableCell>{orDash(sourceLabel(f.featureInfoSourceCode))}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </FormLock>
+
         </Modal>
       )}
     </div>

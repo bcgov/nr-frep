@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ExternalLink } from '@/components/core/ExternalLink';
+import FormLock from '@/components/core/FormLock';
 import BlockSummary from '@/pages/ChrChecklist/BlockSummary';
 import Contacts from '@/pages/ChrChecklist/Contacts';
 import FeatureList from '@/pages/ChrChecklist/FeatureList';
@@ -1378,72 +1379,84 @@ const ChrChecklistPage: FC = () => {
           </TabList>
           <TabPanels>
             <TabPanel>
-              {tabBanner('opening')}
-              <OpeningInformation
-                value={checkList}
-                onSave={saveOpening}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('opening')}
+                <OpeningInformation
+                  value={checkList}
+                  onSave={saveOpening}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              {tabBanner('blockSummary')}
-              <BlockSummary
-                value={checkList}
-                onSave={saveBlockSummary}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('blockSummary')}
+                <BlockSummary
+                  value={checkList}
+                  onSave={saveBlockSummary}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <Contacts
-                contacts={checkList.contacts ?? EMPTY_CONTACTS}
-                onSave={saveContacts}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                <Contacts
+                  contacts={checkList.contacts ?? EMPTY_CONTACTS}
+                  onSave={saveContacts}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              {tabBanner('features')}
-              <FeatureList
-                features={draftFeatures ?? checkList.features ?? []}
-                onChange={setDraftFeatures}
-                onSave={saveFeatures}
-                onDelete={deleteFeature}
-                onSaveAssociations={saveAssociations}
-                onSaveFeature={saveOneFeature}
-                onCreateComposite={createComposite}
-                onUpdateComposite={updateCompositeGroup}
-                onUngroupComposite={ungroupCompositeGroup}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('features')}
+                <FeatureList
+                  features={draftFeatures ?? checkList.features ?? []}
+                  onChange={setDraftFeatures}
+                  onSave={saveFeatures}
+                  onDelete={deleteFeature}
+                  onSaveAssociations={saveAssociations}
+                  onSaveFeature={saveOneFeature}
+                  onCreateComposite={createComposite}
+                  onUpdateComposite={updateCompositeGroup}
+                  onUngroupComposite={ungroupCompositeGroup}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
+              <FormLock busy={busy}>
+                <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              {tabBanner('attachments')}
-              <Photos
-                pictures={
-                  isOfflineCopy
-                    ? (checkList.pictures ?? []).slice(
-                        photoPage * photoPageSize,
-                        photoPage * photoPageSize + photoPageSize,
-                      )
-                    : (checkList.pictures ?? [])
-                }
-                onAdd={addPhotos}
-                onDelete={deletePhoto}
-                fetchContent={fetchPhotoContent}
-                page={photoPage}
-                pageSize={photoPageSize}
-                totalCount={isOfflineCopy ? (checkList.pictures ?? []).length : photoTotal}
-                onPageChange={(nextPage, nextSize) => void loadPhotos(nextPage, nextSize)}
-                readOnly={readOnly}
-                busy={busy}
-                active={tab === 5}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('attachments')}
+                <Photos
+                  pictures={
+                    isOfflineCopy
+                      ? (checkList.pictures ?? []).slice(
+                          photoPage * photoPageSize,
+                          photoPage * photoPageSize + photoPageSize,
+                        )
+                      : (checkList.pictures ?? [])
+                  }
+                  onAdd={addPhotos}
+                  onDelete={deletePhoto}
+                  fetchContent={fetchPhotoContent}
+                  page={photoPage}
+                  pageSize={photoPageSize}
+                  totalCount={isOfflineCopy ? (checkList.pictures ?? []).length : photoTotal}
+                  onPageChange={(nextPage, nextSize) => void loadPhotos(nextPage, nextSize)}
+                  readOnly={readOnly}
+                  busy={busy}
+                  active={tab === 5}
+                />
+              </FormLock>
             </TabPanel>
           </TabPanels>
         </Tabs>

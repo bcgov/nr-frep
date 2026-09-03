@@ -1,6 +1,12 @@
 package ca.bc.gov.nrs.frep.controller.v1;
 
+import ca.bc.gov.nrs.frep.struct.v1.frep.AssociationsRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeCreateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUngroupRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUpdateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import ca.bc.gov.nrs.frep.endpoint.v1.ChrChecklistApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.chr.ChrChecklistService;
@@ -84,6 +90,48 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
   @Override
   public ResponseEntity<Void> deletePhoto(long id, long photoId, String deviceCheckoutGuid) {
     chrChecklistService.deletePhoto(id, photoId, deviceCheckoutGuid);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> createComposite(
+      long id, CompositeCreateRequest request) {
+    return ResponseEntity.ok(chrChecklistService.createComposite(id, request));
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> ungroupComposite(
+      long id, long anchorId, CompositeUngroupRequest request) {
+    return ResponseEntity.ok(chrChecklistService.ungroupComposite(id, anchorId, request));
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> updateComposite(
+      long id, long anchorId, CompositeUpdateRequest request) {
+    return ResponseEntity.ok(chrChecklistService.updateComposite(id, anchorId, request));
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> createFeature(long id, FeatureSaveRequest request) {
+    return ResponseEntity.ok(chrChecklistService.createFeature(id, request));
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> saveFeature(
+      long id, long featureId, FeatureSaveRequest request) {
+    return ResponseEntity.ok(chrChecklistService.saveFeature(id, featureId, request));
+  }
+
+  @Override
+  public ResponseEntity<FeatureSaveResponse> saveFeatureAssociations(
+      long id, long featureId, AssociationsRequest request) {
+    return ResponseEntity.ok(
+        chrChecklistService.saveFeatureAssociations(id, featureId, request));
+  }
+
+  @Override
+  public ResponseEntity<Void> deleteFeature(long id, long featureId, String revisionCount) {
+    chrChecklistService.deleteFeature(id, featureId, revisionCount);
     return ResponseEntity.noContent().build();
   }
 

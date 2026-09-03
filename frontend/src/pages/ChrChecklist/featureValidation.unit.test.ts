@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { Feature } from '@/types/chrChecklist';
 
-import { featureBlockingErrors, featureTypingErrors } from '@/pages/ChrChecklist/featureValidation';
+import {
+  duplicateLabelError,
+  featureBlockingErrors,
+  featureHasErrors,
+  featureTypingErrors,
+} from '@/pages/ChrChecklist/featureValidation';
 
 const feature = (over: Partial<Feature> = {}): Feature =>
   ({ featureLabel: '1', ...over }) as Feature;
@@ -48,5 +53,39 @@ describe('featureTypingErrors', () => {
   it('says nothing about a required field left blank', () => {
     // Blank is a gap, not a bad value — marked and counted, but never nagged about mid-edit.
     expect(featureTypingErrors(feature({ ofCMTs: 'true' }))).toEqual({});
+  });
+});
+
+/**
+ * The label is system-assigned and its field is read-only, so this can no longer be provoked by
+ * typing — but `CHFID_UK` is still UNIQUE (CHR_CHECKLIST_ID, FEATURE_LABEL), and the check still
+ * gates the feature through `featureHasErrors`. Covered here because the browser tests that used to
+ * exercise it drove the message through the field, which now renders no invalid state.
+ */
+describe('duplicateLabelError', () => {
+  it('flags a label another feature already uses', () => {
+    expect(duplicateLabelError(feature({ featureLabel: '2' }), ['1', '2', '3'])).toEqual({
+      featureLabel: 'Already used by another feature.',
+    });
+  });
+
+  it('does not flag a feature against labels it does not clash with', () => {
+    expect(duplicateLabelError(feature({ featureLabel: '2' }), ['1', '3'])).toEqual({});
+  });
+
+  it('treats labels differing only in case as the same', () => {
+    // Stricter than the constraint on purpose: Oracle would allow "A" and "a", but composite
+    // membership matches labels case-insensitively, so the pair would be indistinguishable.
+    expect(duplicateLabelError(feature({ featureLabel: 'a' }), ['A'])).toEqual({
+      featureLabel: 'Already used by another feature.',
+    });
+  });
+
+  it('says nothing about a feature with no label yet', () => {
+    expect(duplicateLabelError(feature({ featureLabel: '' }), ['1'])).toEqual({});
+  });
+
+  it('still fails the feature through featureHasErrors', () => {
+    expect(featureHasErrors(feature({ featureLabel: '2' }), ['2'])).toBe(true);
   });
 });

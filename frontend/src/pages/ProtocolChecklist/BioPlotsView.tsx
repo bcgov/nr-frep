@@ -48,6 +48,8 @@ import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { byteLength } from '@/utils/textLimits';
 import { errorsForSettledFields } from '@/utils/validation';
+import FormLock from '@/components/core/FormLock';
+import ActionButton from '@/components/core/ActionButton';
 
 /**
  * Biodiversity Plots section (FREP212) — edited inline. Plots are stratum-scoped, so a Stratum
@@ -884,227 +886,227 @@ const BioPlotsView: FC<Props> = ({
 
   return (
     <div className="rip-form">
-      <OutstandingPanel groups={outstanding} tone={tone} />
-      {/* The plots table and the plot form are mutually exclusive — the table is hidden
-          while a plot form is open (mirrors the Stratum summary tab). */}
-      {!current && (
-        <>
-          {/* Two aligned columns: Stratum / Stratum type on the left, Add plot / # of plots
-              completed on the right. */}
-          <div className="bio-plot__header">
-            <Select
-              autoComplete="off"
-              id="plots-stratum"
-              labelText="Stratum"
-              value={stratumId}
-              onChange={(e) => setStratumId(e.target.value)}
-            >
-              {strata.map((s) => (
-                <SelectItem
-                  key={s.stratumId}
-                  value={s.stratumId ?? ''}
-                  text={s.stratumNumber || s.stratumId || ''}
-                />
-              ))}
-            </Select>
-            {!readOnly ? (
-              <Button
-                kind="tertiary"
-                size="lg"
-                className="bio-strata__add"
-                renderIcon={Add}
-                disabled={busy}
-                onClick={addPlot}
+      <FormLock busy={busy}>
+        <OutstandingPanel groups={outstanding} tone={tone} />
+        {/* The plots table and the plot form are mutually exclusive — the table is hidden
+            while a plot form is open (mirrors the Stratum summary tab). */}
+        {!current && (
+          <>
+            {/* Two aligned columns: Stratum / Stratum type on the left, Add plot / # of plots
+                completed on the right. */}
+            <div className="bio-plot__header">
+              <Select
+                autoComplete="off"
+                id="plots-stratum"
+                labelText="Stratum"
+                value={stratumId}
+                onChange={(e) => setStratumId(e.target.value)}
               >
-                Add plot
-              </Button>
-            ) : (
-              <div />
-            )}
-            {roField('Stratum type', stratumTypeLabel)}
-            {roField('# of plots completed', `${plotsCompleted} of ${plotsExpected || '—'}`)}
-          </div>
-
-          <div className="bio-strata">
-            {rows.length > 0 && (
-              <Table size="sm" className="bio-strata__table">
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Plot number</TableHeader>
-                    <TableHeader>Assessor name</TableHeader>
-                    <TableHeader>Action</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.plotId}>
-                      <TableCell>{row.plotNumber || row.plotId}</TableCell>
-                      <TableCell>{row.assessorDisplayName || row.assessorName}</TableCell>
-                      <TableCell className="table-actions">
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          renderIcon={Edit}
-                          disabled={busy}
-                          onClick={() => void select(row.plotId)}
-                        >
-                          Edit
-                        </Button>
-                        {!readOnly && (
-                          <Button
-                            kind="danger--ghost"
-                            size="sm"
-                            renderIcon={TrashCan}
-                            disabled={busy}
-                            onClick={() => void deleteRow(row)}
-                          >
-                            Delete
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </>
-      )}
-
-      {current && (
-        <>
-          {/* Actions at the top, mirroring the Stratum summary tab. */}
-          <div className="protocol-checklist__section-actions">
-            {!readOnly && (
-              <Button size="lg" disabled={busy} onClick={() => void handleSave()}>
-                Save
-              </Button>
-            )}
-            <Button kind="ghost" size="lg" disabled={busy} onClick={() => setCurrent(null)}>
-              Cancel
-            </Button>
-          </div>
-
-          {/* Under the buttons, directly above the fields it describes — and only where fields are
-              marked, which is the open form, not the list behind it. */}
-          {!readOnly && <RequiredLegend />}
-
-          {stratumInfo(true)}
-
-          <fieldset className="rip-form__group">
-            <legend>Plot identification</legend>
-            <div className="rip-form__grid">
-              {textField('plotNumber', 'Plot #', 3, false, true)}
-              {evaluatedByField()}
-            </div>
-            {/* The checkbox sits between the plot's own details and the coordinates, because it is
-                the switch that governs the row beneath it: ticking it disables all three. Above the
-                lot, it read as a heading for the whole section. */}
-            <div className="rip-form__grid">
-              {readOnly ? (
-                roField('No UTM signal available', noUtmSignal ? 'Yes' : 'No')
+                {strata.map((s) => (
+                  <SelectItem
+                    key={s.stratumId}
+                    value={s.stratumId ?? ''}
+                    text={s.stratumNumber || s.stratumId || ''}
+                  />
+                ))}
+              </Select>
+              {!readOnly ? (
+                <Button
+                  kind="tertiary"
+                  size="lg"
+                  className="bio-strata__add"
+                  renderIcon={Add}
+                  disabled={busy}
+                  onClick={addPlot}
+                >
+                  Add plot
+                </Button>
               ) : (
-                <Checkbox
-                  id="plot-utmSignal"
-                  labelText="No UTM signal available"
-                  checked={noUtmSignal}
-                  onChange={(_e, { checked }) => set('utmSignal', checked ? 'N' : 'Y')}
-                />
+                <div />
               )}
+              {roField('Stratum type', stratumTypeLabel)}
+              {roField('# of plots completed', `${plotsCompleted} of ${plotsExpected || '—'}`)}
             </div>
-            <div className="rip-form__grid">
-              {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, utmSignalled)}
-              {textField('utmEasting', 'Easting', 6, noUtmSignal, utmSignalled)}
-              {textField('utmNorthing', 'Northing', 7, noUtmSignal, utmSignalled)}
-            </div>
-          </fieldset>
 
-          <fieldset className="rip-form__group">
-            <legend>Plot information</legend>
-            <div className="rip-form__grid">
-              {/* "Trees exist" is allowed on every stratum type (including clear-cut) — no gating. */}
-              {checkField('treeIndicator', 'Trees exist')}
-            </div>
-            <p className="rip-form__hint">Fill in one of:</p>
-            <div className="rip-form__grid">
-              {textField('basalAreaFactor', 'BAF', 2)}
-              {/* A clear-cut plot must use the fixed-area radius — the other two methods are
-                  refused for CC — so it is the one measurement field that is genuinely owed. */}
-              {textField(
-                'fixedAreaRadius',
-                'Fixed area radius (m)',
-                6,
-                false,
-                stratumType === 'CC',
+            <div className="bio-strata">
+              {rows.length > 0 && (
+                <Table size="sm" className="bio-strata__table">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Plot number</TableHeader>
+                      <TableHeader>Assessor name</TableHeader>
+                      <TableHeader>Action</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.plotId}>
+                        <TableCell>{row.plotNumber || row.plotId}</TableCell>
+                        <TableCell>{row.assessorDisplayName || row.assessorName}</TableCell>
+                        <TableCell className="table-actions">
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            renderIcon={Edit}
+                            disabled={busy}
+                            onClick={() => void select(row.plotId)}
+                          >
+                            Edit
+                          </Button>
+                          {!readOnly && (
+                            <Button
+                              kind="danger--ghost"
+                              size="sm"
+                              renderIcon={TrashCan}
+                              disabled={busy}
+                              onClick={() => void deleteRow(row)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
-              {textField('fullCountArea', 'Full count area (ha)', 7)}
             </div>
-            {/* Directly under the measurement row that sizes the plot, and under the "Trees exist"
-                box that calls for it — both tables used to sit below the whole section, so ticking a
-                box added rows a screen away from the control that asked for them. */}
-            {/* Read-only with nothing recorded now has nothing to show — no table and no Add
-                button — so the section is skipped rather than left as a bare legend. */}
-            {get('treeIndicator') === 'Y' &&
-              (!readOnly || (current.standTable ?? []).length > 0) && (
-                <fieldset className="rip-form__group">
-                  {/* The table itself is owed, not just its columns: the section only renders once
-                    "Trees exist" is ticked, and the proc refuses the submit while it holds no rows
-                    (`frep.submit.biodiversity.plot.notrees`). */}
-                  <legend>{requiredLabel('Stand table (trees)', !readOnly)}</legend>
-                  {/* Under the heading of the table it applies to, where the reader meets it before
-                    entering a row. It repeats across both tables on purpose: each is filled in on
-                    its own, and a note left at one of them is no use at the other. */}
-                  <p className="rip-form__hint">* Decimal place means measured</p>
-                  {childGrid(
-                    'Stand',
-                    STAND_COLS,
-                    (current.standTable ?? []) as Array<Record<string, string | undefined>>,
-                    (i) => current.standTable?.[i]?.standId ?? `stand-${i}`,
-                    (index, key, value) => setStand(index, { [key]: value }),
-                    removeStand,
-                    addStand,
-                    'Add stand table (tree)',
-                    standError,
-                  )}
-                </fieldset>
-              )}
+          </>
+        )}
 
-            <div className="rip-form__grid">
-              {checkField('cwdTransectIndicator', 'CWD in transect')}
-            </div>
-            <div className="rip-form__grid">
-              {textField('firstLegTransect', 'Bearing 1st leg', 3, false, true)}
-              {textField('secondLegTransect', '2nd leg', 3, false, true)}
-            </div>
-            {/* Under the bearings that define the transect it measures. Those used to be repeated
-                read-only at the top of this block, which is redundant now they are the row above. */}
-            {get('cwdTransectIndicator') === 'Y' &&
-              (!readOnly || (current.cwdTable ?? []).length > 0) && (
-                <fieldset className="rip-form__group">
-                  {/* Owed for the same reason as the stand table — `frep.submit.biodiversity.plot.nocwd`. */}
-                  <legend>{requiredLabel('Coarse woody debris (30 m transect)', !readOnly)}</legend>
-                  {/* Under the heading of the table it applies to, where the reader meets it before
-                    entering a row. It repeats across both tables on purpose: each is filled in on
-                    its own, and a note left at one of them is no use at the other. */}
-                  <p className="rip-form__hint">* Decimal place means measured</p>
-                  {childGrid(
-                    'CWD',
-                    CWD_COLS,
-                    (current.cwdTable ?? []) as Array<Record<string, string | undefined>>,
-                    (i) => current.cwdTable?.[i]?.cwdId ?? `cwd-${i}`,
-                    (index, key, value) => setCwd(index, { [key]: value }),
-                    removeCwd,
-                    addCwd,
-                    'Add CWD (log)',
-                    cwdError,
-                  )}
-                </fieldset>
+        {current && (
+          <>
+            {/* Actions at the top, mirroring the Stratum summary tab. */}
+            <div className="protocol-checklist__section-actions">
+              {!readOnly && (
+                <ActionButton busy={busy} onClick={() => void handleSave()} />
               )}
+              <Button kind="ghost" size="lg" disabled={busy} onClick={() => setCurrent(null)}>
+                Cancel
+              </Button>
+            </div>
 
-            <div className="rip-form__grid">{textField('plotComment', 'Comments')}</div>
-          </fieldset>
-        </>
-      )}
+            {/* Under the buttons, directly above the fields it describes — and only where fields are
+                marked, which is the open form, not the list behind it. */}
+            {!readOnly && <RequiredLegend />}
+
+            {stratumInfo(true)}
+
+            <fieldset className="rip-form__group">
+              <legend>Plot identification</legend>
+              <div className="rip-form__grid">
+                {textField('plotNumber', 'Plot #', 3, false, true)}
+                {evaluatedByField()}
+              </div>
+              {/* The checkbox sits between the plot's own details and the coordinates, because it is
+                  the switch that governs the row beneath it: ticking it disables all three. Above the
+                  lot, it read as a heading for the whole section. */}
+              <div className="rip-form__grid">
+                {readOnly ? (
+                  roField('No UTM signal available', noUtmSignal ? 'Yes' : 'No')
+                ) : (
+                  <Checkbox
+                    id="plot-utmSignal"
+                    labelText="No UTM signal available"
+                    checked={noUtmSignal}
+                    onChange={(_e, { checked }) => set('utmSignal', checked ? 'N' : 'Y')}
+                  />
+                )}
+              </div>
+              <div className="rip-form__grid">
+                {selectField('utmZone', 'Zone', UTM_ZONE_OPTIONS, noUtmSignal, utmSignalled)}
+                {textField('utmEasting', 'Easting', 6, noUtmSignal, utmSignalled)}
+                {textField('utmNorthing', 'Northing', 7, noUtmSignal, utmSignalled)}
+              </div>
+            </fieldset>
+
+            <fieldset className="rip-form__group">
+              <legend>Plot information</legend>
+              <div className="rip-form__grid">
+                {/* "Trees exist" is allowed on every stratum type (including clear-cut) — no gating. */}
+                {checkField('treeIndicator', 'Trees exist')}
+              </div>
+              <p className="rip-form__hint">Fill in one of:</p>
+              <div className="rip-form__grid">
+                {textField('basalAreaFactor', 'BAF', 2)}
+                {/* A clear-cut plot must use the fixed-area radius — the other two methods are
+                    refused for CC — so it is the one measurement field that is genuinely owed. */}
+                {textField(
+                  'fixedAreaRadius',
+                  'Fixed area radius (m)',
+                  6,
+                  false,
+                  stratumType === 'CC',
+                )}
+                {textField('fullCountArea', 'Full count area (ha)', 7)}
+              </div>
+              {/* Directly under the measurement row that sizes the plot, and under the "Trees exist"
+                  box that calls for it — both tables used to sit below the whole section, so ticking a
+                  box added rows a screen away from the control that asked for them. */}
+              {/* Read-only with nothing recorded now has nothing to show — no table and no Add
+                  button — so the section is skipped rather than left as a bare legend. */}
+              {get('treeIndicator') === 'Y' &&
+                (!readOnly || (current.standTable ?? []).length > 0) && (
+                  <fieldset className="rip-form__group">
+                    {/* The table itself is owed, not just its columns: the section only renders once
+                      "Trees exist" is ticked, and the proc refuses the submit while it holds no rows
+                      (`frep.submit.biodiversity.plot.notrees`). */}
+                    <legend>{requiredLabel('Stand table (trees)', !readOnly)}</legend>
+                    {/* Under the heading of the table it applies to, where the reader meets it before
+                      entering a row. It repeats across both tables on purpose: each is filled in on
+                      its own, and a note left at one of them is no use at the other. */}
+                    <p className="rip-form__hint">* Decimal place means measured</p>
+                    {childGrid(
+                      'Stand',
+                      STAND_COLS,
+                      (current.standTable ?? []) as Array<Record<string, string | undefined>>,
+                      (i) => current.standTable?.[i]?.standId ?? `stand-${i}`,
+                      (index, key, value) => setStand(index, { [key]: value }),
+                      removeStand,
+                      addStand,
+                      'Add stand table (tree)',
+                      standError,
+                    )}
+                  </fieldset>
+                )}
+
+              <div className="rip-form__grid">
+                {checkField('cwdTransectIndicator', 'CWD in transect')}
+              </div>
+              <div className="rip-form__grid">
+                {textField('firstLegTransect', 'Bearing 1st leg', 3, false, true)}
+                {textField('secondLegTransect', '2nd leg', 3, false, true)}
+              </div>
+              {/* Under the bearings that define the transect it measures. Those used to be repeated
+                  read-only at the top of this block, which is redundant now they are the row above. */}
+              {get('cwdTransectIndicator') === 'Y' &&
+                (!readOnly || (current.cwdTable ?? []).length > 0) && (
+                  <fieldset className="rip-form__group">
+                    {/* Owed for the same reason as the stand table — `frep.submit.biodiversity.plot.nocwd`. */}
+                    <legend>{requiredLabel('Coarse woody debris (30 m transect)', !readOnly)}</legend>
+                    {/* Under the heading of the table it applies to, where the reader meets it before
+                      entering a row. It repeats across both tables on purpose: each is filled in on
+                      its own, and a note left at one of them is no use at the other. */}
+                    <p className="rip-form__hint">* Decimal place means measured</p>
+                    {childGrid(
+                      'CWD',
+                      CWD_COLS,
+                      (current.cwdTable ?? []) as Array<Record<string, string | undefined>>,
+                      (i) => current.cwdTable?.[i]?.cwdId ?? `cwd-${i}`,
+                      (index, key, value) => setCwd(index, { [key]: value }),
+                      removeCwd,
+                      addCwd,
+                      'Add CWD (log)',
+                      cwdError,
+                    )}
+                  </fieldset>
+                )}
+
+              <div className="rip-form__grid">{textField('plotComment', 'Comments')}</div>
+            </fieldset>
+          </>
+        )}
+      </FormLock>
     </div>
   );
 };

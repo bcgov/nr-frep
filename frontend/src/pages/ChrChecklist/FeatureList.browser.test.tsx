@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,6 +46,12 @@ const featureB: Feature = {
 /** The list is controlled, so the harness holds the array the way the page does. */
 const renderList = (initial: Feature[] = [featureA, featureB]) => {
   const onSave = vi.fn().mockResolvedValue(true);
+  const onDelete = vi.fn().mockResolvedValue(true);
+  const onSaveAssociations = vi.fn().mockResolvedValue(true);
+  const onSaveFeature = vi.fn().mockResolvedValue(true);
+  const onCreateComposite = vi.fn().mockResolvedValue(true);
+  const onUpdateComposite = vi.fn().mockResolvedValue(true);
+  const onUngroupComposite = vi.fn().mockResolvedValue(true);
   const Harness = () => {
     const [features, setFeatures] = useState(initial);
     return (
@@ -53,13 +59,27 @@ const renderList = (initial: Feature[] = [featureA, featureB]) => {
         features={features}
         onChange={setFeatures}
         onSave={onSave}
+        onDelete={onDelete}
+        onSaveAssociations={onSaveAssociations}
+        onSaveFeature={onSaveFeature}
+        onCreateComposite={onCreateComposite}
+        onUpdateComposite={onUpdateComposite}
+        onUngroupComposite={onUngroupComposite}
         readOnly={false}
         busy={false}
       />
     );
   };
   render(<Harness />);
-  return { onSave };
+  return {
+    onSave,
+    onDelete,
+    onSaveAssociations,
+    onSaveFeature,
+    onCreateComposite,
+    onUpdateComposite,
+    onUngroupComposite,
+  };
 };
 
 describe('FeatureList table', () => {
@@ -78,7 +98,7 @@ describe('FeatureList table', () => {
   it('associates both features from the row action and persists on Save', async () => {
     // The association is a relationship, so ticking one side has to write the other's label too —
     // otherwise the pair disagrees and submit validation sees only half of it.
-    const { onSave } = renderList();
+    const { onSave, onSaveAssociations } = renderList();
 
     await userEvent.click(screen.getAllByRole('button', { name: /Associate/ })[0]);
     await userEvent.click(
@@ -86,9 +106,15 @@ describe('FeatureList table', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Save associations' }));
 
-    const saved = onSave.mock.calls[0][0] as Feature[];
-    expect(saved[0].associatedFeatures).toEqual(['2']);
-    expect(saved[1].associatedFeatures).toEqual(['1']);
+    await waitFor(() => expect(onSaveAssociations).toHaveBeenCalledTimes(1));
+    const [subject, partners] = onSaveAssociations.mock.calls[0] as [Feature, Feature[]];
+    expect(subject.featureLabel).toBe('1');
+    expect(subject.associatedFeatures).toEqual(['2']);
+    // Both sides are still written locally; the server then persists the pair in both directions.
+    expect(partners.map((p) => p.featureLabel)).toEqual(['2']);
+    expect(partners[0].associatedFeatures).toEqual(['1']);
+    // Associating no longer resends every other feature.
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('identifies each candidate by class and source, not just number', async () => {
@@ -174,24 +200,95 @@ describe('FeatureList table', () => {
  */
 const renderSaving = (initial: Feature[] = [featureA, featureB]) => {
   const onSave = vi.fn();
+  const onDelete = vi.fn();
+  const onSaveAssociations = vi.fn().mockResolvedValue(true);
+  const onSaveFeature = vi.fn();
+  const onCreateComposite = vi.fn();
+  const onUpdateComposite = vi.fn();
+  const onUngroupComposite = vi.fn();
   const Harness = () => {
     const [features, setFeatures] = useState(initial);
     onSave.mockImplementation(async (next: Feature[]) => {
       setFeatures(next);
       return true;
     });
+    // Mirrors the page: the row goes through its own endpoint, and the list re-renders without it.
+    onDelete.mockImplementation(async (feature: Feature) => {
+      setFeatures((prev) => prev.filter((f) => f !== feature));
+      return true;
+    });
+    // Mirrors the page: the edited feature is patched back into the list by id.
+    onSaveFeature.mockImplementation(async (feature: Feature) => {
+      setFeatures((prev) => prev.map((f) => (f.featureLabel === feature.featureLabel ? feature : f)));
+      return true;
+    });
+    // Mirrors the page: the server returns the anchor and every member, merged back into the list.
+    onCreateComposite.mockImplementation(
+      async (anchor: Feature, memberIds: string[], newMembers: Feature[]) => {
+        setFeatures((prev) => [
+          { ...anchor, id: 'new-anchor' },
+          ...prev.map((f) =>
+            f.id && memberIds.includes(f.id)
+              ? { ...f, compositeFeature: anchor.featureLabel }
+              : f,
+          ),
+          ...newMembers.map((f, i) => ({
+            ...f,
+            id: `new-member-${i}`,
+            compositeFeature: anchor.featureLabel,
+          })),
+        ]);
+        return true;
+      },
+    );
+    // Mirrors the page closely enough for the table to re-render: the merged result is the array
+    // the component already computed.
+    onUpdateComposite.mockImplementation(
+      async (
+        _anchorId: string,
+        _classCode: string | undefined,
+        _sourceCode: string | undefined,
+        _memberIds: string[],
+        _newMembers: Feature[],
+        applied: Feature[],
+      ) => {
+        setFeatures(applied);
+        return true;
+      },
+    );
+    // The anchor and any deleted members are already absent from `applied`.
+    onUngroupComposite.mockImplementation(
+      async (_anchorId: string, _deleteMemberIds: string[], applied: Feature[]) => {
+        setFeatures(applied);
+        return true;
+      },
+    );
     return (
       <FeatureList
         features={features}
         onChange={setFeatures}
         onSave={onSave}
+        onDelete={onDelete}
+        onSaveAssociations={onSaveAssociations}
+        onSaveFeature={onSaveFeature}
+        onCreateComposite={onCreateComposite}
+        onUpdateComposite={onUpdateComposite}
+        onUngroupComposite={onUngroupComposite}
         readOnly={false}
         busy={false}
       />
     );
   };
   render(<Harness />);
-  return { onSave };
+  return {
+    onSave,
+    onDelete,
+    onSaveAssociations,
+    onSaveFeature,
+    onCreateComposite,
+    onUpdateComposite,
+    onUngroupComposite,
+  };
 };
 
 /**
@@ -226,9 +323,10 @@ const submitCreate = async (user: ReturnType<typeof userEvent.setup>, dialog: HT
   user.click(within(dialog).getByRole('button', { name: 'Create composite' }));
 
 describe('FeatureList — button icons', () => {
-  it('puts the icon to the left of the label', async () => {
-    // Carbon renders renderIcon as the button's last child, so "Add feature" came out as
-    // "Add feature +". The app-wide override in styles/_overrides.scss reorders it.
+  it('puts the icon to the right of the label', async () => {
+    // Carbon's own child order — the icon trails the label. The app-wide override in
+    // styles/_overrides.scss only unpins it from the button's right edge so it flows beside the
+    // text; it no longer reorders it.
     renderList([featureA, featureB]);
 
     const button = screen.getByRole('button', { name: /Add feature/ });
@@ -242,13 +340,50 @@ describe('FeatureList — button icons', () => {
 
     expect(icon).toBeTruthy();
     expect(range.getBoundingClientRect().width).toBeGreaterThan(0);
-    expect(icon.getBoundingClientRect().right).toBeLessThanOrEqual(
-      range.getBoundingClientRect().left,
+    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      range.getBoundingClientRect().right,
     );
   });
 });
 
 describe('FeatureList — deleting a feature', () => {
+  it('saves the edited feature through its own endpoint, not by resending the list', async () => {
+    const user = userEvent.setup();
+    const { onSave, onSaveFeature } = renderList([featureA, featureB]);
+
+    await user.click(screen.getAllByRole('button', { name: /Edit/ })[1]);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onSaveFeature).toHaveBeenCalledTimes(1));
+    expect((onSaveFeature.mock.calls[0][0] as Feature).featureLabel).toBe(featureB.featureLabel);
+    // The whole-array save is what this endpoint exists to avoid.
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('deletes the confirmed row through its own endpoint, not by resending the list', async () => {
+    const user = userEvent.setup();
+    confirmSpy.mockResolvedValueOnce(true);
+    const { onSave, onDelete } = renderList([featureA, featureB]);
+
+    // The second row's Delete — the one the confirm dialog names.
+    await user.click(screen.getAllByRole('button', { name: /Delete/ })[1]);
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+    expect(onDelete.mock.calls[0][0]).toBe(featureB);
+    // The whole-array save is what this endpoint exists to avoid.
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('deletes nothing when the confirmation is declined', async () => {
+    const user = userEvent.setup();
+    confirmSpy.mockResolvedValueOnce(false);
+    const { onDelete } = renderList([featureA, featureB]);
+
+    await user.click(screen.getAllByRole('button', { name: /Delete/ })[1]);
+
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it('names the feature and what deleting it costs', async () => {
     const user = userEvent.setup();
     renderList([featureA, featureB]);
@@ -269,15 +404,29 @@ describe('FeatureList — deleting a feature', () => {
 describe('FeatureList composites', () => {
   it('groups the chosen features and shows them under the composite', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving([featureA, featureB]);
+    const { onSave, onCreateComposite } = renderSaving([featureA, featureB]);
 
     const dialog = await createComposite(user, ['1', '2']);
     await submitCreate(user, dialog);
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    const anchor = saved.find((f) => f.compositeFeatureInd === 'true') as Feature;
+    // The anchor is described, not addressed — the server assigns its id — and the two existing
+    // features travel as ids rather than as a resent array.
+    const [anchor, memberIds, newMembers] = onCreateComposite.mock.calls.at(-1) as [
+      Feature,
+      string[],
+      Feature[],
+    ];
+    expect(anchor.compositeFeatureInd).toBe('true');
     expect(anchor.featureDescriptionCode).toBe('ARCH');
-    expect(saved.filter((f) => f.compositeFeature === anchor.featureLabel)).toHaveLength(2);
+    expect(memberIds).toHaveLength(2);
+    expect(newMembers).toHaveLength(0);
+    expect(onSave).not.toHaveBeenCalled();
+
+    // The grouping is also handed over already applied to the array, for the offline path — there
+    // is no server there to give the anchor an id, so membership stays held by label.
+    const applied = onCreateComposite.mock.calls.at(-1)?.[3] as Feature[];
+    expect(applied.some((f) => f.compositeFeatureInd === 'true')).toBe(true);
+    expect(applied.filter((f) => f.compositeFeature === anchor.featureLabel)).toHaveLength(2);
 
     // Named for what it is, keeping its own feature number rather than an invented name.
     expect(compositeLabel()).toBe(`Composite ${anchor.featureLabel}`);
@@ -342,17 +491,25 @@ describe('FeatureList composites', () => {
 
   it('adds a new feature from inside the dialog and groups it', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving([featureA, featureB]);
+    const { onCreateComposite } = renderSaving([featureA, featureB]);
 
     const dialog = await createComposite(user, ['1', '2']);
     await user.click(within(dialog).getByRole('button', { name: /Add a new feature/ }));
     await user.selectOptions(within(dialog).getByLabelText('Feature class for feature 3'), 'CT');
     await submitCreate(user, dialog);
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    const added = saved.find((f) => f.featureLabel === '3') as Feature;
-    expect(added.featureDescriptionCode).toBe('CT');
-    expect(added.compositeFeature).toBe('4');
+    // A feature typed into the dialog has no id, so it travels as a new member to be created in
+    // the same request rather than in a prior round trip that could half-fail.
+    const [anchor, memberIds, newMembers] = onCreateComposite.mock.calls.at(-1) as [
+      Feature,
+      string[],
+      Feature[],
+    ];
+    expect(memberIds).toHaveLength(2);
+    expect(newMembers).toHaveLength(1);
+    expect(newMembers[0].featureLabel).toBe('3');
+    expect(newMembers[0].featureDescriptionCode).toBe('CT');
+    expect(anchor.featureLabel).toBe('4');
     expect(screen.getByText('3 features assessed as one unit')).toBeTruthy();
   });
 
@@ -385,7 +542,7 @@ describe('FeatureList composites', () => {
 
   it('ungroups a composite and frees its features', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving([featureA, featureB]);
+    const { onUngroupComposite } = renderSaving([featureA, featureB]);
 
     const dialog = await createComposite(user, ['1', '2']);
     await submitCreate(user, dialog);
@@ -394,9 +551,15 @@ describe('FeatureList composites', () => {
     await user.click(within(confirmDialog).getByRole('radio', { name: /Keep them/ }));
     await user.click(within(confirmDialog).getByRole('button', { name: /Ungroup/ }));
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    expect(saved).toHaveLength(2);
-    expect(saved.every((f) => !f.compositeFeature)).toBe(true);
+    // Keeping them means naming none for deletion; the anchor goes either way.
+    const [, deleteMemberIds, applied] = onUngroupComposite.mock.calls.at(-1) as [
+      string,
+      string[],
+      Feature[],
+    ];
+    expect(deleteMemberIds).toEqual([]);
+    expect(applied).toHaveLength(2);
+    expect(applied.every((f) => !f.compositeFeature)).toBe(true);
     expect(compositeLabel()).toBeNull();
     // Freed features get their full set of actions back.
     const row = screen.getByText('1').closest('tr') as HTMLElement;
@@ -471,7 +634,7 @@ describe('Members dialog', () => {
 
   it('removes a feature when its selection is cleared', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving(four);
+    const { onUpdateComposite } = renderSaving(four);
 
     const create = await createComposite(user, ['1', '2', '3']);
     await submitCreate(user, create);
@@ -482,14 +645,16 @@ describe('Members dialog', () => {
     );
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    expect(saved.find((f) => f.featureLabel === '3')?.compositeFeature).toBeUndefined();
+    // The list is the complete set, so releasing is expressed by absence from it — the server
+    // clears membership on anything that was under this anchor and is no longer named.
+    const memberIds = onUpdateComposite.mock.calls.at(-1)?.[3] as string[];
+    expect(memberIds).toEqual(['1', '2']);
     expect(screen.getByText('2 features assessed as one unit')).toBeTruthy();
   });
 
   it('moves a feature across from another composite', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving(four);
+    const { onUpdateComposite } = renderSaving(four);
 
     // Feature 5 groups 1 and 2; feature 6 groups 3 and 4.
     const first = await createComposite(user, ['1', '2']);
@@ -506,10 +671,16 @@ describe('Members dialog', () => {
     );
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    const first1 = saved.find((f) => f.featureLabel === '1') as Feature;
-    const moved = saved.find((f) => f.featureLabel === '3') as Feature;
-    expect(moved.compositeFeature).toBe(first1.compositeFeature);
+    // The move is expressed by naming feature 3 among this anchor's members. The composite it came
+    // from needs no mention: membership lives on the child row, so re-pointing it is the whole move.
+    const [anchorId, , , memberIds] = onUpdateComposite.mock.calls.at(-1) as [
+      string,
+      string | undefined,
+      string | undefined,
+      string[],
+    ];
+    expect(anchorId).toBeTruthy();
+    expect(memberIds).toEqual(['1', '2', '3']);
     expect(screen.getByText('3 features assessed as one unit')).toBeTruthy();
   });
 
@@ -569,34 +740,38 @@ describe('Ungroup dialog', () => {
 
   it('names the missing answer instead of blocking the button', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving([featureA, featureB]);
+    const { onUngroupComposite } = renderSaving([featureA, featureB]);
 
     const dialog = await openUngroup(user);
-    // Creating the composite already saved once; only growth from here counts as an ungroup.
-    const saves = onSave.mock.calls.length;
     const ungroup = within(dialog).getByRole('button', { name: /Ungroup/ });
     expect(ungroup.hasAttribute('disabled')).toBe(false);
 
     await user.click(ungroup);
     expect(within(dialog).getByText('Choose whether to keep or delete them.')).toBeTruthy();
-    expect(onSave.mock.calls).toHaveLength(saves);
+    expect(onUngroupComposite).not.toHaveBeenCalled();
 
     // Answering clears the way through.
     await user.click(within(dialog).getByRole('radio', { name: /Keep them/ }));
     await user.click(ungroup);
-    expect(onSave.mock.calls).toHaveLength(saves + 1);
+    expect(onUngroupComposite).toHaveBeenCalledTimes(1);
   });
 
   it('deletes the undescribed features when asked to, and keeps the rest', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSaving([featureA, featureB]);
+    const { onUngroupComposite } = renderSaving([featureA, featureB]);
 
     const dialog = await openUngroup(user);
     await user.click(within(dialog).getByRole('radio', { name: /Delete them/ }));
     await user.click(within(dialog).getByRole('button', { name: /Ungroup/ }));
 
-    const saved = onSave.mock.calls.at(-1)?.[0] as Feature[];
-    expect(saved.map((f) => f.featureLabel)).toEqual(['2']);
+    // The client names which members go, because "undescribed" is its rule to apply.
+    const [, deleteMemberIds, applied] = onUngroupComposite.mock.calls.at(-1) as [
+      string,
+      string[],
+      Feature[],
+    ];
+    expect(deleteMemberIds).toEqual([featureA.id]);
+    expect(applied.map((f) => f.featureLabel)).toEqual(['2']);
   });
 
   it('changes nothing when cancelled', async () => {
@@ -614,7 +789,7 @@ describe('Ungroup dialog', () => {
   it('does not ask the question when every member was assessed in its own right', async () => {
     const user = userEvent.setup();
     const described = { ...featureA, featureDescription: 'A cluster of CMTs' };
-    const { onSave } = renderSaving([described, featureB]);
+    const { onUngroupComposite } = renderSaving([described, featureB]);
 
     const create = await createComposite(user, ['1', '2']);
     await submitCreate(user, create);
@@ -623,10 +798,14 @@ describe('Ungroup dialog', () => {
 
     expect(within(dialog).queryByRole('radio')).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: /Ungroup/ }));
-    expect((onSave.mock.calls.at(-1)?.[0] as Feature[]).map((f) => f.featureLabel)).toEqual([
-      '1',
-      '2',
-    ]);
+    // Nothing to strand, so nothing is named for deletion and both features are freed.
+    const [, deleteMemberIds, applied] = onUngroupComposite.mock.calls.at(-1) as [
+      string,
+      string[],
+      Feature[],
+    ];
+    expect(deleteMemberIds).toEqual([]);
+    expect(applied.map((f) => f.featureLabel)).toEqual(['1', '2']);
   });
 });
 

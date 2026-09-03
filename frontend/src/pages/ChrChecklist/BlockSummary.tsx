@@ -15,6 +15,7 @@ import {
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import { BLOCK_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { labelFor, useRatingCodes } from '@/pages/ChrChecklist/useChrCodeLists';
+import ActionButton from '@/components/core/ActionButton';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -237,7 +238,7 @@ const BlockSummary: FC<{
         {!editing && !readOnly && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}
@@ -254,9 +255,7 @@ const BlockSummary: FC<{
             >
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           </>
         )}
       </div>

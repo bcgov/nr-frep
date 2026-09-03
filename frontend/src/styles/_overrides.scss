@@ -90,20 +90,11 @@
   .#{variables.$bcgov-prefix}--btn__icon {
     position: static;
     inset-inline-end: auto;
-    /* Icon leads the label, app-wide: Carbon renders it as the button's last child, which puts a
-       "+" after "Add feature" — the opposite of the pattern every other control here follows.
-       `order` rather than DOM changes, so it applies to every Carbon button at once. */
-    order: -1;
+    /* The icon trails the label — Carbon's own child order, kept. What is changed is only that it
+       flows beside the text instead of being pinned absolutely to the button's right edge, which
+       left text-only and text+icon buttons looking lopsided. */
     transform: translateY(1px);
   }
-}
-
-/* The one icon that belongs after its label: an arrow pointing the way the button takes you reads
-   backwards on the left. Applies to the landing page's "Get started", not to the login buttons
-   beside it — those lead with their icon like everything else. */
-.#{variables.$bcgov-prefix}--btn[data-testid='landing-button__offline']
-  .#{variables.$bcgov-prefix}--btn__icon {
-  order: 0;
 }
 
 /* ------- Text Input / Text Area / Password Input -------
@@ -632,4 +623,21 @@ nav.#{variables.$bcgov-prefix}--side-nav,
 // underneath it is what we hide.
 .cds--icon-tooltip > .cds--popover {
   display: none;
+}
+
+/* ------- FormLock -------
+   A fieldset used only to disable a section while its save is in flight, so it must not bring any
+   of a fieldset's own box with it. `min-width: 0` matters most: a fieldset's intrinsic minimum
+   width is its content, which breaks flex and grid children that expect to be allowed to shrink.
+------------------------- */
+.form-lock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  &[disabled] {
+    /* Says the section is not accepting input, without moving anything. */
+    opacity: 0.6;
+  }
 }

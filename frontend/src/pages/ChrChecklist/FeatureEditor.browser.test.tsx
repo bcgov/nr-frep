@@ -128,8 +128,31 @@ describe('FeatureEditor — required markers', () => {
     await waitFor(() => expect(marked('Feature label')).toBe(true));
     expect(marked('Feature class')).toBe(true);
     expect(marked('Information source')).toBe(true);
-    // Borden is only format-checked when it has a value, so it is not owed and is not marked.
+    // Neither of these is owed at submit, so neither is marked: a description has only a length
+    // limit, and Borden is only format-checked once it has a value.
+    expect(marked('Feature description')).toBe(false);
     expect(marked('Borden number')).toBe(false);
+  });
+
+  it('marks the type group rather than any one box, and says what it wants', async () => {
+    render(
+      <FeatureEditor
+        feature={baseFeature({ compositeFeatureInd: 'false' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    // Submit asks for "at least one type of feature" — a requirement on the group, which no single
+    // checkbox can satisfy or fail, so the mark belongs on the legend.
+    const legend = await waitFor(() =>
+      Array.from(document.querySelectorAll('legend')).find((l) =>
+        l.textContent?.startsWith('Type of feature(s)'),
+      ),
+    );
+    expect(legend).toBeTruthy();
+    expect(legend!.querySelector('.required-asterisk')).toBeTruthy();
+    expect(screen.getByText('Select at least one.')).toBeTruthy();
   });
 
   it('does not ask a composite for the two codes it is never validated on', async () => {
@@ -405,6 +428,61 @@ describe('FeatureEditor — duplicate feature label', () => {
     );
 
     expect(await screen.findByText('Already used by another feature.')).toBeTruthy();
+  });
+});
+
+describe('FeatureEditor — windthrow treatment', () => {
+  const withWindthrow = (over: Partial<Feature> = {}) =>
+    baseFeature({ windthrowManagement: 'true', ...over });
+
+  it('clears and closes the other techniques when None is ticked', async () => {
+    const user = userEvent.setup();
+    const onPatch = vi.fn();
+    render(
+      <FeatureEditor
+        feature={withWindthrow({ windthrowTechniquePruning: 'true', otherTechnique: 'true' })}
+        onPatch={onPatch}
+        readOnly={false}
+      />,
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: 'None' }));
+
+    // A saved feature must not say both "no treatment" and "pruning", so ticking None wipes what
+    // was recorded — the free-text description included, since the box that owned it is gone too.
+    const patch = onPatch.mock.calls.at(-1)?.[0] as Record<string, string>;
+    expect(patch.windthrowTechniqueNone).toBe('true');
+    expect(patch.windthrowTechniquePruning).toBe('false');
+    expect(patch.otherTechnique).toBe('false');
+    expect(patch.ifotherpleasedescribe).toBe('');
+  });
+
+  it('holds the other techniques closed while None is ticked', async () => {
+    render(
+      <FeatureEditor
+        feature={withWindthrow({ windthrowTechniqueNone: 'true' })}
+        onPatch={vi.fn()}
+        readOnly={false}
+      />,
+    );
+
+    expect(
+      (screen.getByRole('checkbox', { name: 'Pruning' }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole('checkbox', { name: 'Other technique' }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    // None stays live, or there would be no way back out of the choice.
+    expect((screen.getByRole('checkbox', { name: 'None' }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('leaves the techniques open when None is not ticked', () => {
+    render(<FeatureEditor feature={withWindthrow()} onPatch={vi.fn()} readOnly={false} />);
+    expect(
+      (screen.getByRole('checkbox', { name: 'Pruning' }) as HTMLInputElement).disabled,
+    ).toBe(false);
   });
 });
 

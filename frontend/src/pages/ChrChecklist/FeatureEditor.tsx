@@ -142,7 +142,8 @@ const PLANNING_STRATEGIES: Array<{
 ];
 
 // Per-strategy conditional sub-fields (buffer length / reserve type) keyed by the row checkbox
-// that reveals them, with the FN/AIA/SP variant field names. Rendered below the planning grid.
+// that reveals them, with the FN/AIA/SP variant field names. Rendered in the cell, directly under
+// the checkbox that reveals them — see PLANNING_SUB_FIELDS.
 const BUFFER_LENGTH = {
   fn: { when: 'retainBufferFN', field: 'bufferLengthFN' },
   aia: { when: 'retainBufferAIA', field: 'bufferLengthAIA' },
@@ -158,6 +159,35 @@ const TEMPORARY_RESERVE = {
   aia: { when: 'permanentReserveAIA', field: 'temporaryRetentionTypeAIA' },
   sp: { when: 'permanentReserveSP', field: 'temporaryRetentionTypeSP' },
 } as const;
+
+/**
+ * Which planning strategies carry a conditional field, keyed by the row's label.
+ *
+ * The field lives in the same cell as the checkbox that reveals it, so it is read as part of that
+ * answer. That also removes the need for a "— FN / — AIA / — SP" suffix on its label: the column
+ * the field sits in already says which source it belongs to, and repeating it three times down a
+ * list below the table was the only way to tell them apart when they were rendered there.
+ */
+const PLANNING_SUB_FIELDS: Record<
+  string,
+  {
+    variants: Record<'fn' | 'aia' | 'sp', { when: string; field: string }>;
+    label: string;
+    kind: 'buffer' | 'reserve';
+  }
+> = {
+  'Retain buffer': { variants: BUFFER_LENGTH, label: 'Buffer length (m)', kind: 'buffer' },
+  'Conserve in rotational reserve': {
+    variants: ROTATIONAL_RESERVE,
+    label: 'Rotational reserve type',
+    kind: 'reserve',
+  },
+  'Permanent / temporary reserve': {
+    variants: TEMPORARY_RESERVE,
+    label: 'Reserve type',
+    kind: 'reserve',
+  },
+};
 
 /** The four age indicators, as one question. Order follows the legacy screen. */
 const AGE_OPTIONS: Array<{ label: string; field: string }> = [
@@ -210,6 +240,9 @@ const DAMAGE_CAUSE_ITEMS: Array<{ id: string; label: string }> = [
   ...DAMAGE_AGENTS,
   { label: 'Other', field: OTHER_DAMAGE_AGENT },
 ].map((d) => ({ id: d.field, label: d.label }));
+
+/** The technique that excludes the others; see the Treatment group. */
+const WINDTHROW_NONE = 'windthrowTechniqueNone';
 
 const WINDTHROW_TECHNIQUES: Array<{ label: string; field: string }> = [
   { label: 'None', field: 'windthrowTechniqueNone' },
@@ -269,7 +302,20 @@ const FeatureEditor: FC<{
   // a feature whose composite box has never been touched owes neither code — and must not be
   // marked as if it did.
   const notComposite = feature.compositeFeatureInd === 'false';
-  const chk = (field: string, label: string) => (
+  const windthrowOthers = WINDTHROW_TECHNIQUES.filter((w) => w.field !== WINDTHROW_NONE);
+  /** True while "None" is ticked: every other technique is closed and shows nothing recorded. */
+  const noTreatment = on(WINDTHROW_NONE);
+  /**
+   * What ticking "None" wipes. The free-text description goes with the box that owns it — left
+   * behind it would be saved against a technique that is no longer claimed.
+   */
+  const clearedWindthrowTechniques = {
+    ...Object.fromEntries(windthrowOthers.map((w) => [w.field, 'false'])),
+    otherTechnique: 'false',
+    ifotherpleasedescribe: '',
+  };
+
+  const chk = (field: string, label: string, disabled = false) => (
     <IndicatorCheckbox
       // Keyed because several groups render this straight from a `.map` (feature types, damage
       // agents, windthrow techniques) — React warned on each of those lists.
@@ -277,7 +323,7 @@ const FeatureEditor: FC<{
       id={`feat-${field}`}
       labelText={label}
       value={ind(field)}
-      disabled={readOnly}
+      disabled={readOnly || disabled}
       onToggle={(v) => onPatch({ [field]: v })}
     />
   );
@@ -457,7 +503,6 @@ const FeatureEditor: FC<{
     );
   };
 
-  const variantLabel = { fn: 'FN', aia: 'AIA', sp: 'SP' } as const;
   /**
    * Untick a planning source and everything recorded under it goes with it.
    *
@@ -748,13 +793,6 @@ const FeatureEditor: FC<{
   ];
   const effectivenessColumns = dealColumns(effectivenessCells);
 
-  const planningSubFields = (['fn', 'aia', 'sp'] as const).flatMap((v) => [
-    subField(v, BUFFER_LENGTH[v], `Buffer length — ${variantLabel[v]} (m)`, 'buffer'),
-    subField(v, ROTATIONAL_RESERVE[v], `Rotational reserve type — ${variantLabel[v]}`, 'reserve'),
-    subField(v, TEMPORARY_RESERVE[v], `Reserve type — ${variantLabel[v]}`, 'reserve'),
-  ]);
-  const hasPlanningSubFields = planningSubFields.some(Boolean);
-
   return (
     <div className="feature-sections">
       {/* The feature's own name, so the form says which of a list of features is open — the tab
@@ -917,7 +955,11 @@ const FeatureEditor: FC<{
         </fieldset>
 
         <fieldset className="rip-form__group">
-          <legend>Type of feature(s)</legend>
+          <legend>{requiredLabel('Type of feature(s)', true)}</legend>
+          {/* The mark goes on the legend because the requirement is on the group, not on any one
+              box — submit asks for "at least one type of feature", which no single checkbox can
+              satisfy or fail on its own. The line says what "at least one" means here. */}
+          <p className="rip-form__hint">Select at least one.</p>
           {/* Fixed columns, dealt in markup.
               CSS multi-column balances its content, so opening a field re-flowed items between
               columns and boxes jumped as they were ticked. Dealing the list here pins every box to
@@ -998,18 +1040,28 @@ const FeatureEditor: FC<{
               </tr>
             </thead>
             <tbody>
-              {PLANNING_STRATEGIES.map((s) => (
-                <tr key={s.label}>
-                  <td>{s.label}</td>
-                  {showFN && <td>{chk(s.fn, '')}</td>}
-                  {showAIA && <td>{chk(s.aia, '')}</td>}
-                  {showSP && <td>{chk(s.sp, '')}</td>}
-                </tr>
-              ))}
+              {PLANNING_STRATEGIES.map((s) => {
+                const sub = PLANNING_SUB_FIELDS[s.label];
+                // The conditional field goes in the cell under the box that reveals it. Nothing is
+                // rendered until that box is ticked, so an untouched row is still three checkboxes.
+                const cell = (variant: 'fn' | 'aia' | 'sp', field: string) => (
+                  <td>
+                    {chk(field, '')}
+                    {sub && subField(variant, sub.variants[variant], sub.label, sub.kind)}
+                  </td>
+                );
+                return (
+                  <tr key={s.label}>
+                    <td>{s.label}</td>
+                    {showFN && cell('fn', s.fn)}
+                    {showAIA && cell('aia', s.aia)}
+                    {showSP && cell('sp', s.sp)}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
-        {hasPlanningSubFields && <div className="rip-form__grid">{planningSubFields}</div>}
         {recommendationsEnabled && (
           <fieldset className="rip-form__group">
             <legend>Additional management strategies</legend>
@@ -1221,18 +1273,37 @@ const FeatureEditor: FC<{
             )}
             <fieldset className="rip-form__group">
               <legend>Treatment</legend>
-              {WINDTHROW_TECHNIQUES.map((w) => chk(w.field, w.label))}
-              {chk('otherTechnique', 'Other technique')}
-              {on('otherTechnique') && (
-                <TextField
-                  id="feat-windthrow-other"
-                  labelText={requiredLabel('Description', true)}
-                  value={str('ifotherpleasedescribe')}
-                  maxLength={FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribe}
-                  disabled={readOnly}
-                  onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
-                />
-              )}
+              {/* "None" is the answer that excludes the rest, not one more technique alongside
+                  them: ticking it clears whatever was recorded and holds the list closed, so the
+                  saved feature cannot say both "no treatment" and "pruning". Kept above a rule so
+                  the two read as a choice rather than as six equal boxes. */}
+              <IndicatorCheckbox
+                id="feat-windthrowTechniqueNone"
+                labelText="None"
+                value={ind(WINDTHROW_NONE)}
+                disabled={readOnly}
+                onToggle={(v) =>
+                  onPatch(
+                    v === 'true'
+                      ? { [WINDTHROW_NONE]: v, ...clearedWindthrowTechniques }
+                      : { [WINDTHROW_NONE]: v },
+                  )
+                }
+              />
+              <div className="chr-checklist__treatment-options">
+                {windthrowOthers.map((w) => chk(w.field, w.label, noTreatment))}
+                {chk('otherTechnique', 'Other technique', noTreatment)}
+                {on('otherTechnique') && (
+                  <TextField
+                    id="feat-windthrow-other"
+                    labelText={requiredLabel('Description', true)}
+                    value={str('ifotherpleasedescribe')}
+                    maxLength={FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribe}
+                    disabled={readOnly || noTreatment}
+                    onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
+                  />
+                )}
+              </div>
             </fieldset>
           </div>
         )}
@@ -1354,8 +1425,10 @@ const FeatureEditor: FC<{
 
       <section className="feature-section">
         <h3 className="feature-section__title">Comments</h3>
-        {/* Comments */}
-        <div className="rip-form__grid">
+        {/* Not in a `rip-form__grid`: that grid caps its tracks, which held the comments box ~70px
+            narrower than the rating rationale above it — the same kind of field, asked once more,
+            at a different width. Full section width, matching the rationale. */}
+        <div className="chr-checklist__summary-question">
           <TextAreaField
             id="feat-comment"
             labelText="Comments"

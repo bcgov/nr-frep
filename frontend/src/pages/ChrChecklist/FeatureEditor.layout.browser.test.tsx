@@ -84,6 +84,109 @@ describe('FeatureEditor — additional strategies row layout', () => {
   });
 });
 
+describe('FeatureEditor — type of feature(s) group', () => {
+  it('keeps the hint with its legend rather than adrift above the boxes', async () => {
+    await page.viewport(1300, 900);
+    render(<FeatureEditor feature={withStrategy()} onPatch={vi.fn()} readOnly={false} />);
+
+    const legend = Array.from(document.querySelectorAll('legend')).find((l) =>
+      l.textContent?.startsWith('Type of feature(s)'),
+    ) as HTMLElement;
+    const hint = legend.nextElementSibling as HTMLElement;
+    expect(hint.textContent).toBe('Select at least one.');
+
+    // The legend's 1rem and the hint's 0.75rem used to stack into nearly two blank lines, so the
+    // sentence read as separated from the heading it explains rather than part of it.
+    const gap = hint.getBoundingClientRect().top - legend.getBoundingClientRect().bottom;
+    expect(gap).toBeLessThan(12);
+  });
+});
+
+describe('FeatureEditor — long-form fields', () => {
+  it('gives the rationale and the comments the same content width', async () => {
+    await page.viewport(1400, 900);
+    render(<FeatureEditor feature={withStrategy()} onPatch={vi.fn()} readOnly={false} />);
+
+    const rationale = document.getElementById('feat-rating-rationale')!.getBoundingClientRect();
+    const comments = document.getElementById('feat-comment')!.getBoundingClientRect();
+
+    // Both are a paragraph of prose about the same feature; sizing them differently made the pair
+    // look like two kinds of field rather than the same one asked twice.
+    expect(Math.round(comments.width)).toBe(Math.round(rationale.width));
+  });
+});
+
+describe('FeatureEditor — size of area influenced', () => {
+  it('sets the measurement instruction below the heading it sits under', async () => {
+    await page.viewport(1300, 900);
+    render(<FeatureEditor feature={withStrategy()} onPatch={vi.fn()} readOnly={false} />);
+
+    const heading = Array.from(document.querySelectorAll('legend')).find(
+      (l) => l.textContent === 'Size of area influenced',
+    ) as HTMLElement;
+    const instruction = Array.from(document.querySelectorAll('legend')).find(
+      (l) => l.textContent === 'Select how the area was measured',
+    ) as HTMLElement;
+    expect(heading).toBeTruthy();
+    expect(instruction).toBeTruthy();
+
+    // It is a sentence telling the reader what to do, not a second heading — Carbon renders it as
+    // a legend, which the section's own legend heading style was also matching.
+    const weight = (el: HTMLElement) => Number(getComputedStyle(el).fontWeight);
+    expect(weight(instruction)).toBeLessThan(weight(heading));
+    expect(weight(instruction)).toBe(400);
+  });
+});
+
+describe('FeatureEditor — planning strategy table', () => {
+  const withBuffer = (): Feature =>
+    ({
+      featureLabel: 'Feature 1',
+      managementStrategyFN: 'true',
+      managementStrategySP: 'true',
+      sitePermitIssued: 'true',
+      // Ticked on two of the three sources, so the field appears in those cells and not the third.
+      retainBufferFN: 'true',
+      retainBufferSP: 'true',
+    }) as Feature;
+
+  it('puts a revealed field in the same cell as the box that revealed it', async () => {
+    await page.viewport(1300, 900);
+    render(<FeatureEditor feature={withBuffer()} onPatch={vi.fn()} readOnly={false} />);
+
+    const row = Array.from(
+      document.querySelectorAll('.chr-checklist__planning:not(.chr-checklist__additional) tbody tr'),
+    ).find((tr) => tr.textContent?.startsWith('Retain buffer')) as HTMLElement;
+    expect(row).toBeTruthy();
+
+    // One per ticked source, inside its own cell — not gathered in a list below the table, where
+    // each needed an "— FN / — AIA / — SP" suffix to say which column it belonged to.
+    const cellsWithField = Array.from(row.querySelectorAll('td')).filter((td) =>
+      td.querySelector('input[type="text"], select'),
+    );
+    expect(cellsWithField).toHaveLength(2);
+    cellsWithField.forEach((td) => {
+      expect(td.querySelector('.cds--checkbox-wrapper')).toBeTruthy();
+      expect(td.textContent).toContain('Buffer length (m)');
+      expect(td.textContent).not.toContain('—');
+    });
+  });
+
+  it('keeps a strategy within reach of its first checkbox', async () => {
+    await page.viewport(1300, 900);
+    render(<FeatureEditor feature={withBuffer()} onPatch={vi.fn()} readOnly={false} />);
+
+    const row = document.querySelector(
+      '.chr-checklist__planning:not(.chr-checklist__additional) tbody tr',
+    ) as HTMLElement;
+    const name = row.querySelector('td')!.getBoundingClientRect();
+    const firstBox = row.querySelector('.cds--checkbox-wrapper')!.getBoundingClientRect();
+
+    // Stretched to the container there were ~750px of nothing between the two.
+    expect(firstBox.left - name.left).toBeLessThan(400);
+  });
+});
+
 describe('FeatureEditor — section layout', () => {
   it('lays every section out on the page, ruled apart', async () => {
     await page.viewport(1300, 900);

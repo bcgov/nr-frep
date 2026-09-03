@@ -258,15 +258,35 @@
       background: var(--cds-layer-02, #ffffff);
     }
 
-    /* Left-aligned under their heading, not centred in the column: with three sources the boxes
-       drifted away from the labels naming them. */
-    th:not(:first-child),
-    td:not(:first-child) {
-      width: 18%;
+    /* The strategy table only. `__additional` carries this class too, and its three columns are a
+       different problem — sized by the controls in them, not by these headings. */
+    &:not(.chr-checklist__additional) {
+      /* Sized to its content, not to the container. Stretched to full width, a strategy name sat
+         roughly 750px from the checkbox answering it, further than the eye carries a row. */
+      width: auto;
+      max-width: 100%;
+      table-layout: fixed;
+
+      th:first-child,
+      td:first-child {
+        width: 320px;
+      }
+
+      th:not(:first-child),
+      td:not(:first-child) {
+        width: 220px;
+      }
+
+      /* The conditional field under a ticked box: tied to it by proximity, and held to the column
+         so a text input cannot push the cell wider than its heading. */
+      td .cds--form-item {
+        margin-top: 0.5rem;
+        max-width: 100%;
+      }
     }
 
-    // The cells hold a label-less Carbon checkbox; shrink the wrapper to just the box and centre
-    // it so each box lines up under its FN / AIA/SAP / Site plan heading.
+    // The cells hold a label-less Carbon checkbox; shrink the wrapper to just the box so it sits at
+    // the cell's left edge, under the FN / AIA/SAP / Site plan heading rather than adrift of it.
     td:not(:first-child) {
       .cds--checkbox-wrapper {
         display: inline-flex;
@@ -276,6 +296,7 @@
         padding-left: 1rem;
       }
     }
+
   }
 
   &__feature-list {
@@ -288,6 +309,13 @@
      The per-cell labels are hidden rather than dropped — the column header is the visible label, but
      the input still needs its own name for anyone not reading the table visually. */
   &__additional {
+    /* Grey field on a white surface, white field on a grey one. These rows are white, so the Name
+       input takes the grey field token — left white it lost its boundary against the cell and read
+       as text rather than something to type in. */
+    .cds--text-input {
+      background: var(--cds-field-01, #f4f4f4);
+    }
+
     /* Rows sized to the controls they hold. The shared table padding is set for text cells; here
        every row carries a 40px input, so the same padding again above and below made each row twice
        the height of its contents. */
@@ -638,6 +666,40 @@
    "Feature rating rationale". `.rip-form__grid` and the additional-strategies row each already
    correct this for themselves; applied to the section instead, so a container added later inherits
    the fix rather than rediscovering the bug. Fields only grow while an error is showing. */
+/* Carbon renders a RadioButtonGroup's `legendText` as `legend.cds--label`, and the section's own
+   `.rip-form__group legend` heading style matches it too — so "Select how the area was measured"
+   came out at the same weight as "Size of area influenced" above it and the two competed for the
+   same job. It is an instruction, not a heading, so it is set in body text. */
+.feature-section legend.cds--label {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.43;
+}
+
+/* Windthrow treatment: "None" stands apart from the techniques it excludes. Space alone does the
+   separating — a rule here read as a section divider in a group only six rows tall — and only just
+   enough of it: the gap has to say "these are not the same thing" without breaking the group into
+   two lists. */
+.chr-checklist__treatment-options {
+  margin-top: 0.5rem;
+}
+
+/* A hint that explains the legend belongs to it, not adrift between the heading and the first
+   control. The legend's own 1rem and the hint's 0.75rem stacked to nearly two blank lines, which
+   read as a gap rather than as one label in two parts.
+
+   `:has()` so only a legend that is actually followed by a hint gives up its spacing; every other
+   fieldset keeps the room it needs before its first field. Where `:has()` is unsupported the second
+   rule still applies, so the spacing improves rather than breaking. */
+.feature-section legend:has(+ .rip-form__hint) {
+  margin-bottom: 0.25rem;
+}
+
+.feature-section legend + .rip-form__hint {
+  margin-top: 0;
+}
+
 .feature-section .cds--form-requirement {
   position: static;
 }

@@ -448,7 +448,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
         {!editing && showEditControls && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}

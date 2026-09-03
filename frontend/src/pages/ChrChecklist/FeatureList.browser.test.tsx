@@ -226,9 +226,10 @@ const submitCreate = async (user: ReturnType<typeof userEvent.setup>, dialog: HT
   user.click(within(dialog).getByRole('button', { name: 'Create composite' }));
 
 describe('FeatureList — button icons', () => {
-  it('puts the icon to the left of the label', async () => {
-    // Carbon renders renderIcon as the button's last child, so "Add feature" came out as
-    // "Add feature +". The app-wide override in styles/_overrides.scss reorders it.
+  it('puts the icon to the right of the label', async () => {
+    // Carbon's own child order — the icon trails the label. The app-wide override in
+    // styles/_overrides.scss only unpins it from the button's right edge so it flows beside the
+    // text; it no longer reorders it.
     renderList([featureA, featureB]);
 
     const button = screen.getByRole('button', { name: /Add feature/ });
@@ -242,8 +243,8 @@ describe('FeatureList — button icons', () => {
 
     expect(icon).toBeTruthy();
     expect(range.getBoundingClientRect().width).toBeGreaterThan(0);
-    expect(icon.getBoundingClientRect().right).toBeLessThanOrEqual(
-      range.getBoundingClientRect().left,
+    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      range.getBoundingClientRect().right,
     );
   });
 });

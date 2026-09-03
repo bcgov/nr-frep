@@ -65,10 +65,10 @@ describe('LandingPage', () => {
     expect(mockLogin).toHaveBeenCalledWith('bceid');
   });
 
-  it('keeps the login icon beside its label rather than at the far edge', () => {
-    // The buttons are a fixed 20rem wide, so their contents have to be positioned deliberately.
-    // `space-between` pushed the label to one edge and the icon to the other, which read as a hole
-    // once the icon moved to the left of the label.
+  it('puts the login icon after its label, against the far edge', () => {
+    // These two buttons are the exception to the app-wide "icon leads the label" rule: a sign-in
+    // glyph points the way the button takes you, so it trails. The fixed 20rem width means the
+    // arrangement has to be stated — `space-between` is what pushes the icon to the edge.
     renderPage();
 
     const button = screen.getByTestId('landing-button__idir');
@@ -79,14 +79,12 @@ describe('LandingPage', () => {
     const range = document.createRange();
     range.selectNodeContents(text);
 
-    const gap = range.getBoundingClientRect().left - icon.getBoundingClientRect().right;
-    expect(gap).toBeGreaterThanOrEqual(0);
-    expect(gap).toBeLessThan(16); // the 0.5rem flex gap, not a 10rem hole
+    // The icon starts after the label ends — the ordering, which geometry can see.
+    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(range.getBoundingClientRect().right);
 
-    // And the pair sits against the left edge rather than centred. Asserted on the computed style:
-    // the button only reaches its 20rem in the real layout, so in here a centred and a left-aligned
-    // button measure the same and geometry cannot tell them apart.
-    expect(getComputedStyle(button).justifyContent).toBe('flex-start');
+    // Asserted on the computed style: the button only reaches its 20rem in the real layout, so in
+    // here the gap collapses and geometry cannot tell "against the edge" from "just after the text".
+    expect(getComputedStyle(button).justifyContent).toBe('space-between');
   });
 
   it('spells out the app name under the acronym', () => {

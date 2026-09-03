@@ -237,7 +237,7 @@ const BlockSummary: FC<{
         {!editing && !readOnly && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}

@@ -568,6 +568,37 @@ public class ChrChecklistPersistenceService {
   }
 
   /**
+   * Insert one standalone feature — the editor's Save on a feature the server has never seen.
+   *
+   * <p>Its own entry point because {@link #saveFeature} addresses a feature by id and a new one has
+   * none. Without this the editor fell back to the whole-document save, so building a checklist
+   * stayed quadratic: the tenth feature added rewrote all ten.
+   *
+   * <p>No composite membership is written. A feature created here stands on its own; grouping is
+   * the composite endpoints' job, and the editor cannot express it.
+   *
+   * @return the created feature, re-read so its id and code associations are populated
+   */
+  public List<Feature> createStandaloneFeature(long checklistId, Feature feature, String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    if (feature == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    feature.setCompositeFeatureInd("false");
+    ChrFeatureIdentity identity = createFeature(chrChecklist, feature, userId);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, Set.of(), identity.getChrFeatureId());
+  }
+
+  /**
    * Save one feature's own fields — the editor's Save.
    *
    * <p>The identity row and all nine per-feature child collections are rewritten, exactly as pass 1

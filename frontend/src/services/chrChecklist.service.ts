@@ -196,6 +196,26 @@ export class ChrChecklistService extends HttpClient {
   }
 
   /**
+   * Add one standalone feature — the editor's Save on a feature the server has never seen.
+   *
+   * `/new` rather than a plain POST to the collection because `POST …/features` is already the
+   * whole-section save, which cannot move: cached bundles still call it, and it is the fallback
+   * every per-feature write uses on an offline copy.
+   */
+  createFeature(
+    checklistId: string,
+    revisionCount: string,
+    feature: Feature,
+  ): CancelablePromise<FeatureSaveResponse> {
+    return this.doRequest<FeatureSaveResponse>(this.config, {
+      method: 'POST',
+      url: '/v1/chr/checklists/{checklistId}/features/new',
+      path: { checklistId },
+      body: { revisionCount, feature },
+    });
+  }
+
+  /**
    * Save one feature's own fields — the editor's Save, rather than resending every feature.
    *
    * Relationships are not sent and are not touched: associations have their own endpoint, and

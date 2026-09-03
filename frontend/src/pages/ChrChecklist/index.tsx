@@ -652,17 +652,22 @@ const ChrChecklistPage: FC = () => {
     async (feature: Feature): Promise<boolean> => {
       if (!checkList) return false;
       const pending = draftFeatures ?? checkList.features ?? [];
-      if (isOfflineCopy || !feature.id) {
+      // Offline there is no server to assign an id, so the local document stays the record.
+      if (isOfflineCopy) {
         return saveFeatures(pending);
       }
       setBusy(true);
       try {
-        const saved = await API.chrChecklist.saveFeature(
-          id,
-          feature.id,
-          checkList.revisionCount ?? '',
-          feature,
-        );
+        // A feature the server has never seen has no id to address, so it is created rather than
+        // updated. Both return the same shape, and both touch only this feature.
+        const saved = feature.id
+          ? await API.chrChecklist.saveFeature(
+              id,
+              feature.id,
+              checkList.revisionCount ?? '',
+              feature,
+            )
+          : await API.chrChecklist.createFeature(id, checkList.revisionCount ?? '', feature);
         const touched = saved.features ?? [];
         setCheckList((prev) =>
           prev

@@ -19,6 +19,8 @@ vi.mock('@/services/APIs', async () => ({
       saveBlockSummary: vi.fn(),
       saveContacts: vi.fn(),
       saveFeatures: vi.fn(),
+      createFeature: vi.fn(),
+      saveFeature: vi.fn(),
       getPhotos: vi.fn(),
       getPhotoContent: vi.fn(),
       addPhoto: vi.fn(),
@@ -65,6 +67,8 @@ const api = API.chrChecklist as unknown as {
   save: ReturnType<typeof vi.fn>;
   saveOpening: ReturnType<typeof vi.fn>;
   saveFeatures: ReturnType<typeof vi.fn>;
+  createFeature: ReturnType<typeof vi.fn>;
+  saveFeature: ReturnType<typeof vi.fn>;
   getPhotos: ReturnType<typeof vi.fn>;
   activate: ReturnType<typeof vi.fn>;
   submit: ReturnType<typeof vi.fn>;
@@ -187,18 +191,22 @@ describe('ChrChecklistPage', () => {
     // Not yet: the edit is still pending, and the count describes what is stored.
     expect(listed()).not.toContain('Other description, in the Description section');
 
-    // The server echoes the saved record back, which is what the count then reads.
-    const savedFeature = { featureLabel: '1', compositeFeatureInd: 'false', other: 'true' };
-    api.saveFeatures.mockResolvedValue({
-      ...sampleChecklist,
-      features: [savedFeature],
-      revisionCount: '2',
-    });
+    // A feature the server has never seen is created rather than updated — it has no id for a PUT
+    // to address — and the response carries just that feature, which is what the count then reads.
+    const savedFeature = {
+      id: '900',
+      featureLabel: '1',
+      compositeFeatureInd: 'false',
+      other: 'true',
+    };
+    api.createFeature.mockResolvedValue({ features: [savedFeature], revisionCount: '2' });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await vi.waitFor(() =>
       expect(listed()).toContain('Other description, in the Description section'),
     );
+    // Adding a feature no longer resends every other feature.
+    expect(api.saveFeatures).not.toHaveBeenCalled();
   });
 
   it('applies an edit made to a feature that has not been saved yet', async () => {

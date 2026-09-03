@@ -1174,4 +1174,67 @@ class ChrChecklistPersistenceServiceTest {
     assertEquals(1, survivors.size());
     assertEquals("7001", survivors.get(0).getId());
   }
+  // ---------------------------------------------------------------------------------------------
+  // createStandaloneFeature — the editor's Save on a feature the server has never seen. Without it
+  // the editor fell back to the whole-document save, so building a checklist stayed quadratic.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  void creatingAFeatureInsertsItAndHandsBackItsId() throws Exception {
+    Feature added = new Feature();
+    added.setFeatureLabel("4");
+    added.setFeatureDescriptionCode("CMT");
+    added.setPre1846("true");
+
+    List<Feature> saved = service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    assertTrue(ChrStringUtils.hasAValue(added.getId()), "the client needs the assigned id");
+    assertEquals(1, saved.size(), "creating one feature touches one feature");
+    assertTrue(persisted.stream().anyMatch(ChrFeatureAgeXref.class::isInstance),
+        "its child collections are written too, not just the identity row");
+  }
+
+  @Test
+  void creatingAFeatureLeavesTheOthersAlone() throws Exception {
+    ChrFeatureIdentity untouched = givenMappableFeature(7001L, "1");
+    untouched.setComments("as it was");
+
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    // The whole point: adding the tenth feature must not rewrite the other nine.
+    assertEquals("as it was", untouched.getComments());
+    assertNull(untouched.getUpdateUserid());
+  }
+
+  @Test
+  void creatingAFeatureNeverGroupsIt() throws Exception {
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+    // A stale flag on the payload must not make a composite by accident — grouping belongs to the
+    // composite endpoints, and the editor cannot express it.
+    added.setCompositeFeatureInd("true");
+
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    ChrFeatureIdentity created = persisted.stream()
+        .filter(ChrFeatureIdentity.class::isInstance)
+        .map(ChrFeatureIdentity.class::cast)
+        .findFirst()
+        .orElseThrow();
+    assertEquals("N", created.getCompositeFeatureInd());
+    assertNull(created.getCompositeChrFeatureIdentity());
+  }
+
+  @Test
+  void creatingAFeatureReleasesAnOfflineCheckout() throws Exception {
+    checklist.setDeviceCheckoutGuid(new byte[] {7});
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    assertNull(checklist.getDeviceCheckoutGuid());
+  }
 }

@@ -361,6 +361,35 @@ public class ChrChecklistService {
         saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
   }
 
+  /** Add one standalone feature to a checklist. Same gate and validation as an edit. */
+  @Transactional
+  public FeatureSaveResponse createFeature(long checklistId, FeatureSaveRequest request) {
+    if (request == null || request.feature() == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    CheckList carrier = new CheckList();
+    carrier.setFeatures(new ArrayList<>(List.of(request.feature())));
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.createStandaloneFeature(
+          checklistId, request.feature(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the feature after creating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
   /**
    * Save one feature's own fields.
    *

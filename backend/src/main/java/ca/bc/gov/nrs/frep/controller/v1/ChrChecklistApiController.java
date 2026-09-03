@@ -112,6 +112,11 @@ public class ChrChecklistApiController implements ChrChecklistApiEndpoint {
   }
 
   @Override
+  public ResponseEntity<FeatureSaveResponse> createFeature(long id, FeatureSaveRequest request) {
+    return ResponseEntity.ok(chrChecklistService.createFeature(id, request));
+  }
+
+  @Override
   public ResponseEntity<FeatureSaveResponse> saveFeature(
       long id, long featureId, FeatureSaveRequest request) {
     return ResponseEntity.ok(chrChecklistService.saveFeature(id, featureId, request));

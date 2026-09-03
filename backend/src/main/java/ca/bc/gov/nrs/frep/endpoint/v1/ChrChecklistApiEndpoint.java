@@ -184,6 +184,18 @@ public interface ChrChecklistApiEndpoint {
       @RequestBody CompositeUngroupRequest request);
 
   /**
+   * Add one standalone feature to a checklist — the editor's Save on a new feature.
+   *
+   * <p>The path carries {@code /new} because {@code POST /checklists/{id}/features} is already the
+   * whole-section save, which cannot be moved: cached frontend bundles still call it, and it is the
+   * fallback every per-feature write uses when the checklist is an offline copy.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PostMapping("/checklists/{id}/features/new")
+  ResponseEntity<FeatureSaveResponse> createFeature(
+      @PathVariable long id, @RequestBody FeatureSaveRequest request);
+
+  /**
    * Save one feature's own fields — the feature editor's Save.
    *
    * <p>Replaces resending every feature to change one. Relationships are left to their own

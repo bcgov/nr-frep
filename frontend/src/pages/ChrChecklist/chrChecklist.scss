@@ -516,6 +516,14 @@
       width: 9rem;
     }
 
+    /* The feature label is system-assigned, so its field is read-only. Carbon keeps the input
+       underline on a read-only field, which reads as an empty box waiting to be filled rather than
+       a value the record already holds. Outranks Carbon's own
+       `.cds--text-input-wrapper--readonly .cds--text-input` on specificity, not `!important`. */
+    .cds--text-input-wrapper--readonly .cds--text-input {
+      border-block-end: none;
+    }
+
     /* Carbon positions the inline error absolutely, so it takes no layout height and printed over
        the row beneath. `.rip-form__grid` already corrects this; this row is not one, so it needs the
        same. */

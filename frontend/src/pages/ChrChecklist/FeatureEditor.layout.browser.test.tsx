@@ -243,25 +243,10 @@ describe('FeatureEditor — required legend visibility', () => {
 });
 
 describe('FeatureEditor — Description row', () => {
-  it('keeps the invalid icon inside the field it belongs to', async () => {
-    await page.viewport(1150, 400);
-    render(
-      <FeatureEditor
-        feature={{ featureLabel: '2', compositeFeatureInd: 'false' } as never}
-        onPatch={vi.fn()}
-        readOnly={false}
-        takenLabels={['2']}
-      />,
-    );
-
-    const input = document.getElementById('feat-label')!.getBoundingClientRect();
-    const icon = document.querySelector('.cds--text-input__invalid-icon')!.getBoundingClientRect();
-
-    // Carbon pins the icon to `.cds--text-input__field-wrapper`, not to the input — capping the bare
-    // input left the wrapper full width and the exclamation floated clear of its field.
-    expect(icon.right).toBeLessThanOrEqual(input.right);
-    expect(icon.x).toBeGreaterThan(input.x);
-  });
+  // Removed: "keeps the invalid icon inside the field it belongs to". It drove the icon through
+  // feat-label's duplicate-label error, and that field is now read-only, so Carbon renders no
+  // invalid state on it. `chr-checklist__short-field` is used on no other field, so the capped-width
+  // regression it guarded cannot recur. The row layout is still covered by the test below.
 
   it('sits the label beside the two selects, not stranded before them', async () => {
     await page.viewport(1150, 400);

@@ -1,5 +1,4 @@
 import {
-  Button,
   Column,
   DatePicker,
   DatePickerInput,
@@ -21,6 +20,9 @@ import {
   Tile,
 } from '@carbon/react';
 import { useEffect, useState, type FC } from 'react';
+
+import ActionButton from '@/components/core/ActionButton';
+import FormLock from '@/components/core/FormLock';
 
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
@@ -130,7 +132,14 @@ const MasterListAdminPage: FC = () => {
   const [form, setForm] = useState<GenerateMasterListRequest>(emptyForm(''));
 
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  /**
+   * Which action is in flight, if any. Three buttons on this page share one request at a time, so a
+   * single boolean cannot say which one to spin — it would put the spinner on Generate while the
+   * user was saving comments.
+   */
+  const [running, setRunning] = useState<'generate' | 'comments' | 'delete' | null>(null);
+  /** Anything running locks the whole page, which is what every `disabled` here already asks. */
+  const generating = running !== null;
   const [errors, setErrors] = useState<FormErrors>({});
   // Live, unlike the rest of `errors` (which is only populated on Generate). "Save comments"
   // posts straight to the API without running validateGenerateForm, so this is what stops an
@@ -230,7 +239,7 @@ const MasterListAdminPage: FC = () => {
       });
       return;
     }
-    setGenerating(true);
+    setRunning('generate');
     try {
       const response = await API.masterListAdmin.generate(form);
       setCriteria(response);
@@ -248,12 +257,16 @@ const MasterListAdminPage: FC = () => {
         timeout: 9000,
       });
     } finally {
-      setGenerating(false);
+      setRunning(null);
     }
   };
 
-  const runMutation = async (action: () => Promise<MasterListAdmin>, successTitle: string) => {
-    setGenerating(true);
+  const runMutation = async (
+    action: () => Promise<MasterListAdmin>,
+    successTitle: string,
+    kind: 'comments' | 'delete',
+  ) => {
+    setRunning(kind);
     try {
       setCriteria(await action());
       display({ kind: 'success', title: successTitle, timeout: 5000 });
@@ -265,7 +278,7 @@ const MasterListAdminPage: FC = () => {
         timeout: 9000,
       });
     } finally {
-      setGenerating(false);
+      setRunning(null);
     }
   };
 
@@ -274,6 +287,7 @@ const MasterListAdminPage: FC = () => {
     return runMutation(
       () => API.masterListAdmin.saveComments(effectiveYear, form.comments ?? ''),
       'Comments saved',
+      'comments',
     );
   };
 
@@ -293,6 +307,7 @@ const MasterListAdminPage: FC = () => {
     void runMutation(
       () => API.masterListAdmin.deleteMasterList(effectiveYear),
       'Master list deleted',
+      'delete',
     );
   };
 
@@ -358,111 +373,118 @@ const MasterListAdminPage: FC = () => {
 
           {!loading && criteria && (
             <>
-              <div className="master-list-admin__form">
-                <DatePicker
-                  className="master-list-admin__date"
-                  datePickerType="single"
-                  dateFormat="Y-m-d"
-                  value={form.minHarvestCompleteDate ? [form.minHarvestCompleteDate] : []}
-                  onChange={(dates: Date[]) =>
-                    setForm({ ...form, minHarvestCompleteDate: toIsoDate(dates[0]) })
-                  }
-                >
-                  <DatePickerInput
-                    id="mla-min-date"
-                    labelText={requiredLabel('Min harvest-complete date', true)}
-                    placeholder="YYYY-MM-DD"
-                    disabled={generating || hasList}
-                    invalid={!!errors.minDate}
-                    invalidText={errors.minDate}
-                  />
-                </DatePicker>
-                <DatePicker
-                  className="master-list-admin__date"
-                  datePickerType="single"
-                  dateFormat="Y-m-d"
-                  value={form.maxHarvestCompleteDate ? [form.maxHarvestCompleteDate] : []}
-                  onChange={(dates: Date[]) =>
-                    setForm({ ...form, maxHarvestCompleteDate: toIsoDate(dates[0]) })
-                  }
-                >
-                  <DatePickerInput
-                    id="mla-max-date"
-                    labelText={requiredLabel('Max harvest-complete date', true)}
-                    placeholder="YYYY-MM-DD"
-                    disabled={generating || hasList}
-                    invalid={!!errors.maxDate}
-                    invalidText={errors.maxDate}
-                  />
-                </DatePicker>
-                <NumberInput
-                  id="mla-min-area"
-                  label={requiredLabel('Min opening gross area (ha)', true)}
-                  value={form.minOpeningGrossAreaHa ?? 0}
-                  onChange={(_e, { value }) =>
-                    setForm({
-                      ...form,
-                      minOpeningGrossAreaHa: typeof value === 'number' ? value : Number(value),
-                    })
-                  }
-                  step={0.5}
-                  disabled={generating || hasList}
-                  invalid={!!errors.minArea}
-                  invalidText={errors.minArea}
-                />
-                <NumberInput
-                  id="mla-max-sites"
-                  label={requiredLabel('Max sites per district', true)}
-                  value={form.maxSitesPerDistrict ?? 0}
-                  onChange={(_e, { value }) =>
-                    setForm({
-                      ...form,
-                      maxSitesPerDistrict: typeof value === 'number' ? value : Number(value),
-                    })
-                  }
-                  step={1}
-                  disabled={generating || hasList}
-                  invalid={!!errors.maxSites}
-                  invalidText={errors.maxSites}
-                />
-                {/* No maxLength: silently truncating pasted text loses content without telling
-                    the admin. The counter shows the overage and validateGenerateForm blocks. */}
-                <FieldWithCounter used={byteLength(form.comments)} limit={MAX_COMMENTS_LENGTH}>
-                  <TextArea
-                    id="mla-comments"
-                    labelText="Generation comments"
-                    rows={3}
-                    value={form.comments ?? ''}
-                    onChange={(e) => setForm({ ...form, comments: e.target.value })}
-                    invalid={Boolean(commentsLimitError || errors.comments)}
-                    invalidText={commentsLimitError || errors.comments}
-                  />
-                </FieldWithCounter>
-              </div>
-              <div className="master-list-admin__actions">
-                <Button
-                  onClick={() => void handleGenerate()}
-                  disabled={generating || hasList || Boolean(commentsLimitError)}
-                >
-                  Generate master list
-                </Button>
-                <Button
-                  kind="tertiary"
-                  onClick={() => void handleSaveComments()}
-                  disabled={generating || !hasList || Boolean(commentsLimitError)}
-                >
-                  Save comments
-                </Button>
-                {hasList && (
-                  <Button
-                    kind="danger--tertiary"
-                    onClick={() => void handleDelete()}
-                    disabled={generating || locked}
+              <FormLock busy={generating}>
+                <div className="master-list-admin__form">
+                  <DatePicker
+                    className="master-list-admin__date"
+                    datePickerType="single"
+                    dateFormat="Y-m-d"
+                    value={form.minHarvestCompleteDate ? [form.minHarvestCompleteDate] : []}
+                    onChange={(dates: Date[]) =>
+                      setForm({ ...form, minHarvestCompleteDate: toIsoDate(dates[0]) })
+                    }
                   >
-                    Delete list
-                  </Button>
-                )}
-              </div>
+                    <DatePickerInput
+                      id="mla-min-date"
+                      labelText={requiredLabel('Min harvest-complete date', true)}
+                      placeholder="YYYY-MM-DD"
+                      disabled={generating || hasList}
+                      invalid={!!errors.minDate}
+                      invalidText={errors.minDate}
+                    />
+                  </DatePicker>
+                  <DatePicker
+                    className="master-list-admin__date"
+                    datePickerType="single"
+                    dateFormat="Y-m-d"
+                    value={form.maxHarvestCompleteDate ? [form.maxHarvestCompleteDate] : []}
+                    onChange={(dates: Date[]) =>
+                      setForm({ ...form, maxHarvestCompleteDate: toIsoDate(dates[0]) })
+                    }
+                  >
+                    <DatePickerInput
+                      id="mla-max-date"
+                      labelText={requiredLabel('Max harvest-complete date', true)}
+                      placeholder="YYYY-MM-DD"
+                      disabled={generating || hasList}
+                      invalid={!!errors.maxDate}
+                      invalidText={errors.maxDate}
+                    />
+                  </DatePicker>
+                  <NumberInput
+                    id="mla-min-area"
+                    label={requiredLabel('Min opening gross area (ha)', true)}
+                    value={form.minOpeningGrossAreaHa ?? 0}
+                    onChange={(_e, { value }) =>
+                      setForm({
+                        ...form,
+                        minOpeningGrossAreaHa: typeof value === 'number' ? value : Number(value),
+                      })
+                    }
+                    step={0.5}
+                    disabled={generating || hasList}
+                    invalid={!!errors.minArea}
+                    invalidText={errors.minArea}
+                  />
+                  <NumberInput
+                    id="mla-max-sites"
+                    label={requiredLabel('Max sites per district', true)}
+                    value={form.maxSitesPerDistrict ?? 0}
+                    onChange={(_e, { value }) =>
+                      setForm({
+                        ...form,
+                        maxSitesPerDistrict: typeof value === 'number' ? value : Number(value),
+                      })
+                    }
+                    step={1}
+                    disabled={generating || hasList}
+                    invalid={!!errors.maxSites}
+                    invalidText={errors.maxSites}
+                  />
+                  {/* No maxLength: silently truncating pasted text loses content without telling
+                      the admin. The counter shows the overage and validateGenerateForm blocks. */}
+                  <FieldWithCounter used={byteLength(form.comments)} limit={MAX_COMMENTS_LENGTH}>
+                    <TextArea
+                      id="mla-comments"
+                      labelText="Generation comments"
+                      rows={3}
+                      value={form.comments ?? ''}
+                      onChange={(e) => setForm({ ...form, comments: e.target.value })}
+                      invalid={Boolean(commentsLimitError || errors.comments)}
+                      invalidText={commentsLimitError || errors.comments}
+                    />
+                  </FieldWithCounter>
+                </div>
+                <div className="master-list-admin__actions">
+                  <ActionButton
+                    busy={running === 'generate'}
+                    busyLabel="Generating…"
+                    onClick={() => void handleGenerate()}
+                    disabled={generating || hasList || Boolean(commentsLimitError)}
+                  >
+                    Generate master list
+                  </ActionButton>
+                  <ActionButton
+                    kind="tertiary"
+                    busy={running === 'comments'}
+                    onClick={() => void handleSaveComments()}
+                    disabled={generating || !hasList || Boolean(commentsLimitError)}
+                  >
+                    Save comments
+                  </ActionButton>
+                  {hasList && (
+                    <ActionButton
+                      kind="danger--tertiary"
+                      busy={running === 'delete'}
+                      busyLabel="Deleting…"
+                      onClick={() => void handleDelete()}
+                      disabled={generating || locked}
+                    >
+                      Delete list
+                    </ActionButton>
+                  )}
+                </div>
+              </FormLock>
             </>
           )}
         </Tile>

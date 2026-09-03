@@ -1,4 +1,5 @@
 import { RadioButton, RadioButtonGroup } from '@carbon/react';
+import FormLock from '@/components/core/FormLock';
 import { useState, type FC } from 'react';
 
 import { Modal } from '@/components/Modal';
@@ -53,57 +54,64 @@ const UngroupModal: FC<{
       primaryButtonText="Ungroup"
       secondaryButtonText="Cancel"
       primaryButtonDisabled={busy}
+      // Carbon swaps the primary button's text for an inline loader while this is active, which is
+      // the modal equivalent of ActionButton's spinner.
+      loadingStatus={busy ? 'active' : 'inactive'}
+      loadingDescription="Ungrouping…"
       size="sm"
       onRequestSubmit={submit}
       onRequestClose={onCancel}
     >
-      <p className="chr-features__composite-intro">
-        {`The composite assessment will be deleted, and each of the ${memberCount} features will need its own before the checklist can be submitted.`}
-      </p>
 
-      {mustChoose && (
-        <>
-          <p className="chr-features__composite-required">
-            <span aria-hidden="true">*</span> Required field.
-          </p>
-          <p className="chr-features__ungroup-stranded">
-            {`${listFeatureLabels(undescribed)} ${
-              undescribed.length === 1
-                ? 'has no details of its own'
-                : 'have no details of their own'
-            }.`}
-          </p>
-          <RadioButtonGroup
-            name="ungroup-choice"
-            orientation="vertical"
-            legendText={
-              <>
-                What should happen to these features?{' '}
-                <span aria-hidden="true" className="chr-features__required-mark">
-                  *
-                </span>
-              </>
-            }
-            invalid={choiceError}
-            invalidText="Choose whether to keep or delete them."
-            valueSelected={choice ?? ''}
-            onChange={(value) => setChoice(value as UngroupChoice)}
-          >
-            <RadioButton
-              id="ungroup-keep"
-              value="keep"
-              labelText="Keep them and assess them individually"
-              disabled={busy}
-            />
-            <RadioButton
-              id="ungroup-delete"
-              value="delete"
-              labelText="Delete them — this cannot be undone"
-              disabled={busy}
-            />
-          </RadioButtonGroup>
-        </>
-      )}
+      <FormLock busy={busy}>        <p className="chr-features__composite-intro">
+          {`The composite assessment will be deleted, and each of the ${memberCount} features will need its own before the checklist can be submitted.`}
+        </p>
+
+        {mustChoose && (
+          <>
+            <p className="chr-features__composite-required">
+              <span aria-hidden="true">*</span> Required field.
+            </p>
+            <p className="chr-features__ungroup-stranded">
+              {`${listFeatureLabels(undescribed)} ${
+                undescribed.length === 1
+                  ? 'has no details of its own'
+                  : 'have no details of their own'
+              }.`}
+            </p>
+            <RadioButtonGroup
+              name="ungroup-choice"
+              orientation="vertical"
+              legendText={
+                <>
+                  What should happen to these features?{' '}
+                  <span aria-hidden="true" className="chr-features__required-mark">
+                    *
+                  </span>
+                </>
+              }
+              invalid={choiceError}
+              invalidText="Choose whether to keep or delete them."
+              valueSelected={choice ?? ''}
+              onChange={(value) => setChoice(value as UngroupChoice)}
+            >
+              <RadioButton
+                id="ungroup-keep"
+                value="keep"
+                labelText="Keep them and assess them individually"
+                disabled={busy}
+              />
+              <RadioButton
+                id="ungroup-delete"
+                value="delete"
+                labelText="Delete them — this cannot be undone"
+                disabled={busy}
+              />
+            </RadioButtonGroup>
+          </>
+        )}
+      </FormLock>
+
     </Modal>
   );
 };

@@ -8,6 +8,7 @@ import type { CheckList } from '@/types/chrChecklist';
 
 import { NOTES_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { overLimitError } from '@/utils/textLimits';
+import ActionButton from '@/components/core/ActionButton';
 
 /**
  * Section — Notes: the block-level free-text note (legacy CHR "Comments" tab → `BLOCK_COMMENTS`,
@@ -60,7 +61,7 @@ const Notes: FC<{
         {!editing && !readOnly && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}
@@ -77,9 +78,11 @@ const Notes: FC<{
             >
               Cancel
             </Button>
-            <Button size="lg" disabled={busy || Boolean(limitError)} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton
+              busy={busy}
+              disabled={Boolean(limitError)}
+              onClick={() => void save()}
+            />
           </>
         )}
       </div>

@@ -318,3 +318,13 @@ export type PhotoPageResponse = {
   photos: Picture[];
   totalCount: number;
 };
+
+/**
+ * What a per-feature write hands back: only the features it touched, plus the checklist's new lock
+ * token. More than the addressed feature can appear — writing an association writes both
+ * directions, so the partner's stored state moves too.
+ */
+export type FeatureSaveResponse = {
+  features?: Feature[];
+  revisionCount?: string;
+};

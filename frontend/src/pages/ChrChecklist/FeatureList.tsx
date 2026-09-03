@@ -35,6 +35,7 @@ import {
   featureRows,
   membersOf,
   nextFeatureLabel,
+  sameLabel,
   undescribedMembers,
   ungroupComposite,
   ungroupDiscardingUndescribed,
@@ -61,9 +62,64 @@ const FeatureList: FC<{
   features: Feature[];
   onChange: (features: Feature[]) => void;
   onSave: (features: Feature[]) => Promise<boolean>;
+  /** Remove one feature through its own endpoint — see `deleteFeature` on the checklist page. */
+  onDelete: (feature: Feature) => Promise<boolean>;
+  /** Replace one feature's associations — the server writes both directions. */
+  onSaveAssociations: (subject: Feature, partners: Feature[]) => Promise<boolean>;
+  /** Save one feature's own fields — the editor's Save. */
+  onSaveFeature: (feature: Feature) => Promise<boolean>;
+  /**
+   * Create a composite. The anchor has no id yet — it is described, not addressed — and features
+   * typed into the dialog travel in the same call.
+   *
+   * `applied` is the same grouping already folded into the local array. Only the offline path uses
+   * it: there is no server to assign the anchor an id, so the local record keeps holding the group
+   * by label and the bulk check-in resolves it later. It cannot be derived on the page, because
+   * creating a composite does not go through `onChange` first.
+   */
+  onCreateComposite: (
+    anchor: Feature,
+    memberIds: string[],
+    newMembers: Feature[],
+    applied: Feature[],
+  ) => Promise<boolean>;
+  /**
+   * Re-point an existing composite. `memberIds` is the complete set — whatever is absent is
+   * released — and `applied` carries the same change already folded into the local array, for the
+   * offline path.
+   */
+  onUpdateComposite: (
+    anchorId: string,
+    featureDescriptionCode: string | undefined,
+    featureInfoSourceCode: string | undefined,
+    memberIds: string[],
+    newMembers: Feature[],
+    applied: Feature[],
+  ) => Promise<boolean>;
+  /**
+   * Dissolve a composite. The anchor goes either way; `deleteMemberIds` names the members that were
+   * never assessed in their own right and should go with it.
+   */
+  onUngroupComposite: (
+    anchorId: string,
+    deleteMemberIds: string[],
+    applied: Feature[],
+  ) => Promise<boolean>;
   readOnly: boolean;
   busy: boolean;
-}> = ({ features, onChange, onSave, readOnly, busy }) => {
+}> = ({
+  features,
+  onChange,
+  onSave,
+  onDelete,
+  onSaveAssociations,
+  onSaveFeature,
+  onCreateComposite,
+  onUpdateComposite,
+  onUngroupComposite,
+  readOnly,
+  busy,
+}) => {
   // The feature tables print the class and source of every row, so they need the same fetched
   // lists the dropdowns use — a code with no matching option falls back to the code itself.
   const featureClassCodes = useFeatureClassCodes();
@@ -103,7 +159,15 @@ const FeatureList: FC<{
   };
 
   const saveAssociate = async () => {
-    if (await onSave(features)) {
+    const subject = associating === null ? undefined : features[associating];
+    if (!subject) return;
+    // The dialog holds the set as labels, because that is what the table shows. The endpoint takes
+    // ids, so they are resolved here against the list the dialog was working from — a label that
+    // names no row is dropped rather than sent, the same as the old whole-array save did.
+    const partners = (subject.associatedFeatures ?? [])
+      .map((label) => features.find((f) => sameLabel(f.featureLabel, label)))
+      .filter((f): f is Feature => Boolean(f));
+    if (await onSaveAssociations(subject, partners)) {
       snapshot.current = null;
       setAssociating(null);
       setAssociationsSaved(true);
@@ -153,7 +217,10 @@ const FeatureList: FC<{
     setShowErrors(true);
     const editing = selected === null ? undefined : features[selected];
     if (editing && featureHasErrors(editing, otherLabels(selected))) return;
-    if (await onSave(features)) {
+    if (!editing) return;
+    // Just this feature. A composite anchor is saved the same way — its membership lives on the
+    // member rows, so the editor never owns it.
+    if (await onSaveFeature(editing)) {
       snapshot.current = null;
       setSelected(null);
     }
@@ -173,7 +240,47 @@ const FeatureList: FC<{
     const next = editing
       ? updateComposite(features, editing, draft)
       : addComposite(features, draft);
-    if (!(await onSave(next))) return;
+    if (editing) {
+      // Members travel as ids. The dialog's own additions are not in the list, so they fall through
+      // to newMembers exactly as they do on create.
+      const memberIds = draft.memberLabels
+        .map((label) => features.find((f) => sameLabel(f.featureLabel, label)))
+        .filter((f): f is Feature => Boolean(f?.id))
+        .map((f) => f.id as string);
+      if (!editing.id) {
+        // An anchor the server has never seen cannot be addressed; the whole-document save still
+        // can express it by label.
+        if (!(await onSave(next))) return;
+      } else if (
+        !(await onUpdateComposite(
+          editing.id,
+          draft.featureDescriptionCode,
+          draft.featureInfoSourceCode,
+          memberIds,
+          draft.additions,
+          next,
+        ))
+      ) {
+        return;
+      }
+    } else {
+      // Creating: the anchor is described rather than addressed, because the server assigns its id.
+      // Built the same way `addComposite` builds it, so the label follows the same sequence.
+      const anchor: Feature = {
+        featureLabel: nextFeatureLabel([...features, ...draft.additions]),
+        compositeFeatureInd: 'true',
+        featureDescriptionCode: draft.featureDescriptionCode,
+        featureInfoSourceCode: draft.featureInfoSourceCode,
+      };
+      // Members split by whether the server has seen them: a label that matches a row in the list
+      // is an existing feature and travels as an id, and the dialog's own additions are not in that
+      // list, so they fall through to newMembers.
+      const memberIds = draft.memberLabels
+        .map((label) => features.find((f) => sameLabel(f.featureLabel, label)))
+        .filter((f): f is Feature => Boolean(f?.id))
+        .map((f) => f.id as string);
+      if (!(await onCreateComposite(anchor, memberIds, draft.additions, next))) return;
+    }
     setComposing(null);
     // Name it from the saved list, so it matches the row the user is about to look at.
     const row = featureRows(next).find(
@@ -195,7 +302,21 @@ const FeatureList: FC<{
       choice === 'delete'
         ? ungroupDiscardingUndescribed(features, ungrouping)
         : ungroupComposite(features, ungrouping);
-    if (await onSave(next)) {
+    // Which members go with the anchor is decided here, not on the server: "undescribed" is a rule
+    // over the feature-type, age and description fields this component already reads to render the
+    // dialog, and the server holds those as xref rows.
+    const deleteMemberIds =
+      choice === 'delete'
+        ? undescribedMembers(features, ungrouping)
+            .map((f) => f.id)
+            .filter((id): id is string => Boolean(id))
+        : [];
+    const done = ungrouping.id
+      ? await onUngroupComposite(ungrouping.id, deleteMemberIds, next)
+      : // An anchor the server has never seen cannot be addressed; the whole-document save can
+        // still express its removal by absence.
+        await onSave(next);
+    if (done) {
       setUngrouping(null);
       setCompositeSaved(null);
     }
@@ -217,7 +338,9 @@ const FeatureList: FC<{
       }))
     )
       return;
-    await onSave(features.filter((_, i) => i !== index));
+    // Addressed by id rather than by resending the other features. The confirm dialog above names
+    // the feature, so the row the user agreed to is the row that goes.
+    await onDelete(features[index]);
   };
 
   const patchSelected = (patch: Partial<Feature>) =>

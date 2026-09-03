@@ -160,6 +160,23 @@ const extractValidationErrors = (err: unknown): ValidationError[] | null => {
   return Array.isArray(body) ? (body as ValidationError[]) : null;
 };
 
+/**
+ * Fold the features a per-feature write returned back into the stored list.
+ *
+ * Replace by id where the row is already held, append where it is not — a composite create returns
+ * an anchor and any features typed into its dialog, none of which the client has seen before. Order
+ * does not matter to the table: `featureRows` sorts anchors itself and finds members by their
+ * `compositeFeature`.
+ */
+const mergeSaved = (held: Feature[], touched: Feature[]): Feature[] => {
+  const byId = new Map(touched.filter((f) => f.id).map((f) => [f.id, f]));
+  const merged = held.map((existing) =>
+    existing.id && byId.has(existing.id) ? (byId.get(existing.id) as Feature) : existing,
+  );
+  const alreadyHeld = new Set(merged.map((f) => f.id));
+  return [...merged, ...touched.filter((f) => f.id && !alreadyHeld.has(f.id))];
+};
+
 const ChrChecklistPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -462,6 +479,297 @@ const ChrChecklistPage: FC = () => {
       return saved;
     },
     [checkList, persistSection],
+  );
+
+  /**
+   * Create a composite through its own endpoint.
+   *
+   * The anchor has no id until the server assigns one, which is the whole reason this is a create
+   * rather than a feature save naming a parent. Features typed into the dialog go in the same
+   * request: the gesture is atomic in the UI, and splitting it could leave rows behind that the
+   * evaluator never asked for.
+   */
+  const createComposite = useCallback(
+    async (
+      anchor: Feature,
+      memberIds: string[],
+      newMembers: Feature[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      // Offline there is no server to assign the anchor an id, so the group cannot be expressed as
+      // "these ids point at that id". The local record keeps the whole document, where membership
+      // is still held by label, and check-in resolves it through the bulk path exactly as before.
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.createComposite(
+          id,
+          checkList.revisionCount ?? '',
+          anchor,
+          memberIds,
+          newMembers,
+        );
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], saved.features ?? []),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Dissolve a composite through its own endpoint.
+   *
+   * The response carries only the members that survived — the anchor and any deleted members no
+   * longer exist, and the caller named those itself, so it drops them locally rather than being
+   * told about rows that are gone.
+   */
+  const ungroupCompositeGroup = useCallback(
+    async (
+      anchorId: string,
+      deleteMemberIds: string[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.ungroupComposite(
+          id,
+          anchorId,
+          checkList.revisionCount ?? '',
+          deleteMemberIds,
+        );
+        const gone = new Set([anchorId, ...deleteMemberIds]);
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(
+                  (prev.features ?? []).filter((f) => !f.id || !gone.has(f.id)),
+                  saved.features ?? [],
+                ),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Re-point an existing composite through its own endpoint.
+   *
+   * The response carries the anchor, every member it now holds, and everything it released, so a
+   * merge by id leaves no row stale. The composite a member was taken from needs no write and is
+   * not returned — membership lives on the child row, so re-pointing the member is the whole move,
+   * and `featureRows` recomputes the other group from it.
+   */
+  const updateCompositeGroup = useCallback(
+    async (
+      anchorId: string,
+      featureDescriptionCode: string | undefined,
+      featureInfoSourceCode: string | undefined,
+      memberIds: string[],
+      newMembers: Feature[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.updateComposite(
+          id,
+          anchorId,
+          checkList.revisionCount ?? '',
+          featureDescriptionCode,
+          featureInfoSourceCode,
+          memberIds,
+          newMembers,
+        );
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], saved.features ?? []),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Save one feature's own fields through its own endpoint — the editor's Save.
+   *
+   * The response carries just that feature, re-read, so it is patched back by id rather than
+   * replacing the array. Relationships are untouched here: associations and composite membership
+   * keep whatever the server already holds, which is why the stale `compositeFeature` label an
+   * editor payload may carry can no longer un-group anything.
+   */
+  const saveOneFeature = useCallback(
+    async (feature: Feature): Promise<boolean> => {
+      if (!checkList) return false;
+      const pending = draftFeatures ?? checkList.features ?? [];
+      if (isOfflineCopy || !feature.id) {
+        return saveFeatures(pending);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.saveFeature(
+          id,
+          feature.id,
+          checkList.revisionCount ?? '',
+          feature,
+        );
+        const touched = saved.features ?? [];
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], touched),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Replace one feature's associations through its own endpoint.
+   *
+   * The server writes both directions, so the response names the partner as well as the subject and
+   * both are patched back by id — returning only the addressed feature would leave the other row
+   * showing a stale association list.
+   *
+   * Offline, or a feature the server has never seen, falls back to the whole-document save for the
+   * same reasons as {@link deleteFeature}.
+   */
+  const saveAssociations = useCallback(
+    async (subject: Feature, partners: Feature[]): Promise<boolean> => {
+      if (!checkList) return false;
+      const pending = draftFeatures ?? checkList.features ?? [];
+      if (isOfflineCopy || !subject.id) {
+        return saveFeatures(pending);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.saveFeatureAssociations(
+          id,
+          subject.id,
+          checkList.revisionCount ?? '',
+          partners.map((p) => p.id).filter((featureId): featureId is string => Boolean(featureId)),
+        );
+        const touched = saved.features ?? [];
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], touched),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Remove one feature through its own endpoint, rather than by resending every other feature.
+   *
+   * Falls back to the whole-document save in the two cases where the endpoint cannot apply:
+   * offline, where there is no server to call and the local record is the only truth, and a feature
+   * the server has never seen, which has no id to address (it should not reach the table, since the
+   * editor discards an unsaved feature on Cancel — the guard is here because the cost of being
+   * wrong is deleting the wrong row).
+   *
+   * On success the checklist is re-read. The 204 carries no body, so the client's `revisionCount`
+   * is stale the moment the delete lands and its next save would be rejected as "modified by
+   * another user" — and a delete detaches composite members and drops association links on *other*
+   * features, so their stored state has moved too.
+   */
+  const deleteFeature = useCallback(
+    async (feature: Feature): Promise<boolean> => {
+      if (!checkList) return false;
+      const remaining = (draftFeatures ?? checkList.features ?? []).filter((f) => f !== feature);
+      if (isOfflineCopy || !feature.id) {
+        return saveFeatures(remaining);
+      }
+      setBusy(true);
+      try {
+        await API.chrChecklist.deleteFeature(id, feature.id, checkList.revisionCount ?? '');
+        const fresh = await API.chrChecklist.getChecklist(id);
+        setCheckList(fresh);
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Feature deleted', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Delete failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
   );
 
   /**
@@ -1101,6 +1409,12 @@ const ChrChecklistPage: FC = () => {
                 features={draftFeatures ?? checkList.features ?? []}
                 onChange={setDraftFeatures}
                 onSave={saveFeatures}
+                onDelete={deleteFeature}
+                onSaveAssociations={saveAssociations}
+                onSaveFeature={saveOneFeature}
+                onCreateComposite={createComposite}
+                onUpdateComposite={updateCompositeGroup}
+                onUngroupComposite={ungroupCompositeGroup}
                 readOnly={readOnly}
                 busy={busy}
               />

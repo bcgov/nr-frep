@@ -28,8 +28,7 @@ const ReportsPage: FC = () => {
   // Only show reports the user may run — same rule the generate buttons use (mayRunReport), so a
   // card can't be visible with its buttons hidden. The backend enforces this independently.
   const visibleReports = useMemo(
-    () =>
-      GENERATABLE_REPORTS.filter((report) => mayRunReport(report.id, { canEdit, canAnyChr })),
+    () => GENERATABLE_REPORTS.filter((report) => mayRunReport(report.id, { canEdit, canAnyChr })),
     [canEdit, canAnyChr],
   );
 
@@ -52,7 +51,8 @@ const ReportsPage: FC = () => {
     Promise.all([
       API.configuration.getOrgUnits(),
       API.configuration.getMasterListYears(),
-      API.configuration.getResourceValueStatusCodes(),
+      // REJ is not offered as a report filter, matching the legacy JCRS input control.
+      API.configuration.getResourceValueStatusCodes('REJ'),
       API.configuration.getChecklistStatusCodes(),
     ])
       .then(([orgs, years, statuses, checklistStatusCodes]) => {

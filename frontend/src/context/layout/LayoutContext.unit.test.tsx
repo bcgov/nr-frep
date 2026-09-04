@@ -76,6 +76,48 @@ describe('LayoutContext', () => {
     expect(value.textContent).toBe('closed');
   });
 
+  /**
+   * Regression: every protected route wraps its page in <Layout>, which renders a LayoutProvider —
+   * so navigating remounted the provider and reset the side nav to expanded mid-task. A nested
+   * provider now defers to the one above it, which lives above the router and survives navigation.
+   * The inner provider is keyed here so React genuinely unmounts and rebuilds it, exactly as a route
+   * change does.
+   */
+  it('keeps state when a nested provider remounts, as it does on navigation', async () => {
+    const Nested = ({ routeKey }: { routeKey: string }) => (
+      <LayoutProvider key={routeKey}>
+        <TestComponent />
+      </LayoutProvider>
+    );
+
+    let rerender: (ui: React.ReactElement) => void = () => {};
+    await act(async () => {
+      const result = render(
+        <LayoutProvider>
+          <Nested routeKey="page-a" />
+        </LayoutProvider>,
+      );
+      rerender = result.rerender;
+    });
+
+    const value = screen.getByTestId('side-nav');
+    const initial = value.textContent;
+    act(() => screen.getByText('Toggle SideNav').click());
+    const afterToggle = value.textContent;
+    expect(afterToggle).not.toBe(initial);
+
+    // "Navigate": the inner provider is torn down and a new one mounted.
+    await act(async () => {
+      rerender(
+        <LayoutProvider>
+          <Nested routeKey="page-b" />
+        </LayoutProvider>,
+      );
+    });
+
+    expect(screen.getByTestId('side-nav').textContent).toBe(afterToggle);
+  });
+
   it('throws if useLayout is used outside of LayoutProvider', () => {
     const errorSpy = vi?.spyOn(console, 'error').mockImplementation(() => {});
     const Broken = () => {

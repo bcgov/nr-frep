@@ -54,6 +54,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.DisplayName;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class ProtocolChecklistServiceTest {
@@ -341,16 +346,30 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
-  void saveBiodiversityOpeningRejectsMissingRequiredFields() {
-    // Blank location, invasive plant indicator, innovative practice and rating.
-    BiodiversityOpening bad = opening(null, "", null, null, null, null, null);
-    assertThrows(InvalidPayloadException.class, () -> service.saveBiodiversityOpening("9001", bad));
+  void saveBiodiversityOpeningAcceptsMissingRequiredFields() {
+    // Blank location, invasive plant indicator, innovative practice and rating. An evaluator part-way
+    // through the tab keeps what they have entered; the missing answers are reported on the tab and
+    // block submit, not the save.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening incomplete = opening(null, "", null, null, null, null, null);
+    when(writeRepository.saveBiodiversityOpening(incomplete, "u")).thenReturn(incomplete);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(incomplete);
+
+    service.saveBiodiversityOpening("9001", incomplete);
+
+    verify(writeRepository).saveBiodiversityOpening(incomplete, "u");
   }
 
   @Test
-  void saveBiodiversityOpeningRequiresInnovativeCommentWhenPracticeIsYes() {
-    BiodiversityOpening bad = opening(null, "loc", "Y", null, "N", null, "W");
-    assertThrows(InvalidPayloadException.class, () -> service.saveBiodiversityOpening("9001", bad));
+  void saveBiodiversityOpeningAcceptsAMissingInnovativeCommentWhenPracticeIsYes() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BiodiversityOpening incomplete = opening(null, "loc", "Y", null, "N", null, "W");
+    when(writeRepository.saveBiodiversityOpening(incomplete, "u")).thenReturn(incomplete);
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(incomplete);
+
+    service.saveBiodiversityOpening("9001", incomplete);
+
+    verify(writeRepository).saveBiodiversityOpening(incomplete, "u");
   }
 
   @Test
@@ -380,10 +399,67 @@ class ProtocolChecklistServiceTest {
         "2", List.of());
   }
 
+  /**
+   * The constrained total only ever *guarded* the two cross-field rules below it, so a value outside
+   * 0-100 — or not a number at all — skipped every check and went to the proc.
+   * {@code CALC_CONSTRAINED_TOTAL} is NUMBER(3), so "500" stored as nonsense and "abc" failed as a
+   * conversion error.
+   */
+  @Test
+  void saveBioStratumRejectsAConstrainedTotalOutsideItsRange() {
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("500")));
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("abc")));
+  }
+
+  @Test
+  void saveBioStratumAcceptsAConstrainedTotalInRange() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioStratum ok = stratumWithConstrainedTotal("0");
+    when(writeRepository.saveBioStratum(ok, "u")).thenReturn(ok);
+
+    service.saveBioStratum(ok);
+
+    verify(writeRepository).saveBioStratum(ok, "u");
+  }
+
+  /** A valid stratum carrying one constrained total. */
+  private static BioStratum stratumWithConstrainedTotal(String total) {
+    BioStratum base = stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+    return new BioStratum(
+        base.stratumId(), base.checklistId(), base.strataTypeCode(), base.stratumNumber(),
+        base.summaryDate(), base.assessorName(), base.plotCount(), base.size(),
+        base.consistentMapInd(), base.estimatedSize(),
+        null, null, null, null, null, null,
+        base.harvestAreaCode(),
+        null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null,
+        null, null,
+        base.bgcZoneCode(), base.bgcSubzoneCode(),
+        null, null, null, null, null, null, null, total,
+        base.revisionCount(), List.of());
+  }
+
   @Test
   void saveBioStratumRejectsMissingRequiredFields() {
     BioStratum bad = stratum(null, null, null, null, null, null, null, null, null);
     assertThrows(InvalidPayloadException.class, () -> service.saveBioStratum(bad));
+  }
+
+  @Test
+  void saveBioStratumAcceptsAMissingNumberTypeAndSize() {
+    // Nullable columns: a stratum entered before its type or size is known still stores. Plot count,
+    // map-consistency, harvest area and BGC zone/subzone are the floor and are still supplied.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioStratum partial = stratum(null, null, "Y", "3", null, "HNR", "CWH", "ds", null);
+    when(writeRepository.saveBioStratum(partial, "u")).thenReturn(partial);
+
+    service.saveBioStratum(partial);
+
+    verify(writeRepository).saveBioStratum(partial, "u");
   }
 
   @Test
@@ -479,16 +555,74 @@ class ProtocolChecklistServiceTest {
         null, null, "N", firstLeg, secondLeg, null, "1", standTable, List.of(), null);
   }
 
+  /**
+   * {@code BIODIVERSITY_PLOT.UTM_ZONE} is NUMBER(2) and had no rule at all: the picker only offers
+   * 7-11, but the API is open to any client and the offline check-in path reaches the same code, so
+   * a non-numeric zone went to Oracle and came back as "A database error occurred" naming nothing.
+   */
   @Test
-  void saveBioPlotRejectsMissingRequiredFields() {
+  void saveBioPlotRejectsAZoneTheColumnCannotHold() {
+    BioPlot bad = plotWithZone("abc");
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(plotWithZone("100")));
+  }
+
+  @Test
+  void saveBioPlotAcceptsAZoneOutsideThePickerButInsideTheColumn() {
+    // Bounded by the column, not by the five BC zones: a legacy row on another zone still re-saves.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot ok = plotWithZone("12");
+    when(writeRepository.saveBioPlot(ok, "u")).thenReturn(ok);
+
+    service.saveBioPlot(ok);
+
+    verify(writeRepository).saveBioPlot(ok, "u");
+  }
+
+  /** A valid plot carrying one UTM zone, with a signal recorded. */
+  private static BioPlot plotWithZone(String zone) {
+    return new BioPlot("P1", "S1", "1", "IDIR\\JDOE", "Y", zone, "123456", "1234567", "N", "5",
+        null, null, "N", "120", "240", null, "1", List.of(), List.of(), null);
+  }
+
+  @Test
+  void saveBioPlotRejectsABlankAssessor() {
+    // BIODIVERSITY_PLOT.ASSESSOR_NAME is NOT NULL, so this one cannot be waved through. The blank
+    // bearings alongside it are advisory now — the assessor is what refuses the save.
     BioPlot bad = plot(null, null, null, null, "N", List.of());
     assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
   }
 
   @Test
-  void saveBioPlotRejectsMissingMeasurementMethod() {
-    // Valid except no measurement method (BAF/fixed-area/full-count all blank).
-    BioPlot bad = plot("IDIR\\JDOE", "120", "240", null, "N", List.of());
+  void saveBioPlotAcceptsMissingBearingsAndUtm() {
+    // A plot recorded before the transect is walked or the GPS gets a fix still stores.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot partial = plot("IDIR\\JDOE", null, null, "5", "N", List.of());
+    when(writeRepository.saveBioPlot(partial, "u")).thenReturn(partial);
+
+    service.saveBioPlot(partial);
+
+    verify(writeRepository).saveBioPlot(partial, "u");
+  }
+
+  @Test
+  void saveBioPlotAcceptsNoMeasurementMethodYet() {
+    // No measurement method (BAF/fixed-area/full-count all blank) is a plot not measured yet, not a
+    // contradiction — it stores, and the tab counts it against submit.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot unmeasured = plot("IDIR\\JDOE", "120", "240", null, "N", List.of());
+    when(writeRepository.saveBioPlot(unmeasured, "u")).thenReturn(unmeasured);
+
+    service.saveBioPlot(unmeasured);
+
+    verify(writeRepository).saveBioPlot(unmeasured, "u");
+  }
+
+  @Test
+  void saveBioPlotRejectsTwoMeasurementMethods() {
+    // Naming both a BAF and a full-count area is a contradiction: still refused.
+    BioPlot bad = new BioPlot("P1", "S1", "1", "IDIR\\JDOE", "N", null, null, null, "N", "5",
+        null, "2.5", "N", "120", "240", null, "1", List.of(), List.of(), null);
     assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
   }
 
@@ -729,5 +863,37 @@ class ProtocolChecklistServiceTest {
         .thenReturn(new AttachmentContent("legacy.odd", "application/x-odd", new byte[] {1}));
     assertEquals("application/x-odd",
         service.getAttachmentContent("bio", "1", "8").mimeType());
+  }
+
+  @Nested
+  @DisplayName("getBioPlot id validation")
+  class GetBioPlotIdValidation {
+
+    /**
+     * BIODIVERSITY_PLOT_ID is a NUMBER. Binding a blank or non-numeric string fails inside Oracle as
+     * "Invalid Input Number", which reached the evaluator as "A database error occurred… contact the
+     * FREP help desk" and was logged as a system fault naming nothing.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "bio", "107a", "undefined"})
+    @DisplayName("rejects a non-numeric plot id as a 400 that quotes it")
+    void rejectsNonNumericPlotId(String plotId) {
+      ResponseStatusException thrown =
+          assertThrows(ResponseStatusException.class, () -> service.getBioPlot(plotId));
+
+      assertThat(thrown.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(thrown.getReason()).contains(plotId);
+      // Never reaches the driver, so no "Database error" and no 500.
+      verifyNoInteractions(writeRepository);
+    }
+
+    @Test
+    @DisplayName("still reads a numeric plot id")
+    void acceptsNumericPlotId() {
+      when(writeRepository.getBioPlot("107")).thenReturn(null);
+
+      assertThrows(ResponseStatusException.class, () -> service.getBioPlot("107"));
+      verify(writeRepository).getBioPlot("107");
+    }
   }
 }

@@ -43,6 +43,12 @@ export const getCookie = (name: string): string => {
  * We therefore clear the {@code CognitoIdentityServiceProvider.<clientId>.*} keys from localStorage;
  * clearing cookies here would be a silent no-op and leave the local session intact after logout.
  */
+/**
+ * Set when the user signs out while offline, so the landing page can say that the sign-out was
+ * local only. Mirrors {@code SESSION_EXPIRED_FLAG}: sessionStorage, read-and-cleared once.
+ */
+export const OFFLINE_SIGNOUT_FLAG = 'frep.offlineSignOut';
+
 export const clearStoredTokens = (): void => {
   const prefix = `CognitoIdentityServiceProvider.${env.VITE_USER_POOLS_WEB_CLIENT_ID}`;
   try {
@@ -104,7 +110,7 @@ export const parseToken = (idToken: JWT | undefined): FamLoginUser | undefined =
  * Parses Cognito group strings into a user privilege object.
  *
  * - Global roles that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMIN", "FREP_EDITOR",
- *   "FREP_VIEW_ONLY") map to a `null` value (null = global, non-scoped role).
+ *   "FREP_EDITOR") map to a `null` value (null = global, non-scoped role).
  * - Per-district CHR groups ({@link CHR_DISTRICT_EDITOR_PREFIX}`<code>`, e.g.
  *   "FREP_CHR_EDITOR_DISTRICT_DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
  *   value is the `string[]` of district codes the user may edit CHR for (a scoped role).

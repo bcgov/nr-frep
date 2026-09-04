@@ -5,8 +5,9 @@
 @use '@carbon/react/scss/theme' as *;
 @use '@carbon/type';
 
-// Drawer: slide off-screen when closed. It stays open through navigation; only the header
-// hamburger/X toggle sets isSideNavExpanded false.
+// Below lg the nav is a slide-away drawer over the content — a 48px rail is too much of a phone's
+// width to give up permanently, and there is room for the full panel when it is open. It stays open
+// through navigation; only the header hamburger/X toggle sets isSideNavExpanded false.
 .side-nav-drawer.#{vars.$bcgov-prefix}--side-nav {
   inline-size: vars.$layout-side-nav-width;
   transform: translateX(-100%);
@@ -18,11 +19,11 @@
   transform: translateX(0);
 }
 
-// Carbon marks the SideNav overlay `--overlay-active` whenever the nav is `expanded`, and we keep
-// the SideNav permanently expanded so the drawer stays mounted for its slide animation. On mobile
-// (< lg) that leaves Carbon's full-screen dimming overlay active even while the drawer is CLOSED —
-// it covers the page at z-index 6000 and swallows every tap, so the page looks frozen and nothing
-// is editable. Neutralise the overlay unless the drawer (its following sibling) is actually open.
+// Carbon marks the SideNav overlay `--overlay-active` whenever the nav is `expanded`, and we keep the
+// SideNav permanently expanded so the drawer stays mounted for its slide animation. That leaves the
+// full-screen dimming overlay active even while the drawer is CLOSED — it covers the page at
+// z-index 6000 and swallows every tap, so the page looks frozen and nothing is editable. Neutralise
+// it unless the drawer (its following sibling) is actually open.
 .#{vars.$bcgov-prefix}--side-nav__overlay-active:not(:has(~ .side-nav-drawer--open)) {
   block-size: 0;
   inline-size: 0;
@@ -30,10 +31,91 @@
   pointer-events: none;
 }
 
-.cds--side-nav__link-text {
-  svg {
-    margin-inline-end: 0.75rem;
-    fill: var(--#{vars.$bcgov-prefix}-link-primary);
+// From lg the nav is always on screen instead: a 3rem icon-only rail when closed, the 16rem panel
+// when open, with the width animating between them. Sliding it off-screen hid the icons too, costing
+// the user their bearings as well as the labels — and on a wide viewport there is room to keep them.
+@include breakpoint(lg) {
+  .side-nav-drawer.#{vars.$bcgov-prefix}--side-nav {
+    min-inline-size: vars.$layout-side-nav-width;
+    max-inline-size: vars.$layout-side-nav-width;
+    transform: none;
+    transition:
+      inline-size 400ms cubic-bezier(0.4, 0.14, 0.3, 1),
+      min-inline-size 400ms cubic-bezier(0.4, 0.14, 0.3, 1),
+      max-inline-size 400ms cubic-bezier(0.4, 0.14, 0.3, 1);
+    will-change: auto;
+  }
+
+  // Closed = the rail. `overflow: visible` only here, so a hover tooltip can escape the 48px strip;
+  // the expanded nav keeps Carbon's own overflow (relaxing it unconditionally leaks the nav
+  // internals as stray white lines).
+  .side-nav-drawer.#{vars.$bcgov-prefix}--side-nav:not(.side-nav-drawer--open) {
+    inline-size: vars.$layout-side-nav-rail;
+    min-inline-size: vars.$layout-side-nav-rail;
+    max-inline-size: vars.$layout-side-nav-rail;
+    overflow: visible;
+  }
+
+  // The nav no longer sits over the content here (the content margin tracks its width), so the
+  // dimming overlay has nothing left to do.
+  .#{vars.$bcgov-prefix}--side-nav__overlay,
+  .#{vars.$bcgov-prefix}--side-nav__overlay-active {
+    display: none;
+  }
+
+  // In the rail the link is the positioning anchor for its tooltip and centres its lone icon. Carbon
+  // indents the link by 2rem to make room for the label; force it flush so the icon lands
+  // dead-centre of the 48px strip. `!important` beats Carbon's more specific longhand padding rule.
+  .side-nav-drawer:not(.side-nav-drawer--open) .#{vars.$bcgov-prefix}--side-nav__link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0 !important;
+  }
+
+  // Zero the icon→label gap so the icon isn't pushed off-centre by a label nobody can see.
+  .side-nav-drawer:not(.side-nav-drawer--open) .#{vars.$bcgov-prefix}--side-nav__icon {
+    margin-inline: 0 !important;
+  }
+
+  // Carbon clips the list and its items, which would cut off a tooltip sticking out past the rail.
+  // `!important` is required: `.cds--side-nav:hover .cds--side-nav__items` sets `overflow-y: auto`,
+  // ties on specificity but wins on source order, and fires exactly when the tooltip appears — and
+  // `overflow-y: auto` forces `overflow-x` to `auto` too.
+  .side-nav-drawer:not(.side-nav-drawer--open) .#{vars.$bcgov-prefix}--side-nav__items,
+  .side-nav-drawer:not(.side-nav-drawer--open) .#{vars.$bcgov-prefix}--side-nav__item {
+    overflow: visible !important;
+  }
+
+  // The tooltip is the link's own label, repurposed: taken out of flow and floated to the right of
+  // the icon as a dark pill, hidden until hover. Reusing the real label rather than a data-attribute
+  // guarantees it is present and says exactly what the expanded nav says.
+  .side-nav-drawer:not(.side-nav-drawer--open) .#{vars.$bcgov-prefix}--side-nav__link-text {
+    position: absolute;
+    inset-inline-start: calc(100% + 8px);
+    inset-block-start: 50%;
+    z-index: 9500;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: #131315;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
+    // `!important` beats Carbon's `__link:hover .__link-text` colour, which would paint the text dark
+    // against the dark pill at the exact moment it becomes visible.
+    color: #fff !important;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .side-nav-drawer:not(.side-nav-drawer--open)
+    .#{vars.$bcgov-prefix}--side-nav__link:hover
+    .#{vars.$bcgov-prefix}--side-nav__link-text {
+    opacity: 1;
   }
 }
 
@@ -59,4 +141,11 @@
   padding-inline: 2rem 1rem;
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
   @include type.type-style('label-01');
+}
+
+// No room for a section label in the rail — the link's hover tooltip already names it.
+@include breakpoint(lg) {
+  .side-nav-drawer:not(.side-nav-drawer--open) .side-nav-support-heading {
+    display: none;
+  }
 }

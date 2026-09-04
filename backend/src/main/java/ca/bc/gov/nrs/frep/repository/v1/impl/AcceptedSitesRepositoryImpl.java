@@ -44,9 +44,9 @@ public class AcceptedSitesRepositoryImpl extends AbstractFrepRepository
         ACCEPTED_SITES_SQL,
         params,
         (rs, rowNum) -> new AcceptedSiteRow(
-            cleanString(rs.getString("checklist_id")),
+            cleanString(numberString(rs, "checklist_id")),
             cleanString(rs.getString("checklist_type")),
-            cleanString(rs.getString("sample_number")),
+            cleanString(numberString(rs, "sample_number")),
             cleanString(rs.getString("resource_value_stat_code")),
             cleanString(rs.getString("checklist_status_code")),
             cleanString(rs.getString("opening_number")),

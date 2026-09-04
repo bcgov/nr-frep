@@ -28,6 +28,28 @@ public class ObjectStorageService {
     this.properties = properties;
   }
 
+  /** Flat {@code slr/} namespace for Biodiversity attachments — see {@link #bioObjectKey}. */
+  private static final String BIO_OBJECT_PREFIX = "slr/";
+
+  /**
+   * The object key for a Biodiversity attachment. <b>The single definition</b> — the download, the
+   * upload, the delete and the one-time BLOB migration all resolve their key through here.
+   *
+   * <p>It lives on the storage service rather than in any one caller because the four paths must
+   * agree exactly and are spread across three classes in two layers. When they each held their own
+   * {@code "slr/" + id} literal, a divergence would have been invisible in the worst possible way:
+   * the download falls back to the Oracle BLOB when the object is absent, so a migration writing to
+   * a key the download never reads would still serve the right bytes from the BLOB — correct
+   * downloads, a passing gate, and every migrated object orphaned. The symptom would only appear
+   * once the fallback is removed (Phase 4b), long after the evidence was gone.
+   *
+   * <p>{@code trim()} because the id reaches the key as a string on some paths and a trailing space
+   * would silently write to a key nothing ever reads.
+   */
+  public static String bioObjectKey(String attachmentId) {
+    return BIO_OBJECT_PREFIX + attachmentId.trim();
+  }
+
 
   public byte[] getObjectBytes(String key) {
     try (S3Client client = client()) {

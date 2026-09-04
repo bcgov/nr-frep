@@ -208,40 +208,34 @@ public class ProtocolChecklistService {
   }
 
   /**
-   * Validate the Biodiversity Opening, mirroring the legacy FREP210 {@code Frep210ValidationManager}
-   * "Save" chain: Location description, Invasive plant?, Innovative practice? and Rating are required;
-   * the two practice/invasive comments are required when their answer is Yes; length limits on the
-   * description (50) and the comments (4000) / rationale (2000); and the FREP gross-area override is a
-   * float within 0.01–99999.99 to two decimals. Throws {@link InvalidPayloadException} (HTTP 400).
+   * Validate the Biodiversity Opening for <b>saving</b>.
+   *
+   * <p>Only rules the stored row cannot survive are enforced here: the byte-length limits the
+   * columns declare ({@code LOCATION_DESCRIPTION VARCHAR2(50 BYTE)}, the 4000-byte comments, the
+   * 2000-byte rationale) and the FREP gross-area override's number format (float, 0.01–99999.99,
+   * two decimals). Breaking one of those means an {@code ORA-12899} or a nonsense number in the
+   * column, so they stay a hard {@link InvalidPayloadException} (HTTP 400).
+   *
+   * <p><b>Completeness is deliberately not enforced.</b> The legacy FREP210
+   * {@code Frep210ValidationManager} "Save" chain also required Location description, Invasive
+   * plant?, Innovative practice?, Rating and the two conditional comments, and this method used to
+   * copy that. An evaluator working a block in the field routinely has some of those answers and not
+   * others, and refusing the save cost them the answers they did have. They are now reported rather
+   * than refused: the tab marks them, counts them and warns after the save, and
+   * {@code FREP_TOMBSTONE.validate_biodiversity_chklst} still blocks <i>submit</i> on the three it
+   * owns (evaluation date, evaluation team lead, location description). A partially filled Opening
+   * is a legitimate saved state; an unsubmittable one.
    */
   private static void validateBiodiversityOpening(BiodiversityOpening opening) {
     List<String> errors = new ArrayList<>();
 
-    if (StringUtils.isBlank(opening.locationDescription())) {
-      errors.add("Location description is required.");
-    } else if (length(opening.locationDescription()) > 50) {
+    if (length(opening.locationDescription()) > 50) {
       errors.add(tooLong("Location description", opening.locationDescription(), 50));
     }
-    if (StringUtils.isBlank(opening.invasivePlantIndicator())) {
-      errors.add("Select whether invasive plant species are present.");
-    }
-    if (StringUtils.isBlank(opening.innovativePracticeInd())) {
-      errors.add("Select whether innovative practices were used.");
-    }
-    if (StringUtils.isBlank(opening.frepSiteEvaluationCode())) {
-      errors.add("A rating is required.");
-    }
-
-    if ("Y".equals(opening.innovativePracticeInd())
-        && StringUtils.isBlank(opening.innovativePracticesComment())) {
-      errors.add("Describe the innovative practice.");
-    } else if (length(opening.innovativePracticesComment()) > 4000) {
+    if (length(opening.innovativePracticesComment()) > 4000) {
       errors.add(tooLong("Description", opening.innovativePracticesComment(), 4000));
     }
-    if ("Y".equals(opening.invasivePlantIndicator())
-        && StringUtils.isBlank(opening.invasivePlantComment())) {
-      errors.add("Enter a comment about the invasive plants.");
-    } else if (length(opening.invasivePlantComment()) > 4000) {
+    if (length(opening.invasivePlantComment()) > 4000) {
       errors.add(tooLong("Comments", opening.invasivePlantComment(), 4000));
     }
     if (length(opening.evaluatorOpinionComment()) > 2000) {
@@ -289,8 +283,12 @@ public class ProtocolChecklistService {
       return;
     }
     double number = Double.parseDouble(text);
-    if (number < 0.01 || number > 99999.99) {
-      errors.add("FREP gross area override must be between 0.01 and 99999.99.");
+    if (number > 99999.99) {
+      errors.add("FREP gross area override must be at most 99999.99.");
+      return;
+    }
+    if (number < 0.01) {
+      errors.add("FREP gross area override must be at least 0.01.");
       return;
     }
     int dot = text.indexOf('.');
@@ -315,13 +313,19 @@ public class ProtocolChecklistService {
     String harvest = trimmedOrEmpty(s.harvestAreaCode());
     String consistent = trimmedOrEmpty(s.consistentMapInd());
 
-    requireField(s.stratumNumber(), "Stratum number", errors);
-    requireField(s.strataTypeCode(), "Stratum type", errors);
+    // The four the database itself insists on: BIODIVERSITY_STRATUM declares them NOT NULL and
+    // FREP_BIODIVERSITY_STRATUM.validate_mandatories re-checks three of them. A blank one is an
+    // ORA-01400, not a preference, so these stay a hard refusal. BGC subzone joins them because
+    // validate_bec runs the whole BEC combination through FREP_VALIDATE_BGC against the catalogue.
     requireField(s.consistentMapInd(), "Consistent with map", errors);
     requireField(s.plotCount(), "Plot count", errors);
     requireField(s.harvestAreaCode(), "Harvest area", errors);
     requireField(s.bgcZoneCode(), "BGC zone", errors);
     requireField(s.bgcSubzoneCode(), "BGC subzone", errors);
+
+    // Stratum number, stratum type, the size fields and the patch details are nullable columns, so a
+    // half-entered stratum stores fine. They are reported on the tab and counted against submit
+    // rather than refused here — see the note on validateBiodiversityOpening.
 
     if (StringUtils.isNotBlank(s.stratumNumber()) && !stratumNumberValid(s.stratumNumber().trim())) {
       errors.add("Stratum Id: use 1-3 letters then 0-2 digits, e.g. AB12.");
@@ -329,20 +333,9 @@ public class ProtocolChecklistService {
     if ("0".equals(trimmedOrEmpty(s.plotCount())) && !type.isEmpty() && !type.startsWith("P")) {
       errors.add("A stratum with 0 plots must be a patch stratum type.");
     }
-    if ("Y".equals(consistent) && StringUtils.isBlank(s.size())) {
-      errors.add("Stratum size is required when consistent with map is \"Yes\".");
-    }
-    if (("N".equals(consistent) || "M".equals(consistent)) && StringUtils.isBlank(s.estimatedSize())) {
-      errors.add("Estimated size is required when not consistent with map.");
-    }
+    // A contradiction between two entered values, not a gap: keep refusing it.
     if ("M".equals(consistent) && isNumeric(s.size()) && Double.parseDouble(s.size().trim()) != 0) {
       errors.add("Stratum size must be blank when \"Not mapped\".");
-    }
-    if ("PCH".equals(harvest) && StringUtils.isBlank(s.patchWindthrowPct())) {
-      errors.add("% of trees windthrown is required for a patch reserve.");
-    }
-    if (type.startsWith("P") && StringUtils.isBlank(s.patchLocationCode())) {
-      errors.add("Patch location is required for a patch stratum type.");
     }
 
     intRange(s.plotCount(), "Plot count", 0, 99, errors);
@@ -381,6 +374,11 @@ public class ProtocolChecklistService {
     maxLength(s.otherConstraint(), "Other constraint", 50, errors);
     maxLength(s.otherEcoAnchorDesc(), "Other eco anchor description", 30, errors);
     maxLength(s.patchGeneralComment(), "Patch general comment", 2000, errors);
+
+    // The total is a percentage in a NUMBER(3) column. It needed a rule of its own: the block below
+    // only *guards* on the range, so a total of "500" — or "abc" — skipped every check here and went
+    // to the proc, where it is either stored as nonsense or fails as a conversion error.
+    intRange(s.constrainedTotal(), "Total constrained %", 0, 100, errors);
 
     if (isIntInRange(trimmedOrEmpty(s.constrainedTotal()), 0, 100)) {
       int total = Integer.parseInt(s.constrainedTotal().trim());
@@ -462,17 +460,41 @@ public class ProtocolChecklistService {
     }
   }
 
+  /**
+   * Range check that names the end that failed, matching the client's wording.
+   *
+   * <p>One message covering shape and both bounds ran to "Wetland % must be a whole number from 1 to
+   * 100." — too long for the bare table cells these live in, where it was clipped mid-sentence, and it
+   * described three rules to someone who broke one.
+   */
   private static void intRange(String value, String label, int min, int max, List<String> errors) {
-    if (StringUtils.isNotBlank(value) && !isIntInRange(value.trim(), min, max)) {
-      errors.add(label + " must be a whole number from " + min + " to " + max + ".");
+    if (StringUtils.isBlank(value) || isIntInRange(value.trim(), min, max)) {
+      return;
     }
+    String text = value.trim();
+    if (!text.matches("-?\\d+")) {
+      errors.add(label + " must be a whole number.");
+      return;
+    }
+    long n = Long.parseLong(text);
+    errors.add(n > max ? label + " must be at most " + max + "."
+        : label + " must be at least " + min + ".");
   }
 
+  /** As {@link #intRange}, for a field whose column carries decimals. */
   private static void numRange(String value, String label, double min, double max,
       List<String> errors) {
-    if (StringUtils.isNotBlank(value) && !isNumInRange(value.trim(), min, max)) {
-      errors.add(label + " must be a number from " + fmt(min) + " to " + fmt(max) + ".");
+    if (StringUtils.isBlank(value) || isNumInRange(value.trim(), min, max)) {
+      return;
     }
+    String text = value.trim();
+    if (!UNSIGNED_DECIMAL.matcher(text).matches()) {
+      errors.add(label + " must be a number.");
+      return;
+    }
+    double n = Double.parseDouble(text);
+    errors.add(n > max ? label + " must be at most " + fmt(max) + "."
+        : label + " must be at least " + fmt(min) + ".");
   }
 
   private static void decimalLimit(String value, String label, int max, List<String> errors) {
@@ -587,7 +609,26 @@ public class ProtocolChecklistService {
         .toList();
   }
 
+
+  /**
+   * Reject a non-numeric id before it reaches the driver.
+   *
+   * {@code BIODIVERSITY_PLOT.BIODIVERSITY_PLOT_ID} is a NUMBER, so binding a blank or non-numeric
+   * string fails inside Oracle as "Invalid Input Number" — which surfaces to the evaluator as
+   * "A database error occurred… contact the FREP help desk" and is logged as a system fault, with
+   * nothing anywhere naming the value that caused it. A 400 that quotes the id says what happened
+   * and leaves a usable trace.
+   */
+  private static void requireNumericId(String value, String what) {
+    if (!StringUtils.isNumeric(value)) {
+      log.warn("Rejected non-numeric {}: '{}'", what, value);
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Invalid " + what + ": '" + value + "'");
+    }
+  }
+
   public BioPlot getBioPlot(String plotId) {
+    requireNumericId(plotId, "plot id");
     BioPlot plot = writeRepository.getBioPlot(plotId);
     if (plot == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plot not found: " + plotId);
@@ -632,22 +673,28 @@ public class ProtocolChecklistService {
   private static void validateBioPlot(BioPlot p) {
     List<String> errors = new ArrayList<>();
 
-    if (!"N".equals(trimmedOrEmpty(p.utmSignal()))) {
-      requireField(p.utmZone(), "Zone", errors);
-      if (StringUtils.isBlank(p.utmEasting())) {
-        errors.add("Easting is required.");
-      } else if (!p.utmEasting().trim().matches("\\d{6}")) {
-        errors.add("Easting must be exactly 6 digits.");
-      }
-      if (StringUtils.isBlank(p.utmNorthing())) {
-        errors.add("Northing is required.");
-      } else if (!p.utmNorthing().trim().matches("\\d{7}")) {
-        errors.add("Northing must be exactly 7 digits.");
-      }
+    // UTM and the bearings are nullable, so a plot recorded before the GPS fix (or before the
+    // transect is walked) stores fine — the missing values are counted on the tab and block submit.
+    //
+    // A value that *is* entered still has to be the right shape, whatever the signal says: a
+    // coordinate has to be storable even on a plot claiming no signal, and the columns are what
+    // decide that. Only the requiredness of the three is conditional, and that is advisory. Mirrors
+    // the standing rule in the client's plotValidation.ts.
+    if (StringUtils.isNotBlank(p.utmEasting()) && !p.utmEasting().trim().matches("\\d{6}")) {
+      errors.add("Easting must be exactly 6 digits.");
     }
+    if (StringUtils.isNotBlank(p.utmNorthing()) && !p.utmNorthing().trim().matches("\\d{7}")) {
+      errors.add("Northing must be exactly 7 digits.");
+    }
+    // BIODIVERSITY_PLOT.UTM_ZONE is NUMBER(2), and nothing checked it before: a non-numeric zone
+    // reached Oracle as a conversion error with nothing naming the field. Bounded by the column
+    // rather than by the five zones the picker offers (7-11), so a legacy row carrying another zone
+    // still re-saves.
+    intRange(p.utmZone(), "Zone", 1, 99, errors);
 
-    requireBearing(p.firstLegTransect(), "Bearing 1st leg", errors);
-    requireBearing(p.secondLegTransect(), "2nd leg", errors);
+    intRange(p.firstLegTransect(), "Bearing 1st leg", 0, 359, errors);
+    intRange(p.secondLegTransect(), "2nd leg", 0, 359, errors);
+    // BIODIVERSITY_PLOT.ASSESSOR_NAME is NOT NULL (and validate_mandatories re-checks it).
     requireField(p.assessorName(), "Evaluated by", errors);
 
     intRange(p.plotNumber(), "Plot #", 0, 999, errors);
@@ -658,17 +705,18 @@ public class ProtocolChecklistService {
     numRange(p.fullCountArea(), "Full count area", 0.01, 9999.99, errors);
     decimalLimit(p.fullCountArea(), "Full count area", 2, errors);
 
+    // Naming two measurement methods is a contradiction and still refused; naming none is just a
+    // plot not measured yet.
     long methods = Stream.of(p.basalAreaFactor(), p.fixedAreaRadius(), p.fullCountArea())
         .filter(StringUtils::isNotBlank).count();
-    if (methods != 1) {
-      errors.add("Enter exactly one of BAF, fixed area radius, or full count area.");
+    if (methods > 1) {
+      errors.add("Enter only one of BAF, fixed area radius, or full count area.");
     }
 
+    // Every column of BIODIVERSITY_STAND_DETAIL and COARSE_WOODY_DEBRIS_DETAIL is NOT NULL, so a row
+    // the user has added must be complete before it can be stored. Having no rows at all is fine.
     if ("Y".equals(trimmedOrEmpty(p.treeIndicator()))) {
       List<BioStandRow> stand = p.standTable() == null ? List.of() : p.standTable();
-      if (stand.isEmpty()) {
-        errors.add("\"Trees exist\" is checked — add at least one stand-table row, or uncheck it.");
-      }
       for (int i = 0; i < stand.size(); i++) {
         BioStandRow r = stand.get(i);
         String prefix = "Stand row " + (i + 1) + ": ";
@@ -700,14 +748,6 @@ public class ProtocolChecklistService {
     }
   }
 
-  private static void requireBearing(String value, String label, List<String> errors) {
-    if (StringUtils.isBlank(value)) {
-      errors.add(label + " is required.");
-    } else {
-      intRange(value, label, 0, 359, errors);
-    }
-  }
-
   private static void requireFloat(String value, String label, double min, double max,
       int maxDecimals, boolean exclusiveMin, List<String> errors) {
     if (StringUtils.isBlank(value)) {
@@ -726,10 +766,12 @@ public class ProtocolChecklistService {
       return;
     }
     double n = Double.parseDouble(text);
-    if ((exclusiveMin ? n <= min : n < min) || n > max) {
+    if (n > max) {
+      errors.add(label + " must be at most " + fmt(max) + ".");
+    } else if (exclusiveMin ? n <= min : n < min) {
       errors.add(exclusiveMin
-          ? label + " must be greater than " + fmt(min) + " and no more than " + fmt(max) + "."
-          : label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+          ? label + " must be over " + fmt(min) + "."
+          : label + " must be at least " + fmt(min) + ".");
     }
   }
 
@@ -787,9 +829,15 @@ public class ProtocolChecklistService {
     return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
 
-  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  /**
+   * Object key for a Biodiversity attachment; resolved through {@link
+   * ObjectStorageService#bioObjectKey} so the size shown in the list is HEADed from the same key the
+   * download reads. This one previously skipped the {@code trim()} the write path applies — harmless
+   * in practice, since ids come from a NUMBER column, but it meant a blank size rather than a failed
+   * download would have been the only symptom if that ever stopped holding.
+   */
   private static String bioObjectKey(String attachmentId) {
-    return "slr/" + attachmentId;
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   /** A page of attachment metadata plus the total, for the pager. */

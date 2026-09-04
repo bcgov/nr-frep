@@ -2,7 +2,7 @@ import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AuthContext, type AuthContextType } from './AuthContext';
-import { clearStoredTokens, parseToken } from './authUtils';
+import { OFFLINE_SIGNOUT_FLAG, clearStoredTokens, parseToken } from './authUtils';
 import { buildFederatedLogoutUrl } from './logoutChain';
 
 import type { FamLoginUser, LoginProvider } from './types';
@@ -75,6 +75,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const logout = useCallback(() => {
+    // Offline the federated chain cannot be reached. window.location.assign() lands on the browser's
+    // ERR_INTERNET_DISCONNECTED page — outside the app, with the local tokens already cleared — and
+    // the user has to find their own way back. Sign out locally instead and stay put: clearing the
+    // user swaps AppRoutes to the offline route set, whose catch-all returns to the landing.
+    //
+    // This clears the app session only. The upstream IDIR / Keycloak / Cognito sessions are
+    // untouched and cannot be reached from here, so signing in again once back online may not
+    // re-prompt for credentials — the landing page says so (OFFLINE_SIGNOUT_FLAG).
+    if (!navigator.onLine) {
+      sessionStorage.setItem(OFFLINE_SIGNOUT_FLAG, '1');
+      // Move to the landing *before* clearing the user, and without a page load.
+      //
+      // Clearing the user alone left the screen untouched, so signing out looked like a dead
+      // control: the offline route set still serves the page you were most likely on when you
+      // pressed it (/protocol-checklists/chr/:id, /chr/offline, /dashboard), so its catch-all never
+      // fires and nothing moves. The "signed out on this device" notice lives on the landing page,
+      // so it was never seen either.
+      //
+      // history.replaceState rather than location.assign: a real navigation offline depends on the
+      // service worker being active to serve index.html from cache, and being wrong about that
+      // strands the user on the browser's error page — the exact failure this branch exists to
+      // avoid. AppRoutes rebuilds the router when `user` changes, and the new router reads
+      // window.location, so the swap below lands on the landing with no network involved.
+      window.history.replaceState({}, '', env.VITE_BASE_PATH || '/');
+      clearStoredTokens();
+      setUser(undefined);
+      return;
+    }
+
     // Primary path: drive the BC-Gov federated logout chain ourselves (Siteminder → Keycloak →
     // Cognito → app) so the upstream IDIR/Keycloak/Cognito sessions are cleared — not just the local
     // app tokens (which is all Amplify's signOut() reliably does here). We clear the Amplify token

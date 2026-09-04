@@ -13,6 +13,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioWindthrowTreatment;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioAttachmentRef;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
 import ca.bc.gov.nrs.frep.struct.v1.frep.StratumComputed;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
@@ -118,12 +119,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           }
           return new BiodiversityOpening(
               checklistId,
-              rs.getString("frep_resource_value_id"),
+              numberString(rs, "frep_resource_value_id"),
               rs.getString("frep_checklist_status_code"),
-              rs.getString("frep_wtp_override"),
+              numberString(rs, "frep_wtp_override"),
               rs.getString("location_description"),
-              rs.getString("patch_reserves_on_block"),
-              rs.getString("patch_reserves_sampled"),
+              numberString(rs, "patch_reserves_on_block"),
+              numberString(rs, "patch_reserves_sampled"),
               rs.getString("innovtv_practice_answer_code"),
               rs.getString("innovative_practices_comment"),
               rs.getString("invasive_plant_answer_code"),
@@ -131,11 +132,11 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
               rs.getString("frep_site_evaluation_code"),
               rs.getString("evaluator_opinion_comment"),
               rs.getString("evaluation_date"),
-              rs.getString("revision_count"),
+              numberString(rs, "revision_count"),
               null, null, null,
               rs.getString("team_lead_userid"),
               null, // teamLeadName — resolved via FAM in the service
-              rs.getString("team_lead_revision_count")
+              numberString(rs, "team_lead_revision_count")
           );
         },
         checklistId
@@ -166,8 +167,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
             + " ON frv.frep_selected_site_id = fss.frep_selected_site_id"
             + " WHERE frv.frep_resource_value_id = ?",
         (rs, n) -> opening.withResultsRefs(
-            rs.getString("opening_gross_area"),
-            rs.getString("nar_area"),
+            numberString(rs, "opening_gross_area"),
+            numberString(rs, "nar_area"),
             rs.getString("harvest_date")),
         resourceValueId);
     return refs.isEmpty() ? opening : refs.get(0);
@@ -285,13 +286,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         STRATUM_LIST_SELECT,
         (rs, rowNum) -> new BioStratumRow(
-            rs.getString("stratum_id"),
+            numberString(rs, "stratum_id"),
             rs.getString("stratum_number"),
             rs.getString("biodiversity_strata_type_code"),
             rs.getString("summary_date"),
-            rs.getString("stratum_plot_count"),
-            rs.getString("stratum_size"),
-            rs.getString("revision_count")),
+            numberString(rs, "stratum_plot_count"),
+            numberString(rs, "stratum_size"),
+            numberString(rs, "revision_count")),
         checklistId
     );
   }
@@ -300,7 +301,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioWindthrowTreatment> treatments = jdbcTemplate.query(
         WINDTHROW_SELECT,
         (rs, rowNum) -> new BioWindthrowTreatment(
-            rs.getString("windthrow_treatment_id"),
+            numberString(rs, "windthrow_treatment_id"),
             rs.getString("windthrow_treatment_code"),
             rs.getString("check_ind")),
         stratumId
@@ -311,52 +312,52 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       }
       return new BioStratum(
           stratumId,
-          rs.getString("biodiversity_checklist_id"),
+          numberString(rs, "biodiversity_checklist_id"),
           rs.getString("biodiversity_strata_type_code"),
           rs.getString("stratum_number"),
           rs.getString("summary_date"),
           rs.getString("stratum_summary_assessor_name"),
-          rs.getString("stratum_plot_count"),
-          rs.getString("stratum_size"),
+          numberString(rs, "stratum_plot_count"),
+          numberString(rs, "stratum_size"),
           rs.getString("stratum_consistent_map_ind"),
-          rs.getString("stratum_estimated_size"),
+          numberString(rs, "stratum_estimated_size"),
           rs.getString("patch_location_code"),
-          rs.getString("patch_estimated_oldst_tree_age"),
+          numberString(rs, "patch_estimated_oldst_tree_age"),
           rs.getString("patch_general_comment"),
-          rs.getString("patch_windthrow_pct"),
+          numberString(rs, "patch_windthrow_pct"),
           rs.getString("constraint_indicator"),
-          rs.getString("wetland_pct"),
+          numberString(rs, "wetland_pct"),
           rs.getString("harvest_area_code"),
-          rs.getString("riparian_management_zone_pct"),
-          rs.getString("riparian_reserve_zone_pct"),
-          rs.getString("rock_outcrop_pct"),
-          rs.getString("non_commercial_brush_pct"),
-          rs.getString("non_merch_timber_pct"),
-          rs.getString("sensitive_soil_pct"),
-          rs.getString("ung_hoof_animal_wintering_pct"),
-          rs.getString("wildlife_habitat_area_pct"),
-          rs.getString("old_growth_management_area_pct"),
-          rs.getString("visuals_pct"),
-          rs.getString("cultural_heritage_feature_pct"),
-          rs.getString("recreation_feature_pct"),
+          numberString(rs, "riparian_management_zone_pct"),
+          numberString(rs, "riparian_reserve_zone_pct"),
+          numberString(rs, "rock_outcrop_pct"),
+          numberString(rs, "non_commercial_brush_pct"),
+          numberString(rs, "non_merch_timber_pct"),
+          numberString(rs, "sensitive_soil_pct"),
+          numberString(rs, "ung_hoof_animal_wintering_pct"),
+          numberString(rs, "wildlife_habitat_area_pct"),
+          numberString(rs, "old_growth_management_area_pct"),
+          numberString(rs, "visuals_pct"),
+          numberString(rs, "cultural_heritage_feature_pct"),
+          numberString(rs, "recreation_feature_pct"),
           rs.getString("other_constraint"),
-          rs.getString("other_constraint_pct"),
+          numberString(rs, "other_constraint_pct"),
           rs.getString("eco_indicator"),
-          rs.getString("bear_den_cnt"),
-          rs.getString("hibernaculum_cnt"),
-          rs.getString("vet_tree_cnt"),
-          rs.getString("mineral_lick_cnt"),
-          rs.getString("large_stick_nest_cnt"),
-          rs.getString("cavity_nest_cnt"),
-          rs.getString("large_hallow_tree_cnt"),
-          rs.getString("large_witches_broom_cnt"),
+          numberString(rs, "bear_den_cnt"),
+          numberString(rs, "hibernaculum_cnt"),
+          numberString(rs, "vet_tree_cnt"),
+          numberString(rs, "mineral_lick_cnt"),
+          numberString(rs, "large_stick_nest_cnt"),
+          numberString(rs, "cavity_nest_cnt"),
+          numberString(rs, "large_hallow_tree_cnt"),
+          numberString(rs, "large_witches_broom_cnt"),
           rs.getString("karst_feature_ind"),
           rs.getString("largest_tree_ind"),
           rs.getString("cwd_heavy_concentration_ind"),
           rs.getString("active_wildlife_trails_ind"),
           rs.getString("active_wlt_cwd_feeding_ind"),
           rs.getString("uncommon_tree_species_ind"),
-          rs.getString("other_eco_anchor_cnt"),
+          numberString(rs, "other_eco_anchor_cnt"),
           rs.getString("other_eco_anchor_desc"),
           rs.getString("bgc_zone_code"),
           rs.getString("bgc_subzone_code"),
@@ -367,8 +368,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           rs.getString("seral"),
           rs.getString("windthrow_distribution_code"),
           rs.getString("other_windthrow_treatment"),
-          rs.getString("calc_constrained_total"),
-          rs.getString("revision_count"),
+          numberString(rs, "calc_constrained_total"),
+          numberString(rs, "revision_count"),
           treatments
       );
     }, stratumId);
@@ -470,7 +471,8 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<Object> structs = new ArrayList<>(treatments.size());
     for (BioWindthrowTreatment t : treatments) {
       structs.add(connection.createStruct(WINDTHROW_OBJECT_TYPE, new Object[] {
-          t.windthrowTreatmentId(), s.stratumId(), t.code(), t.checkInd()
+          numberAttribute(t.windthrowTreatmentId()), numberAttribute(s.stratumId()),
+          t.code(), t.checkInd()
       }));
     }
     return connection.createOracleArray(WINDTHROW_VARRAY_TYPE, structs.toArray());
@@ -608,11 +610,11 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         PLOT_LIST_SELECT,
         (rs, rowNum) -> new BioPlotRow(
-            rs.getString("biodiversity_plot_id"),
-            rs.getString("plot_number"),
+            numberString(rs, "biodiversity_plot_id"),
+            numberString(rs, "plot_number"),
             rs.getString("assessor_name"),
             null, // display name resolved via FAM in the service
-            rs.getString("revision_count")),
+            numberString(rs, "revision_count")),
         stratumId
     );
   }
@@ -621,17 +623,17 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioStandRow> stand = jdbcTemplate.query(
         STAND_SELECT,
         (rs, rowNum) -> new BioStandRow(
-            rs.getString("biodiversity_stand_id"),
-            rs.getString("biodiversity_plot_id"),
+            numberString(rs, "biodiversity_stand_id"),
+            numberString(rs, "biodiversity_plot_id"),
             rs.getString("frep_tree_species_code"),
             rs.getString("species_desc"),
-            rs.getString("tree_number"),
-            rs.getString("dbh"),
-            rs.getString("height"),
+            numberString(rs, "tree_number"),
+            numberString(rs, "dbh"),
+            numberString(rs, "height"),
             rs.getString("comments"),
             rs.getString("wildlife_tree_decay_class_code"),
             rs.getString("decay_desc"),
-            rs.getString("revision_count"),
+            numberString(rs, "revision_count"),
             rs.getString("entry_userid"),
             rs.getString("update_userid")),
         plotId
@@ -639,17 +641,17 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     List<BioCwdRow> cwd = jdbcTemplate.query(
         CWD_SELECT,
         (rs, rowNum) -> new BioCwdRow(
-            rs.getString("coarse_woody_debris_detail_id"),
-            rs.getString("biodiversity_plot_id"),
+            numberString(rs, "coarse_woody_debris_detail_id"),
+            numberString(rs, "biodiversity_plot_id"),
             rs.getString("frep_tree_species_code"),
             rs.getString("species_desc"),
-            rs.getString("log_number"),
-            rs.getString("log_diameter"),
-            rs.getString("log_length"),
+            numberString(rs, "log_number"),
+            numberString(rs, "log_diameter"),
+            numberString(rs, "log_length"),
             rs.getString("cwd_decay_class_code"),
             rs.getString("decay_desc"),
             rs.getString("comments"),
-            rs.getString("revision_count"),
+            numberString(rs, "revision_count"),
             rs.getString("entry_userid"),
             rs.getString("update_userid")),
         plotId
@@ -660,22 +662,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       }
       return new BioPlot(
           plotId,
-          rs.getString("stratum_id"),
-          rs.getString("plot_number"),
+          numberString(rs, "stratum_id"),
+          numberString(rs, "plot_number"),
           rs.getString("assessor_name"),
           rs.getString("utm_signal"),
-          rs.getString("utm_zone"),
-          rs.getString("utm_easting"),
-          rs.getString("utm_northing"),
+          numberString(rs, "utm_zone"),
+          numberString(rs, "utm_easting"),
+          numberString(rs, "utm_northing"),
           rs.getString("tree_indicator"),
-          rs.getString("basal_area_factor"),
-          rs.getString("fixed_area_radius"),
-          rs.getString("full_count_area"),
+          numberString(rs, "basal_area_factor"),
+          numberString(rs, "fixed_area_radius"),
+          numberString(rs, "full_count_area"),
           rs.getString("cwd_transect_indicator"),
-          rs.getString("first_leg_transect"),
-          rs.getString("second_leg_transect"),
+          numberString(rs, "first_leg_transect"),
+          numberString(rs, "second_leg_transect"),
           rs.getString("plot_comment"),
-          rs.getString("revision_count"),
+          numberString(rs, "revision_count"),
           stand,
           cwd,
           null // display name resolved via FAM in the service
@@ -733,10 +735,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, STAND_VARRAY_TYPE, STAND_OBJECT_TYPE, rows,
+              // Attribute order matches THE.FREP_STAND_TABLE_OBJECT; the NUMBER attributes go
+              // through numberAttribute so the driver writes canonical bytes.
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, blankToNull(row.treeNumber()),
-                  blankToNull(row.dbh()), blankToNull(row.height()), row.comments(),
-                  row.decayClassCode(), null, blankToNull(row.revisionCount()), null, userId
+                  null, numberAttribute(plotId), row.speciesCode(), null,
+                  numberAttribute(row.treeNumber()), numberAttribute(row.dbh()),
+                  numberAttribute(row.height()), row.comments(), row.decayClassCode(), null,
+                  numberAttribute(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },
@@ -751,10 +756,12 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         cs -> {
           setInOutString(cs, 1, plotId);
           cs.setObject(2, buildStructArray(cs, CWD_VARRAY_TYPE, CWD_OBJECT_TYPE, rows,
+              // Attribute order matches THE.FREP_CWD_TABLE_OBJECT; see the stand mapper above.
               row -> new Object[] {
-                  null, plotId, row.speciesCode(), null, blankToNull(row.logNumber()),
-                  blankToNull(row.logDiameter()), blankToNull(row.logLength()), row.decayClassCode(),
-                  null, row.comments(), blankToNull(row.revisionCount()), null, userId
+                  null, numberAttribute(plotId), row.speciesCode(), null,
+                  numberAttribute(row.logNumber()), numberAttribute(row.logDiameter()),
+                  numberAttribute(row.logLength()), row.decayClassCode(), null, row.comments(),
+                  numberAttribute(row.revisionCount()), null, userId
               }));
           cs.registerOutParameter(3, Types.VARCHAR);
         },
@@ -913,21 +920,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
 
   private static final String ATTACH_PKG = "FREP_CHECKLIST_ATTACHMENTS";
 
+  private static boolean isBioAttachment(String resourceType) {
+    return isBiodiversity(resourceType);
+  }
+
   /**
    * Biodiversity attachment bytes live in shared object storage, not the Oracle BLOB. Metadata
    * still goes through {@code FREP_CHECKLIST_ATTACHMENTS} (list/insert/remove); only the file content
    * moves. Keyed by the unique attachment id under an {@code slr/} prefix — collision-free vs the CHR
    * photo keys and independent of the DB resource type (SLB legacy / SLR go-forward). Other protocols
    * (RIP/WTR) keep using the Oracle BLOB path unchanged.
+   *
+   * <p>Delegates to {@link ObjectStorageService#bioObjectKey} rather than holding its own prefix, so
+   * the download, upload, delete and the one-time BLOB migration cannot drift apart.
    */
-  private static final String BIO_OBJECT_PREFIX = "slr/";
-
-  private static boolean isBioAttachment(String resourceType) {
-    return isBiodiversity(resourceType);
-  }
-
   private static String bioObjectKey(String attachmentId) {
-    return BIO_OBJECT_PREFIX + attachmentId.trim();
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   /**
@@ -971,7 +979,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
     return jdbcTemplate.query(
         BIO_ATTACHMENTS_PAGE,
         (rs, n) -> new AttachmentRow(
-            trimNumericId(rs.getString("chklst_attach_id")), rs.getString("file_name"),
+            trimNumericId(numberString(rs, "chklst_attach_id")), rs.getString("file_name"),
             rs.getString("description"), rs.getString("mime_type_code"), null),
         Long.valueOf(checklistId), (long) page * size, size);
   }
@@ -1017,11 +1025,67 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
   }
 
   /**
+   * One keyset page of every Biodiversity attachment, ascending by id — the scan behind the one-time
+   * BLOB → object-storage migration.
+   *
+   * <p>Deliberately reads {@code BIODIVERSITY_CHKLST_ATTACH} only, never
+   * {@code BIODIVERSITY_ATTACH_CONTENT}: the app holds {@code SELECT} on the former (granted when the
+   * attachment list went native, confirmed 2026-08-06) but has never needed it on the latter, because
+   * every content read goes through the definer-rights {@code FREP_CHECKLIST_ATTACHMENTS} package.
+   * Touching the content table directly here would need a new grant in every environment. The bytes
+   * come from {@code GET_BLOB} instead — see {@link #getAttachmentContentFromBlob}.
+   *
+   * <p>Keyset rather than OFFSET so batches stay cheap and a re-run can resume from {@code lastId}.
+   *
+   * <p>The resource type is joined in rather than assumed to be {@code SLB}: {@code GET_BLOB} takes it
+   * as a parameter and both {@code SLB} and {@code SLR} are live Biodiversity codes during the rename,
+   * so a constant would address the wrong protocol for any already-renamed row. This mirrors
+   * {@code ChecklistRepositoryImpl.resolveResourceType}, including its {@code SLB} default — and
+   * reuses the same two-table join, which is why no additional grant is needed.
+   *
+   * <p><b>LEFT JOIN deliberately.</b> An inner join would silently drop any attachment whose
+   * checklist or resource-value row is missing, and a row that never appears in the scan is a row
+   * that never migrates — invisible until its download 404s after the fallback is removed. That is
+   * exactly the failure mode the old {@code GET} package cursor hid.
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove with the rest of the
+   * migration code; nothing in the application calls it.
+   */
+  @Override
+  public List<BioAttachmentRef> listBioAttachmentsForMigration(String afterId, int limit) {
+    String sql = """
+        SELECT bca.biodiversity_chklst_attach_id AS chklst_attach_id
+             , bca.biodiversity_checklist_id     AS checklist_id
+             , NVL(rv.frep_resource_value_type_code, 'SLB') AS resource_type
+          FROM THE.biodiversity_chklst_attach bca
+          LEFT JOIN THE.biodiversity_checklist bc
+                 ON bc.biodiversity_checklist_id = bca.biodiversity_checklist_id
+          LEFT JOIN THE.frep_resource_value rv
+                 ON rv.frep_resource_value_id = bc.frep_resource_value_id
+         WHERE bca.biodiversity_chklst_attach_id > ?
+         ORDER BY bca.biodiversity_chklst_attach_id
+         FETCH FIRST ? ROWS ONLY
+        """;
+    long after = StringUtils.isBlank(afterId) ? 0L : Long.parseLong(afterId.trim());
+    return jdbcTemplate.query(
+        sql,
+        (rs, n) -> new BioAttachmentRef(
+            trimNumericId(numberString(rs, "chklst_attach_id")),
+            trimNumericId(numberString(rs, "checklist_id")),
+            StringUtils.trimToEmpty(rs.getString("resource_type"))),
+        after, limit);
+  }
+
+  /**
    * The raw {@code GET_BLOB} read (10 params: id/checklist/type/name/desc/mime-code/mime-type IN OUT
    * 1-7, file_contents BLOB @8, userid @9, error @10) — returns metadata + whatever bytes are in the
    * Oracle BLOB (empty for a migrated BIO row).
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove with the rest of the
+   * migration code; nothing in the application calls it.
    */
-  private AttachmentContent getAttachmentContentFromBlob(
+  @Override
+  public AttachmentContent getAttachmentContentFromBlob(
       String checklistId, String resourceType, String attachmentId) {
     return executeCall(
         callSql(ATTACH_PKG, "GET_BLOB", 10),

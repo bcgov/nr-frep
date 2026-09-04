@@ -17,6 +17,7 @@ import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
+import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
@@ -550,5 +551,44 @@ class ChrChecklistServiceTest {
     InvalidParameterException ex = assertThrows(InvalidParameterException.class,
         () -> service.saveContactsSection(checklist));
     assertTrue(ex.getMessage().startsWith("Contact 2:"), ex.getMessage());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // deleteFeature — the online delete gate. A feature is not a leaf resource like a photo: removing
+  // one detaches composite members and drops association links on other features, so it runs the
+  // same status + optimistic-lock check a section save does.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  void deleteFeatureRemovesTheFeatureWhenTheChecklistIsActiveAndTheTokenMatches() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\user");
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(checklistRepository.getRevisionCount(1001L)).thenReturn(7L);
+
+    service.deleteFeature(1001L, 7001L, "7");
+
+    verify(persistenceService).deleteFeature(1001L, 7001L, "IDIR\\user");
+  }
+
+  @Test
+  void deleteFeatureRefusesWhenTheChecklistIsNotActive() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.SUB);
+
+    assertThrows(InvalidParameterException.class, () -> service.deleteFeature(1001L, 7001L, "7"));
+
+    verify(persistenceService, never()).deleteFeature(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void deleteFeatureRefusesAStaleRevisionToken() {
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(checklistRepository.getRevisionCount(1001L)).thenReturn(8L);
+
+    // The client is holding 7 — someone else has saved since it read the checklist.
+    assertThrows(ConflictFoundException.class, () -> service.deleteFeature(1001L, 7001L, "7"));
+
+    verify(persistenceService, never()).deleteFeature(anyLong(), anyLong(), anyString());
   }
 }

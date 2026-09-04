@@ -2,3 +2,32 @@ $bcgov-prefix: 'cds';
 
 // Expanded side nav width (Carbon default is 16rem; was previously trimmed to 12rem).
 $layout-side-nav-width: 16rem;
+
+// Collapsed side nav: an icon-only rail rather than an off-screen drawer, so the icons stay
+// reachable. Fixed so the content margin (components/Layout/index.scss) tracks it exactly.
+$layout-side-nav-rail: 3rem;
+
+/* ------------------------------ FREP blue ------------------------------
+The BC Gov design-system blue scale, the same palette nr-fspts carries in `styles/bcgov/_colors.scss`
+— named by their scale step so the two apps can be compared step-for-step rather than hex-for-hex.
+
+Two roles, because one blue can't do both jobs:
+
+- SOLID — filled surfaces the user reads *on top of* (header bar, primary buttons). One value for
+  both themes: a filled blue works on a light or a dark page, and keeping it fixed means the header
+  is the same colour whichever theme is active.
+- TEXT  — blue drawn *against* the page (links, icons, tertiary buttons). Has to flip: blue-70 has
+  the contrast for white, blue-30 for #161616. The solid blue used as text on dark would fail WCAG.
+
+Hover/active steps follow the mapping nr-fspts uses in `styles/bcgov/_light-buttons.scss`
+(60 → 65 → 80 for a solid, 70 → 75 → 80 for blue text), so a control behaves the same in both apps.
+------------------------------------------------------------------------- */
+$frep-blue-solid: #0073e6; // blue-60
+$frep-blue-solid-hover: #0066cc; // blue-65
+$frep-blue-solid-active: #00478f; // blue-80
+
+$frep-blue-text-light: #005cb8; // blue-70
+$frep-blue-text-light-hover: #0052a3; // blue-75
+
+$frep-blue-text-dark: #5cadff; // blue-30
+$frep-blue-text-dark-hover: #70b8ff; // blue-25

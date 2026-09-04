@@ -22,17 +22,26 @@ import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 import { requiredLabel } from '@/utils/requiredLabel';
 
+import OutstandingPanel from './OutstandingPanel';
+import RequiredLegend from './RequiredLegend';
 import { BEC_SEARCH_MAX, STRATUM_FIELD_MAX, STRATUM_TEXT_LIMITS } from './stratumLimits';
 
+import type { OutstandingGroup } from './tabStatus';
 import type { BecRow, CodeOption } from '@/types/configuration';
 import type { BioStratum, BioStratumRow, StratumComputed } from '@/types/protocolChecklist';
+import type { ValidationMode } from '@/utils/validation';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
+import { useSettledFields } from '@/hooks/useSettledFields';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { formatShortDate } from '@/utils/date';
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import { errorsForSettledFields, isNumberInProgress } from '@/utils/validation';
+import FormLock from '@/components/core/FormLock';
+import ActionButton from '@/components/core/ActionButton';
 
 /**
  * Biodiversity Stratum Summary section (FREP211) — edited inline in place. Master-detail editor with
@@ -47,6 +56,12 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /** Outstanding submit rules for this tab, grouped by stratum (see OutstandingPanel). */
+  outstanding?: OutstandingGroup[];
+  /** Called after a save or delete lands, so the tab-completion dots re-derive. */
+  onSaved?: () => void;
+  /** `error` once a submit has been refused — see OutstandingPanel. */
+  tone?: 'neutral' | 'error';
 };
 
 type FieldDef = { key: string; label: string };
@@ -328,6 +343,20 @@ const CONSTRAINT_ECO_ROWS: {
   },
 ];
 
+/**
+ * The fields that make up a BEC combination, in form order. One list so the catalogue search and
+ * the copy-from-previous action can never drift apart.
+ */
+const BEC_KEYS = [
+  'bgcZoneCode',
+  'bgcSubzoneCode',
+  'bgcVariant',
+  'bgcPhase',
+  'becSiteSeriesCd',
+  'siteSeriesPhaseCd',
+  'seral',
+] as const;
+
 // BEC search modal criteria fields.
 const BEC_CRITERIA: FieldDef[] = [
   { key: 'zone', label: 'BGC zone' },
@@ -389,14 +418,53 @@ const checkRange = (
   min: number,
   max: number,
   integer: boolean,
+  mode: ValidationMode = 'settled',
 ) => {
   if (e[k] || !v(k)) return;
-  const ok = integer ? isIntInRange(v(k), min, max) : isNumInRange(v(k), min, max);
-  if (!ok) {
-    const kind = integer ? 'a whole number' : 'a number';
-    e[k] = `${LABELS[k] ?? k} must be ${kind} from ${min} to ${max}.`;
+  const text = v(k);
+  const ok = integer ? isIntInRange(text, min, max) : isNumInRange(text, min, max);
+  if (ok) return;
+  // While the user is still typing, hold back the one failure more typing can fix: a value below
+  // the floor is on its way up. Anything malformed, or already past the ceiling, is said at once.
+  if (mode === 'typing') {
+    if (isNumberInProgress(text)) return;
+    const n = Number(text);
+    if (Number.isFinite(n) && n < min) return;
+  }
+  // Name the end that actually failed. One message covering shape and both bounds ran to "Wetland %
+  // must be a whole number from 1 to 100." — too long for the bare table cells these percentages and
+  // counts live in, where it was clipped mid-sentence, and it described three rules to someone who
+  // broke one.
+  const label = LABELS[k] ?? k;
+  const n = Number(text);
+  if (!Number.isFinite(n) || (integer && !Number.isInteger(n))) {
+    e[k] = `${label} must be ${integer ? 'a whole number' : 'a number'}.`;
+  } else {
+    e[k] = n > max ? `${label} must be at most ${max}.` : `${label} must be at least ${min}.`;
   }
 };
+
+/**
+ * Fields whose "not filled in yet" error is advisory: nullable columns the tab still marks required
+ * and still counts against submit, but that no longer stop a stratum being stored.
+ *
+ * Deliberately excluded — the database refuses these outright (BIODIVERSITY_STRATUM declares them
+ * NOT NULL, and FREP_BIODIVERSITY_STRATUM.validate_mandatories re-checks three of them): plot count,
+ * consistent-with-map, harvest area and BGC zone. BGC subzone joins them because validate_bec runs
+ * the whole BEC combination through FREP_VALIDATE_BGC.
+ */
+const ADVISORY_WHEN_BLANK = new Set([
+  'stratumNumber',
+  'strataTypeCode',
+  'size',
+  'estimatedSize',
+  'patchWindthrowPct',
+  'patchLocationCode',
+]);
+
+/** Current value of a stratum field, for the advisory test above. */
+const valueOf = (stratum: BioStratum | null, key: string): string =>
+  ((stratum as unknown as Record<string, string | undefined>)?.[key] ?? '').trim();
 
 const checkRequiredAndFormat = (e: StratumErrors, v: ValueReader) => {
   REQUIRED_KEYS.forEach((k) => {
@@ -433,14 +501,14 @@ const checkSizeConsistency = (e: StratumErrors, v: ValueReader) => {
   }
 };
 
-const checkNumericRanges = (e: StratumErrors, v: ValueReader) => {
-  checkRange(e, v, 'plotCount', 0, 99, true);
-  checkRange(e, v, 'size', 0.01, 9999.99, false);
-  checkRange(e, v, 'estimatedSize', 0.01, 9999.99, false);
-  checkRange(e, v, 'patchEstimatedOldestTreeAge', 0, 999, true);
-  checkRange(e, v, 'patchWindthrowPct', 0, 100, false);
-  CONSTRAINT_PCT_KEYS.forEach((k) => checkRange(e, v, k, 1, 100, true));
-  ECO_COUNT_KEYS.forEach((k) => checkRange(e, v, k, 1, 999, true));
+const checkNumericRanges = (e: StratumErrors, v: ValueReader, mode: ValidationMode) => {
+  checkRange(e, v, 'plotCount', 0, 99, true, mode);
+  checkRange(e, v, 'size', 0.01, 9999.99, false, mode);
+  checkRange(e, v, 'estimatedSize', 0.01, 9999.99, false, mode);
+  checkRange(e, v, 'patchEstimatedOldestTreeAge', 0, 999, true, mode);
+  checkRange(e, v, 'patchWindthrowPct', 0, 100, false, mode);
+  CONSTRAINT_PCT_KEYS.forEach((k) => checkRange(e, v, k, 1, 100, true, mode));
+  ECO_COUNT_KEYS.forEach((k) => checkRange(e, v, k, 1, 999, true, mode));
 };
 
 const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
@@ -484,14 +552,18 @@ const checkDecimalsAndLengths = (e: StratumErrors, v: ValueReader) => {
   }
 };
 
-const checkConstrainedTotal = (e: StratumErrors, v: ValueReader) => {
+const checkConstrainedTotal = (e: StratumErrors, v: ValueReader, mode: ValidationMode) => {
   // Total constrained: 0–100, ≥ largest single %, and ≥1 constraint if total > 0.
   const totalStr = v('constrainedTotal');
   if (!totalStr || e.constrainedTotal) return;
   if (!isIntInRange(totalStr, 0, 100)) {
-    e.constrainedTotal = 'Total constrained % must be a whole number from 0 to 100.';
+    if (mode === 'typing' && isNumberInProgress(totalStr)) return;
+    e.constrainedTotal = 'Total constrained % must be a whole number, 0 to 100.';
     return;
   }
+  // The two rules below compare this field against the constraint percentages, so they read as an
+  // accusation while one of those is still being typed. They wait for Save.
+  if (mode === 'typing') return;
   const total = Number(totalStr);
   const maxSingle = Math.max(0, ...CONSTRAINT_PCT_KEYS.map((k) => Number(v(k)) || 0));
   if (total > 0 && total < maxSingle) {
@@ -546,7 +618,14 @@ const checkCrossField = (
   }
 };
 
-const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
+const BioStratumView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  onSaved,
+  outstanding = [],
+  tone,
+}) => {
   const { display } = useNotification();
   const confirm = useConfirm();
   const [rows, setRows] = useState<BioStratumRow[]>([]);
@@ -564,6 +643,11 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   const [becCriteria, setBecCriteria] = useState<Record<string, string>>({});
   const [becResults, setBecResults] = useState<BecRow[]>([]);
   const [becBusy, setBecBusy] = useState(false);
+
+  // "Copy BEC from another stratum" dialog.
+  const [becCopyOpen, setBecCopyOpen] = useState(false);
+  const [becCopyBusy, setBecCopyBusy] = useState(false);
+  const [becCopyRows, setBecCopyRows] = useState<{ stratumNumber: string; bec: BioStratum }[]>([]);
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -700,6 +784,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       setCurrent(s);
       setComputed(c);
       setShowErrors(false);
+      resetSettled();
     } catch (err) {
       reportError('Could not load the stratum', err);
     } finally {
@@ -709,6 +794,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   const addStratum = async () => {
     setShowErrors(false);
+    resetSettled();
     // The legacy `add_new` default was a sequence value that always failed its own
     // format validation, so we don't prefill the Stratum Id. Seed the full windthrow
     // code list (all unchecked) — SAVE_STRATUM loops the VARRAY and crashes on empty.
@@ -753,37 +839,89 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       setBecBusy(false);
     }
   };
-  const applyBec = (r: BecRow) => {
+  /**
+   * Set the whole BEC combination from a source that carries the same field names — a catalogue row
+   * or another stratum.
+   *
+   * All seven together, never a subset: `FREP_VALIDATE_BGC` validates the combination, so a
+   * half-copied BEC is a validation failure rather than a head start.
+   */
+  const applyBecFrom = (source: Partial<Record<(typeof BEC_KEYS)[number], string | undefined>>) =>
     setCurrent((prev) =>
-      prev
-        ? {
-            ...prev,
-            bgcZoneCode: r.bgcZoneCode ?? '',
-            bgcSubzoneCode: r.bgcSubzoneCode ?? '',
-            bgcVariant: r.bgcVariant ?? '',
-            bgcPhase: r.bgcPhase ?? '',
-            becSiteSeriesCd: r.becSiteSeriesCd ?? '',
-            siteSeriesPhaseCd: r.siteSeriesPhaseCd ?? '',
-            seral: r.seral ?? '',
-          }
-        : prev,
+      prev ? { ...prev, ...Object.fromEntries(BEC_KEYS.map((k) => [k, source[k] ?? ''])) } : prev,
     );
+
+  const applyBec = (r: BecRow) => {
+    applyBecFrom(r);
     setBecOpen(false);
+  };
+
+  /** The other strata on this checklist — the ones whose BEC can be copied. */
+  const otherRows = rows.filter((r) => !current?.stratumId || r.stratumId !== current.stratumId);
+
+  /**
+   * Load the BEC every other stratum is using, so the user can pick any of them rather than only
+   * the one immediately before this stratum.
+   *
+   * Fetched when the dialog opens, not when the form does: the list rows carry no BEC fields, so
+   * this is one read per stratum and most stratum edits never ask for it.
+   *
+   * Strata within one block usually share a BEC, which is why the browser's own autofill was being
+   * used for it — but that fills whatever else it infers belongs to the same group, and the rest of
+   * a stratum is per-stratum evaluation data. Copying only the seven named BEC fields makes it
+   * impossible for this to touch anything else. See utils/autofill.ts for the other half of that fix.
+   */
+  const openBecCopy = async () => {
+    setBecCopyOpen(true);
+    setBecCopyBusy(true);
+    try {
+      const loaded = await Promise.all(
+        otherRows
+          .filter((r) => r.stratumId)
+          .map(async (r) => ({
+            stratumNumber: r.stratumNumber ?? r.stratumId ?? '',
+            bec: await API.protocolChecklist.getBioStratum(r.stratumId as string),
+          })),
+      );
+      // Only strata that actually have a BEC, and one entry per distinct combination — repeating
+      // the same BEC once per stratum would make the list longer without offering another choice.
+      const seen = new Set<string>();
+      setBecCopyRows(
+        loaded
+          .filter(({ bec }) => (bec.bgcZoneCode ?? '').trim() !== '')
+          .filter(({ bec }) => {
+            const key = BEC_KEYS.map((k) => (bec[k] ?? '').trim().toLowerCase()).join('|');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }),
+      );
+    } catch (err) {
+      reportError("We couldn't load the other strata's BEC", err);
+      setBecCopyRows([]);
+    } finally {
+      setBecCopyBusy(false);
+    }
   };
 
   // Mirror Frep211ValidationManager + the proc's validate(). Returns a field-keyed map (one message
   // per field) so each error renders inline on its own input; the first rule to flag a field wins.
   // Orchestrates the rule groups (each a small module-level function); the first rule to flag a
   // field wins. Mirrors Frep211ValidationManager + the proc's validate().
-  const validate = (): Record<string, string> => {
+  const validate = (mode: ValidationMode = 'settled'): Record<string, string> => {
     const e: StratumErrors = {};
     const v: ValueReader = (k) => get(k).trim();
-    checkRequiredAndFormat(e, v);
-    checkSizeConsistency(e, v);
-    checkNumericRanges(e, v);
+    // Blank required fields, the stratum-number pattern and the size/type consistency rules are all
+    // states a correct entry passes through, so they are held back while the user is still typing.
+    // Ranges and decimal places run in both modes — the mode decides which half of a range applies.
+    if (mode === 'settled') {
+      checkRequiredAndFormat(e, v);
+      checkSizeConsistency(e, v);
+    }
+    checkNumericRanges(e, v, mode);
     checkDecimalsAndLengths(e, v);
-    checkConstrainedTotal(e, v);
-    checkCrossField(e, v, treatmentChecked);
+    checkConstrainedTotal(e, v, mode);
+    if (mode === 'settled') checkCrossField(e, v, treatmentChecked);
     return e;
   };
 
@@ -792,8 +930,26 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // same gate in BioOpeningView. `allErrors` drives the save guard, `fieldErrors` the rendering, so
   // every `invalid`/`invalidText` site below is gated without touching each one.
   const allErrors: Record<string, string> = current && !readOnly ? validate() : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
-  const fieldErrors = showErrors ? allErrors : {};
+  // Before the first save attempt, only the errors no further typing can rescue — see the same gate
+  // in BioPlotsView and utils/validation.ts.
+  const typingErrors: Record<string, string> = current && !readOnly ? validate('typing') : {};
+  // Between the two: once a field has been filled in and left, it is finished enough to judge
+  // against the full rules — the Stratum Id's pattern, a size below its floor. Blank fields are
+  // exempt, so tabbing through an empty stratum marks nothing.
+  const { settled, markSettled, resetSettled } = useSettledFields();
+  const fieldErrors = showErrors
+    ? allErrors
+    : { ...typingErrors, ...errorsForSettledFields(allErrors, settled, (key) => get(key)) };
+
+  // Which of those errors actually stop the save. A blank field in ADVISORY_WHEN_BLANK is a gap —
+  // marked, counted on the tab and blocking submit, but stored happily. A field that *has* a value
+  // can only be failing a format or range rule, so its error still blocks.
+  const blockingErrors = Object.fromEntries(
+    Object.entries(allErrors).filter(
+      ([key]) => !(ADVISORY_WHEN_BLANK.has(key) && !valueOf(current, key)),
+    ),
+  );
+  const hasErrors = Object.keys(blockingErrors).length > 0;
 
   const handleSave = async () => {
     if (!current) return;
@@ -806,6 +962,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       setCurrent(null);
       setComputed(null);
       await loadList();
+      onSaved?.();
       display({ kind: 'success', title: 'Stratum saved', timeout: 4000 });
     } catch (err) {
       reportError('Save failed', err);
@@ -818,8 +975,13 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     if (!row.stratumId) return;
     if (
       !(await confirm({
-        title: 'Delete stratum?',
-        message: `Delete stratum ${row.stratumNumber || row.stratumId}? This can't be undone.`,
+        title: 'Are you sure you want to delete this stratum?',
+        message: (
+          <>
+            <strong>Stratum {row.stratumNumber || row.stratumId}</strong> will be permanently
+            deleted from this checklist. This action cannot be undone.
+          </>
+        ),
       }))
     )
       return;
@@ -827,6 +989,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     try {
       await API.protocolChecklist.deleteBioStratum(row.stratumId, row.revisionCount ?? '');
       await loadList();
+      onSaved?.();
       display({ kind: 'success', title: 'Stratum deleted', timeout: 4000 });
     } catch (err) {
       reportError('Delete failed', err);
@@ -850,8 +1013,24 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
   // Read-only display of a Yes/No indicator field.
   const yesNo = (key: string): string => (get(key) === 'Y' ? 'Yes' : 'No');
 
+  /**
+   * Whether the field is owed, for the asterisk.
+   *
+   * {@link REQUIRED_KEYS} covers the fields that are always owed. The two sizes are conditional —
+   * which one applies depends on the map-consistency answer — so they are decided here, on the same
+   * test the validation below uses, rather than being left unmarked because a static set could not
+   * express them.
+   */
+  const isRequired = (key: string): boolean => {
+    if (REQUIRED_KEYS.has(key)) return true;
+    const consistent = get('consistentMapInd');
+    if (key === 'size') return consistent === 'Y';
+    if (key === 'estimatedSize') return consistent === 'N' || consistent === 'M';
+    return false;
+  };
+
   const field = (key: string, label: string): ReactNode => {
-    const lbl = requiredLabel(label, REQUIRED_KEYS.has(key));
+    const lbl = requiredLabel(label, isRequired(key));
     const opts = optionsFor(key);
     const disabled = disabledKey(key);
     const onChange = onChangeFor(key);
@@ -868,6 +1047,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       }
       return (
         <Select
+          autoComplete="off"
           key={key}
           id={`stratum-${key}`}
           labelText={lbl}
@@ -877,7 +1057,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           invalidText={fieldErrors[key]}
           onChange={(e) => onChange(e.target.value)}
         >
-          <SelectItem value="" text="—" />
+          <SelectItem value="" text="Choose an option" />
           {opts.map((o) => (
             <SelectItem key={o.code} value={o.code} text={o.description} />
           ))}
@@ -899,6 +1079,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
           }
         >
           <DatePickerInput
+            {...NO_AUTOFILL}
             id={`stratum-${key}`}
             labelText={lbl}
             placeholder="YYYY-MM-DD"
@@ -921,6 +1102,12 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
     const inputProps = {
       key,
       id: `stratum-${key}`,
+      // Off across the checklist forms: every field keeps a stable id across strata / plots /
+      // features, so the browser treats the next one as the same field and offers what was typed
+      // last time. Accepting one suggestion then cascades into the rest of the group — these are
+      // per-record evaluation values, never a repeat of the previous record.
+      autoComplete: 'off',
+
       labelText: lbl,
       value: get(key),
       // Undefined for anything not in the map — notably patchGeneralComment, which uses the byte
@@ -929,6 +1116,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       disabled,
       invalid: Boolean(fieldErrors[key]),
       invalidText: fieldErrors[key],
+      onBlur: () => markSettled(key),
       onChange: (e: { target: { value: string } }) => set(key, e.target.value),
     };
     const input = MULTILINE_KEYS.has(key) ? (
@@ -962,6 +1150,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
       get(key) || '—'
     ) : (
       <TextInput
+        autoComplete="off"
         id={`stratum-${key}`}
         labelText={LABELS[key] ?? key}
         hideLabel
@@ -970,6 +1159,7 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
         disabled={disabledKey(key)}
         invalid={Boolean(fieldErrors[key])}
         invalidText={fieldErrors[key]}
+        onBlur={() => markSettled(key)}
         onChange={(e) => set(key, e.target.value)}
       />
     );
@@ -1010,341 +1200,431 @@ const BioStratumView: FC<Props> = ({ checklistId, canEdit, submitted }) => {
 
   return (
     <div className="rip-form">
-      {/* The strata table and the stratum form are mutually exclusive — each takes the
-          full width; the table is hidden while a stratum form is open. */}
-      <div>
-        {/* The stratum list + "Add stratum" is hidden while a stratum form is open. */}
-        {!current && (
-          <div className="bio-strata">
-            {/* Add stratum sits top-right above the table; the + leads the label. */}
-            {!readOnly && (
-              <div className="bio-strata__toolbar">
-                <Button
-                  kind="tertiary"
-                  size="lg"
-                  className="bio-strata__add"
-                  disabled={busy}
-                  onClick={() => void addStratum()}
-                >
-                  <Add size={16} className="bio-strata__add-icon" />
-                  Add stratum
-                </Button>
-              </div>
-            )}
-            {rows.length === 0 ? (
-              <p>No strata yet.</p>
-            ) : (
-              <Table size="sm" className="bio-strata__table">
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Stratum number</TableHeader>
-                    <TableHeader>Stratum type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.stratumId}>
-                      <TableCell>{row.stratumNumber || row.stratumId}</TableCell>
-                      <TableCell>{strataTypeLabel(row.strataTypeCode)}</TableCell>
-                      <TableCell>
+      <FormLock busy={busy}>
+        <OutstandingPanel groups={outstanding} tone={tone} />
+        {/* The strata table and the stratum form are mutually exclusive — each takes the
+            full width; the table is hidden while a stratum form is open. */}
+        <div>
+          {/* The stratum list + "Add stratum" is hidden while a stratum form is open. */}
+          {!current && (
+            <div className="bio-strata">
+              {/* Add stratum sits top-right above the table; the + leads the label. */}
+              {!readOnly && (
+                <div className="bio-strata__toolbar">
+                  <Button
+                    kind="tertiary"
+                    size="lg"
+                    className="bio-strata__add"
+                    renderIcon={Add}
+                    disabled={busy}
+                    onClick={() => void addStratum()}
+                  >
+                    Add stratum
+                  </Button>
+                </div>
+              )}
+              {rows.length > 0 && (
+                <Table size="sm" className="bio-strata__table">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Stratum number</TableHeader>
+                      <TableHeader>Stratum type</TableHeader>
+                      <TableHeader>Action</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.stratumId}>
+                        <TableCell>{row.stratumNumber || row.stratumId}</TableCell>
+                        <TableCell>{strataTypeLabel(row.strataTypeCode)}</TableCell>
+                        <TableCell className="table-actions">
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            renderIcon={Edit}
+                            disabled={busy}
+                            onClick={() => void select(row.stratumId ?? '')}
+                          >
+                            Edit
+                          </Button>
+                          {!readOnly && (
+                            <Button
+                              kind="danger--ghost"
+                              size="sm"
+                              renderIcon={TrashCan}
+                              disabled={busy}
+                              onClick={() => void deleteRow(row)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+
+          <div className="bio-master__detail">
+            {/* The form stays hidden until the user clicks "Add stratum" (new) or picks an
+                existing stratum from the rail. */}
+            {current && (
+              <>
+                {/* Actions at the top, mirroring the Opening info tab. */}
+                <div className="protocol-checklist__section-actions">
+                  {!readOnly && (
+                    <ActionButton busy={busy} onClick={() => void handleSave()} />
+                  )}
+                  <Button
+                    kind="ghost"
+                    size="lg"
+                    disabled={busy}
+                    onClick={() => {
+                      setCurrent(null);
+                      setComputed(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+
+                {/* Under the buttons, directly above the fields it describes — and only where fields
+                    are marked, which is the open form, not the list behind it. */}
+                {!readOnly && <RequiredLegend />}
+
+                {/* Stratum Summary (legacy frep211StratumSummary.jsp top block) */}
+                <fieldset className="rip-form__group">
+                  <legend>Stratum summary</legend>
+                  {/* Two rows of three: the stratum's identity, then its plots and size. Left as one
+                      row the six ran the width of the page and read as an undifferentiated strip. */}
+                  <div className="rip-form__grid">
+                    {field('stratumNumber', 'Stratum Id')}
+                    {field('strataTypeCode', 'Stratum type')}
+                    {roCell('NAR', computed?.nar ?? '')}
+                  </div>
+                  <div className="rip-form__grid">
+                    {field('plotCount', '# of plots in stratum')}
+                    {roCell('# of plots completed', computed?.plotsCompleted ?? '')}
+                    {field('size', 'Mapped stratum size (ha)')}
+                  </div>
+                </fieldset>
+
+                {/* BEC */}
+                <fieldset className="rip-form__group">
+                  <legend>BEC</legend>
+                  <div className="rip-form__grid">
+                    {field('bgcZoneCode', 'BGC zone')}
+                    {field('bgcSubzoneCode', 'BGC subzone')}
+                    {field('bgcVariant', 'BGC variant')}
+                    {field('bgcPhase', 'BGC phase')}
+                    {field('becSiteSeriesCd', 'Site series')}
+                    {field('siteSeriesPhaseCd', 'Site series phase')}
+                    {field('seral', 'Seral')}
+                  </div>
+                  {!readOnly && (
+                    <div className="rip-form__group-actions">
+                      <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
+                        Search BEC
+                      </Button>
+                      {/* Only offered when there is another stratum to copy from. */}
+                      {otherRows.length > 0 && (
                         <Button
                           kind="ghost"
                           size="sm"
-                          renderIcon={Edit}
-                          iconDescription="Edit"
-                          hasIconOnly
                           disabled={busy}
-                          onClick={() => void select(row.stratumId ?? '')}
-                        />
-                        {!readOnly && (
-                          <Button
-                            kind="danger--ghost"
-                            size="sm"
-                            renderIcon={TrashCan}
-                            iconDescription="Delete"
-                            hasIconOnly
-                            disabled={busy}
-                            onClick={() => void deleteRow(row)}
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        )}
-
-        <div className="bio-master__detail">
-          {/* The form stays hidden until the user clicks "Add stratum" (new) or picks an
-              existing stratum from the rail. */}
-          {current && (
-            <>
-              {/* Actions at the top, mirroring the Opening info tab. */}
-              <div className="protocol-checklist__section-actions">
-                {!readOnly && (
-                  <Button size="lg" disabled={busy} onClick={() => void handleSave()}>
-                    Save
-                  </Button>
-                )}
-                <Button
-                  kind="ghost"
-                  size="lg"
-                  disabled={busy}
-                  onClick={() => {
-                    setCurrent(null);
-                    setComputed(null);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-
-              {/* Stratum Summary (legacy frep211StratumSummary.jsp top block) */}
-              <fieldset className="rip-form__group">
-                <legend>Stratum summary</legend>
-                <div className="rip-form__grid">
-                  {field('stratumNumber', 'Stratum Id')}
-                  {field('strataTypeCode', 'Stratum type')}
-                  {roCell('NAR', computed?.nar ?? '')}
-                  {field('plotCount', '# of plots in stratum')}
-                  {roCell('# of plots completed', computed?.plotsCompleted ?? '')}
-                  {field('size', 'Mapped stratum size (ha)')}
-                </div>
-              </fieldset>
-
-              {/* BEC */}
-              <fieldset className="rip-form__group">
-                <legend>BEC</legend>
-                <div className="rip-form__grid">
-                  {field('bgcZoneCode', 'BGC zone')}
-                  {field('bgcSubzoneCode', 'BGC subzone')}
-                  {field('bgcVariant', 'BGC variant')}
-                  {field('bgcPhase', 'BGC phase')}
-                  {field('becSiteSeriesCd', 'Site series')}
-                  {field('siteSeriesPhaseCd', 'Site series phase')}
-                  {field('seral', 'Seral')}
-                </div>
-                {!readOnly && (
-                  <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
-                    Search BEC catalogue…
-                  </Button>
-                )}
-              </fieldset>
-
-              {/* Map consistency */}
-              <fieldset className="rip-form__group">
-                <legend>Map consistency</legend>
-                <div className="rip-form__grid">
-                  {field('consistentMapInd', 'Stratum location and size consistent with map?')}
-                  {field('estimatedSize', "If 'no' or 'not mapped', estimated size (ha)")}
-                </div>
-              </fieldset>
-
-              {/* Harvest area */}
-              <fieldset className="rip-form__group">
-                <legend>Harvest area</legend>
-                <div className="rip-form__grid">{field('harvestAreaCode', 'Tick one of')}</div>
-              </fieldset>
-
-              {/* Patch / Dispersed Summary */}
-              <fieldset className="rip-form__group">
-                <legend>Patch / dispersed summary</legend>
-                <div className="rip-form__grid">
-                  {field(
-                    'patchEstimatedOldestTreeAge',
-                    'Estimated age of oldest trees in reserve (other than Vets)',
+                          onClick={() => void openBecCopy()}
+                        >
+                          Same BEC as another stratum
+                        </Button>
+                      )}
+                    </div>
                   )}
-                  {field('patchLocationCode', 'Patch location')}
-                  {field('patchWindthrowPct', '% of trees in reserve windthrown')}
-                  {field('windthrowDistributionCode', 'Distribution of windthrow')}
-                </div>
-              </fieldset>
+                </fieldset>
 
-              {/* Windthrow treatment in reserve */}
-              <fieldset className="rip-form__group">
-                <legend>Windthrow treatment in reserve</legend>
-                {readOnly ? (
-                  <div className="protocol-checklist__field">
-                    <span className="protocol-checklist__label">Treatments</span>
-                    <span className="protocol-checklist__value">
-                      {WINDTHROW_TREATMENT_OPTIONS.filter((o) => treatmentChecked(o.code))
-                        .map((o) => o.label)
-                        .join(', ') || '—'}
-                    </span>
-                  </div>
-                ) : (
+                {/* Map consistency */}
+                <fieldset className="rip-form__group">
+                  <legend>Map consistency</legend>
                   <div className="rip-form__grid">
-                    {WINDTHROW_TREATMENT_OPTIONS.map((o) => (
-                      <Checkbox
-                        key={o.code}
-                        id={`wt-${o.code}`}
-                        labelText={o.label}
-                        checked={treatmentChecked(o.code)}
-                        disabled={patchOff}
-                        onChange={(_e, { checked }) => toggleTreatment(o.code, checked)}
-                      />
-                    ))}
+                    {field('consistentMapInd', 'Stratum location and size consistent with map?')}
+                    {field('estimatedSize', "If 'no' or 'not mapped', estimated size (ha)")}
                   </div>
-                )}
-                <div className="rip-form__grid">{field('otherWindthrowTreatment', 'Other')}</div>
-              </fieldset>
+                </fieldset>
 
-              {/* Reserve Constraints | Ecological Anchors (two-column, legacy layout) */}
-              <fieldset className="rip-form__group">
-                <legend>Reserve constraints &amp; ecological anchors</legend>
-                <table className="rip-field-grid">
-                  <thead>
-                    <tr>
-                      <th scope="col">Reserve Constraints</th>
-                      <th scope="col">% of reserve</th>
-                      <th scope="col">Ecological Anchors</th>
-                      <th scope="col">Stratum estimate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Constraints present</td>
-                      <td className="rip-grid__choice">{toggleCell('constraintIndicator')}</td>
-                      <td>Eco anchors present</td>
-                      <td className="rip-grid__choice">{toggleCell('ecoIndicator')}</td>
-                    </tr>
-                    {CONSTRAINT_ECO_ROWS.map((r) => (
-                      <tr key={r.cKey}>
-                        <td>{r.cLabel}</td>
-                        <td>{numCell(r.cKey)}</td>
-                        <td>{r.eLabel}</td>
-                        <td className={r.eKind === 'check' ? 'rip-grid__choice' : undefined}>
-                          {r.eKind === 'count' ? numCell(r.eKey) : checkCell(r.eKey, r.eLabel)}
+                {/* Harvest area */}
+                <fieldset className="rip-form__group">
+                  <legend>Harvest area</legend>
+                  <div className="rip-form__grid rip-form__grid--wide">
+                    {field('harvestAreaCode', 'Tick one of')}
+                  </div>
+                </fieldset>
+
+                {/* Patch / Dispersed Summary */}
+                <fieldset className="rip-form__group">
+                  <legend>Patch / dispersed summary</legend>
+                  <div className="rip-form__grid">
+                    {field(
+                      'patchEstimatedOldestTreeAge',
+                      'Estimated age of oldest trees in reserve (other than Vets)',
+                    )}
+                    {field('patchLocationCode', 'Patch location')}
+                    {field('patchWindthrowPct', '% of trees in reserve windthrown')}
+                    {field('windthrowDistributionCode', 'Distribution of windthrow')}
+                  </div>
+                </fieldset>
+
+                {/* Windthrow treatment in reserve */}
+                <fieldset className="rip-form__group">
+                  <legend>Windthrow treatment in reserve</legend>
+                  {readOnly ? (
+                    <div className="protocol-checklist__field">
+                      <span className="protocol-checklist__label">Treatments</span>
+                      <span className="protocol-checklist__value">
+                        {WINDTHROW_TREATMENT_OPTIONS.filter((o) => treatmentChecked(o.code))
+                          .map((o) => o.label)
+                          .join(', ') || '—'}
+                      </span>
+                    </div>
+                  ) : (
+                    /* "Other" joins the treatments it belongs with rather than sitting on a row of
+                       its own. Bottom-aligned so the checkboxes line up with the input beside them:
+                       they carry no label above, so a top-aligned row left them floating a label's
+                       height clear of it. */
+                    <div className="rip-form__grid rip-form__grid--checks">
+                      {WINDTHROW_TREATMENT_OPTIONS.map((o) => (
+                        <Checkbox
+                          key={o.code}
+                          id={`wt-${o.code}`}
+                          labelText={o.label}
+                          checked={treatmentChecked(o.code)}
+                          disabled={patchOff}
+                          onChange={(_e, { checked }) => toggleTreatment(o.code, checked)}
+                        />
+                      ))}
+                      {field('otherWindthrowTreatment', 'Other')}
+                    </div>
+                  )}
+                </fieldset>
+
+                {/* Reserve Constraints | Ecological Anchors (two-column, legacy layout) */}
+                <fieldset className="rip-form__group">
+                  <legend>Reserve constraints &amp; ecological anchors</legend>
+                  <table className="rip-field-grid">
+                    <thead>
+                      <tr>
+                        <th scope="col">Reserve Constraints</th>
+                        <th scope="col">% of reserve</th>
+                        <th scope="col">Ecological Anchors</th>
+                        <th scope="col">Stratum estimate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Constraints present</td>
+                        <td className="rip-grid__choice">{toggleCell('constraintIndicator')}</td>
+                        <td>Eco anchors present</td>
+                        <td className="rip-grid__choice">{toggleCell('ecoIndicator')}</td>
+                      </tr>
+                      {CONSTRAINT_ECO_ROWS.map((r) => (
+                        <tr key={r.cKey}>
+                          <td>{r.cLabel}</td>
+                          <td>{numCell(r.cKey)}</td>
+                          <td>{r.eLabel}</td>
+                          <td className={r.eKind === 'check' ? 'rip-grid__choice' : undefined}>
+                            {r.eKind === 'count' ? numCell(r.eKey) : checkCell(r.eKey, r.eLabel)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td>
+                          Other:{' '}
+                          {readOnly ? (
+                            get('otherConstraint') || '—'
+                          ) : (
+                            <TextInput
+                              autoComplete="off"
+                              id="stratum-otherConstraint"
+                              labelText="Other constraint"
+                              hideLabel
+                              size="sm"
+                              // Rendered raw rather than through `textField`, so it gets neither the
+                              // byte counter nor a visible error: invalidText collapses to zero
+                              // height in a size="sm" table cell. The length rule above still blocks
+                              // the save, but the user would see no reason why — so cap the input.
+                              maxLength={STRATUM_TEXT_LIMITS.otherConstraint}
+                              value={get('otherConstraint')}
+                              disabled={disabledKey('otherConstraint')}
+                              onChange={(e) => set('otherConstraint', e.target.value)}
+                            />
+                          )}
+                        </td>
+                        <td>{numCell('otherConstraintPct')}</td>
+                        <td>Uncommon tree species</td>
+                        <td className="rip-grid__choice">
+                          {checkCell('uncommonTreeSpeciesInd', 'Uncommon tree species')}
                         </td>
                       </tr>
-                    ))}
-                    <tr>
-                      <td>
-                        Other:{' '}
-                        {readOnly ? (
-                          get('otherConstraint') || '—'
-                        ) : (
-                          <TextInput
-                            id="stratum-otherConstraint"
-                            labelText="Other constraint"
-                            hideLabel
-                            size="sm"
-                            // Rendered raw rather than through `textField`, so it gets neither the
-                            // byte counter nor a visible error: invalidText collapses to zero
-                            // height in a size="sm" table cell. The length rule above still blocks
-                            // the save, but the user would see no reason why — so cap the input.
-                            maxLength={STRATUM_TEXT_LIMITS.otherConstraint}
-                            value={get('otherConstraint')}
-                            disabled={disabledKey('otherConstraint')}
-                            onChange={(e) => set('otherConstraint', e.target.value)}
-                          />
-                        )}
-                      </td>
-                      <td>{numCell('otherConstraintPct')}</td>
-                      <td>Uncommon tree species</td>
-                      <td className="rip-grid__choice">
-                        {checkCell('uncommonTreeSpeciesInd', 'Uncommon tree species')}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Total constrained</td>
-                      <td>{numCell('constrainedTotal')}</td>
-                      <td>
-                        Other:{' '}
-                        {readOnly ? (
-                          get('otherEcoAnchorDesc') || '—'
-                        ) : (
-                          <TextInput
-                            id="stratum-otherEcoAnchorDesc"
-                            labelText="Other eco anchor"
-                            hideLabel
-                            size="sm"
-                            // Same as otherConstraint above — raw table cell, no counter or visible
-                            // error, so the cap is the only feedback. 30 bytes is the tightest
-                            // free-text column in either protocol.
-                            maxLength={STRATUM_TEXT_LIMITS.otherEcoAnchorDesc}
-                            value={get('otherEcoAnchorDesc')}
-                            disabled={disabledKey('otherEcoAnchorDesc')}
-                            onChange={(e) => set('otherEcoAnchorDesc', e.target.value)}
-                          />
-                        )}
-                      </td>
-                      <td>{numCell('otherEcoAnchorCnt')}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="rip-form__grid">{field('patchGeneralComment', 'Comments')}</div>
-              </fieldset>
-            </>
-          )}
+                      <tr>
+                        <td>Total constrained</td>
+                        <td>{numCell('constrainedTotal')}</td>
+                        <td>
+                          Other:{' '}
+                          {readOnly ? (
+                            get('otherEcoAnchorDesc') || '—'
+                          ) : (
+                            <TextInput
+                              autoComplete="off"
+                              id="stratum-otherEcoAnchorDesc"
+                              labelText="Other eco anchor"
+                              hideLabel
+                              size="sm"
+                              // Same as otherConstraint above — raw table cell, no counter or visible
+                              // error, so the cap is the only feedback. 30 bytes is the tightest
+                              // free-text column in either protocol.
+                              maxLength={STRATUM_TEXT_LIMITS.otherEcoAnchorDesc}
+                              value={get('otherEcoAnchorDesc')}
+                              disabled={disabledKey('otherEcoAnchorDesc')}
+                              onChange={(e) => set('otherEcoAnchorDesc', e.target.value)}
+                            />
+                          )}
+                        </td>
+                        <td>{numCell('otherEcoAnchorCnt')}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="rip-form__grid">{field('patchGeneralComment', 'Comments')}</div>
+                </fieldset>
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      <Modal
-        className="bec-modal"
-        open={becOpen}
-        modalHeading="Search the BEC catalogue"
-        primaryButtonText="Search"
-        secondaryButtonText="Close"
-        primaryButtonDisabled={becBusy}
-        onRequestSubmit={() => void runBecSearch()}
-        onRequestClose={() => setBecOpen(false)}
-        size="lg"
-      >
-        <div className="rip-form__grid">
-          {BEC_CRITERIA.map((c) => (
-            <TextInput
-              key={c.key}
-              id={`bec-${c.key}`}
-              labelText={c.label}
-              maxLength={BEC_SEARCH_MAX[c.key]}
-              value={becCriteria[c.key] ?? ''}
-              onChange={(e) => setBecCriteria((prev) => ({ ...prev, [c.key]: e.target.value }))}
-            />
-          ))}
-        </div>
-        {becResults.length > 0 ? (
-          <table className="rip-field-grid" style={{ marginTop: '1rem' }}>
-            <thead>
-              <tr>
-                <th scope="col">Zone</th>
-                <th scope="col">Subzone</th>
-                <th scope="col">Variant</th>
-                <th scope="col">Phase</th>
-                <th scope="col">Site series</th>
-                <th scope="col">Seral</th>
-                <th scope="col">Description</th>
-                <th scope="col" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {becResults.map((r, i) => (
-                <tr key={`bec-${i}`}>
-                  <td>{r.bgcZoneCode || '—'}</td>
-                  <td>{r.bgcSubzoneCode || '—'}</td>
-                  <td>{r.bgcVariant || '—'}</td>
-                  <td>{r.bgcPhase || '—'}</td>
-                  <td>{r.becSiteSeriesCd || '—'}</td>
-                  <td>{r.seral || '—'}</td>
-                  <td>{r.description || '—'}</td>
-                  <td>
-                    <Button kind="ghost" size="sm" onClick={() => applyBec(r)}>
-                      Select
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p style={{ marginTop: '1rem' }}>
-            {becBusy ? 'Searching…' : 'Enter criteria and search (all fields optional).'}
+        <Modal
+          // Its own class as well as the shared one: the button that opens this dialog carries the
+          // same words as its heading, so the dialog needs an identifier that is not its text.
+          className="bec-modal bec-copy-modal"
+          open={becCopyOpen}
+          modalHeading="Same BEC as another stratum"
+          passiveModal
+          onRequestClose={() => setBecCopyOpen(false)}
+          size="lg"
+        >
+          <p>
+            Pick the stratum whose BEC this one shares. Only the BEC is copied — everything else on
+            this stratum is its own evaluation.
           </p>
-        )}
-      </Modal>
+          {becCopyRows.length > 0 ? (
+            <table className="rip-field-grid" style={{ marginTop: '1rem' }}>
+              <thead>
+                <tr>
+                  <th scope="col">Stratum</th>
+                  <th scope="col">Zone</th>
+                  <th scope="col">Subzone</th>
+                  <th scope="col">Variant</th>
+                  <th scope="col">Phase</th>
+                  <th scope="col">Site series</th>
+                  <th scope="col">Seral</th>
+                  <th scope="col" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {becCopyRows.map(({ stratumNumber, bec }) => (
+                  <tr key={`bec-copy-${stratumNumber}`}>
+                    <td>{stratumNumber || '—'}</td>
+                    <td>{bec.bgcZoneCode || '—'}</td>
+                    <td>{bec.bgcSubzoneCode || '—'}</td>
+                    <td>{bec.bgcVariant || '—'}</td>
+                    <td>{bec.bgcPhase || '—'}</td>
+                    <td>{bec.becSiteSeriesCd || '—'}</td>
+                    <td>{bec.seral || '—'}</td>
+                    <td>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => {
+                          applyBecFrom(bec);
+                          setBecCopyOpen(false);
+                        }}
+                      >
+                        Select
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p style={{ marginTop: '1rem' }}>
+              {becCopyBusy ? 'Loading…' : 'None of the other strata have a BEC recorded yet.'}
+            </p>
+          )}
+        </Modal>
+
+        <Modal
+          className="bec-modal"
+          open={becOpen}
+          modalHeading="Search the BEC catalogue"
+          primaryButtonText="Search"
+          secondaryButtonText="Close"
+          primaryButtonDisabled={becBusy}
+          onRequestSubmit={() => void runBecSearch()}
+          onRequestClose={() => setBecOpen(false)}
+          size="lg"
+        >
+          <div className="rip-form__grid">
+            {BEC_CRITERIA.map((c) => (
+              <TextInput
+                autoComplete="off"
+                key={c.key}
+                id={`bec-${c.key}`}
+                labelText={c.label}
+                maxLength={BEC_SEARCH_MAX[c.key]}
+                value={becCriteria[c.key] ?? ''}
+                onChange={(e) => setBecCriteria((prev) => ({ ...prev, [c.key]: e.target.value }))}
+              />
+            ))}
+          </div>
+          {becResults.length > 0 ? (
+            <table className="rip-field-grid" style={{ marginTop: '1rem' }}>
+              <thead>
+                <tr>
+                  <th scope="col">Zone</th>
+                  <th scope="col">Subzone</th>
+                  <th scope="col">Variant</th>
+                  <th scope="col">Phase</th>
+                  <th scope="col">Site series</th>
+                  <th scope="col">Seral</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {becResults.map((r, i) => (
+                  <tr key={`bec-${i}`}>
+                    <td>{r.bgcZoneCode || '—'}</td>
+                    <td>{r.bgcSubzoneCode || '—'}</td>
+                    <td>{r.bgcVariant || '—'}</td>
+                    <td>{r.bgcPhase || '—'}</td>
+                    <td>{r.becSiteSeriesCd || '—'}</td>
+                    <td>{r.seral || '—'}</td>
+                    <td>{r.description || '—'}</td>
+                    <td>
+                      <Button kind="ghost" size="sm" onClick={() => applyBec(r)}>
+                        Select
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p style={{ marginTop: '1rem' }}>
+              {becBusy ? 'Searching…' : 'Enter criteria and search (all fields optional).'}
+            </p>
+          )}
+        </Modal>
+      </FormLock>
     </div>
   );
 };

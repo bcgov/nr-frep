@@ -6,18 +6,36 @@ import {
   SettingsAdjust,
   TableSplit,
 } from '@carbon/icons-react';
-import { ClickableTile, Column, Grid } from '@carbon/react';
+import { ActionableNotification, ClickableTile, Column, Grid } from '@carbon/react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { FC } from 'react';
 
+import { APP_NAME } from '@/constants/appName';
 import { useAuth } from '@/context/auth/useAuth';
+import { env } from '@/env';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 import './dashboard.scss';
 
-import { APP_NAME } from '@/constants/appName';
+/**
+ * Remembers that the welcome banner was closed, per browser.
+ *
+ * Versioned: bump the suffix to put a new message in front of everyone who dismissed the last one.
+ * Storage can throw outright (private windows, blocked site data), so both sides are guarded — a
+ * browser that cannot remember simply shows the banner again, which is the harmless direction.
+ */
+const WELCOME_DISMISSED_KEY = 'frep.dashboard.welcome.v1';
+
+const welcomeWasDismissed = (): boolean => {
+  try {
+    return window.localStorage.getItem(WELCOME_DISMISSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
 
 type ScreenTile = {
   title: string;
@@ -77,6 +95,11 @@ const OFFLINE_SCREEN: ScreenTile = {
 const DashboardPage: FC = () => {
   const navigate = useNavigate();
   const { isSysAdmin } = useAuthorization();
+  const [welcomeDismissed, setWelcomeDismissed] = useState(welcomeWasDismissed);
+  // The same shared mailbox the side nav's "Report an issue" uses, read per render from the values
+  // injected at container start. Unset means no mailbox to write to, so the invitation is dropped
+  // rather than shipping a mailto: that goes nowhere — see LayoutSideNav.
+  const supportEmail = env.VITE_SUPPORT_EMAIL?.trim() ?? '';
   const { isLoggedIn } = useAuth();
   const online = useOnlineStatus();
 
@@ -87,12 +110,58 @@ const DashboardPage: FC = () => {
     ? [OFFLINE_SCREEN]
     : SCREENS.filter((s) => !s.sysAdminOnly || isSysAdmin);
 
+  const dismissWelcome = () => {
+    setWelcomeDismissed(true);
+    try {
+      window.localStorage.setItem(WELCOME_DISMISSED_KEY, 'true');
+    } catch {
+      // Not remembered — it will greet them again next visit, which beats failing to close.
+    }
+  };
+
   return (
     <Grid fullWidth className="default-grid dashboard-grid">
       <Column sm={4} md={8} lg={16}>
         <h1 className="dashboard__title">{APP_NAME}</h1>
         <p className="dashboard__subtitle">Select a screen to begin.</p>
       </Column>
+
+      {!welcomeDismissed && (
+        <Column sm={4} md={8} lg={16}>
+          {/* ActionableNotification rather than InlineNotification: the message carries a link, and
+              an inline notification refuses interactive children outright (Carbon throws
+              "component should have no interactive child nodes"). `inline` keeps the inline look.
+              `hasFocus={false}` because it defaults to true — a welcome banner that grabs focus on
+              arrival would drop the user past the page heading every time. */}
+          <ActionableNotification
+            kind="info"
+            lowContrast
+            inline
+            hasFocus={false}
+            className="dashboard__welcome"
+            data-testid="dashboard-welcome"
+            title="Welcome to the new FREP IMS!"
+            subtitle={
+              <span className="dashboard__welcome-text">
+                Your feedback helps us improve the system
+                {supportEmail ? (
+                  <>
+                    , don&apos;t hesitate to reach out to us at{' '}
+                    {/* The address is the link text, the way the Landing page's "Request access"
+                        mailbox reads — it comes from configuration, so spelling it out here would
+                        go stale the moment the mailbox moves. */}
+                    <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.
+                  </>
+                ) : (
+                  '.'
+                )}
+              </span>
+            }
+            statusIconDescription="Information"
+            onCloseButtonClick={dismissWelcome}
+          />
+        </Column>
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <div className="dashboard__tiles">

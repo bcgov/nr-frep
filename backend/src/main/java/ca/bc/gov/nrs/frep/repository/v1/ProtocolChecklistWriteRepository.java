@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep.repository.v1;
 
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioAttachmentRef;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
@@ -44,6 +45,27 @@ public interface ProtocolChecklistWriteRepository {
   /** Total attachments on the checklist, for the pager. */
   int countAttachments(String checklistId, String resourceType);
   AttachmentContent getAttachmentContent(
+      String checklistId, String resourceType, String attachmentId);
+
+  /**
+   * One keyset page of every Biodiversity attachment in the schema, ascending by id — the scan
+   * behind the one-time BLOB → object-storage migration. Unlike {@link #getAttachments}, this is
+   * not scoped to a checklist.
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove this method with the
+   * rest of the migration code; nothing in the application calls it.
+   */
+  List<BioAttachmentRef> listBioAttachmentsForMigration(String afterId, int limit);
+
+  /**
+   * The attachment's bytes as stored in the Oracle BLOB, bypassing the object-storage read path.
+   * Migrated Biodiversity rows return an empty array here, which is exactly how the migration
+   * detects what still needs copying.
+   *
+   * <p>Cutover tooling — {@code DELETE-AFTER-BIO-ATTACHMENT-MIGRATION}. Remove this method with the
+   * rest of the migration code; nothing in the application calls it.
+   */
+  AttachmentContent getAttachmentContentFromBlob(
       String checklistId, String resourceType, String attachmentId);
   void saveAttachment(
       String checklistId, String resourceType, String fileName, String description, String mimeType,

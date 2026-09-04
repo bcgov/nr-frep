@@ -1,12 +1,4 @@
-import {
-  ArrowLeft,
-  Attachment,
-  Document,
-  Information,
-  Location,
-  Notebook,
-  UserMultiple,
-} from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -24,12 +16,17 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
+import FormLock from '@/components/core/FormLock';
 import BlockSummary from '@/pages/ChrChecklist/BlockSummary';
 import Contacts from '@/pages/ChrChecklist/Contacts';
 import FeatureList from '@/pages/ChrChecklist/FeatureList';
 import Notes from '@/pages/ChrChecklist/Notes';
 import OpeningInformation from '@/pages/ChrChecklist/OpeningInformation';
 import Photos from '@/pages/ChrChecklist/Photos';
+import OutstandingPanel from '@/pages/ProtocolChecklist/OutstandingPanel';
+import OutstandingSummary from '@/pages/ProtocolChecklist/OutstandingSummary';
+import TabStatusIcon from '@/pages/ProtocolChecklist/TabStatusIcon';
 
 import { useAuth } from '@/context/auth/useAuth';
 import { useConfirm } from '@/context/confirm/useConfirm';
@@ -37,6 +34,8 @@ import { useNotification } from '@/context/notification/useNotification';
 import { useAuthorization } from '@/hooks/useAuthorization';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
+import { chrTabStatuses, type ChrTabKey } from '@/pages/ChrChecklist/tabStatus';
+import { groupOutstanding } from '@/pages/ProtocolChecklist/tabStatus';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 import {
@@ -72,6 +71,17 @@ const STATUS_LABELS: Record<string, string> = {
 
 // Stable empty-array reference so the Contacts draft-sync effect doesn't re-fire each render.
 const EMPTY_CONTACTS: ContactDto[] = [];
+
+// The tab strip, in order. `key` is what tabStatus.ts reports against; `title` is what the tab, the
+// submit pre-flight banner and the per-tab banner all call the section.
+const TABS: { key: ChrTabKey; title: string }[] = [
+  { key: 'opening', title: 'Opening info' },
+  { key: 'blockSummary', title: 'Block summary' },
+  { key: 'contacts', title: 'Contacts' },
+  { key: 'features', title: 'Features' },
+  { key: 'notes', title: 'Notes' },
+  { key: 'attachments', title: 'Attachments' },
+];
 
 // Map a submit-validation error's field to the CHR tab that owns it, so the inline panel names the
 // tab (like the Biodiversity submit panel) rather than the raw field. Checklist-level fields are
@@ -151,6 +161,23 @@ const extractValidationErrors = (err: unknown): ValidationError[] | null => {
   return Array.isArray(body) ? (body as ValidationError[]) : null;
 };
 
+/**
+ * Fold the features a per-feature write returned back into the stored list.
+ *
+ * Replace by id where the row is already held, append where it is not — a composite create returns
+ * an anchor and any features typed into its dialog, none of which the client has seen before. Order
+ * does not matter to the table: `featureRows` sorts anchors itself and finds members by their
+ * `compositeFeature`.
+ */
+const mergeSaved = (held: Feature[], touched: Feature[]): Feature[] => {
+  const byId = new Map(touched.filter((f) => f.id).map((f) => [f.id, f]));
+  const merged = held.map((existing) =>
+    existing.id && byId.has(existing.id) ? (byId.get(existing.id) as Feature) : existing,
+  );
+  const alreadyHeld = new Set(merged.map((f) => f.id));
+  return [...merged, ...touched.filter((f) => f.id && !alreadyHeld.has(f.id))];
+};
+
 const ChrChecklistPage: FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -179,6 +206,37 @@ const ChrChecklistPage: FC = () => {
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState(0);
+  // Outstanding work found by the submit pre-flight, keyed by tab. Set when Submit is pressed and the
+  // checklist is not ready; cleared on the next attempt.
+  const [preflight, setPreflight] = useState<Partial<Record<ChrTabKey, string[]>>>({});
+
+  /**
+   * Features being edited but not yet saved.
+   *
+   * The Features tab edits the whole list at once — a composite's membership and the cross-feature
+   * associations are both edited from inside one feature — so it needs the live array, and it used to
+   * write that straight back into `checkList`. Holding the pending list here keeps `checkList`
+   * meaning "what the server (or the local record) actually holds", which is what a save sends and
+   * what Cancel reverts to.
+   *
+   * The tab counts deliberately do *not* read this list: they describe what is stored, so they move
+   * when a save lands rather than as the editor is used.
+   */
+  const [draftFeatures, setDraftFeatures] = useState<Feature[] | null>(null);
+
+  /**
+   * Per-tab completion state, derived from the checklist the page is already holding.
+   *
+   * No requests: CHR keeps the whole document — features included — in client state, so every submit
+   * rule can be answered from memory. The counts therefore move the moment an edit lands and keep
+   * working on an offline copy.
+   *
+   * Read from the stored checklist, never from the pending edits — the same rule Opening info and
+   * Block summary follow. The count answers "what does this checklist still owe?", which is a
+   * question about what is kept, not about what is currently on screen; recomputing it under the
+   * cursor would move the number while the user is still deciding.
+   */
+  const tabState = useMemo(() => chrTabStatuses(checkList), [checkList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -287,11 +345,6 @@ const ChrChecklistPage: FC = () => {
   // only "Remove from device" is offered.
   const offlineOutOfDate =
     isOfflineCopy && offlineStaleness != null && isStale(offlineStaleness.verdict);
-
-  const patch = useCallback(
-    (p: Partial<CheckList>) => setCheckList((prev) => (prev ? { ...prev, ...p } : prev)),
-    [],
-  );
 
   const reportError = useCallback(
     (title: string, err: unknown) =>
@@ -410,19 +463,319 @@ const ChrChecklistPage: FC = () => {
   );
 
   const saveFeatures = useCallback(
-    (features: Feature[]): Promise<boolean> => {
-      if (!checkList) return Promise.resolve(false);
-      return persistSection(
+    async (features: Feature[]): Promise<boolean> => {
+      if (!checkList) return false;
+      const saved = await persistSection(
         (cid, cl) => API.chrChecklist.saveFeatures(cid, cl),
         { ...checkList, features },
-        (prev, saved) => ({
+        (prev, stored) => ({
           ...prev,
-          features: saved.features,
-          revisionCount: saved.revisionCount,
+          features: stored.features,
+          revisionCount: stored.revisionCount,
         }),
       );
+      // The stored list is the truth again — drop the pending edits so the tab reads from it (and
+      // picks up the ids the server assigned to any new rows).
+      if (saved) setDraftFeatures(null);
+      return saved;
     },
     [checkList, persistSection],
+  );
+
+  /**
+   * Create a composite through its own endpoint.
+   *
+   * The anchor has no id until the server assigns one, which is the whole reason this is a create
+   * rather than a feature save naming a parent. Features typed into the dialog go in the same
+   * request: the gesture is atomic in the UI, and splitting it could leave rows behind that the
+   * evaluator never asked for.
+   */
+  const createComposite = useCallback(
+    async (
+      anchor: Feature,
+      memberIds: string[],
+      newMembers: Feature[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      // Offline there is no server to assign the anchor an id, so the group cannot be expressed as
+      // "these ids point at that id". The local record keeps the whole document, where membership
+      // is still held by label, and check-in resolves it through the bulk path exactly as before.
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.createComposite(
+          id,
+          checkList.revisionCount ?? '',
+          anchor,
+          memberIds,
+          newMembers,
+        );
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], saved.features ?? []),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Dissolve a composite through its own endpoint.
+   *
+   * The response carries only the members that survived — the anchor and any deleted members no
+   * longer exist, and the caller named those itself, so it drops them locally rather than being
+   * told about rows that are gone.
+   */
+  const ungroupCompositeGroup = useCallback(
+    async (
+      anchorId: string,
+      deleteMemberIds: string[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.ungroupComposite(
+          id,
+          anchorId,
+          checkList.revisionCount ?? '',
+          deleteMemberIds,
+        );
+        const gone = new Set([anchorId, ...deleteMemberIds]);
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(
+                  (prev.features ?? []).filter((f) => !f.id || !gone.has(f.id)),
+                  saved.features ?? [],
+                ),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Re-point an existing composite through its own endpoint.
+   *
+   * The response carries the anchor, every member it now holds, and everything it released, so a
+   * merge by id leaves no row stale. The composite a member was taken from needs no write and is
+   * not returned — membership lives on the child row, so re-pointing the member is the whole move,
+   * and `featureRows` recomputes the other group from it.
+   */
+  const updateCompositeGroup = useCallback(
+    async (
+      anchorId: string,
+      featureDescriptionCode: string | undefined,
+      featureInfoSourceCode: string | undefined,
+      memberIds: string[],
+      newMembers: Feature[],
+      applied: Feature[],
+    ): Promise<boolean> => {
+      if (!checkList) return false;
+      if (isOfflineCopy) {
+        return saveFeatures(applied);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.updateComposite(
+          id,
+          anchorId,
+          checkList.revisionCount ?? '',
+          featureDescriptionCode,
+          featureInfoSourceCode,
+          memberIds,
+          newMembers,
+        );
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], saved.features ?? []),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Save one feature's own fields through its own endpoint — the editor's Save.
+   *
+   * The response carries just that feature, re-read, so it is patched back by id rather than
+   * replacing the array. Relationships are untouched here: associations and composite membership
+   * keep whatever the server already holds, which is why the stale `compositeFeature` label an
+   * editor payload may carry can no longer un-group anything.
+   */
+  const saveOneFeature = useCallback(
+    async (feature: Feature): Promise<boolean> => {
+      if (!checkList) return false;
+      const pending = draftFeatures ?? checkList.features ?? [];
+      // Offline there is no server to assign an id, so the local document stays the record.
+      if (isOfflineCopy) {
+        return saveFeatures(pending);
+      }
+      setBusy(true);
+      try {
+        // A feature the server has never seen has no id to address, so it is created rather than
+        // updated. Both return the same shape, and both touch only this feature.
+        const saved = feature.id
+          ? await API.chrChecklist.saveFeature(
+              id,
+              feature.id,
+              checkList.revisionCount ?? '',
+              feature,
+            )
+          : await API.chrChecklist.createFeature(id, checkList.revisionCount ?? '', feature);
+        const touched = saved.features ?? [];
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], touched),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Replace one feature's associations through its own endpoint.
+   *
+   * The server writes both directions, so the response names the partner as well as the subject and
+   * both are patched back by id — returning only the addressed feature would leave the other row
+   * showing a stale association list.
+   *
+   * Offline, or a feature the server has never seen, falls back to the whole-document save for the
+   * same reasons as {@link deleteFeature}.
+   */
+  const saveAssociations = useCallback(
+    async (subject: Feature, partners: Feature[]): Promise<boolean> => {
+      if (!checkList) return false;
+      const pending = draftFeatures ?? checkList.features ?? [];
+      if (isOfflineCopy || !subject.id) {
+        return saveFeatures(pending);
+      }
+      setBusy(true);
+      try {
+        const saved = await API.chrChecklist.saveFeatureAssociations(
+          id,
+          subject.id,
+          checkList.revisionCount ?? '',
+          partners.map((p) => p.id).filter((featureId): featureId is string => Boolean(featureId)),
+        );
+        const touched = saved.features ?? [];
+        setCheckList((prev) =>
+          prev
+            ? {
+                ...prev,
+                features: mergeSaved(prev.features ?? [], touched),
+                revisionCount: saved.revisionCount ?? prev.revisionCount,
+              }
+            : prev,
+        );
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Checklist saved', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Save failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
+  );
+
+  /**
+   * Remove one feature through its own endpoint, rather than by resending every other feature.
+   *
+   * Falls back to the whole-document save in the two cases where the endpoint cannot apply:
+   * offline, where there is no server to call and the local record is the only truth, and a feature
+   * the server has never seen, which has no id to address (it should not reach the table, since the
+   * editor discards an unsaved feature on Cancel — the guard is here because the cost of being
+   * wrong is deleting the wrong row).
+   *
+   * On success the checklist is re-read. The 204 carries no body, so the client's `revisionCount`
+   * is stale the moment the delete lands and its next save would be rejected as "modified by
+   * another user" — and a delete detaches composite members and drops association links on *other*
+   * features, so their stored state has moved too.
+   */
+  const deleteFeature = useCallback(
+    async (feature: Feature): Promise<boolean> => {
+      if (!checkList) return false;
+      const remaining = (draftFeatures ?? checkList.features ?? []).filter((f) => f !== feature);
+      if (isOfflineCopy || !feature.id) {
+        return saveFeatures(remaining);
+      }
+      setBusy(true);
+      try {
+        await API.chrChecklist.deleteFeature(id, feature.id, checkList.revisionCount ?? '');
+        const fresh = await API.chrChecklist.getChecklist(id);
+        setCheckList(fresh);
+        setDraftFeatures(null);
+        display({ kind: 'success', title: 'Feature deleted', timeout: 4000 });
+        return true;
+      } catch (err) {
+        reportError('Delete failed', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [checkList, draftFeatures, isOfflineCopy, id, saveFeatures, display, reportError],
   );
 
   /**
@@ -577,7 +930,26 @@ const ChrChecklistPage: FC = () => {
     if (!checkList) return;
     setBusy(true);
     setErrors([]);
+    setPreflight({});
     try {
+      // Pre-flight every tab against the checklist in hand before troubling the server. This is what
+      // catches the checklist whose Block summary was never opened: those tabs are deliberately quiet
+      // until they have been started, so without this the first news of the problem would be a
+      // rejected submit. For an offline copy it also avoids checking the record back in — an
+      // irreversible step — only for submit to turn it down. The server stays authoritative: a clean
+      // pre-flight still submits and can still be refused; this only stops us asking when the answer
+      // is already known.
+      const blocking = Object.fromEntries(
+        Object.entries(chrTabStatuses(checkList).outstanding).filter(
+          ([, items]) => items.length > 0,
+        ),
+      ) as Partial<Record<ChrTabKey, string[]>>;
+      if (Object.keys(blocking).length > 0) {
+        setPreflight(blocking);
+        display({ kind: 'warning', title: 'Submit blocked by validation', timeout: 6000 });
+        return;
+      }
+
       // Submit requires the server status to be ACT, but an offline copy is RDO. So for an offline
       // copy, first check it back in (upload: RDO → ACT) and drop the local draft, then submit the
       // now-active checklist. Checking in before submit also avoids a stuck state: upload clears the
@@ -664,9 +1036,15 @@ const ChrChecklistPage: FC = () => {
   const handleRemoveOfflineCopy = async () => {
     if (
       !(await confirm({
-        title: 'Remove from device?',
-        message:
-          'Remove this offline copy from this device? Any unsynced local changes will be lost.',
+        title: 'Are you sure you want to remove this checklist from your device?',
+        // Not a deletion — the checklist stays on the server — so this one says what is actually
+        // lost rather than borrowing the "permanently deleted" wording.
+        message: (
+          <>
+            <strong>This offline copy</strong> will be removed from this device. Any changes that
+            have not been synced will be lost.
+          </>
+        ),
         confirmButtonText: 'Remove',
       }))
     ) {
@@ -714,11 +1092,6 @@ const ChrChecklistPage: FC = () => {
       setBusy(false);
     }
   };
-
-  const mrva = useMemo(
-    () => calculateMrvaRatingCode(checkList?.rating, checkList?.features),
-    [checkList?.rating, checkList?.features],
-  );
 
   if (loading) {
     return (
@@ -782,14 +1155,32 @@ const ChrChecklistPage: FC = () => {
       <div key="Opening ID">
         <span className="protocol-checklist__label">Opening ID</span>
         <span>
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {value}
-          </a>
+          <ExternalLink href={href}>{value}</ExternalLink>
         </span>
       </div>
     );
   };
   const orgUnit = [checkList.orgUnitCode, checkList.orgUnitName].filter(Boolean).join(' - ');
+
+  // Which tabs draw no indicator is decided next to the rules (they report `none`), not listed
+  // here, so a tab that gains a rule lights up on its own.
+  const statusFor = (key: ChrTabKey) => tabState.statuses[key];
+
+  // The page-level tally. Counted across every tab, including the two without an indicator: a total
+  // that silently omitted a tab would read as "nothing left" while submit still refused.
+  const outstandingTotal = Object.values(tabState.counts).reduce((sum, count) => sum + count, 0);
+  const outstandingTabs = Object.values(tabState.counts).filter((count) => count > 0).length;
+
+  // A submit has been turned away for these items. Everything that reports them — the page banner,
+  // the tab counts, each tab's disclosure — turns red together, so the page reads as one answer to
+  // "why didn't it submit?" rather than three separate remarks.
+  const submitRefused = Object.keys(preflight).length > 0;
+  const tone = submitRefused ? 'error' : 'neutral';
+
+  /** The per-tab disclosure listing everything the tab still owes. */
+  const tabBanner = (key: ChrTabKey) => (
+    <OutstandingPanel groups={groupOutstanding(tabState.items[key])} tone={tone} />
+  );
 
   return (
     <Grid fullWidth className="default-grid chr-checklist">
@@ -805,8 +1196,13 @@ const ChrChecklistPage: FC = () => {
           </button>
           <div className="chr-checklist__title-row">
             <h1>{`${checkList.checklistID}-Cultural Heritage`}</h1>
-            {/* The status itself lives in the tombstone grid below; an offline copy is your editable
-                local copy (always RDO under the hood), so flag that here instead. */}
+            {/* Status reads beside the heading rather than as the last cell of the tombstone grid:
+                it governs what the whole page allows, so it belongs where the eye lands first. */}
+            <Tag type={statusTagType(checkList.status)} size="sm">
+              {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
+            </Tag>
+            {/* An offline copy is your editable local copy (always RDO under the hood), so it is
+                flagged separately from the server-side status above. */}
             {isOfflineCopy && (
               <Tag type="teal" size="sm">
                 Offline copy
@@ -817,9 +1213,55 @@ const ChrChecklistPage: FC = () => {
                 No network connection
               </Tag>
             )}
-            <Tag type="cool-gray" size="sm">
-              MRVA {mrva || '—'}
-            </Tag>
+            {/* Every checklist-level action lives here, at the top of the page rather than below
+                the tombstone tile. Most are mutually exclusive — Sync changes and Remove from
+                device only ever appear on an offline copy, Reactivate only on a checked-out one —
+                so the row stays short in practice, and wraps under the heading when it doesn't. */}
+            <div className="chr-checklist__title-actions">
+              {!readOnly && online && !offlineOutOfDate && (
+                <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
+                  Submit checklist
+                </Button>
+              )}
+              {!isOfflineCopy && online && !readOnly && (
+                <Button kind="tertiary" onClick={() => void handleTakeOffline()} disabled={busy}>
+                  Take offline
+                </Button>
+              )}
+              {/* A submitted server copy is read-only; Unsubmit reopens it for editing (the legacy
+                  FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
+              {!isOfflineCopy &&
+                online &&
+                canEditThisChr &&
+                checkList.status === CHR_STATUS.SUBMITTED && (
+                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                    Unsubmit checklist
+                  </Button>
+                )}
+              {/* Admin-only recovery for a checklist stuck "Checked out" on another device. */}
+              {!isOfflineCopy &&
+                online &&
+                canPerformSysAdminActions &&
+                checkList.status === CHR_STATUS.READ_ONLY_OFFLINE && (
+                  <Button kind="tertiary" onClick={() => void handleReactivate()} disabled={busy}>
+                    Reactivate
+                  </Button>
+                )}
+              {isOfflineCopy && online && !offlineOutOfDate && (
+                <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
+                  Sync changes
+                </Button>
+              )}
+              {isOfflineCopy && offlineOutOfDate && (
+                <Button
+                  kind="danger--tertiary"
+                  onClick={() => void handleRemoveOfflineCopy()}
+                  disabled={busy}
+                >
+                  Remove from device
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </Column>
@@ -842,7 +1284,13 @@ const ChrChecklistPage: FC = () => {
           );
         })()}
 
-      {!canEditThisChr && (
+      {/* Not shown for an offline copy — the same reasoning readOnly above already applies. Holding
+          the copy at all proves the district check passed at checkout
+          (@chrAuth.canEditChecklist gates POST /checklists/{id}/offline), and the role check cannot
+          be evaluated offline anyway: there is no session to read the districts from, so it would
+          always report "view only" and contradict a form that is genuinely editable. Anything that
+          did slip through is refused server-side on sync. */}
+      {!canEditThisChr && !isOfflineCopy && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
@@ -867,6 +1315,14 @@ const ChrChecklistPage: FC = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
+        <OutstandingSummary
+          total={outstandingTotal}
+          tabs={outstandingTabs}
+          refused={submitRefused}
+        />
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
         <Tile className="protocol-checklist__summary">
           <div className="protocol-checklist__summary-grid">
             {/* Tombstone header laid out like the Biodiversity checklist (same fields, same order). */}
@@ -881,66 +1337,13 @@ const ChrChecklistPage: FC = () => {
             {headerCell('Cutting permit', checkList.cuttingPermit)}
             {headerCell('Cut block', checkList.block)}
             {headerCell('Year of harvest', checkList.yearOfHarvest)}
-            <div>
-              <span className="protocol-checklist__label">Status</span>
-              <Tag type={statusTagType(checkList.status)} size="sm">
-                {STATUS_LABELS[checkList.status ?? ''] ?? checkList.status ?? '—'}
-              </Tag>
-            </div>
             {headerCell('Evaluator', checkList.assessedByName || checkList.assessedBy)}
             {headerCell('Evaluation date', formatShortDate(checkList.evaluationDate))}
           </div>
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <div className="chr-checklist__actions">
-          {!readOnly && online && !offlineOutOfDate && (
-            <Button kind="primary" onClick={() => void handleSubmit()} disabled={busy}>
-              Submit
-            </Button>
-          )}
-          {!isOfflineCopy && online && !readOnly && (
-            <Button kind="tertiary" onClick={() => void handleTakeOffline()} disabled={busy}>
-              Take offline
-            </Button>
-          )}
-          {/* A submitted server copy is read-only; Unsubmit reopens it for editing (the legacy
-              FREP_TOMBSTONE.UNSUBMIT proc enforces who may do so, same as Biodiversity). */}
-          {!isOfflineCopy &&
-            online &&
-            canEditThisChr &&
-            checkList.status === CHR_STATUS.SUBMITTED && (
-              <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                Unsubmit
-              </Button>
-            )}
-          {!isOfflineCopy &&
-            online &&
-            canPerformSysAdminActions &&
-            checkList.status === CHR_STATUS.READ_ONLY_OFFLINE && (
-              <Button kind="tertiary" onClick={() => void handleReactivate()} disabled={busy}>
-                Reactivate
-              </Button>
-            )}
-          {isOfflineCopy && online && !offlineOutOfDate && (
-            <Button kind="tertiary" onClick={() => void handleUpload()} disabled={busy}>
-              Sync changes
-            </Button>
-          )}
-          {isOfflineCopy && offlineOutOfDate && (
-            <Button
-              kind="danger--tertiary"
-              onClick={() => void handleRemoveOfflineCopy()}
-              disabled={busy}
-            >
-              Remove from device
-            </Button>
-          )}
-        </div>
-      </Column>
-
-      {/* Submit validation errors, shown inline near the Submit button (mirrors the Biodiversity
+      {/* Submit validation errors returned by the server, shown inline (mirrors the Biodiversity
           checklist's submit-validation panel) rather than behind a tab. */}
       {errors.length > 0 && (
         <Column sm={4} md={8} lg={16}>
@@ -965,71 +1368,100 @@ const ChrChecklistPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tabs selectedIndex={tab} onChange={({ selectedIndex }) => setTab(selectedIndex)}>
           <TabList aria-label="CHR checklist sections" contained>
-            <Tab renderIcon={Information}>Opening info</Tab>
-            <Tab renderIcon={Document}>Block summary</Tab>
-            <Tab renderIcon={UserMultiple}>Contacts</Tab>
-            <Tab renderIcon={Location}>Features</Tab>
-            <Tab renderIcon={Notebook}>Notes</Tab>
-            <Tab renderIcon={Attachment}>Attachments</Tab>
+            {TABS.map((section) => (
+              <Tab key={section.key}>
+                <span className="protocol-checklist__tab-label">
+                  {section.title}
+                  <TabStatusIcon
+                    status={statusFor(section.key)}
+                    count={tabState.counts[section.key]}
+                    section={section.title}
+                    tone={tone}
+                  />
+                </span>
+              </Tab>
+            ))}
           </TabList>
           <TabPanels>
             <TabPanel>
-              <OpeningInformation
-                value={checkList}
-                onSave={saveOpening}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('opening')}
+                <OpeningInformation
+                  value={checkList}
+                  onSave={saveOpening}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <BlockSummary
-                value={checkList}
-                onSave={saveBlockSummary}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('blockSummary')}
+                <BlockSummary
+                  value={checkList}
+                  onSave={saveBlockSummary}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <Contacts
-                contacts={checkList.contacts ?? EMPTY_CONTACTS}
-                onSave={saveContacts}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                <Contacts
+                  contacts={checkList.contacts ?? EMPTY_CONTACTS}
+                  onSave={saveContacts}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <FeatureList
-                features={checkList.features ?? []}
-                onChange={(features: Feature[]) => patch({ features })}
-                onSave={saveFeatures}
-                readOnly={readOnly}
-                busy={busy}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('features')}
+                <FeatureList
+                  features={draftFeatures ?? checkList.features ?? []}
+                  onChange={setDraftFeatures}
+                  onSave={saveFeatures}
+                  onDelete={deleteFeature}
+                  onSaveAssociations={saveAssociations}
+                  onSaveFeature={saveOneFeature}
+                  onCreateComposite={createComposite}
+                  onUpdateComposite={updateCompositeGroup}
+                  onUngroupComposite={ungroupCompositeGroup}
+                  readOnly={readOnly}
+                  busy={busy}
+                />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
+              <FormLock busy={busy}>
+                <Notes value={checkList} onSave={saveNotes} readOnly={readOnly} busy={busy} />
+              </FormLock>
             </TabPanel>
             <TabPanel>
-              <Photos
-                pictures={
-                  isOfflineCopy
-                    ? (checkList.pictures ?? []).slice(
-                        photoPage * photoPageSize,
-                        photoPage * photoPageSize + photoPageSize,
-                      )
-                    : (checkList.pictures ?? [])
-                }
-                onAdd={addPhotos}
-                onDelete={deletePhoto}
-                fetchContent={fetchPhotoContent}
-                page={photoPage}
-                pageSize={photoPageSize}
-                totalCount={isOfflineCopy ? (checkList.pictures ?? []).length : photoTotal}
-                onPageChange={(nextPage, nextSize) => void loadPhotos(nextPage, nextSize)}
-                readOnly={readOnly}
-                busy={busy}
-                active={tab === 5}
-              />
+              <FormLock busy={busy}>
+                {tabBanner('attachments')}
+                <Photos
+                  pictures={
+                    isOfflineCopy
+                      ? (checkList.pictures ?? []).slice(
+                          photoPage * photoPageSize,
+                          photoPage * photoPageSize + photoPageSize,
+                        )
+                      : (checkList.pictures ?? [])
+                  }
+                  onAdd={addPhotos}
+                  onDelete={deletePhoto}
+                  fetchContent={fetchPhotoContent}
+                  page={photoPage}
+                  pageSize={photoPageSize}
+                  totalCount={isOfflineCopy ? (checkList.pictures ?? []).length : photoTotal}
+                  onPageChange={(nextPage, nextSize) => void loadPhotos(nextPage, nextSize)}
+                  readOnly={readOnly}
+                  busy={busy}
+                  active={tab === 5}
+                />
+              </FormLock>
             </TabPanel>
           </TabPanels>
         </Tabs>

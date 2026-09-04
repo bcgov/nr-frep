@@ -28,19 +28,22 @@
     }
   }
 
+  // Heading, its status tags and the checklist-level actions share one row; the actions are pushed
+  // to the end. On a narrow viewport the row wraps and the actions drop below, still end-aligned.
   &__title-row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
+    width: 100%;
   }
 
-  &__actions {
+  &__title-actions {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
-    margin: 1rem 0;
+    margin-inline-start: auto;
   }
 
   &__section {
@@ -116,16 +119,33 @@
     align-items: start;
   }
 
-  // Contacts edit form mixes label-over-input fields (First name, Role, …) with bare Carbon
-  // checkboxes (Contacted, Attending on site) in a bottom-aligned grid (align-items: end). Carbon
-  // gives the LAST checkbox a smaller bottom margin (3px) than the others (6px), so the last box
-  // ("Attending on site") sits ~3px lower than "Contacted". Normalize every checkbox's bottom margin
-  // so the boxes share one baseline; the doubled class out-specifies Carbon's
-  // `.cds--form-item.cds--checkbox-wrapper:last-of-type`.
+  /* Carbon gives the LAST checkbox in a group a smaller bottom margin (3px) than the others (6px),
+     which left "Attending on site" sitting a few pixels below "Contacted". Normalised so the boxes
+     share one baseline; the doubled class out-specifies
+     `.cds--form-item.cds--checkbox-wrapper:last-of-type`. */
   &__contacts-grid {
     .cds--checkbox-wrapper.cds--checkbox-wrapper {
       margin-block-end: 0.375rem;
     }
+  }
+
+  /* Starts a new row in an auto-fill grid: an item placed in column 1 cannot sit beside what came
+     before it, so the row breaks here however many tracks the viewport happens to fit. */
+  &__row-break {
+    grid-column: 1;
+  }
+
+  /* A lone checkbox sharing a row with label-over-input fields.
+     It has no label above it, so on this top-aligned grid it sat level with its neighbours' labels
+     rather than their inputs. Dropped by the label block every other cell reserves — 2rem of
+     min-height plus Carbon's 0.5rem margin — and then by half the difference between a 40px input
+     and a 20px checkbox, so the box's centre meets the input's rather than its top. Measured: the
+     input's centre sits 50px below the cell top, the checkbox's 10px.
+
+     Not `.rip-form__grid--checks`, which bottom-aligns the whole row: this grid is deliberately
+     top-aligned so an inline error growing one cell cannot push its neighbours down the page. */
+  &__grid-check {
+    margin-top: 3.125rem;
   }
 
   // Push the "Assessed by" cell right so it isn't crowded against the Evaluation date input.
@@ -170,11 +190,6 @@
     }
   }
 
-  &__assessed-by__notice {
-    margin-bottom: 1rem;
-    max-width: none;
-  }
-
   // Two-column question/answer layout (Damage, Windthrow, Summary): paired cells flow left→right,
   // top-aligned so an answer field sits next to its question.
   &__two-col {
@@ -194,31 +209,84 @@
 
   // The three recommendation checkboxes above the planning grid: top-align them (so a wrapped
   // label doesn't drop its checkbox) and add breathing room before the strategy table below.
-  &__planning-header {
-    align-items: start;
+  /* The three planning sources, stacked. They read as a checklist to work down rather than a row of
+     options, and stacking leaves each one room for what it reveals — the permit number sits under
+     the box that asks for it. */
+  &__planning-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
     margin-bottom: 2rem;
   }
 
+  /* Indented to the checkbox's label, so the field reads as belonging to the box above it rather
+     than as the next question in the list. */
+  &__planning-permit {
+    margin: 0.25rem 0 0.5rem 1.75rem;
+    max-width: 18rem;
+  }
+
+  /* Left-aligned, unlike the right-aligned toolbars over the record tables: this button sits under
+     a sentence explaining what it adds, and belongs with that text. */
+  &__planning-add {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 0.5rem;
+  }
+
+  /* Styled as a record table rather than a bare grid of checkboxes: a shaded header that names each
+     source, white rows on the tab's grey ground, and a rule under each row so the eye can carry a
+     strategy across three columns without losing its line. */
   &__planning {
     width: 100%;
     border-collapse: collapse;
-    margin: 1rem 0;
+    margin: 1rem 0 2rem;
 
     th,
     td {
       text-align: left;
-      padding: 0.25rem 0.5rem;
+      padding: 0.75rem 1rem;
       border-bottom: 1px solid var(--cds-border-subtle, #e0e0e0);
     }
 
-    th:not(:first-child),
-    td:not(:first-child) {
-      text-align: center;
-      width: 6rem;
+    thead th {
+      background: var(--cds-layer-accent-01, #e0e0e0);
+      font-weight: 600;
     }
 
-    // The cells hold a label-less Carbon checkbox; shrink the wrapper to just the box and centre
-    // it so each box lines up under its FN / AIA/SAP / Site plan heading.
+    tbody tr {
+      background: var(--cds-layer-02, #ffffff);
+    }
+
+    /* The strategy table only. `__additional` carries this class too, and its three columns are a
+       different problem — sized by the controls in them, not by these headings. */
+    &:not(.chr-checklist__additional) {
+      /* Sized to its content, not to the container. Stretched to full width, a strategy name sat
+         roughly 750px from the checkbox answering it, further than the eye carries a row. */
+      width: auto;
+      max-width: 100%;
+      table-layout: fixed;
+
+      th:first-child,
+      td:first-child {
+        width: 320px;
+      }
+
+      th:not(:first-child),
+      td:not(:first-child) {
+        width: 220px;
+      }
+
+      /* The conditional field under a ticked box: tied to it by proximity, and held to the column
+         so a text input cannot push the cell wider than its heading. */
+      td .cds--form-item {
+        margin-top: 0.5rem;
+        max-width: 100%;
+      }
+    }
+
+    // The cells hold a label-less Carbon checkbox; shrink the wrapper to just the box so it sits at
+    // the cell's left edge, under the FN / AIA/SAP / Site plan heading rather than adrift of it.
     td:not(:first-child) {
       .cds--checkbox-wrapper {
         display: inline-flex;
@@ -228,12 +296,267 @@
         padding-left: 1rem;
       }
     }
+
   }
 
   &__feature-list {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  /* Additional strategies: Name | Source | Action.
+     The per-cell labels are hidden rather than dropped — the column header is the visible label, but
+     the input still needs its own name for anyone not reading the table visually. */
+  &__additional {
+    /* Grey field on a white surface, white field on a grey one. These rows are white, so the Name
+       input takes the grey field token — left white it lost its boundary against the cell and read
+       as text rather than something to type in. */
+    .cds--text-input {
+      background: var(--cds-field-01, #f4f4f4);
+    }
+
+    /* Rows sized to the controls they hold. The shared table padding is set for text cells; here
+       every row carries a 40px input, so the same padding again above and below made each row twice
+       the height of its contents. */
+    td {
+      padding-block: 0.5rem;
+      /* Every cell holds a control of a different height — a 40px input, a 24px checkbox, a button.
+         Centring puts them on one line instead of hanging each from the top of the row. */
+      vertical-align: middle;
+    }
+
+    /* Sized to its contents rather than stretched to the panel.
+       At full width the leftover space all fell into Source, opening a gap between the last
+       checkbox and Action wide enough to read as a missing column. Name is given the room a typed
+       strategy needs, Action the room its button needs, and Source takes what its checkboxes take. */
+    width: fit-content;
+    max-width: 100%;
+
+    th:first-child,
+    td:first-child {
+      width: 20rem;
+    }
+
+    th:nth-child(2),
+    td:nth-child(2) {
+      width: auto;
+      white-space: nowrap;
+    }
+
+    th:last-child,
+    td:last-child {
+      width: 7rem;
+    }
+
+    td .cds--label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* The sources sit together in one cell, spaced apart rather than stacked: they are one answer to
+     "who recommended this?", not three separate rows. */
+  /* A short fixed-length field sharing a row sized for its neighbours — the feature label takes
+     five characters, in a row widened for two selects whose options run to fifty. */
+  &__short-field {
+    /* Capped at the field wrapper, which is the box holding the input *and* Carbon's invalid icon —
+       the icon is pinned to its right edge. Capping the bare input left the wrapper full width, so
+       the exclamation floated 240px clear of the field it belonged to.
+       Not capped any higher: `.cds--form-requirement` sits outside this wrapper, and an inline error
+       is a sentence that needs the column's width to stay on one line. */
+    .cds--text-input__field-wrapper {
+      max-width: 9rem;
+    }
+  }
+
+  /* Summary — the questions stacked, each with its description directly beneath. Two gaps, not one:
+     a description belongs to the box above it, so it sits closer to its own question than the
+     questions sit to each other. */
+  &__summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  &__summary-question {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    /* The counter block already sets a text area apart from what follows; `.frep-field`'s own
+       bottom margin then doubled up with the gaps above. */
+    .frep-field {
+      margin-bottom: 0;
+    }
+  }
+
+  /* A one-word answer picked from a list — it takes the width of its options, not the column the
+     rationale below it needs. */
+  &__rating {
+    .cds--form-item {
+      max-width: 18rem;
+    }
+  }
+
+  /* What a checkbox reveals, indented to its label so the follow-ups read as belonging to the answer
+     above rather than as the next question. Same 1.75rem as the planning permit field, which is the
+     distance from the checkbox's left edge to the start of its label text. */
+  &__reveal {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: 0.5rem;
+    margin-left: 1.75rem;
+
+    /* Capped at the field wrapper, the box holding the input and Carbon's invalid icon — capping
+       the bare input leaves the icon pinned to a full-width wrapper, far from its field. These are
+       percentages and a short description, none of which needs the column. */
+    .cds--text-input__field-wrapper {
+      max-width: 14rem;
+    }
+  }
+
+  /* The description text area carries `.frep-field`'s own bottom margin, which then doubled up with
+     this stack's `gap` — the hole between the text area and Q2 read as a break between sections
+     rather than the next question. The gap alone spaces this stack. */
+  &__damage-stack {
+    /* Tighter than the default stack: each control here is a follow-up to the one above it, and at
+       1.5rem the description's counter sat marooned in the middle of the gap. */
+    gap: 1rem;
+
+    .frep-field {
+      margin-bottom: 0;
+    }
+  }
+
+  /* Q2's cause picker and the description "Other" reveals, stacked so the field reads as belonging
+     to the choice above it. Capped well short of the description text area it sits under: the
+     picker answers a one-line question, and full width made it read as a second paragraph field. */
+  &__damage-cause {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: 0.5rem;
+
+    .cds--form-item,
+    .cds--list-box__wrapper {
+      max-width: 24rem;
+      width: 100%;
+    }
+  }
+
+  /* A question and whatever its answer reveals, stacked. The follow-up belongs to the answer above
+     it, so it sits under it rather than alongside as a field of its own. */
+  &__question {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: 0.5rem;
+
+    .cds--form-item {
+      max-width: 18rem;
+    }
+  }
+
+  /* Three fixed columns for the feature types.
+     Not a grid, whose row is as tall as its tallest cell — one ticked box opening a field left a
+     hole beside every checkbox sharing its row. Not CSS multi-column either: that balances its
+     content, so opening a field re-flowed items between columns and boxes jumped as they were
+     ticked. The columns are dealt in markup (see `typeColumns`) and each stacks on its own. */
+  &__type-columns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: 0.75rem 2rem;
+  }
+
+  &__type-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    /* Grows to share the width, wraps under its neighbours when there is no room for three. */
+    flex: 1 1 16rem;
+    min-width: 0;
+  }
+
+  /* One feature type and the follow-up it reveals, stacked in a single grid cell so the field sits
+     under the box that asked for it rather than taking the next column along. */
+  &__type-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Description's first row: a five-character label beside two selects whose option text runs to
+     fifty. Flex rather than the grid, because a grid track is one width for the whole column — at
+     the selects' width the little label sat stranded at the head of a box three times its size, and
+     at the label's width the options truncated. Each field takes the width its content needs. */
+  &__description-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    /* Tight: the three read as one line of the form, not three separate questions. */
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
+
+    > .cds--form-item,
+    > .chr-checklist__short-field {
+      /* Carbon's form item carries `flex: 1 1 auto`; left alone the three grow to fill the row. */
+      flex: 0 0 auto;
+    }
+
+    > .chr-checklist__short-field {
+      /* The width of its own input. Anything wider shows as dead space before the next field; the
+         clash message wraps within it, which is why the message is kept short. */
+      width: 9rem;
+    }
+
+    /* The feature label is system-assigned, so its field is read-only. Carbon keeps the input
+       underline on a read-only field, which reads as an empty box waiting to be filled rather than
+       a value the record already holds. Outranks Carbon's own
+       `.cds--text-input-wrapper--readonly .cds--text-input` on specificity, not `!important`. */
+    .cds--text-input-wrapper--readonly .cds--text-input {
+      border-block-end: none;
+    }
+
+    /* Carbon positions the inline error absolutely, so it takes no layout height and printed over
+       the row beneath. `.rip-form__grid` already corrects this; this row is not one, so it needs the
+       same. */
+    .cds--form-requirement {
+      position: static;
+    }
+
+    > .cds--form-item {
+      width: 24rem;
+      max-width: 100%;
+    }
+  }
+
+  &__additional-sources {
+    display: flex;
+    flex-wrap: wrap;
+    /* A flex cell is its own formatting context, so the `vertical-align` above does not reach the
+       boxes inside it — they are centred here instead. */
+    align-items: center;
+    gap: 0.25rem 2.5rem;
+
+    /* Carbon's checkbox wrapper is a full-width block, which stacked the three sources one per line
+       inside the cell. Shrunk to its content so they sit side by side. */
+    .cds--checkbox-wrapper {
+      /* Carbon's checkbox wrapper is also a `.cds--form-item`, which carries `flex: 1 1 auto` — in a
+         flex cell that made the three sources grow to fill the column and drift apart. Held at their
+         content width so they read as one group. */
+      flex: 0 0 auto;
+      display: inline-flex;
+      width: auto;
+      margin: 0;
+      white-space: nowrap;
+    }
   }
 
   &__feature-item {
@@ -257,21 +580,37 @@
 }
 
 // Block Summary operational review — each question (col 1) beside its description (col 2).
+/* Q8 / Q9 / Q10, each question with its description directly beneath it.
+   Not two columns: the description is a paragraph, and pairing it with the question left the answer
+   reading as a separate field across the page from what it answers — with an empty cell opposite
+   every unticked question. Two gaps, not one: a description belongs to the box above it, so it sits
+   closer to its own question than the questions sit to each other. */
 .chr-block-qa {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem 2rem;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
   margin-bottom: 1rem;
+}
 
-  // Stack to a single column on narrow viewports (Carbon md breakpoint).
-  @media (max-width: 671px) {
-    grid-template-columns: 1fr;
+.chr-block-qa__question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  /* The counter block already sets a text area apart from what follows; `.frep-field`'s own bottom
+     margin then doubled up with the gaps above. */
+  .frep-field {
+    margin-bottom: 0;
   }
 }
 
 // MRVA derivation help — compact disclosure under the computed MRVA tag (Block Summary).
+/* The MRVA derivation table, as its own row under the rating fields.
+   It holds a 32rem table, and `.rip-form__grid` caps its tracks at 12rem — inside the MRVA cell the
+   table was squeezed into one column and the whole disclosure began halfway across the page. Spans
+   the row instead, the same way a textarea does. */
 .chr-mrva-help {
+  grid-column: 1 / -1;
   margin-top: 0.5rem;
   font-size: 0.75rem;
 
@@ -312,27 +651,76 @@
   grid-column: 1 / -1;
 }
 
-// Inline disclosure help inside a feature form grid (e.g. "What is a composite feature?"). Spans the
-// full grid width so it reads as its own row, and mirrors the .chr-mrva-help disclosure styling.
-.chr-feature-help {
-  grid-column: 1 / -1;
-  margin: 0.25rem 0;
-  font-size: 0.75rem;
-
-  summary {
-    cursor: pointer;
-    color: var(--cds-link-primary, #0f62fe);
-  }
-
-  p {
-    margin: 0.5rem 0;
-    max-width: 48rem;
-    color: var(--cds-text-secondary, #525252);
-  }
+/* The feature's name, above its form. */
+.feature-sections__title {
+  font-size: 1.75rem;
+  font-weight: 400;
+  line-height: 1.3;
+  margin-bottom: 0.5rem;
 }
 
-// Feature accordion section header with an error badge: name + warning icon + count, shown when a
-// section holds a live validation error (the section also stays expanded — see FeatureEditor).
+/* The feature form's sections, laid out one after another and ruled apart rather than folded into
+   an accordion. Everything a feature holds is on the page at once: the sections are short, they are
+   filled in order, and a reader had to open all nine to see what a feature said. The rule goes
+   between them — the first has nothing above it to be separated from. */
+.feature-section + .feature-section {
+  border-top: 1px solid var(--cds-border-subtle, #e0e0e0);
+  margin-top: 2rem;
+  padding-top: 2rem;
+}
+
+/* Carbon positions the inline error (`.cds--form-requirement`) absolutely, so it takes no layout
+   height and the next label prints straight over it — "A rating is required" landing on top of
+   "Feature rating rationale". `.rip-form__grid` and the additional-strategies row each already
+   correct this for themselves; applied to the section instead, so a container added later inherits
+   the fix rather than rediscovering the bug. Fields only grow while an error is showing. */
+/* Carbon renders a RadioButtonGroup's `legendText` as `legend.cds--label`, and the section's own
+   `.rip-form__group legend` heading style matches it too — so "Select how the area was measured"
+   came out at the same weight as "Size of area influenced" above it and the two competed for the
+   same job. It is an instruction, not a heading, so it is set in body text. */
+.feature-section legend.cds--label {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.43;
+}
+
+/* Windthrow treatment: "None" stands apart from the techniques it excludes. Space alone does the
+   separating — a rule here read as a section divider in a group only six rows tall — and only just
+   enough of it: the gap has to say "these are not the same thing" without breaking the group into
+   two lists. */
+.chr-checklist__treatment-options {
+  margin-top: 0.5rem;
+}
+
+/* A hint that explains the legend belongs to it, not adrift between the heading and the first
+   control. The legend's own 1rem and the hint's 0.75rem stacked to nearly two blank lines, which
+   read as a gap rather than as one label in two parts.
+
+   `:has()` so only a legend that is actually followed by a hint gives up its spacing; every other
+   fieldset keeps the room it needs before its first field. Where `:has()` is unsupported the second
+   rule still applies, so the spacing improves rather than breaking. */
+.feature-section legend:has(+ .rip-form__hint) {
+  margin-bottom: 0.25rem;
+}
+
+.feature-section legend + .rip-form__hint {
+  margin-top: 0;
+}
+
+.feature-section .cds--form-requirement {
+  position: static;
+}
+
+.feature-section__title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.4;
+  margin-bottom: 1rem;
+}
+
+// Feature section heading with an error badge: name + warning icon, shown when a section holds a
+// live validation error.
 .feature-accordion__title {
   display: inline-flex;
   align-items: center;
@@ -342,4 +730,230 @@
 .feature-accordion__error-icon {
   fill: var(--cds-support-error, #da1e28);
   flex-shrink: 0;
+}
+
+/* `.default-grid :is(h1, …)` sets every page heading to `width: 100%`, which fills the title row on
+   its own and wraps the tags and actions onto the next line. Undone here only — and with two
+   classes, because `:is()` takes the specificity of its most specific argument, making that rule
+   (0,2,0). */
+.default-grid .chr-checklist__title-row h1 {
+  width: auto;
+}
+
+.chr-features__associate-intro {
+  margin-block-end: 1rem;
+  color: var(--cds-text-primary);
+}
+
+/* The dialog's table sits under two paragraphs of explanation, so it needs the gap. */
+.chr-features__associate-table {
+  margin-block-start: 1.5rem;
+}
+
+/* Carbon's modal footer stretches its buttons to fill the width (`flex: 0 1 50%`) and makes them
+   64px tall with top-aligned text — a full-bleed black/blue bar. The design wants ordinary buttons
+   sitting at the end of the row, so this restores normal sizing. Scoped to this dialog rather than
+   applied globally: the confirm dialog and the others still use Carbon's default treatment. */
+.chr-features__associate-modal,
+.chr-features__composite-modal,
+.chr-features__ungroup-modal {
+  .cds--modal-footer {
+    justify-content: flex-end;
+    gap: 1rem;
+    // More below than above, so the buttons are not flush against the dialog's bottom edge.
+    // `block-size: auto` is what makes that padding count: Carbon pins the footer to a fixed height,
+    // which the taller buttons then fill exactly, leaving nothing visible below them.
+    block-size: auto;
+    padding: 1rem 1rem 1.5rem;
+
+    .cds--btn {
+      flex: 0 0 auto;
+      align-items: center;
+      // The footer is also a `cds--btn-set`, which sets `inline-size: 100%` on every child — so
+      // without this each button is as wide as the whole footer and `flex-end` pushes the first one
+      // off the left edge, outside the dialog. Sizing to content is the actual fix; `flex` alone
+      // never was.
+      inline-size: auto;
+      max-inline-size: none;
+      block-size: auto;
+      min-inline-size: 8rem;
+      padding-block: 0.75rem;
+    }
+  }
+
+  /* Carbon has no prop for the secondary button's kind, and its `secondary` is a dark grey fill.
+     The design's Cancel is the tertiary treatment — outlined, brand-coloured — so it is restyled
+     here rather than by hand-rolling the footer and losing the dialog's submit/close wiring. */
+  .cds--btn--secondary {
+    border: 1px solid var(--cds-button-tertiary);
+    background-color: transparent;
+    color: var(--cds-button-tertiary);
+
+    &:hover,
+    &:active {
+      background-color: var(--cds-button-tertiary-hover);
+      color: var(--cds-text-on-color);
+    }
+  }
+}
+
+.chr-features__saved {
+  max-inline-size: 100%;
+  margin-block-end: 1rem;
+}
+
+/* --- Create composite dialog ------------------------------------------------------------ */
+
+.chr-features__composite-intro {
+  margin-block-end: 0.5rem;
+  color: var(--cds-text-primary);
+}
+
+.chr-features__composite-required,
+.chr-features__composite-hint {
+  margin-block-end: 1rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* The asterisk is the only thing marking a field required, so it has to read as the error colour
+   rather than inheriting the muted text around it. */
+.chr-features__composite-required span,
+.chr-features__composite-subhead span {
+  color: var(--cds-text-error);
+}
+
+.chr-features__composite-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+}
+
+.chr-features__composite-subhead {
+  margin-block-end: 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* The feature picker is boxed so the count and the "Add a new feature" action read as belonging to
+   the table below them rather than to the dialog at large. */
+.chr-features__composite-panel {
+  border: 1px solid var(--cds-border-subtle);
+}
+
+.chr-features__composite-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  background-color: var(--cds-layer);
+}
+
+.chr-features__composite-table {
+  width: 100%;
+}
+
+/* --- Composites in the feature table ---------------------------------------------------- */
+
+/* The composite is the record being assessed, so it carries the weight; its members read as
+   belonging to it. */
+.chr-features__composite-row td:first-child {
+  font-weight: 600;
+}
+
+.chr-features__composite-caption td {
+  padding-block: 0.5rem;
+  font-weight: 600;
+}
+
+/* Indented rather than separately bordered: the indent is what ties a member to the composite
+   above it once the caption row has scrolled past. */
+.chr-features__member-row td:first-child {
+  padding-inline-start: 2.5rem;
+}
+
+/* A composite and its members are one record, so they share one unbroken white background. The
+   app-wide zebra stripe (styles/_overrides.scss) would otherwise cut the group into bands and make
+   a member look like just another row.
+
+   The extra `.bio-strata` scope is deliberate: the stripe is
+   `.cds--data-table tbody tr:not(.cds--parent-row):not(.cds--data-table--selected):nth-child(even)`,
+   which is four classes deep. Matching it exactly would leave the winner down to file order. */
+.bio-strata
+  .cds--data-table
+  tbody
+  tr:is(
+    .chr-features__composite-row,
+    .chr-features__composite-caption,
+    .chr-features__member-row
+  ):not(.cds--data-table--selected) {
+  background-color: var(--cds-layer-02);
+
+  &:hover {
+    background-color: var(--cds-layer-hover);
+  }
+}
+
+/* Members carry a single action, which sits at the end of the column under the composite's own
+   actions rather than orphaned at the start of an otherwise empty cell. */
+.chr-features__member-row .table-actions {
+  text-align: end;
+}
+
+/* Shrink the Action column to its widest button group. Left to `table-layout: auto` it takes a
+   share of the spare width, so a right-aligned Associate lands at the table's edge rather than
+   under the composite's own Ungroup — which is what the design lines it up with. The freed width
+   goes to Description and Associated features, which have real content to show. */
+.chr-features__table td:last-child,
+.chr-features__table th:last-child {
+  inline-size: 1%;
+  white-space: nowrap;
+}
+
+/* --- Ungroup confirmation --------------------------------------------------------------- */
+
+.chr-features__ungroup-modal {
+  /* The stranded features are the reason the dialog asks anything at all, so they are called out
+     rather than left as another line of body copy.
+
+     Scoped to the dialog, not left as a bare class: Carbon styles `.cds--modal-content p`, which is
+     a class plus an element (0,1,1) and beats a lone class (0,1,0) — unscoped, the bold silently
+     lost to the modal's default body text. */
+  .chr-features__ungroup-stranded {
+    margin-block-end: 1rem;
+    color: var(--cds-text-primary);
+    font-weight: 600;
+  }
+
+  .cds--radio-button-group {
+    margin-block-start: 0.5rem;
+  }
+
+  /* Carbon sizes a fieldset legend as a 12px form label. Here it is a question put to the reader in
+     the middle of body copy, not a field label, so it is set to the same size as the paragraphs
+     around it — the design has one size throughout the dialog. */
+  legend.cds--label {
+    margin-block-end: 0.25rem;
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    line-height: 1.43;
+  }
+}
+
+/* The asterisk is the only thing marking an answer required, so it has to read as the error colour
+   rather than inheriting the label's. */
+.chr-features__ungroup-modal .chr-features__required-mark {
+  color: var(--cds-text-error);
+}
+
+/* The picker panel has no form control to hang Carbon's invalidText on, so its requirement line
+   turns into the error instead of a second line repeating it.
+
+   Scoped to the dialog rather than left as a bare class: Carbon styles `.cds--modal-content p`,
+   which is a class + element (0,1,1) and outspecifies a lone class (0,1,0) — the error colour was
+   silently losing to the modal's default body text. */
+.chr-features__composite-modal .chr-features__composite-required--error {
+  color: var(--cds-text-error);
+  font-weight: 600;
 }

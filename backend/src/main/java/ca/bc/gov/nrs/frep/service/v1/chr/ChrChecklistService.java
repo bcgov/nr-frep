@@ -7,7 +7,14 @@ import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AssociationsRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeCreateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUngroupRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUpdateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
@@ -28,6 +35,7 @@ import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -264,6 +272,234 @@ public class ChrChecklistService {
    * the relevant section is validated, so e.g. saving Opening info is not blocked by a photo that
    * is missing its description.
    */
+  /**
+   * Create a composite over two or more features.
+   *
+   * <p>Validates the anchor and any newly created members the same way the features section does —
+   * they are ordinary features, and the dialog can describe them in place.
+   */
+  @Transactional
+  public FeatureSaveResponse createComposite(long checklistId, CompositeCreateRequest request) {
+    if (request == null || request.anchor() == null) {
+      throw new InvalidParameterException("A composite needs an anchor feature.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    CheckList carrier = new CheckList();
+    List<Feature> toValidate = new ArrayList<>();
+    toValidate.add(request.anchor());
+    if (request.newMembers() != null) {
+      toValidate.addAll(request.newMembers());
+    }
+    carrier.setFeatures(toValidate);
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.createComposite(
+          checklistId,
+          request.anchor(),
+          request.memberIds(),
+          request.newMembers(),
+          loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the composite after creating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Dissolve a composite, releasing its members and deleting the ones the caller names. */
+  @Transactional
+  public FeatureSaveResponse ungroupComposite(
+      long checklistId, long anchorId, CompositeUngroupRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("An ungroup request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    List<Feature> survivors;
+    try {
+      survivors = persistenceService.ungroupComposite(
+          checklistId, anchorId, request.deleteMemberIds(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the features after ungrouping.", ex);
+    }
+    log.info("Ungrouped composite :: {} on CHR checklist :: {} by user :: {}", anchorId,
+        checklistId, loggedUserHelper.getLoggedUserId());
+    return new FeatureSaveResponse(
+        survivors, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Re-point an existing composite at a new set of members. */
+  @Transactional
+  public FeatureSaveResponse updateComposite(
+      long checklistId, long anchorId, CompositeUpdateRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("A composite update request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    if (request.newMembers() != null && !request.newMembers().isEmpty()) {
+      CheckList carrier = new CheckList();
+      carrier.setFeatures(new ArrayList<>(request.newMembers()));
+      validateFeatures(carrier);
+    }
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.updateComposite(
+          checklistId,
+          anchorId,
+          request.featureDescriptionCode(),
+          request.featureInfoSourceCode(),
+          request.memberIds(),
+          request.newMembers(),
+          loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the composite after updating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Add one standalone feature to a checklist. Same gate and validation as an edit. */
+  @Transactional
+  public FeatureSaveResponse createFeature(long checklistId, FeatureSaveRequest request) {
+    if (request == null || request.feature() == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    CheckList carrier = new CheckList();
+    carrier.setFeatures(new ArrayList<>(List.of(request.feature())));
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.createStandaloneFeature(
+          checklistId, request.feature(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the feature after creating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Save one feature's own fields.
+   *
+   * <p>Runs the same validation the features section runs — {@code validateFeatures} is already
+   * per-feature, so it ports unchanged — plus the {@code ACT} status and revision-token gate.
+   */
+  @Transactional
+  public FeatureSaveResponse saveFeature(
+      long checklistId, long featureId, FeatureSaveRequest request) {
+    if (request == null || request.feature() == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    // The section validator walks a CheckList's features; one feature is that list with one entry.
+    CheckList carrier = new CheckList();
+    carrier.setFeatures(new ArrayList<>(List.of(request.feature())));
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.saveFeature(
+          checklistId, featureId, request.feature(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the feature after saving it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Replace one feature's associations, both directions.
+   *
+   * <p>Same gate as a section save — {@code ACT} plus a matching revision token — since an
+   * association is stored state on two features, not a leaf resource.
+   */
+  @Transactional
+  public FeatureSaveResponse saveFeatureAssociations(
+      long checklistId, long featureId, AssociationsRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("An associations request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+    List<Feature> touched;
+    try {
+      touched = persistenceService.saveFeatureAssociations(
+          checklistId, featureId, request.featureIds(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      // CheckListMapper.toFeature is declared `throws Exception` (legacy signature); anything it
+      // raises is a mapping failure, not something the caller can act on.
+      throw new FrepApiRuntimeException(
+          "Could not read back the features after saving associations.", ex);
+    }
+    return new FeatureSaveResponse(
+        touched, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Remove one feature from a checklist.
+   *
+   * <p>Runs the same gate as a section save — the checklist must be {@code ACT} and the caller's
+   * revision token must match — because a delete is as destructive as any edit and shares the
+   * checklist's optimistic lock. Photos deliberately skip both (they are leaf resources that do not
+   * advance the token); a feature is not a leaf, since removing one detaches composite members and
+   * drops association links on other features.
+   */
+  @Transactional
+  public void deleteFeature(long checklistId, long featureId, String revisionCount) {
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(revisionCount, checklistId);
+    persistenceService.deleteFeature(checklistId, featureId, loggedUserHelper.getLoggedUserId());
+    log.info("Deleted feature :: {} from CHR checklist :: {} by user :: {}", featureId, checklistId,
+        loggedUserHelper.getLoggedUserId());
+  }
+
   private CheckList saveSection(
       CheckList checklist,
       java.util.function.BiConsumer<CheckList, String> persist,
@@ -565,6 +801,13 @@ public class ChrChecklistService {
     }
   }
 
+
+  private void assertRevisionCount(String revisionCount, long checklistId) {
+    CheckList carrier = new CheckList();
+    carrier.setChecklistID(Long.toString(checklistId));
+    carrier.setRevisionCount(revisionCount);
+    assertRevisionCount(carrier, checklistId);
+  }
 
   private void assertRevisionCount(CheckList checklist, long checklistId) {
     long revisionCount = checklistRepository.getRevisionCount(checklistId);

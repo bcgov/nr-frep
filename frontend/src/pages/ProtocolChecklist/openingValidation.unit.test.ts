@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { BiodiversityOpening } from '@/types/protocolChecklist';
 
-import { validateOpening } from '@/pages/ProtocolChecklist/openingValidation';
+import {
+  openingFormatErrors,
+  openingTypingErrors,
+  validateOpening,
+} from '@/pages/ProtocolChecklist/openingValidation';
 
 const valid = (overrides: Partial<BiodiversityOpening> = {}): BiodiversityOpening => ({
   locationDescription: 'A clear-cut block near the lake',
@@ -76,14 +80,44 @@ describe('validateOpening', () => {
   it('validates the FREP gross area override (number, range, decimals)', () => {
     expect(validateOpening(valid({ frepWtpOverride: 'abc' })).frepWtpOverride).toMatch(/number/);
     expect(validateOpening(valid({ frepWtpOverride: '0' })).frepWtpOverride).toMatch(
-      /between 0.01 and 99999.99/,
+      /at least 0.01/,
     );
     expect(validateOpening(valid({ frepWtpOverride: '100000' })).frepWtpOverride).toMatch(
-      /between 0.01 and 99999.99/,
+      /at most 99999.99/,
     );
     expect(validateOpening(valid({ frepWtpOverride: '1.234' })).frepWtpOverride).toMatch(
       /2 decimal/,
     );
     expect(validateOpening(valid({ frepWtpOverride: '12.5' })).frepWtpOverride).toBeUndefined();
+  });
+});
+
+/**
+ * The override is the Opening tab's only typed number, so it is the only field here with a "still
+ * being typed" state to respect. See utils/validation.ts.
+ */
+describe('openingTypingErrors', () => {
+  it('names a letter and a value past the ceiling straight away', () => {
+    expect(openingTypingErrors(valid({ frepWtpOverride: 'lots' })).frepWtpOverride).toMatch(
+      /must be a number/,
+    );
+    expect(openingTypingErrors(valid({ frepWtpOverride: '100000' })).frepWtpOverride).toMatch(
+      /at most 99999.99/,
+    );
+  });
+
+  it('names a decimal place too many straight away', () => {
+    expect(openingTypingErrors(valid({ frepWtpOverride: '1.234' })).frepWtpOverride).toMatch(
+      /2 decimal places/,
+    );
+  });
+
+  it('holds a value still below the floor, and a number half-typed', () => {
+    // 0 is the first keystroke of 0.5; "1." is on its way to 1.5.
+    expect(openingTypingErrors(valid({ frepWtpOverride: '0' })).frepWtpOverride).toBeUndefined();
+    expect(openingTypingErrors(valid({ frepWtpOverride: '1.' })).frepWtpOverride).toBeUndefined();
+    expect(openingFormatErrors(valid({ frepWtpOverride: '0' })).frepWtpOverride).toMatch(
+      /at least 0.01/,
+    );
   });
 });

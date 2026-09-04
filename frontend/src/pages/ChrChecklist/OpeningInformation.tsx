@@ -1,5 +1,5 @@
 import { Edit } from '@carbon/icons-react';
-import { Button, InlineNotification } from '@carbon/react';
+import { Button } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import {
@@ -8,14 +8,19 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import RequiredLegend from '@/pages/ProtocolChecklist/RequiredLegend';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
+import {
+  openingFormatErrors,
+  openingRequiredErrors,
+} from '@/pages/ChrChecklist/checklistValidation';
 import { OPENING_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
-import { addTextLimitErrors } from '@/utils/textLimits';
+import ActionButton from '@/components/core/ActionButton';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -30,20 +35,6 @@ type Draft = Pick<
   CheckList,
   'evaluationDate' | 'firstNationName' | 'generalLocation' | 'targeted' | 'assessedBy'
 >;
-
-/**
- * Field-level errors keyed by field, mirroring the Biodiversity tabs' live-inline validation and the
- * CHR submit checks: Evaluation date, General location and Assessed by are all required.
- */
-const openingErrors = (d: Draft): Record<string, string> => {
-  const e: Record<string, string> = {};
-  if (!d.evaluationDate?.trim()) e.evaluationDate = 'Evaluation date is required.';
-  if (!d.generalLocation?.trim()) e.generalLocation = 'General location is required.';
-  if (!d.assessedBy?.trim()) e.assessedBy = 'Evaluator is required — choose “Assign it to me”.';
-  // Free-text length, same rule as the feature editor — see textLimits.ts.
-  addTextLimitErrors(e, d as Record<string, unknown>, OPENING_TEXT_LIMITS);
-  return e;
-};
 
 /**
  * Section 1 — opening information. Read-only by default with an Edit / Save / Cancel toggle,
@@ -73,7 +64,6 @@ const OpeningInformation: FC<{
   const editAssessedByDisplay =
     editAssessedBy === assessedBy ? value.assessedByName || editAssessedBy : editAssessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
-  const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
   const beginEdit = () => {
     setDraft({
@@ -88,15 +78,21 @@ const OpeningInformation: FC<{
   };
   // Validation runs live off the draft, but is only *displayed* once a save has been attempted —
   // opening an incomplete tab should not greet the user with errors they have not been asked to fix
-  // yet (same gate as the Biodiversity tabs). `allErrors` drives the save guard, `fieldErrors` the
-  // rendering, so every call site below is gated at once.
-  const allErrors: Record<string, string> = editing ? openingErrors(draft) : {};
-  const hasErrors = Object.keys(allErrors).length > 0;
+  // yet (same gate as the Biodiversity tabs). `fieldErrors` drives the rendering, so every call site
+  // below is gated at once; `blockingErrors` drives the save guard.
+  const allErrors: Record<string, string> = editing
+    ? { ...openingRequiredErrors(draft), ...openingFormatErrors(draft) }
+    : {};
+  // Only free text the column cannot store stops the save. A required field left blank is marked,
+  // counted on the tab and blocks submit — but a part-finished Opening is a legitimate saved state.
+  const blockingErrors = editing ? openingFormatErrors(draft) : {};
+  const hasBlockingErrors = Object.keys(blockingErrors).length > 0;
   const fieldErrors = showErrors ? allErrors : {};
   const save = async () => {
-    // First point the user has asked for the tab to be complete — reveal the errors now.
+    // First point the user has asked for the tab to be complete — reveal the errors now. Blank
+    // required fields are shown but do not stop the save; only unstorable values do.
     setShowErrors(true);
-    if (hasErrors) return;
+    if (hasBlockingErrors) return;
     if (await onSave(draft)) setEditing(false);
   };
 
@@ -106,7 +102,7 @@ const OpeningInformation: FC<{
         {!editing && !readOnly && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}
@@ -123,27 +119,17 @@ const OpeningInformation: FC<{
             >
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           </>
         )}
       </div>
+      {/* Only while editing — the read-only view marks nothing required. */}
+      {editing && <RequiredLegend />}
 
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
         {editing ? (
           <>
-            {assignPending && (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                hideCloseButton
-                title="Save required"
-                subtitle="You must save the form to update the Evaluator value."
-                className="chr-checklist__assessed-by__notice"
-              />
-            )}
             <div className="rip-form__grid">
               <DateField
                 id="chr-evaluation-date"
@@ -183,12 +169,14 @@ const OpeningInformation: FC<{
                 maxLength={200}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
-              <IndicatorCheckbox
-                id="chr-targeted"
-                labelText="Targeted site"
-                value={draft.targeted}
-                onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
-              />
+              <div className="chr-checklist__grid-check">
+                <IndicatorCheckbox
+                  id="chr-targeted"
+                  labelText="Targeted site"
+                  value={draft.targeted}
+                  onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
+                />
+              </div>
             </div>
             <TextAreaField
               id="chr-general-location"

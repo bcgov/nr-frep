@@ -9,7 +9,8 @@ import * as useAuthorizationModule from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
 
-vi.mock('@/services/APIs', () => ({
+// The checklist's dropdowns read their options from the code tables.
+vi.mock('@/services/APIs', async () => ({
   default: {
     chrChecklist: {
       getChecklist: vi.fn(),
@@ -18,6 +19,8 @@ vi.mock('@/services/APIs', () => ({
       saveBlockSummary: vi.fn(),
       saveContacts: vi.fn(),
       saveFeatures: vi.fn(),
+      createFeature: vi.fn(),
+      saveFeature: vi.fn(),
       getPhotos: vi.fn(),
       getPhotoContent: vi.fn(),
       addPhoto: vi.fn(),
@@ -26,6 +29,7 @@ vi.mock('@/services/APIs', () => ({
       unsubmit: vi.fn(),
       activate: vi.fn(),
     },
+    configuration: (await import('@/testing/chrCodeListApi')).chrCodeListApi(),
   },
 }));
 
@@ -62,6 +66,9 @@ const api = API.chrChecklist as unknown as {
   getChecklist: ReturnType<typeof vi.fn>;
   save: ReturnType<typeof vi.fn>;
   saveOpening: ReturnType<typeof vi.fn>;
+  saveFeatures: ReturnType<typeof vi.fn>;
+  createFeature: ReturnType<typeof vi.fn>;
+  saveFeature: ReturnType<typeof vi.fn>;
   getPhotos: ReturnType<typeof vi.fn>;
   activate: ReturnType<typeof vi.fn>;
   submit: ReturnType<typeof vi.fn>;
@@ -83,14 +90,32 @@ const renderPage = () =>
     </MemoryRouter>,
   );
 
+// A feature with every submit rule satisfied: labelled, not a composite (so it owes a description
+// code and an information source), one feature type, one age, and a rating.
+const completeFeature = {
+  featureLabel: '1',
+  compositeFeatureInd: 'false',
+  featureDescriptionCode: 'CMT',
+  featureInfoSourceCode: 'AIA',
+  burialSite: 'true',
+  pre1846: 'true',
+  featureRating: 'HIGH',
+};
+
+// A checklist that is ready to submit. Submit runs a client-side pre-flight over the same rules the
+// server enforces (see tabStatus.ts) and stops before calling the API when anything is outstanding,
+// so a fixture missing a required field would never reach the call the test is about.
 const sampleChecklist = {
   checklistID: '1001',
   status: 'ACT',
-  // The Opening tab requires these to save; pre-fill them (assessedBy = the mock user).
+  // Opening info (assessedBy = the mock user).
   assessedBy: String.raw`IDIR\TESTER`,
   evaluationDate: '2026-06-10',
   generalLocation: '16 km on Finnegan FSR',
-  features: [],
+  yearOfHarvest: '2024',
+  // Block summary.
+  rating: 'HIGH',
+  features: [completeFeature],
   contacts: [],
   pictures: [],
 };
@@ -107,7 +132,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('loads a checklist from the API and saves edits back', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
     api.saveOpening.mockResolvedValue({ ...sampleChecklist });
@@ -124,8 +149,111 @@ describe('ChrChecklistPage', () => {
     expect(api.saveOpening.mock.calls[0][1]).toMatchObject({ checklistID: '1001' });
   });
 
+  it('saves an Opening tab that is still missing a required field', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
+    api.saveOpening.mockResolvedValue({ ...sampleChecklist, generalLocation: '' });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    // General location is required for submit, but a part-finished Opening is a legitimate thing to
+    // store — the save goes through, and the tab says what is still owed.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.saveOpening).toHaveBeenCalledTimes(1));
+    // The tab's own panel names it, and the page-level tally counts it.
+    expect(await screen.findByText('Outstanding in this tab')).toBeTruthy();
+    expect(screen.getByText('1 required item outstanding across 1 tab')).toBeTruthy();
+  });
+
+  it('lists a blank “Other description” once the Features tab has been saved', async () => {
+    // The reported case, end to end: tick “Other” in the editor, save the tab, and the description
+    // it now owes has to appear in the outstanding list. The count reads the *stored* checklist, so
+    // this also pins the point at which it moves — the tab's Save, not the editor's own writes.
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Other' }));
+
+    const listed = () =>
+      Array.from(document.querySelectorAll('.protocol-checklist__outstanding-list li')).map(
+        (li) => li.textContent,
+      );
+    // Not yet: the edit is still pending, and the count describes what is stored.
+    expect(listed()).not.toContain('Other description, in the Description section');
+
+    // A feature the server has never seen is created rather than updated — it has no id for a PUT
+    // to address — and the response carries just that feature, which is what the count then reads.
+    const savedFeature = {
+      id: '900',
+      featureLabel: '1',
+      compositeFeatureInd: 'false',
+      other: 'true',
+    };
+    api.createFeature.mockResolvedValue({ features: [savedFeature], revisionCount: '2' });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() =>
+      expect(listed()).toContain('Other description, in the Description section'),
+    );
+    // Adding a feature no longer resends every other feature.
+    expect(api.saveFeatures).not.toHaveBeenCalled();
+  });
+
+  it('applies an edit made to a feature that has not been saved yet', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Features/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add feature' }));
+
+    // Pending feature edits live outside `checkList` (see draftFeatures) — this is the round trip
+    // that proves the editor still sees its own writes: choose an age, and it stays chosen.
+    const pre1846 = screen.getByRole('radio', { name: 'Pre-1846' });
+    await userEvent.click(pre1846);
+    expect((pre1846 as HTMLInputElement).checked).toBe(true);
+
+    // Age is one question: choosing it leaves the rest unselected rather than disabled.
+    for (const label of ['Post-1846', 'Age unknown', 'Historical use']) {
+      expect((screen.getByRole('radio', { name: label }) as HTMLInputElement).checked).toBe(false);
+    }
+  });
+
+  it('blocks Submit before calling the API when a tab is incomplete', async () => {
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
+    repo.load.mockResolvedValue(undefined);
+    // No features: the checklist cannot be submitted, and the Features tab has never been opened.
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, features: [] });
+
+    renderPage();
+    expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
+
+    expect(await screen.findByText('Checklist not submitted')).toBeTruthy();
+    // The pre-flight answers from what the page already holds, so the server is never asked.
+    expect(api.submit).not.toHaveBeenCalled();
+    // The count was already on the tab before Submit was pressed; the refusal recolours it rather
+    // than revealing it, and says so to a screen reader as well as in the badge.
+    expect(screen.getByLabelText('Features: 1 item outstanding, blocking submit')).toBeTruthy();
+    expect(document.querySelector('.protocol-checklist__outstanding-toggle--error')).not.toBeNull();
+  });
+
   it('shows the FAM-resolved evaluator name (not the raw userid) in the header', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({
       ...sampleChecklist,
@@ -142,7 +270,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('hides write actions for view-only users', async () => {
-    useAuthorization.mockReturnValue({ canEdit: false, isViewOnly: true, canChr: () => false });
+    useAuthorization.mockReturnValue({ canEdit: false, canChr: () => false });
     repo.load.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist });
 
@@ -152,8 +280,27 @@ describe('ChrChecklistPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
+  it('does not claim "View only" on an offline copy the district check cannot verify', async () => {
+    // Offline there is no session to read the CHR districts from, so canChr always says no. Holding
+    // the copy already proves the check passed at checkout (@chrAuth gates take-offline), the form
+    // is editable (readOnly ignores the role check for an offline copy), and sync re-checks
+    // server-side — so the banner would contradict the page it sits on.
+    useAuthorization.mockReturnValue({ canEdit: false, canChr: () => false });
+    repo.load.mockResolvedValue({
+      checklistId: '1001',
+      checkList: { ...sampleChecklist, status: 'RDO' },
+      dirty: false,
+    });
+    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
+
+    renderPage();
+
+    expect(await screen.findByText('Offline copy')).toBeTruthy();
+    expect(screen.queryByText('View only')).toBeNull();
+  });
+
   it('on an offline copy, Submit checks it in (upload) then submits', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -171,7 +318,7 @@ describe('ChrChecklistPage', () => {
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     expect(screen.getByText('Offline copy')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
     // Upload (check in: RDO → ACT) and drop the local draft happen before the submit call.
     // waitFor: the submit chain is async.
     await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
@@ -209,7 +356,7 @@ describe('ChrChecklistPage', () => {
     (repo.saveLocal.mock.calls.at(-1)?.[0] ?? {}) as { pictures?: unknown[] };
 
   it('keeps offline photos when a section is saved locally', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
@@ -227,7 +374,7 @@ describe('ChrChecklistPage', () => {
   it('keeps offline photos when Sync changes writes the local copy before uploading', async () => {
     // The worst of the three: this ran immediately before upload() flushed the photos, so the bytes
     // were already gone by the time the flush looked for them — and the sync reported success.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -249,7 +396,7 @@ describe('ChrChecklistPage', () => {
 
   it('drops the local copy after a successful sync', async () => {
     // A check-in clears the server's checkout guid, so a retained copy can never upload again.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -273,7 +420,7 @@ describe('ChrChecklistPage', () => {
   it('keeps the local copy when a sync fails', async () => {
     // The whole point of removing only on success: a failed check-in must stay retryable, with the
     // photos still on the device.
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockRejectedValue(new Error('conflict'));
@@ -294,7 +441,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('keeps offline photos when Submit checks the copy in first', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue(offlineCopyWithAPhoto());
     repo.saveLocal.mockResolvedValue(undefined);
     repo.upload.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
@@ -309,7 +456,7 @@ describe('ChrChecklistPage', () => {
     renderPage();
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit checklist' }));
 
     await waitFor(() => expect(repo.upload).toHaveBeenCalledWith('1001'));
     expect(savedLocally().pictures).toHaveLength(1);
@@ -318,7 +465,7 @@ describe('ChrChecklistPage', () => {
   });
 
   it('warns when an offline copy has been superseded on the server', async () => {
-    useAuthorization.mockReturnValue({ canEdit: true, isViewOnly: false, canChr: () => true });
+    useAuthorization.mockReturnValue({ canEdit: true, canChr: () => true });
     repo.load.mockResolvedValue({
       checklistId: '1001',
       checkList: { ...sampleChecklist, status: 'RDO' },
@@ -339,7 +486,7 @@ describe('ChrChecklistPage', () => {
     expect(await screen.findByText('Offline copy out of date')).toBeTruthy();
     expect(screen.getByText(/Last updated by jsmith on Oct 1, 2012/)).toBeTruthy();
     // A stale copy can't be uploaded, so Submit and Sync changes are hidden…
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
     expect(screen.queryByText('Sync changes')).toBeNull();
     // …leaving only the Remove from device escape hatch.
     expect(screen.getByText('Remove from device')).toBeTruthy();
@@ -348,7 +495,6 @@ describe('ChrChecklistPage', () => {
   it('lets an admin reactivate a checked-out (RDO) server checklist', async () => {
     useAuthorization.mockReturnValue({
       canEdit: true,
-      isViewOnly: false,
       canPerformSysAdminActions: true,
       canChr: () => true,
     });

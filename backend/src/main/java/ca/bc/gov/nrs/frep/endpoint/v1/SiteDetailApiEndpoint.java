@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * <p>Every endpoint here — reads included — is gated on {@link FrepAuthorities#SITE_EDIT}: sites are
  * shared across protocols, so the surface is open to editors <em>and</em> per-district CHR editors,
  * rather than the Biodiversity-only {@link FrepAuthorities#CONTENT_EDIT} it used to sit behind.
- * Note this excludes {@code FREP_VIEW_ONLY}, consistent with the protocol-checklist and CHR reads,
+ * Note this excludes callers with no global role, consistent with the protocol-checklist and CHR reads,
  * which exclude it too.
  *
  * <p>Legacy equivalent: {@code frep110SiteDetailAction} backed by {@code FREP_110_SITE_DETAILS.get}.

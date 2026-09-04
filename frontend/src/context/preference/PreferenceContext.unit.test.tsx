@@ -3,11 +3,11 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
-import type { Mock } from 'vitest';
-
 import { PreferenceProvider } from './PreferenceProvider';
 import { usePreference } from './usePreference';
 import { loadUserPreference, saveUserPreference } from './utils';
+
+import type { Mock } from 'vitest';
 
 vi.mock('@/context/preference/utils', () => {
   return {

@@ -73,9 +73,9 @@ describe('searchClientsAuto', () => {
   it('does not bind a selected label to the acronym arm', async () => {
     // Carbon fires onInputChange with the item's own label when a suggestion is picked. This is the
     // exact value from the ORA-17072 in the TEST logs.
-    expect(await searchClientsAuto('LAKESIDE PACIFIC FOREST PRODUCTS (LAKEPAC) \u00b7 00002483')).toEqual(
-      [],
-    );
+    expect(
+      await searchClientsAuto('LAKESIDE PACIFIC FOREST PRODUCTS (LAKEPAC) \u00b7 00002483'),
+    ).toEqual([]);
     expect(api.searchClients).toHaveBeenCalledTimes(1);
     expect(api.searchClients).not.toHaveBeenCalledWith(
       expect.objectContaining({ clientAcronym: expect.anything() }),

@@ -56,6 +56,27 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # Pin the decimal separator for every pooled connection.
+      #
+      # The legacy FREP_2xx packages declare every parameter VARCHAR2 and then hand the numeric ones
+      # to setters that take a NUMBER — e.g. FREP_210_BIO_OPENING.SAVE's p_frep_wtp_override goes to
+      # frep_biodiversity_checklist.set_frep_wtp_override(p_value IN NUMBER). That implicit
+      # VARCHAR2 -> NUMBER conversion runs under the *session's* NLS_NUMERIC_CHARACTERS, which the
+      # thin driver derives from the JVM's default locale unless it is set here. Where that decimal
+      # separator is not ".", every scalar decimal the app sends fails with
+      # "ORA-06502: PL/SQL: numeric or value error: character to number conversion error" while whole
+      # numbers save cleanly — confirmed against the Opening's FREP gross area override and the
+      # plot's fixed area radius. Stratum size, % windthrown, full count area and the rest of the
+      # scalar decimals ride the same path.
+      #
+      # Not the same path as the plot sub-tables: their numbers are VARRAY object attributes, parsed
+      # to BigDecimal in Java (AbstractFrepRepository#numberAttribute) and bound as real NUMBERs, so
+      # DBH and height were never affected. Reads are unaffected either way — numberString goes
+      # through BigDecimal#toPlainString.
+      #
+      # The value is decimal separator then group separator, so "." and "," — the ANSI default, and
+      # what every caller here already assumes.
+      connection-init-sql: "ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'"
       data-source-properties:
         javax.net.ssl.trustStoreType: JKS
         javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}
@@ -96,14 +117,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,info,prometheus"
+        # health + prometheus only: the probes and the Prometheus scrape. `info` was exposed but
+        # nothing reads it — the `info.app.*` properties below are consumed by
+        # FrepMetricConfiguration through @Value, not through the endpoint.
+        include: "health,prometheus"
   endpoint:
     metrics:
       enabled: false
     health:
-      show-details: always
+      # The liveness/readiness probes only check the status code (openshift.deploy.yml), so the
+      # component and datasource detail was published to no one who needed it.
+      show-details: never
 
-# Application metadata (consumed by FrepMetricConfiguration + Actuator /info endpoint)
+# Application metadata. Read by FrepMetricConfiguration through @Value — not by the Actuator
+# /info endpoint, which is no longer exposed. These keys must stay or startup fails.
 info:
   app:
     name: ${spring.application.name}
@@ -143,6 +170,25 @@ frep:
     connect-timeout: ${CLAMAV_CONNECT_TIMEOUT:5s}
     read-timeout: ${CLAMAV_READ_TIMEOUT:30s}
     chunk-size: 8192
+
+  # ── ONE-TIME CUTOVER TOOLING — DELETE-AFTER-BIO-ATTACHMENT-MIGRATION ──────────────────────────
+  # Grep that tag to find every file and method that must go; the checklist is in
+  # backend/tools/bio-attachment-migration-runbook.md.
+  # Biodiversity attachment BLOB → object-storage backfill. Off everywhere by default; the whole run
+  # is driven by `oc set env` against the Deployment, so no rebuild is needed to start or stop it.
+  # When `enabled` is false the scheduler bean and all scheduling infrastructure are absent entirely
+  # (BioAttachmentMigrationConfiguration). Delete this block with the rest of the tooling once
+  # Phase 4b has shipped. See backend/tools/bio-attachment-migration-runbook.md.
+  bio-attachment-migration:
+    enabled: ${BIO_ATTACHMENT_MIGRATION_ENABLED:false}
+    # Defaults to a dry run: if the flag above is ever set without thinking, the result is a report,
+    # not 5,000 writes to production object storage.
+    dry-run: ${BIO_ATTACHMENT_MIGRATION_DRY_RUN:true}
+    # Delay after context refresh before the single run starts — lets the Hikari pool and the
+    # object-storage client settle, and leaves a window to abort by scaling the Deployment down.
+    initial-delay: ${BIO_ATTACHMENT_MIGRATION_INITIAL_DELAY:60s}
+    batch-size: ${BIO_ATTACHMENT_MIGRATION_BATCH_SIZE:250}
+    verify-batch-size: ${BIO_ATTACHMENT_MIGRATION_VERIFY_BATCH_SIZE:500}
 
 resilience4j:
   circuitbreaker:

@@ -57,7 +57,7 @@ public class FamUserDirectoryService {
   private static final int DEFAULT_PAGE_SIZE = 25;
   private static final List<String> IDP_TYPES = List.of("IDIR", "BCEID");
   private static final List<String> FREP_ACCESS_ROLES =
-      List.of("FREP_EDITOR", "FREP_ADMIN", "FREP_VIEW_ONLY");
+      List.of("FREP_EDITOR", "FREP_ADMIN");
   private static final int MAX_CACHE_ENTRIES = 5000;
   private static final String EVALUATOR_SEARCH_UNAVAILABLE =
       "The evaluator directory is unavailable right now. Please try again later.";
@@ -174,7 +174,7 @@ public class FamUserDirectoryService {
   /**
    * Resolves a checklist evaluator's display name from FAM by userid — used to show names (instead of
    * raw userids) for evaluators who currently have access to the FREP app. Queries
-   * {@code /external/v1/users?role=FREP_EDITOR,FREP_ADMIN,FREP_VIEW_ONLY&idpType=IDIR,BCEID&idpUsername=…}
+   * {@code /external/v1/users?role=FREP_EDITOR,FREP_ADMIN&idpType=IDIR,BCEID&idpUsername=…}
    * and exact-matches the username (FAM's filter is "starts-with"). Returns empty when the lookup base
    * URL is unset, the userid isn't a current FREP user, or FAM errors — the caller falls back to the
    * userid. Results are cached by userid (names rarely change; identical for every caller).

@@ -36,6 +36,7 @@ import ca.bc.gov.nrs.frep.entity.FrepChecklistAnswerCode;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepMrvaRatingCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
+import ca.bc.gov.nrs.frep.mapper.CheckListMapper;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
@@ -57,6 +58,8 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -227,6 +230,14 @@ public class ChrChecklistPersistenceService {
 
     entityManager.flush();
     resource.setRevisionCount(Long.toString(chrChecklist.getRevisionCount()));
+    // Same reason as saveFeaturesSection below: saveFeatures rewrites the feature child xrefs by
+    // delete-then-reinsert, and the new rows carry only their embedded ids — the code associations
+    // the mapper reads are insertable=false. A caller that re-reads the checklist in this same
+    // transaction (submit does, to return the submitted record) would otherwise map those cached
+    // rows and get nulls back, so the response claimed the feature types, ages and information
+    // source had been wiped when the flushed rows were fine. Dropping the context makes the re-read
+    // load the whole graph fresh from the database.
+    entityManager.clear();
   }
 
   /**
@@ -275,6 +286,543 @@ public class ChrChecklistPersistenceService {
     entityManager.clear();
   }
 
+
+  /**
+   * Create a composite: insert the anchor, insert any features typed into the dialog, and point
+   * every member at the anchor.
+   *
+   * <p>Order is forced by the self-FK on {@code COMPOSITE_CHR_FEATURE_ID}: the anchor has to exist
+   * before anything can reference it, so it is inserted and flushed first. That is the whole reason
+   * this is its own endpoint rather than a feature save that happens to mention a parent — and why
+   * the payload needs no correlation id, since the request itself identifies the anchor.
+   *
+   * <p>Two rules the client also applies, enforced here because the database has no constraint for
+   * either: a composite needs at least two members (an empty or single composite is a state the UI
+   * cannot produce and cannot render sensibly), and creating one cannot take a feature that is
+   * already assessed under a different composite — that would quietly empty the other group.
+   *
+   * @return the anchor and every member, so the caller can patch them all back
+   */
+  public List<Feature> createComposite(
+      long checklistId,
+      Feature anchorFeature,
+      List<String> memberIds,
+      List<Feature> newMembers,
+      String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    if (anchorFeature == null) {
+      throw new InvalidParameterException("A composite needs an anchor feature.");
+    }
+    List<String> existingIds = memberIds == null ? List.of() : memberIds;
+    List<Feature> created = newMembers == null ? List.of() : newMembers;
+    if (existingIds.size() + created.size() < 2) {
+      throw new InvalidParameterException("A composite needs at least two features.");
+    }
+
+    List<ChrFeatureIdentity> members = new ArrayList<>();
+    for (String memberId : existingIds) {
+      ChrFeatureIdentity member =
+          featureOnChecklist(chrChecklist, checklistId, Long.parseLong(memberId));
+      if (member.getCompositeChrFeatureIdentity() != null) {
+        throw new InvalidParameterException(
+            "Feature " + memberId + " is already assessed under another composite.");
+      }
+      if ("Y".equalsIgnoreCase(member.getCompositeFeatureInd())) {
+        throw new InvalidParameterException("Feature " + memberId + " is itself a composite.");
+      }
+      members.add(member);
+    }
+
+    // The anchor first, and flushed: everything below writes its id into a self-FK.
+    anchorFeature.setCompositeFeatureInd("true");
+    ChrFeatureIdentity anchor = createFeature(chrChecklist, anchorFeature, userId);
+    entityManager.flush();
+
+    for (Feature newMember : created) {
+      newMember.setCompositeFeatureInd("false");
+      members.add(createFeature(chrChecklist, newMember, userId));
+    }
+
+    Set<Long> touched = new LinkedHashSet<>();
+    for (ChrFeatureIdentity member : members) {
+      member.setCompositeChrFeatureIdentity(anchor.getChrFeatureId());
+      touched.add(member.getChrFeatureId());
+    }
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, touched, anchor.getChrFeatureId());
+  }
+
+  /**
+   * Dissolve a composite: delete the anchor, release its members, and delete the ones named.
+   *
+   * <p>The anchor goes in both cases. {@link #deleteFeature(ChrFeatureIdentity)} runs
+   * {@code detachComposedMembers} on the way, which clears {@code COMPOSITE_CHR_FEATURE_ID} on
+   * everything still pointing at it — that is what releases the survivors, and what keeps
+   * {@code ORA-02292} off a self-FK that would otherwise still have children.
+   *
+   * <p>Every id in {@code deleteMemberIds} is checked to be a member of <em>this</em> composite
+   * first. The client decides which members are undescribed, but it does not get to name arbitrary
+   * features for deletion under cover of an ungroup.
+   *
+   * @return the members that survived, re-read with their membership cleared. The anchor and any
+   *     deleted members are absent because they no longer exist; the caller asked for those and can
+   *     drop them itself.
+   */
+  public List<Feature> ungroupComposite(
+      long checklistId, long anchorId, List<String> deleteMemberIds, String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    ChrFeatureIdentity anchor = featureOnChecklist(chrChecklist, checklistId, anchorId);
+    if (!"Y".equalsIgnoreCase(anchor.getCompositeFeatureInd())) {
+      throw new InvalidParameterException("Feature " + anchorId + " is not a composite.");
+    }
+
+    Map<Long, ChrFeatureIdentity> members = new LinkedHashMap<>();
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      ChrFeatureIdentity existing = (ChrFeatureIdentity) candidate;
+      if (Long.valueOf(anchorId).equals(existing.getCompositeChrFeatureIdentity())) {
+        members.put(existing.getChrFeatureId(), existing);
+      }
+    }
+
+    List<ChrFeatureIdentity> doomed = new ArrayList<>();
+    for (String memberId : deleteMemberIds == null ? List.<String>of() : deleteMemberIds) {
+      ChrFeatureIdentity member = members.get(Long.parseLong(memberId));
+      if (member == null) {
+        throw new InvalidParameterException(
+            "Feature " + memberId + " is not a member of composite " + anchorId + ".");
+      }
+      doomed.add(member);
+    }
+
+    Set<Long> survivors = new LinkedHashSet<>(members.keySet());
+    for (ChrFeatureIdentity member : doomed) {
+      survivors.remove(member.getChrFeatureId());
+      chrChecklist.getChrFeatureIdentities().remove(member);
+      deleteFeature(member);
+    }
+    // The anchor last: its delete is what releases whatever is still pointing at it.
+    chrChecklist.getChrFeatureIdentities().remove(anchor);
+    deleteFeature(anchor);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, survivors, anchorId);
+  }
+
+  /**
+   * Re-point an existing composite at a new set of members.
+   *
+   * <p>Three writes, and the asymmetry between them is the whole of this endpoint:
+   *
+   * <ul>
+   *   <li><b>Take.</b> A member may currently sit under a different composite — moving one across
+   *       is what the members dialog is for, so unlike {@code createComposite} this does not refuse
+   *       an already-grouped feature.
+   *   <li><b>Release.</b> A feature that was under <em>this</em> anchor and is no longer named goes
+   *       back to standing on its own. Scoped to this anchor's own members on purpose: releasing by
+   *       absence alone would strip features out of other groups the request never mentioned.
+   *   <li><b>Create.</b> Features typed into the dialog are inserted here, for the same reason they
+   *       are on create — the gesture is atomic in the UI.
+   * </ul>
+   *
+   * <p>The other composite a member is taken from needs no write: membership lives on the child
+   * row, so re-pointing the member is the entire move.
+   *
+   * @return the anchor, every member it now holds, and everything it released
+   */
+  public List<Feature> updateComposite(
+      long checklistId,
+      long anchorId,
+      String featureDescriptionCode,
+      String featureInfoSourceCode,
+      List<String> memberIds,
+      List<Feature> newMembers,
+      String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    ChrFeatureIdentity anchor = featureOnChecklist(chrChecklist, checklistId, anchorId);
+    if (!"Y".equalsIgnoreCase(anchor.getCompositeFeatureInd())) {
+      throw new InvalidParameterException("Feature " + anchorId + " is not a composite.");
+    }
+    List<String> existingIds = memberIds == null ? List.of() : memberIds;
+    List<Feature> created = newMembers == null ? List.of() : newMembers;
+    if (existingIds.size() + created.size() < 2) {
+      throw new InvalidParameterException("A composite needs at least two features.");
+    }
+
+    Set<Long> wanted = new LinkedHashSet<>();
+    List<ChrFeatureIdentity> members = new ArrayList<>();
+    for (String memberId : existingIds) {
+      long id = Long.parseLong(memberId);
+      if (id == anchorId) {
+        throw new InvalidParameterException("A composite cannot be a member of itself.");
+      }
+      ChrFeatureIdentity member = featureOnChecklist(chrChecklist, checklistId, id);
+      if ("Y".equalsIgnoreCase(member.getCompositeFeatureInd())) {
+        throw new InvalidParameterException("Feature " + memberId + " is itself a composite.");
+      }
+      members.add(member);
+      wanted.add(id);
+    }
+
+    Set<Long> touched = new LinkedHashSet<>(wanted);
+
+    // Release first, and only this anchor's own members.
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      ChrFeatureIdentity existing = (ChrFeatureIdentity) candidate;
+      if (Long.valueOf(anchorId).equals(existing.getCompositeChrFeatureIdentity())
+          && !wanted.contains(existing.getChrFeatureId())) {
+        existing.setCompositeChrFeatureIdentity(null);
+        stampFeatureUpdate(existing, userId);
+        touched.add(existing.getChrFeatureId());
+      }
+    }
+
+    for (Feature newMember : created) {
+      newMember.setCompositeFeatureInd("false");
+      ChrFeatureIdentity inserted = createFeature(chrChecklist, newMember, userId);
+      members.add(inserted);
+      touched.add(inserted.getChrFeatureId());
+    }
+
+    for (ChrFeatureIdentity member : members) {
+      member.setCompositeChrFeatureIdentity(anchorId);
+      stampFeatureUpdate(member, userId);
+    }
+
+    anchor.setChrFeatureClassCode(ChrStringUtils.hasAValue(featureDescriptionCode)
+        ? entityManager.find(ChrFeatureClassCode.class, featureDescriptionCode)
+        : null);
+    stampFeatureUpdate(anchor, userId);
+    // The anchor's information source is an xref row, not a column on the identity.
+    Feature anchorSource = new Feature();
+    anchorSource.setFeatureInfoSourceCode(featureInfoSourceCode);
+    saveFeatureInfoSource(anchorSource, anchorId, userId);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, touched, anchorId);
+  }
+
+  /**
+   * Insert one feature and all nine of its child collections.
+   *
+   * <p>The new-identity half of pass 1, without the composite back-reference: whoever is creating
+   * the feature owns that, and both callers set it after the anchor exists.
+   */
+  private ChrFeatureIdentity createFeature(
+      ChrChecklist chrChecklist, Feature feature, String userId) {
+    ChrFeatureIdentity identity = new ChrFeatureIdentity();
+    identity.setEntryTimestamp(new Date());
+    identity.setUpdateTimestamp(new Date());
+    identity.setEntryUserid(userId);
+    identity.setUpdateUserid(userId);
+    identity.setChrFeatureClassCode(ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())
+        ? entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode())
+        : null);
+    identity.setComments(feature.getFeatureComment());
+    identity.setChrChecklist(chrChecklist);
+    identity.setFeatureLabel(feature.getFeatureLabel());
+    identity.setCompositeFeatureInd(
+        ChrStringUtils.booleanToIndictor(feature.getCompositeFeatureInd()));
+    entityManager.persist(identity);
+    chrChecklist.getChrFeatureIdentities().add(identity);
+    feature.setId(identity.getChrFeatureId().toString());
+    long featureId = identity.getChrFeatureId();
+
+    clearIdentityChildren(identity);
+    saveFeatureInfoSource(feature, featureId, userId);
+    ChrFeatureDetail detail = saveFeatureDetail(feature, identity, userId);
+    // saveFeatureDetail sets the owning side only, so a freshly created identity would otherwise
+    // hold a null detail for the rest of the transaction. Reading a feature back, and
+    // deleteFeature's cascade, both go through this reference. Set here rather than in
+    // saveFeatureDetail so the bulk offline path keeps behaving exactly as it does today.
+    identity.setChrFeatureDetail(detail);
+    clearDetailChildren(detail);
+    saveFeatureTypeXrefs(feature, detail, featureId, userId);
+    saveFeatureLocationDetails(feature, detail, featureId, userId);
+    saveFeatureAgeXrefs(feature, featureId, userId);
+    savePlannedStrategies(feature, detail, featureId, userId);
+    saveUsedStrategies(feature, detail, featureId, userId);
+    saveDamageAgentXrefs(feature, featureId, userId);
+    saveWindthrowTreatmentXrefs(feature, featureId, userId);
+    return identity;
+  }
+
+  /**
+   * Insert one standalone feature — the editor's Save on a feature the server has never seen.
+   *
+   * <p>Its own entry point because {@link #saveFeature} addresses a feature by id and a new one has
+   * none. Without this the editor fell back to the whole-document save, so building a checklist
+   * stayed quadratic: the tenth feature added rewrote all ten.
+   *
+   * <p>No composite membership is written. A feature created here stands on its own; grouping is
+   * the composite endpoints' job, and the editor cannot express it.
+   *
+   * @return the created feature, re-read so its id and code associations are populated
+   */
+  public List<Feature> createStandaloneFeature(long checklistId, Feature feature, String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    if (feature == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    feature.setCompositeFeatureInd("false");
+    ChrFeatureIdentity identity = createFeature(chrChecklist, feature, userId);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, Set.of(), identity.getChrFeatureId());
+  }
+
+  /**
+   * Save one feature's own fields — the editor's Save.
+   *
+   * <p>The identity row and all nine per-feature child collections are rewritten, exactly as pass 1
+   * of {@code saveFeatures} does for each feature. What it deliberately does <b>not</b> touch:
+   *
+   * <ul>
+   *   <li><b>Composite membership.</b> {@code COMPOSITE_CHR_FEATURE_ID} and
+   *       {@code COMPOSITE_FEATURE_IND} are left exactly as stored. The editor cannot change them —
+   *       grouping is done from the composite dialog — so writing them here would mean resolving
+   *       {@code compositeFeature} from a label, which is the reference style this endpoint set
+   *       exists to retire.
+   *   <li><b>Associations.</b> Their own endpoint, because a link names two features.
+   * </ul>
+   *
+   * @return the saved feature, re-read so its code associations are populated
+   */
+  public List<Feature> saveFeature(long checklistId, long featureId, Feature feature, String userId)
+      throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    ChrFeatureIdentity identity = featureOnChecklist(chrChecklist, checklistId, featureId);
+
+    stampFeatureUpdate(identity, userId);
+    // Null included — the row is updated in place, so a conditional setter would keep the previous
+    // feature class when the user cleared it. Same reasoning as pass 1.
+    identity.setChrFeatureClassCode(ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())
+        ? entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode())
+        : null);
+    identity.setComments(feature.getFeatureComment());
+    identity.setFeatureLabel(feature.getFeatureLabel());
+    entityManager.persist(identity);
+
+    // Detach the eager-loaded child collections before the delete-then-reinsert rewrites below.
+    clearIdentityChildren(identity);
+    saveFeatureInfoSource(feature, featureId, userId);
+    ChrFeatureDetail detail = saveFeatureDetail(feature, identity, userId);
+    clearDetailChildren(detail);
+    saveFeatureTypeXrefs(feature, detail, featureId, userId);
+    saveFeatureLocationDetails(feature, detail, featureId, userId);
+    saveFeatureAgeXrefs(feature, featureId, userId);
+    savePlannedStrategies(feature, detail, featureId, userId);
+    saveUsedStrategies(feature, detail, featureId, userId);
+    saveDamageAgentXrefs(feature, featureId, userId);
+    saveWindthrowTreatmentXrefs(feature, featureId, userId);
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, Set.of(), featureId);
+  }
+
+  /**
+   * Replace the set of features one feature is associated with, in <b>both</b> directions.
+   *
+   * <p>{@code CHR_ASSOCIATED_FEATURE_XREF} is directed, and {@link #saveAssociatedFeatures} — the
+   * bulk path — only ever rewrites rows where the subject is the <em>from</em> side. Symmetry
+   * survived there only because the client put each label in the other feature's list and posted
+   * every feature, so each wrote its own half. A per-feature write has no such guarantee, so the
+   * server owns the invariant here: every link is written and removed as a pair.
+   *
+   * <p>Measured in PROD on 2026-09-02, all 802 rows were symmetric — 401 mutual pairs, no
+   * exceptions. This endpoint is the thing most able to break that, which is why it does not
+   * delegate to the one-sided writer.
+   *
+   * @return every feature the write touched — the subject plus each partner gained or lost
+   */
+  public List<Feature> saveFeatureAssociations(
+      long checklistId, long featureId, List<String> targetIds, String userId) throws Exception {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    ChrFeatureIdentity subject = featureOnChecklist(chrChecklist, checklistId, featureId);
+
+    // Every target is resolved through the same checklist. A feature id from elsewhere is a
+    // not-found, not a licence to link across checklists: PROD holds no such row today, and
+    // findFeatureIdentity has always been checklist-scoped.
+    Set<Long> wanted = new LinkedHashSet<>();
+    for (String targetId : targetIds == null ? List.<String>of() : targetIds) {
+      if (!ChrStringUtils.hasAValue(targetId)) {
+        continue;
+      }
+      long target = Long.parseLong(targetId);
+      if (target == featureId) {
+        throw new InvalidParameterException(
+            "Feature " + featureId + " cannot be associated with itself.");
+      }
+      featureOnChecklist(chrChecklist, checklistId, target);
+      wanted.add(target);
+    }
+
+    // Everything currently linked either way, so the response can name the partners that were
+    // dropped as well as the ones that remain.
+    Set<Long> touched = new LinkedHashSet<>(wanted);
+    List<ChrAssociatedFeatureXref> existing = entityManager.createQuery(
+            "SELECT a FROM ChrAssociatedFeatureXref a "
+                + "WHERE a.id.fromChrFeatureId = :fid OR a.id.toChrFeatureId = :fid",
+            ChrAssociatedFeatureXref.class)
+        .setParameter("fid", featureId)
+        .getResultList();
+    for (ChrAssociatedFeatureXref row : existing) {
+      touched.add(row.getId().getFromChrFeatureId() == featureId
+          ? row.getId().getToChrFeatureId()
+          : row.getId().getFromChrFeatureId());
+      entityManager.remove(row);
+    }
+    // Detach before the flush: the subject's eager xref sets still hold the rows just removed, and
+    // a managed entity pointing at a removed one fails with TransientObjectException.
+    clearIdentityChildren(subject);
+    entityManager.flush();
+
+    for (Long target : wanted) {
+      persistAssociation(featureId, target, userId);
+      persistAssociation(target, featureId, userId);
+    }
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    stampFeatureUpdate(subject, userId);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+
+    return mapFeaturesAfterWrite(checklistId, touched, featureId);
+  }
+
+  private void persistAssociation(long fromId, long toId, String userId) {
+    ChrAssociatedFeatureXref xref = new ChrAssociatedFeatureXref();
+    xref.setId(new ChrAssociatedFeatureXrefId(fromId, toId));
+    stampEntry(xref::setEntryTimestamp, xref::setEntryUserid, userId);
+    stampUpdate(xref::setUpdateTimestamp, xref::setUpdateUserid, userId);
+    entityManager.persist(xref);
+  }
+
+  private void stampFeatureUpdate(ChrFeatureIdentity identity, String userId) {
+    identity.setUpdateTimestamp(new Date());
+    identity.setUpdateUserid(userId);
+  }
+
+  /**
+   * Find a feature on this checklist, or fail.
+   *
+   * <p>Scoped through the checklist's own set on purpose: a feature id belonging to another
+   * checklist is a not-found here, not a licence to touch someone else's row — the same rule
+   * {@link #deletePhoto} follows.
+   */
+  private ChrFeatureIdentity featureOnChecklist(
+      ChrChecklist chrChecklist, long checklistId, long featureId) {
+    // The eager collection is a raw Set (legacy mapping), so iterate and cast rather than stream.
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      ChrFeatureIdentity existing = (ChrFeatureIdentity) candidate;
+      if (Long.valueOf(featureId).equals(existing.getChrFeatureId())) {
+        return existing;
+      }
+    }
+    throw new EntityNotFoundException(
+        "Feature " + featureId + " was not found on checklist " + checklistId + ".");
+  }
+
+  /**
+   * Re-read and map the features a write touched.
+   *
+   * <p>The persistence context is dropped first for the same reason {@code saveFeaturesSection}
+   * drops it: rows written here carry only their embedded ids, and the code associations the mapper
+   * reads are {@code insertable=false}, so a feature mapped from them would come back missing its
+   * class and source. Reading after the clear is what populates them.
+   */
+  private List<Feature> mapFeaturesAfterWrite(long checklistId, Set<Long> touched, long subjectId)
+      throws Exception {
+    entityManager.flush();
+    entityManager.clear();
+    ChrChecklist fresh = entityManager.find(ChrChecklist.class, checklistId);
+    List<Feature> mapped = new ArrayList<>();
+    Set<Long> wanted = new LinkedHashSet<>();
+    wanted.add(subjectId);
+    wanted.addAll(touched);
+    for (Object candidate : fresh.getChrFeatureIdentities()) {
+      ChrFeatureIdentity identity = (ChrFeatureIdentity) candidate;
+      if (wanted.contains(identity.getChrFeatureId())) {
+        mapped.add(CheckListMapper.toFeature(identity, fresh.getChrFeatureIdentities()));
+      }
+    }
+    return mapped;
+  }
+
+  /**
+   * Remove one feature from a checklist, with everything that hangs off it.
+   *
+   * <p>The feature is looked up <em>through</em> the checklist's own set rather than by id alone:
+   * a feature id belonging to another checklist is a not-found here, not a licence to delete
+   * someone else's row — the same rule {@link #deletePhoto} follows.
+   *
+   * <p>Clears {@code deviceCheckoutGuid} and stamps the checklist exactly as a section save does, so
+   * an online delete releases an offline checkout and advances the shared revision token.
+   */
+  public void deleteFeature(long checklistId, long featureId, String userId) {
+    ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, checklistId);
+    if (chrChecklist == null) {
+      throw new EntityNotFoundException("Checklist " + checklistId + " was not found.");
+    }
+    // The eager collection is a raw Set (legacy mapping), so iterate and cast rather than stream.
+    ChrFeatureIdentity identity = null;
+    for (Object candidate : chrChecklist.getChrFeatureIdentities()) {
+      ChrFeatureIdentity existing = (ChrFeatureIdentity) candidate;
+      if (Long.valueOf(featureId).equals(existing.getChrFeatureId())) {
+        identity = existing;
+        break;
+      }
+    }
+    if (identity == null) {
+      throw new EntityNotFoundException(
+          "Feature " + featureId + " was not found on checklist " + checklistId + ".");
+    }
+
+    chrChecklist.setDeviceCheckoutGuid(null);
+    // Drop it from the eager set as well as the database: the checklist is still managed, and a
+    // removed entity left in a loaded collection fails the flush.
+    chrChecklist.getChrFeatureIdentities().remove(identity);
+    deleteFeature(identity);
+    stampChecklistUpdate(chrChecklist, userId);
+    entityManager.flush();
+  }
 
   private ChrChecklist loadChecklistForSave(CheckList resource) {
     ChrChecklist chrChecklist = entityManager.find(ChrChecklist.class, Long.parseLong(resource.getChecklistID()));
@@ -325,13 +873,12 @@ public class ChrChecklistPersistenceService {
     }
     chrChecklist.setFrepMrvaRatingCode(mrvaRatingCode);
 
-    if (ChrStringUtils.hasAValue(resource.getRating())) {
-      ChrSiteEvaluationCode siteEvaluationCode = entityManager.find(
-          ChrSiteEvaluationCode.class,
-          resource.getRating()
-      );
-      chrChecklist.setChrSiteEvaluationCode(siteEvaluationCode);
-    }
+    // Set unconditionally, null included. The checklist row is loaded and updated rather than
+    // recreated, so skipping the setter on a blank value left the previous rating in place: the tab
+    // accepted the clear, the save reported success, and the old rating came back on the re-read.
+    chrChecklist.setChrSiteEvaluationCode(ChrStringUtils.hasAValue(resource.getRating())
+        ? entityManager.find(ChrSiteEvaluationCode.class, resource.getRating())
+        : null);
     chrChecklist.setEvaluationRatingRationale(resource.getRatingRationale());
     chrChecklist.setBlockComments(resource.getCommentaires());
   }
@@ -699,10 +1246,12 @@ public class ChrChecklistPersistenceService {
         identity.setEntryUserid(userId);
         identity.setUpdateUserid(userId);
       }
-      if (ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())) {
-        identity.setChrFeatureClassCode(
-            entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode()));
-      }
+      // Null included — an existing identity row is updated in place, so a conditional setter would
+      // keep the previous feature class when the user cleared it. See the note in
+      // applyBlockSummaryFields.
+      identity.setChrFeatureClassCode(ChrStringUtils.hasAValue(feature.getFeatureDescriptionCode())
+          ? entityManager.find(ChrFeatureClassCode.class, feature.getFeatureDescriptionCode())
+          : null);
       identity.setComments(feature.getFeatureComment());
       identity.setChrChecklist(chrChecklist);
       identity.setFeatureLabel(feature.getFeatureLabel());
@@ -786,11 +1335,10 @@ public class ChrChecklistPersistenceService {
     detail.setManagementAppliedInd(ChrStringUtils.booleanToIndictorInverseLogic(feature.getNoManagement()));
     detail.setRegdArchaeologicalSiteInd(ChrStringUtils.booleanToIndictor(feature.getChrRegisteredSite()));
     detail.setDescription(feature.getFeatureDescription());
-    detail.setAreaWidthMeters(toBigDecimal(feature.getWidthofFeature()));
-    detail.setAreaLengthMeters(toBigDecimal(feature.getLengthofFeature()));
-    if (ChrStringUtils.hasAValue(feature.getAreaofFeature())) {
-      detail.setAreaHectares(new BigDecimal(feature.getAreaofFeature()));
-    }
+    String onFeature = " for feature " + feature.getFeatureLabel();
+    detail.setAreaWidthMeters(toBigDecimal(feature.getWidthofFeature(), "Width (m)" + onFeature, 6));
+    detail.setAreaLengthMeters(toBigDecimal(feature.getLengthofFeature(), "Length (m)" + onFeature, 6));
+    detail.setAreaHectares(toBigDecimal(feature.getAreaofFeature(), "Area (ha)" + onFeature, 6));
     detail.setFnMgmtRecommendationsInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategyFN()));
     detail.setSitePlanStratsRecommndInd(ChrStringUtils.booleanToIndictor(feature.getManagementStrategySP()));
     detail.setPermitIssuedInd(ChrStringUtils.booleanToIndictorInverseLogic(feature.getSitePermitIssued()));
@@ -799,25 +1347,26 @@ public class ChrChecklistPersistenceService {
     detail.setEvidenceOfDamageInd(
         ChrStringUtils.booleanToIndictor(feature.getQ1Isthereevidenceofdamagetothesiteorfeature()));
     detail.setDamageDescription(feature.getDescriptionofdamage());
-    FrepChecklistAnswerCode answer = entityManager.find(
-        FrepChecklistAnswerCode.class,
-        feature.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse());
+    // DAMAGE_IRREVERSIBLE_ANSWER_CD is NOT NULL, so an unanswered Q3 still has to be written as
+    // something and "N" is the least-claiming code available. Reached only when the answer is
+    // genuinely absent or unrecognised — `find` is not called with a null key, which throws.
+    String q3 = feature.getQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse();
+    FrepChecklistAnswerCode answer =
+        q3 == null || q3.isBlank() ? null : entityManager.find(FrepChecklistAnswerCode.class, q3);
     if (answer == null) {
       answer = entityManager.find(FrepChecklistAnswerCode.class, "N");
     }
     detail.setDamageIrreversibleAnswerCd(answer);
     detail.setWindthrowMgmtApplicableInd(ChrStringUtils.booleanToIndictor(feature.getWindthrowManagement()));
     detail.setAreaWindfirmInd(ChrStringUtils.booleanToIndictor(feature.getWindthrow()));
-    if (ChrStringUtils.hasAValue(feature.getEstwindthrow())) {
-      detail.setEstWindthrowPercent(Short.parseShort(feature.getEstwindthrow()));
-    }
+    detail.setEstWindthrowPercent(
+        toShort(feature.getEstwindthrow(), "Estimated windthrow (%)" + onFeature, 999));
     detail.setTrailFeaturesApplicableInd(ChrStringUtils.booleanToIndictor(feature.getTrailfeatures()));
     detail.setTrailLocatableInd(ChrStringUtils.booleanToIndictor(feature.getCanthetrailstillbelocated()));
     detail.setTrailLessPassableInd(ChrStringUtils.booleanToIndictor(feature.getHasthetrailbeenmadelesspassble()));
     detail.setTrailAreaDamagedInd(ChrStringUtils.booleanToIndictor(feature.getIsthereevidenceofdamage()));
-    if (ChrStringUtils.hasAValue(feature.getTrailLength())) {
-      detail.setEstTrailDamagePercent(Short.parseShort(feature.getTrailLength()));
-    }
+    detail.setEstTrailDamagePercent(
+        toShort(feature.getTrailLength(), "Estimated trail damage (%)" + onFeature, 999));
     detail.setLimitingOperatnlFactorsInd(ChrStringUtils.booleanToIndictor(
         feature.getQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature()));
     detail.setLimitingOperatnlFactorsDesc(feature.getQ4Description());
@@ -827,10 +1376,9 @@ public class ChrChecklistPersistenceService {
     detail.setAlternateStratsAvailInd(ChrStringUtils.booleanToIndictor(
         feature.getQ6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature()));
     detail.setAlternateStratsAvailDesc(feature.getQ6Description());
-    if (ChrStringUtils.hasAValue(feature.getFeatureRating())) {
-      detail.setChrSiteEvaluationCode(
-          entityManager.find(ChrSiteEvaluationCode.class, feature.getFeatureRating()));
-    }
+    detail.setChrSiteEvaluationCode(ChrStringUtils.hasAValue(feature.getFeatureRating())
+        ? entityManager.find(ChrSiteEvaluationCode.class, feature.getFeatureRating())
+        : null);
     detail.setEvaluationRatingRationale(feature.getFeatureRatingRationale());
     entityManager.persist(detail);
     return detail;
@@ -1261,8 +1809,70 @@ public class ChrChecklistPersistenceService {
     setUser.accept(userId);
   }
 
-  private BigDecimal toBigDecimal(String value) {
-    return ChrStringUtils.hasAValue(value) ? new BigDecimal(value) : null;
+  /**
+   * Parse a decimal feature field, naming the field when the value cannot be stored. Blank becomes
+   * null, for the same reason as {@link #toShort}.
+   *
+   * <p>Digits after the point are left alone: Oracle rounds them to the column's scale, and refusing
+   * a row over a rounding nicety would reject data the database would have taken. Digits before it
+   * are checked, because past the column's precision the insert fails with ORA-01438 — which reaches
+   * the caller as a database error naming neither the field nor the value.
+   */
+  private BigDecimal toBigDecimal(String value, String label, int units) {
+    if (!ChrStringUtils.hasAValue(value)) {
+      return null;
+    }
+    String entered = value.trim();
+    BigDecimal parsed;
+    try {
+      parsed = new BigDecimal(entered);
+    } catch (NumberFormatException ex) {
+      throw new InvalidParameterException(
+          label + " must be a number (received \"" + entered + "\").");
+    }
+    if (parsed.signum() < 0 || parsed.precision() - parsed.scale() > units) {
+      throw new InvalidParameterException(
+          label + " must be from 0 to " + "9".repeat(units) + " (received \"" + entered + "\").");
+    }
+    return parsed;
+  }
+
+  /**
+   * Parse a whole-number feature field, naming the field when the value cannot be stored.
+   *
+   * <p>A blank value becomes null rather than being skipped, so clearing a number clears the column.
+   * The detail row is loaded and updated in place, so anything not written keeps its old value.
+   *
+   * <p>{@link NumberFormatException} is an {@link IllegalArgumentException}, which the REST exception
+   * handler answers as a bad request carrying the exception's own text — so an entry of "tset" used
+   * to reach the user as {@code For input string: "tset"}, naming neither the field nor the feature.
+   * The feature editor blocks these before the save now; this is the backstop for the offline
+   * check-in path, which reaches the same code with no editor in front of it.
+   *
+   * <p>{@code max} is the column's range rather than the form's: the editor caps a percentage at 100,
+   * while anything a {@code NUMBER(3)} column holds is accepted here, so a legacy row carrying a
+   * larger value can still be saved. Without the check a five-digit entry parses and then fails at
+   * insert with ORA-01438, naming neither the field nor the value.
+   */
+  private Short toShort(String value, String label, int max) {
+    if (!ChrStringUtils.hasAValue(value)) {
+      return null;
+    }
+    String entered = value.trim();
+    // Parsed wide, then range-checked: Short.parseShort reports a five-digit entry as a malformed
+    // number, which is the wrong thing to tell someone who typed a number that is merely too big.
+    long parsed;
+    try {
+      parsed = Long.parseLong(entered);
+    } catch (NumberFormatException ex) {
+      throw new InvalidParameterException(
+          label + " must be a whole number (received \"" + entered + "\").");
+    }
+    if (parsed < 0 || parsed > max) {
+      throw new InvalidParameterException(
+          label + " must be from 0 to " + max + " (received \"" + entered + "\").");
+    }
+    return (short) parsed;
   }
 
   private Date parseDate(String value) {

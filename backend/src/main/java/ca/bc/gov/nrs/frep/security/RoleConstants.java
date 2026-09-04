@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>{@link #SYS_ADMIN_AUTHORITY} — all actions including {@code ACTIVATECHECKLIST} (admin-only)</li>
  *   <li>{@link #UPDATE_AUTHORITY} — write actions except {@code ACTIVATECHECKLIST}</li>
- *   <li>{@link #VIEW_ONLY_AUTHORITY} — read actions ({@code CHECKLIST} GET, {@code ACCEPTEDSITES}, etc.)</li>
  * </ul>
  */
 @Component("roles")
@@ -25,9 +24,6 @@ public class RoleConstants {
 
   /** Cognito group for create, edit, and submit workflows (legacy WebADE: FREP_UPDATE). */
   public static final String UPDATE_AUTHORITY = "FREP_EDITOR";
-
-  /** Legacy WebADE / Cognito group for read-only access. */
-  public static final String VIEW_ONLY_AUTHORITY = "FREP_VIEW_ONLY";
 
   /**
    * Prefix for the per-district CHR editor roles (FAM V92): {@code FREP_CHR_EDITOR_DISTRICT_<code>},
@@ -43,10 +39,15 @@ public class RoleConstants {
       UPDATE_AUTHORITY,
   };
 
-  /** Roles that may perform HTTP read operations (GET). */
+  /**
+   * Roles that may perform HTTP read operations (GET).
+   *
+   * <p>Identical to {@link #WRITE_AUTHORITIES} since {@code FREP_VIEW_ONLY} was retired: FREP no
+   * longer has a read-only global role. Per-district CHR editors hold no global role at all and are
+   * authorized through {@code @auth} instead — see {@code LoggedUserHelper}.
+   */
   public static final String[] READ_AUTHORITIES = {
       SYS_ADMIN_AUTHORITY,
       UPDATE_AUTHORITY,
-      VIEW_ONLY_AUTHORITY,
   };
 }

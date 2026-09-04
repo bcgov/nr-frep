@@ -28,8 +28,19 @@ export default defineConfig(({ mode }) => {
   const hmrHost = env.VITE_HMR_HOST ?? devHost;
   const hmrProtocolEnv = env.VITE_HMR_PROTOCOL ?? 'ws';
   const hmrProtocol = hmrProtocolEnv === 'wss' ? 'wss' : 'ws';
+  // Carbon's own SCSS trips Dart Sass's `mixed-decls` / `global-builtin` deprecations (1200+ warnings
+  // per build, none of them from our stylesheets and none actionable until Carbon updates upstream).
+  // quietDeps silences deprecations raised inside node_modules while still reporting any we introduce
+  // in src/styles.
+  const css = {
+    preprocessorOptions: {
+      scss: { quietDeps: true },
+    },
+  };
+
   return {
     define,
+    css,
     resolve: {
       alias: {
         '@': resolve(projectRootDir, 'src'),
@@ -76,7 +87,10 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
-          globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // png/jpg included so the landing page — which is the *offline* entry point
+          // (getOfflineRoutes serves it) — still has its logo and cover art with no network. They
+          // were missing, so both rendered as broken-image alt text offline.
+          globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff,woff2}'],
           // config.js is generated per-container at start-up by docker-entrypoint.sh — it is the
           // ONLY file whose contents differ between environments and deploys. Precaching it froze
           // the runtime config: Workbox fetches a precached URL once at service-worker install and
@@ -193,6 +207,7 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          css,
           plugins: [react(), tsconfigPaths()],
           // Vitest projects do not inherit the root-level `css` option; without this the Carbon
           // deprecation warnings silenced for the build reappear on every test run.
@@ -213,6 +228,7 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          css,
           plugins: [react(), tsconfigPaths()],
           // Vitest projects do not inherit the root-level `css` option; without this the Carbon
           // deprecation warnings silenced for the build reappear on every test run.
@@ -248,6 +264,16 @@ export default defineConfig(({ mode }) => {
               instances: [{ browser: 'chromium' }],
             },
             include: ['src/**/*.browser.test.{ts,tsx}'],
+            // Browser mode starts a real Chromium context per worker. Unbounded on a CI runner
+            // that has a couple of cores, workers time out starting up and Vitest reports
+            // "Failed to import test file … Vitest failed to find the runner" — the whole file
+            // never loads, so no test in it even runs. The giveaway is a `prepare` time far
+            // larger than the test time (1061s of prepare for 22s of tests).
+            //
+            // Capped rather than serialised: two workers keep most of the parallelism while
+            // leaving the runner enough headroom to start them. Left uncapped locally, where
+            // there are cores to spare.
+            ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
           },
         },
       ],

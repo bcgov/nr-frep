@@ -168,6 +168,43 @@ class RestExceptionHandlerTest {
   }
 
   @Test
+  void duplicateFeatureLabelNamesTheFieldRatherThanTheConstraint() {
+    // The real chain for saving two features with the same label: CHFID_UK is
+    // UNIQUE (CHR_CHECKLIST_ID, FEATURE_LABEL), and Hibernate's ConstraintViolationException
+    // arrives as a DataIntegrityViolationException. It used to reach the client as
+    // "Unexpected system error", which named neither the field nor the problem.
+    DataIntegrityViolationException ex = new DataIntegrityViolationException(
+        "could not execute statement",
+        new SQLException("ORA-00001: unique constraint (THE.CHFID_UK) violated"));
+
+    ResponseEntity<Object> response = handler.handleDataAccess(ex);
+
+    assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
+    String message = ((ApiError) response.getBody()).getMessage();
+    assertTrue(message.startsWith("A feature with this label already exists"), message);
+    // The raw Oracle text — and with it the schema and index name — must not reach the UI.
+    assertFalse(message.contains("ORA-00001"));
+    assertFalse(message.contains("CHFID_UK"));
+    assertFalse(message.contains("THE"));
+  }
+
+  @Test
+  void anUnrecognisedUniqueConstraintStillReadsAsADuplicate() {
+    // A constraint this handler has not been taught to name still says what went wrong, rather
+    // than falling through to the catch-all.
+    TransactionSystemException ex = new TransactionSystemException(
+        "Could not commit JPA transaction",
+        new SQLException("ORA-00001: unique constraint (THE.SOME_OTHER_UK) violated"));
+
+    ResponseEntity<Object> response = handler.handleTransactionSystem(ex);
+
+    assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
+    String message = ((ApiError) response.getBody()).getMessage();
+    assertTrue(message.startsWith("This record duplicates one that already exists"), message);
+    assertFalse(message.contains("SOME_OTHER_UK"));
+  }
+
+  @Test
   void abbreviatedColumnNamesGetAReadableLabel() {
     TransactionSystemException ex = new TransactionSystemException(
         "Could not commit JPA transaction",
@@ -196,17 +233,19 @@ class RestExceptionHandlerTest {
 
   @Test
   void otherCommitFailuresStillReportGenerically() {
-    // Not an overflow — must not be dressed up as a field-length problem, and must not leak detail.
+    // Neither an overflow nor a duplicate — the two the handler can explain — so it must not be
+    // dressed up as either, and must not leak detail. (This used to use ORA-00001, which the
+    // handler now recognises and reports as a duplicate.)
     TransactionSystemException ex = new TransactionSystemException(
         "Could not commit JPA transaction",
-        new SQLException("ORA-00001: unique constraint (THE.CHR_PK) violated"));
+        new SQLException("ORA-00904: \"THE\".\"CHR_CHECKLIST\".\"NOPE\": invalid identifier"));
 
     ResponseEntity<Object> response = handler.handleTransactionSystem(ex);
 
     assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatusCode().value());
     String message = ((ApiError) response.getBody()).getMessage();
     assertTrue(message.contains("could not be saved"));
-    assertFalse(message.contains("ORA-00001"));
+    assertFalse(message.contains("ORA-00904"));
   }
 
   @Test

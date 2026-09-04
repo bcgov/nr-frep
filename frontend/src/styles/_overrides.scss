@@ -25,6 +25,26 @@
   @include theme.add-component-tokens(tag-tokens.$tag-tokens);
   @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$white);
+
+  /* FREP blue — overrides Carbon's blue family. Declared after theme() so these win. See
+     _variables.scss for the two roles and how the hover/active shades are derived. */
+  --cds-background-brand: #{variables.$frep-blue-solid};
+  --cds-button-primary: #{variables.$frep-blue-solid};
+  --cds-button-primary-hover: #{variables.$frep-blue-solid-hover};
+  --cds-button-primary-active: #{variables.$frep-blue-solid-active};
+  --cds-interactive: #{variables.$frep-blue-solid};
+  --cds-border-interactive: #{variables.$frep-blue-solid};
+  --cds-support-info: #{variables.$frep-blue-solid};
+  --cds-focus: #{variables.$frep-blue-solid};
+
+  --cds-link-primary: #{variables.$frep-blue-text-light};
+  --cds-link-primary-hover: #{variables.$frep-blue-text-light-hover};
+  --cds-link-secondary: #{variables.$frep-blue-text-light-hover};
+  --cds-icon-interactive: #{variables.$frep-blue-text-light};
+  /* A tertiary button is blue text and border until hover, when it fills. */
+  --cds-button-tertiary: #{variables.$frep-blue-text-light};
+  --cds-button-tertiary-hover: #{variables.$frep-blue-text-light-hover};
+  --cds-button-tertiary-active: #{variables.$frep-blue-solid-active};
 }
 
 :root[data-carbon-theme='g100'] {
@@ -33,6 +53,22 @@
   @include theme.add-component-tokens(tag-tokens.$tag-tokens);
   @include theme.add-component-tokens(notification-tokens.$notification-tokens);
   @include theme.theme(themes.$g100);
+
+  /* Solid stays the same blue in both themes; text lightens so it keeps its contrast against
+     #161616. `focus`, `icon-interactive` and `button-tertiary` are deliberately NOT overridden here
+     — Carbon makes them white on dark for contrast, and a blue focus ring on a dark page is the
+     accessibility regression this palette exists to avoid. */
+  --cds-background-brand: #{variables.$frep-blue-solid};
+  --cds-button-primary: #{variables.$frep-blue-solid};
+  --cds-button-primary-hover: #{variables.$frep-blue-solid-hover};
+  --cds-button-primary-active: #{variables.$frep-blue-solid-active};
+  --cds-interactive: #{variables.$frep-blue-text-dark};
+  --cds-border-interactive: #{variables.$frep-blue-text-dark};
+  --cds-support-info: #{variables.$frep-blue-text-dark};
+
+  --cds-link-primary: #{variables.$frep-blue-text-dark};
+  --cds-link-primary-hover: #{variables.$frep-blue-text-dark-hover};
+  --cds-link-secondary: #{variables.$frep-blue-text-dark-hover};
 }
 
 /* --------------------- Buttons ---------------------
@@ -54,6 +90,9 @@
   .#{variables.$bcgov-prefix}--btn__icon {
     position: static;
     inset-inline-end: auto;
+    /* The icon trails the label — Carbon's own child order, kept. What is changed is only that it
+       flows beside the text instead of being pinned absolutely to the button's right edge, which
+       left text-only and text+icon buttons looking lopsided. */
     transform: translateY(1px);
   }
 }
@@ -283,6 +322,13 @@ $types: "error", "info", "success", "warning";
   vertical-align: middle;
 }
 
+/* On a disabled field the marker fades with its label. A read-only checklist renders its inputs
+   disabled, and a full-strength red asterisk against a greyed-out label reads as an unmet
+   requirement on a form that cannot be filled in. */
+.#{variables.$bcgov-prefix}--label--disabled .required-asterisk {
+  color: inherit;
+}
+
 /* Zebra striping for every data table: white rows with a faint grey alternate,
    matching the standard NRIDS results-table look. Applies to all Carbon
    DataTables (no `useZebraStyles` prop needed). Carbon's White theme maps
@@ -450,9 +496,15 @@ li.#{variables.$bcgov-prefix}--overflow-menu-options__option:last-child {
 /* ------------ Label ---------------
 - Update text color from text-secondary to text-primary
 This will apply to Checkbox, Data Picker, Dropdown, RadioButton, Select, Slider, Text Input, Password Input, Text Area label
+
+Disabled labels are excluded. `label.cds--label` is specificity (0,1,1), which outranks Carbon's
+`.cds--label--disabled` (0,1,0), so without the guard this rule repainted every disabled label full
+black — a disabled text input kept a black label beside its greyed-out value, while a disabled
+select greyed correctly (Carbon reaches those through a more specific selector). The `:not()` keeps
+this rule ahead of Carbon's base label colour while letting the disabled one through.
 ------------------------------- */
-label.#{variables.$bcgov-prefix}--label,
-legend.#{variables.$bcgov-prefix}--label {
+label.#{variables.$bcgov-prefix}--label:not(.#{variables.$bcgov-prefix}--label--disabled),
+legend.#{variables.$bcgov-prefix}--label:not(.#{variables.$bcgov-prefix}--label--disabled) {
   color: var(--#{variables.$bcgov-prefix}-text-primary);
 }
 
@@ -571,4 +623,21 @@ nav.#{variables.$bcgov-prefix}--side-nav,
 // underneath it is what we hide.
 .cds--icon-tooltip > .cds--popover {
   display: none;
+}
+
+/* ------- FormLock -------
+   A fieldset used only to disable a section while its save is in flight, so it must not bring any
+   of a fieldset's own box with it. `min-width: 0` matters most: a fieldset's intrinsic minimum
+   width is its content, which breaks flex and grid children that expect to be allowed to shrink.
+------------------------- */
+.form-lock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  &[disabled] {
+    /* Says the section is not accepting input, without moving anything. */
+    opacity: 0.6;
+  }
 }

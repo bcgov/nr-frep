@@ -25,6 +25,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import './addTargetSite.scss';
 
 import ClientCombo from '@/components/core/ClientCombo';
+import { ExternalLink } from '@/components/core/ExternalLink';
 
 import type { OpeningSearchQuery, OpeningSearchResult } from '@/types/acceptedSite';
 import type { CodeOption } from '@/types/configuration';
@@ -621,9 +622,7 @@ const AddTargetSitePage: FC = () => {
                   <TableRow key={rowKey(opening)}>
                     <TableCell>
                       {silvaHref ? (
-                        <a href={silvaHref} target="_blank" rel="noopener noreferrer">
-                          {opening.openingId}
-                        </a>
+                        <ExternalLink href={silvaHref}>{opening.openingId}</ExternalLink>
                       ) : (
                         opening.openingId || '—'
                       )}

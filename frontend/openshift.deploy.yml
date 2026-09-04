@@ -70,7 +70,12 @@ parameters:
   - name: VITE_SUPPORT_EMAIL
     description: Support mailbox for "Report an issue"; empty hides the link
     value: ""
-
+  # Mailbox behind the landing page's "Request access" link. A different address from the support
+  # mailbox above — reporting a bug and asking to be provisioned go to different people. Optional on
+  # the same terms: an empty value hides the link rather than offering an empty mailto:.
+  - name: VITE_ACCESS_REQUEST_EMAIL
+    description: Mailbox for access requests; empty hides the landing link
+    value: ""
   # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
   # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
   # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
@@ -164,6 +169,8 @@ objects:
                   value: ${VITE_ATTACHMENT_TYPES}
                 - name: VITE_SUPPORT_EMAIL
                   value: ${VITE_SUPPORT_EMAIL}
+                - name: VITE_ACCESS_REQUEST_EMAIL
+                  value: ${VITE_ACCESS_REQUEST_EMAIL}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
               volumeMounts:

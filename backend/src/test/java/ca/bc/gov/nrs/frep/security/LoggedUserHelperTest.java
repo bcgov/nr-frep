@@ -72,7 +72,8 @@ class LoggedUserHelperTest {
     assertThat(withAuthorities("FREP_ADMIN").canEditSite()).isTrue();
     assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canEditSite()).isTrue();
     // ...but it is still a role check: view-only and no-role users cannot edit.
-    assertThat(withAuthorities("FREP_VIEW_ONLY").canEditSite()).isFalse();
+    // No global FREP role and no CHR district — the roleless case, now that FREP_VIEW_ONLY is gone.
+    assertThat(withAuthorities("SOME_OTHER_APP_ROLE").canEditSite()).isFalse();
     assertThat(withAuthorities().canEditSite()).isFalse();
   }
 

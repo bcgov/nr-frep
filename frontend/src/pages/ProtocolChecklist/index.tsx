@@ -1,13 +1,4 @@
-import {
-  ArrowLeft,
-  Attachment,
-  Document,
-  Information,
-  Layers,
-  Location,
-  Notebook,
-  type CarbonIconType,
-} from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -25,15 +16,22 @@ import {
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ExternalLink } from '@/components/core/ExternalLink';
+
 import BioOpeningView from './BioOpeningView';
 import BioPlotsView from './BioPlotsView';
 import BioStratumView from './BioStratumView';
 // Notes / Attachments are shared (named Rip* for legacy reasons) and used by Biodiversity. Riparian
 // + Water are out of scope, so their dedicated editors are removed.
+import OutstandingSummary from './OutstandingSummary';
 import RipAttachmentsView from './RipAttachmentsView';
 import RipNotesView from './RipNotesView';
 import { formatSubmitValidation } from './submitValidation';
+import { groupOutstanding } from './tabStatus';
+import TabStatusIcon from './TabStatusIcon';
+import { useTabStatuses } from './useTabStatuses';
 
+import type { OutstandingGroup } from './tabStatus';
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
@@ -47,16 +45,6 @@ import { formatShortDate } from '@/utils/date';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 import './protocolChecklist.scss';
-
-// Per-section tab icons (keyed by the backend section id), mirroring the contained-tab style with
-// an icon beside each label. Unknown sections fall back to a generic document icon.
-const SECTION_ICONS: Record<string, CarbonIconType> = {
-  opening: Information,
-  stratum: Layers,
-  plots: Location,
-  notes: Notebook,
-  attachments: Attachment,
-};
 
 const extractValidationErrors = (err: unknown): string[] | null => {
   const body = (err as { body?: { validationErrors?: string[] } })?.body;
@@ -98,6 +86,20 @@ const ProtocolChecklistPage: FC = () => {
   // Carbon keeps every TabPanel mounted, so sibling tabs (e.g. Plots) hold data loaded once on
   // mount. Track the active tab so a view can refetch when it becomes visible.
   const [tabIndex, setTabIndex] = useState(0);
+
+  // Per-tab completion dots. Held here rather than in each view so the whole strip is derived from
+  // one read, and so a save on any tab can move another tab's dot (stratum plot counts vs Plots).
+  const {
+    statuses: tabStatuses,
+    counts: tabCounts,
+    items: tabItems,
+    refresh: refreshTabStatuses,
+    evaluate: evaluateTabs,
+  } = useTabStatuses(id, !!checklist);
+
+  // Outstanding work found by the submit pre-flight, keyed by section id. Set when Submit is pressed
+  // and the checklist is not ready; cleared on the next attempt.
+  const [preflight, setPreflight] = useState<Record<string, string[]>>({});
 
   const protocolType: ProtocolType = 'biodiversity';
   const backendCode = PROTOCOL_TYPE_TO_BACKEND[protocolType];
@@ -178,9 +180,7 @@ const ProtocolChecklistPage: FC = () => {
       <div key="Opening ID">
         <span className="protocol-checklist__label">Opening ID</span>
         <span>
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {value}
-          </a>
+          <ExternalLink href={href}>{value}</ExternalLink>
         </span>
       </div>
     );
@@ -190,7 +190,28 @@ const ProtocolChecklistPage: FC = () => {
     if (!backendCode) return;
     setBusy(true);
     setValidationErrors([]);
+    setPreflight({});
     try {
+      // Pre-flight every tab against current data before troubling the proc. The tab counts are
+      // derived from the last read, which a save on another tab can leave behind; this re-reads so
+      // the answer is current. The proc stays authoritative — a clean pre-flight still submits and
+      // can still be refused; this only stops us asking when the answer is already known.
+      let blocking: Record<string, string[]> = {};
+      try {
+        const { outstanding } = await evaluateTabs();
+        blocking = Object.fromEntries(
+          Object.entries(outstanding).filter(([, items]) => items.length > 0),
+        );
+      } catch {
+        // The pre-flight is an early warning, not an authority. If its read fails we say nothing and
+        // submit anyway: refusing because we could not check would be worse than asking the proc.
+      }
+      if (Object.keys(blocking).length > 0) {
+        setPreflight(blocking);
+        display({ kind: 'warning', title: 'Submit blocked by validation', timeout: 6000 });
+        return;
+      }
+
       await API.protocolChecklist.submit(backendCode, id);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
       setReloadKey((k) => k + 1);
@@ -211,6 +232,26 @@ const ProtocolChecklistPage: FC = () => {
       setBusy(false);
     }
   };
+
+  // A submit has been turned away for these items. Everything that reports them — the page banner,
+  // the tab counts, each tab's disclosure — turns red together, so the page reads as one answer to
+  // "why didn't it submit?" rather than three separate remarks.
+  const submitRefused = Object.keys(preflight).length > 0;
+  const tone = submitRefused ? 'error' : 'neutral';
+
+  // `empty` only until the read lands — see TabStatusIcon, which draws nothing for it, just as it
+  // draws nothing for the `none` a rule-less tab reports. Which tabs those are is decided next to
+  // the rules themselves rather than listed here, so a tab that gains a rule lights up on its own.
+  const statusFor = (sectionId: string) => tabStatuses[sectionId] ?? 'empty';
+
+  /** What the tab's own panel lists, grouped by the record each item belongs to. */
+  const outstandingGroups = (sectionId: string): OutstandingGroup[] =>
+    groupOutstanding(tabItems[sectionId] ?? []);
+
+  // The page-level tally. Counted across every tab, including any without an indicator: a total that
+  // silently omitted a tab would read as "nothing left" while submit still refused.
+  const outstandingTotal = Object.values(tabCounts).reduce((sum, count) => sum + count, 0);
+  const outstandingTabs = Object.values(tabCounts).filter((count) => count > 0).length;
 
   const handleUnsubmit = async () => {
     if (!backendCode) return;
@@ -249,9 +290,33 @@ const ProtocolChecklistPage: FC = () => {
           >
             <ArrowLeft /> Back
           </button>
-          <h1>
-            {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
-          </h1>
+          {/* Title row: heading left, the checklist-level action right. Kept on one line so the
+              primary action sits at the top of the page rather than below the tombstone tile. */}
+          <div className="protocol-checklist__title-row">
+            <h1>
+              {protocolType ? `${id}-${PROTOCOL_TYPE_LABEL[protocolType]}` : 'Protocol checklist'}
+            </h1>
+            {/* Status reads beside the heading rather than as a cell of the tombstone grid: it
+                governs what the whole page allows, so it belongs where the eye lands first. */}
+            {checklist && (
+              <Tag type={statusTagType(checklist.statusCode)} size="sm">
+                {statusLabel(checklist.statusCode, checklist.statusLabel)}
+              </Tag>
+            )}
+            {!loading && !notFound && !hasError && checklist && editable && (
+              <div className="protocol-checklist__actions">
+                {submitted ? (
+                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
+                    Unsubmit checklist
+                  </Button>
+                ) : (
+                  <Button onClick={() => void handleSubmit()} disabled={busy}>
+                    Submit checklist
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </Column>
 
@@ -304,6 +369,14 @@ const ProtocolChecklistPage: FC = () => {
           )}
 
           <Column sm={4} md={8} lg={16}>
+            <OutstandingSummary
+              total={outstandingTotal}
+              tabs={outstandingTabs}
+              refused={submitRefused}
+            />
+          </Column>
+
+          <Column sm={4} md={8} lg={16}>
             <Tile className="protocol-checklist__summary">
               <div className="protocol-checklist__summary-grid">
                 {/* Tombstone header laid out like the legacy screen. */}
@@ -317,35 +390,12 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}
                 {headerCell('Cut block', headerExtras['Cut block'])}
-                <div>
-                  <span className="protocol-checklist__label">Status</span>
-                  <Tag type={statusTagType(checklist.statusCode)} size="sm">
-                    {statusLabel(checklist.statusCode, checklist.statusLabel)}
-                  </Tag>
-                </div>
                 {headerCell('Evaluator', checklist.evaluatorName, true)}
                 {headerCell('Evaluation date', formatShortDate(checklist.evaluationDate), true)}
                 {headerCell('Sample #', headerExtras['Sample #'])}
               </div>
             </Tile>
           </Column>
-
-          {editable && (
-            <Column sm={4} md={8} lg={16}>
-              <div className="protocol-checklist__actions">
-                {!submitted && (
-                  <Button onClick={() => void handleSubmit()} disabled={busy}>
-                    Submit
-                  </Button>
-                )}
-                {submitted && (
-                  <Button kind="tertiary" onClick={() => void handleUnsubmit()} disabled={busy}>
-                    Unsubmit
-                  </Button>
-                )}
-              </div>
-            </Column>
-          )}
 
           {validationErrors.length > 0 && (
             <Column sm={4} md={8} lg={16}>
@@ -377,8 +427,16 @@ const ProtocolChecklistPage: FC = () => {
             >
               <TabList aria-label="Checklist sections" contained>
                 {checklist.sections.map((section) => (
-                  <Tab key={section.id} renderIcon={SECTION_ICONS[section.id] ?? Document}>
-                    {section.title}
+                  <Tab key={section.id}>
+                    <span className="protocol-checklist__tab-label">
+                      {section.title}
+                      <TabStatusIcon
+                        status={statusFor(section.id)}
+                        count={tabCounts[section.id]}
+                        section={section.title}
+                        tone={tone}
+                      />
+                    </span>
                   </Tab>
                 ))}
               </TabList>
@@ -401,15 +459,31 @@ const ProtocolChecklistPage: FC = () => {
                         submitted={submitted}
                       />
                     ) : section.id === 'opening' ? (
-                      <BioOpeningView checklistId={id} canEdit={editable} submitted={submitted} />
+                      <BioOpeningView
+                        checklistId={id}
+                        canEdit={editable}
+                        submitted={submitted}
+                        onSaved={refreshTabStatuses}
+                        tone={tone}
+                      />
                     ) : section.id === 'stratum' ? (
-                      <BioStratumView checklistId={id} canEdit={editable} submitted={submitted} />
+                      <BioStratumView
+                        checklistId={id}
+                        canEdit={editable}
+                        submitted={submitted}
+                        onSaved={refreshTabStatuses}
+                        outstanding={outstandingGroups('stratum')}
+                        tone={tone}
+                      />
                     ) : section.id === 'plots' ? (
                       <BioPlotsView
                         checklistId={id}
                         canEdit={editable}
                         submitted={submitted}
                         active={i === tabIndex}
+                        onSaved={refreshTabStatuses}
+                        outstanding={outstandingGroups('plots')}
+                        tone={tone}
                       />
                     ) : null}
                   </TabPanel>

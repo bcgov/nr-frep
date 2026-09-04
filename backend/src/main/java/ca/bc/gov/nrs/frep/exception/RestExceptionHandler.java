@@ -152,22 +152,39 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    * message key (e.g. {@code frep.evaluatorinfo.delete.evaluator:1,NAR1}) that the legacy Struts app
    * resolved before display. When {@link LegacyProcMessages} recognises every key, the rule is
    * reported as a 409 in plain English — no help-desk suffix, because there is nothing wrong for the
-   * help desk to fix and the evaluator can resolve it themselves. Anything unrecognised keeps the
-   * previous behaviour: raw proc text at 500, with the suffix.
+   * help desk to fix and the evaluator can resolve it themselves. Anything unrecognised is a 500
+   * with a generic message; the raw text goes to the log and to {@code debugMessage}, never to the
+   * screen.
    */
   @ExceptionHandler(StoredProcedureException.class)
   protected ResponseEntity<Object> handleStoredProcedure(StoredProcedureException ex) {
+    // Overflow first, for the same reason as the generic handlers — but by a different route. The
+    // legacy packages wrap their inserts in `EXCEPTION WHEN OTHERS`, which swallows the Oracle error
+    // and returns it as `p_error_message` text, so an ORA-12899 never surfaces as a SQLException and
+    // never reaches those handlers. SQLERRM is embedded in that text, so ColumnOverflow still
+    // recognises it. Without this, every over-long value written through a proc — a description, a
+    // file name, an attachment type — reported as a 500 with raw Oracle text rather than a 400
+    // naming the field.
+    return overflowResponse(ex).orElseGet(() -> resolveStoredProcedureRule(ex));
+  }
+
+  private ResponseEntity<Object> resolveStoredProcedureRule(StoredProcedureException ex) {
     return LegacyProcMessages.resolve(ex.getOracleErrorMessage())
         .map(message -> {
           log.warn("Stored procedure rule: {} -> {}", ex.getMessage(), message);
           return buildResponseEntity(new ApiError(CONFLICT, message, ex));
         })
         .orElseGet(() -> {
+          // The raw p_error_message is logged, not shown. It is internal vocabulary — proc names,
+          // message keys, Oracle codes — that tells the evaluator nothing they can act on and leaks
+          // schema detail into the UI. Support keeps every bit of it: this log line carries the full
+          // string and the stack, and ApiError.debugMessage still holds it in the response for
+          // anyone reading the network tab. Same policy as the data-access and catch-all handlers.
           log.error("Stored procedure error: {}", ex.getMessage(), ex);
-          String message = ex.getOracleErrorMessage() != null && !ex.getOracleErrorMessage().isBlank()
-              ? ex.getOracleErrorMessage() + " " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO
-              : "Unexpected system error. " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO;
-          return buildResponseEntity(new ApiError(INTERNAL_SERVER_ERROR, message, ex));
+          return buildResponseEntity(new ApiError(
+              INTERNAL_SERVER_ERROR,
+              "The request could not be completed. " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO,
+              ex));
         });
   }
 
@@ -222,8 +239,10 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
 
   /**
    * A 400 naming the over-long field, when the failure is an ORA-12899 anywhere in the chain.
-   * Applied at all three of the generic handlers above because the same overflow reaches them by
-   * different routes: commit-time flush (JPA), a translated JDBC failure, or an untranslated one.
+   * Applied at every handler that can see one, because the same overflow arrives by four different
+   * routes: a commit-time flush (JPA), a translated JDBC failure, an untranslated one, and — via
+   * {@link #handleStoredProcedure} — as proc text, where a legacy {@code EXCEPTION WHEN OTHERS}
+   * caught the error and returned {@code SQLERRM} in an out-parameter instead of letting it throw.
    * Only the derived field label and the two lengths are returned — never the raw Oracle text.
    */
   private Optional<ResponseEntity<Object>> overflowResponse(Exception ex) {

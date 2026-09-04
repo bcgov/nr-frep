@@ -25,6 +25,8 @@ import ca.bc.gov.nrs.frep.mapper.CheckListMapper;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
@@ -49,20 +51,25 @@ public class ChrChecklistService {
 
   private static final Logger log = LoggerFactory.getLogger(ChrChecklistService.class);
 
-  // CHR photos are image-only. The derived code is stored in CHR_CHECKLIST_ATTACHMENT.MIME_TYPE_CODE
-  // (VARCHAR2(3), NOT NULL, FK to MIME_TYPE_CODE), so a non-image (or an image type whose code isn't a
-  // valid 3-char code, e.g. WEBP/TIFF) would fail on save with ORA-12899 / ORA-02291. Guard new photos
-  // up front. Mirrors deriveMimeType's output (jpeg->jpg) against the image codes in MIME_TYPE_CODE.
-  // TIF is deliberately absent. It fell through every net: browsers can't decode TIFF, so the
-  // client-side downscale in Photos.tsx silently kept the full-resolution original, no thumbnail
-  // could ever render, and it is excluded from server-side normalization — leaving a photo stored at
-  // full size that never displays. TIF remains valid for Biodiversity *attachments*, where scanned
-  // maps have a real fidelity argument; it has none for a site photo.
-  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP");
+  // CHR photos accept exactly the same file types as Biodiversity attachments — one
+  // ATTACHMENT_ALLOWED_TYPES variable, no per-protocol subset — and AttachmentTypes IS THE ONLY
+  // THING ENFORCING IT. The database used to back the rule up: CHR_CHECKLIST_ATTACHMENT.MIME_TYPE_CODE
+  // was VARCHAR2(3) with a FK to the shared MIME_TYPE_CODE table, so anything without a valid 3-char
+  // code failed on save with ORA-12899 / ORA-02291. That safety net is gone — the FK is dropped and
+  // the column is VARCHAR2(10) — so an unguarded write would now simply succeed. It stays safe
+  // because addPhoto is the only path that creates a CHR_CHECKLIST_ATTACHMENT row and
+  // validateNewPhoto always runs first; checklist saves, including the offline check-in,
+  // deliberately never touch photos. Keep it that way.
+  //
+  // Types that no browser renders (TIFF above all) are accepted like any other: the tab shows a type
+  // placeholder instead of a thumbnail and skips the client-side downscale, exactly as the
+  // Biodiversity attachments tab has always done for them. Uploading is not the same question as
+  // previewing.
 
   /** Hard cap on photo rows returned per call; matches SearchService / OpeningTargetService. */
   private static final int MAX_PAGE_SIZE = 100;
 
+  private final AttachmentTypes attachmentTypes;
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
   private final ChrSubmitValidationService submitValidationService;
@@ -73,6 +80,7 @@ public class ChrChecklistService {
   private final FamUserDirectoryService famUserDirectoryService;
 
   public ChrChecklistService(
+      AttachmentTypes attachmentTypes,
       ChrChecklistPersistenceService persistenceService,
       ChrChecklistRepository checklistRepository,
       ChrSubmitValidationService submitValidationService,
@@ -82,6 +90,7 @@ public class ChrChecklistService {
       FamUserDirectoryService famUserDirectoryService,
       VirusScanner virusScanner
   ) {
+    this.attachmentTypes = attachmentTypes;
     this.persistenceService = persistenceService;
     this.checklistRepository = checklistRepository;
     this.submitValidationService = submitValidationService;
@@ -212,14 +221,20 @@ public class ChrChecklistService {
       UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
       if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
         throw new InvalidParameterException(
-            "This checklist is checked out on another device, so its photos can't be changed here.");
+            "This checklist is checked out on another device, so its attachments can't be changed here.");
       }
       return;
     }
     throw new InvalidParameterException(
         "The checklist status is currently "
             + ChrConstants.frepChecklistStatusDescriptions().getOrDefault(status, status)
-            + ", so its photos can't be changed.");
+            + ", so its attachments can't be changed.");
+  }
+
+  /** Uppercased extension of {@code fileName}, or "" when it has none. */
+  private static String extensionOf(String fileName) {
+    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
+    return dot < 0 || dot == fileName.length() - 1 ? "" : fileName.substring(dot + 1).toUpperCase();
   }
 
   private void validateNewPhoto(MultipartFile file, String description) {
@@ -228,12 +243,17 @@ public class ChrChecklistService {
           "The selected file is empty. Choose a file with content and try again.");
     }
     if (!ChrStringUtils.hasAValue(description)) {
-      throw new InvalidParameterException("A description is required for every photo.");
+      throw new InvalidParameterException("A description is required for every attachment.");
     }
-    String mimeType = deriveMimeType(file.getContentType()).toUpperCase();
-    if (!ALLOWED_IMAGE_CODES.contains(mimeType)) {
+    // Check the file's own extension, not the browser's content-type claim: file.type is empty for
+    // some drag sources and for formats the OS has no mapping for, which silently refused perfectly
+    // good photos. The extension is also what is stored as MIME_TYPE_CODE, so this validates the
+    // value that actually has to be legal — and it matches how Biodiversity attachments are checked.
+    String extension = extensionOf(file.getOriginalFilename());
+    if (!attachmentTypes.isAllowed(extension)) {
       throw new InvalidParameterException(
-          "Only image files (JPG, PNG, GIF, BMP) can be uploaded as photos.");
+          "Unsupported file type" + (extension.isEmpty() ? "" : " ." + extension.toLowerCase())
+              + ". Allowed types: " + attachmentTypes.display() + ".");
     }
   }
 
@@ -241,7 +261,7 @@ public class ChrChecklistService {
     try {
       return file.getBytes();
     } catch (IOException ex) {
-      throw new InvalidParameterException("Could not read the uploaded photo.");
+      throw new InvalidParameterException("Could not read the uploaded file.");
     }
   }
 
@@ -648,14 +668,17 @@ public class ChrChecklistService {
         .filter(p -> String.valueOf(photoId).equals(p.getId()))
         .findFirst()
         .orElseThrow(() -> new EntityNotFoundException(
-            "Photo " + photoId + " was not found on checklist " + checklistId + "."));
+            "Attachment " + photoId + " was not found on checklist " + checklistId + "."));
     String mimeType = deriveMimeType(picture.getMimeTypeCode());
     String key = checklistId + "-" + photoId + "." + mimeType;
     byte[] bytes = objectStorageService.getObjectBytes(key);
     if (bytes == null || bytes.length == 0) {
-      throw new EntityNotFoundException("Photo " + photoId + " has no stored content.");
+      throw new EntityNotFoundException("Attachment " + photoId + " has no stored content.");
     }
-    return new PhotoContent(picture.getFileName(), "image/" + mimeType, bytes);
+    // AttachmentType, not "image/" + ext: a photo may now be any allowed type, and "image/pdf" is
+    // not a media type. The object KEY still comes from the extension above — unchanged.
+    return new PhotoContent(
+        picture.getFileName(), AttachmentType.mediaTypeFor(mimeType), bytes);
   }
 
   /** A photo's stored bytes, served as a binary download rather than embedded base64. */

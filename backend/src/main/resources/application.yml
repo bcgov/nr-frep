@@ -139,6 +139,14 @@ info:
 
 frep:
   package-name: FREP
+  attachments:
+    # Which file types may be attached to a Biodiversity checklist. REQUIRED — there is no in-code
+    # default; a blank value makes AttachmentTypes throw at startup rather than quietly accepting
+    # nothing. Adding a format is an edit to the GitHub variable + a redeploy;
+    # there is no database change, because FREP no longer validates the type against
+    # THE.MIME_TYPE_CODE. Entries are extensions only ("PDF,PNG,WEBP"); the media type each
+    # downloads as comes from the AttachmentType enum.
+    allowed-types: ${ATTACHMENT_ALLOWED_TYPES:}
   codelist-package-name: FREP_CODE_LISTS
   # BC Gov DataBC public WFS, proxied for the in-app Leaflet map (opening polygon GeoJSON by
   # OPENING_ID). Public endpoint — overridable per environment but the default is production-correct.

@@ -55,6 +55,15 @@ parameters:
   - name: VITE_SILVA_BASE_URL
     description: SILVA base URL for Opening ID deep links (no trailing slash)
     value: https://silva.nrs.gov.bc.ca
+  # File types offered in the attachment picker — the SAME GitHub variable the backend reads as
+  # ATTACHMENT_ALLOWED_TYPES, so the picker and the server-side allow-list cannot drift. Comma
+  # separated extensions ("BMP,CSV,PDF"). Required for the same reason as the backend parameter:
+  # there is no in-code
+  # default, so an unset variable must fail the deploy rather than ship a picker with no filter.
+  - name: VITE_ATTACHMENT_TYPES
+    description: Comma-separated attachment extensions, e.g. BMP,CSV,PDF,PNG,WEBP
+    required: true
+
   # Shared mailbox behind the side nav's "Report an issue" link. Optional: an empty value hides the
   # link entirely rather than shipping a mailto: that goes nowhere, so an environment with no support
   # address simply doesn't offer one.
@@ -156,6 +165,8 @@ objects:
                   value: ${VITE_BACKEND_URL}
                 - name: VITE_SILVA_BASE_URL
                   value: ${VITE_SILVA_BASE_URL}
+                - name: VITE_ATTACHMENT_TYPES
+                  value: ${VITE_ATTACHMENT_TYPES}
                 - name: VITE_SUPPORT_EMAIL
                   value: ${VITE_SUPPORT_EMAIL}
                 - name: VITE_ACCESS_REQUEST_EMAIL

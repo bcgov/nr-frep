@@ -34,7 +34,14 @@ export default defineConfig(({ mode }) => {
   // in src/styles.
   const css = {
     preprocessorOptions: {
-      scss: { quietDeps: true },
+      scss: {
+        // Carbon's own SCSS trips Sass's mixed-decls and global-builtin deprecations roughly 1200
+        // times per build, which buried any warning about our stylesheets. quietDeps silences
+        // warnings raised *inside* node_modules only — our own files still report, which is how
+        // the dead time-picker rules in _overrides.scss surfaced. Prefer this to
+        // silenceDeprecations, which would mute those categories everywhere including our code.
+        quietDeps: true,
+      },
     },
   };
 
@@ -195,6 +202,8 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          // Vitest projects do not inherit the root-level `css` option; without this the Carbon
+          // deprecation warnings silenced for the build reappear on every test run.
           css,
           plugins: [react(), tsconfigPaths()],
           test: {
@@ -213,8 +222,29 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          // Vitest projects do not inherit the root-level `css` option; without this the Carbon
+          // deprecation warnings silenced for the build reappear on every test run.
           css,
           plugins: [react(), tsconfigPaths()],
+          // Pre-bundle these up front instead of letting Vite discover them mid-run.
+          //
+          // They arrive through the API client's auth chain, so only the tests that touch it pull
+          // them in. Discovering a dependency late makes Vite re-optimize and reload the page, and
+          // Vitest warns that this "may cause tests to fail, lead to flaky behaviour or duplicated
+          // test runs" — it names `optimizeDeps.include` as the fix.
+          //
+          // Precautionary, not a diagnosed failure: the reload was reproducible on a cold
+          // single-file run (every time), but no test was ever observed failing because of it.
+          // Listing the deps removes the warning and the race behind it.
+          optimizeDeps: {
+            include: [
+              'aws-amplify',
+              'aws-amplify/auth',
+              'aws-amplify/auth/cognito',
+              'aws-amplify/utils',
+              'react-dom/client',
+            ],
+          },
           test: {
             name: 'browser',
             setupFiles: [

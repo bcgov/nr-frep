@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.service.v1;
 
 import ca.bc.gov.nrs.frep.ChrConstants;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXref;
 import ca.bc.gov.nrs.frep.entity.ChrAssociatedFeatureXrefId;
@@ -1050,8 +1051,12 @@ public class ChrChecklistPersistenceService {
     chrChecklist.getChrChecklistAttachments().add(attachment);
 
     try {
+      // AttachmentType.mediaTypeFor(mimeType), not the caller's mimeTypeCode: that is the browser's
+      // claim at upload, which differs by browser for the same image and is what legacy stored as
+      // the non-standard "image/jpg". `mimeType` here is the code the row stores (JPG/PNG/GIF/BMP),
+      // so the object gets the registered type for exactly the format on disk.
       objectStorageService.putObject(
-          photoObjectKey(checklistId, attachment), mimeTypeCode, content);
+          photoObjectKey(checklistId, attachment), AttachmentType.mediaTypeFor(mimeType), content);
     } catch (RuntimeException ex) {
       entityManager.remove(attachment);
       chrChecklist.getChrChecklistAttachments().remove(attachment);
@@ -1129,7 +1134,10 @@ public class ChrChecklistPersistenceService {
       picture.setId(String.valueOf(attachment.getChrchecklistAttachmentId()));
       picture.setDescription(attachment.getDescription());
       picture.setFileName(attachment.getFileName());
+      // mimeTypeCode keeps its legacy "image/<code>" shape — the object-storage key is derived from
+      // it — while mediaType carries the real one, now that a photo may be any allowed type.
       picture.setMimeTypeCode("image/" + attachment.getMimeTypeCode().toLowerCase());
+      picture.setMediaType(AttachmentType.mediaTypeFor(attachment.getMimeTypeCode()));
       if (attachment.getChrFeatureId() != null) {
         picture.setFeatureId(String.valueOf(attachment.getChrFeatureId()));
         // Null when the feature was deleted out from under the photo — the id still round-trips.

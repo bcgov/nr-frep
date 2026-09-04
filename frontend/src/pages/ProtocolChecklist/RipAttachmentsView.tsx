@@ -12,6 +12,11 @@ import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
+import {
+  ALLOWED_ATTACHMENT_ACCEPT,
+  ALLOWED_ATTACHMENT_EXTENSIONS,
+  isAllowedAttachmentExtension,
+} from '@/utils/attachmentTypes';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits';
 
@@ -24,17 +29,19 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits'
  * package's shared cursor record borrows its types from `riparian_checklist_attach` regardless of
  * protocol — that record is not the target table.
  *
- * <p>120 comes from the legacy UI, which capped this input at `maxlength="120"`
- * (`checklistAttachment.jsp:62`) on the one screen it used for every protocol; its validator only
- * checked the field was present. So 120 is the widest value the old app is known to have written
- * successfully, and it matches the column: `BIODIVERSITY_CHKLST_ATTACH.DESCRIPTION` is
- * `VARCHAR2(120 BYTE)` (nr-mof-db `scripts/THE/TABLES/V2.00400__BIODIVERSITY_CHKLST_ATTACH.sql`).
+ * <p>The base column is `VARCHAR2(120 BYTE)` — `BIODIVERSITY_CHKLST_ATTACH.DESCRIPTION` in nr-mof-db
+ * `scripts/THE/TABLES/V2.00400__BIODIVERSITY_CHKLST_ATTACH.sql`. That 120 matched the legacy UI,
+ * which capped this input at `maxlength="120"` (`checklistAttachment.jsp:62`) on the one screen it
+ * used for every protocol. Note the table carries no `FREP_` prefix, unlike the
+ * `FREP_CHECKLIST_ATTACHMENTS` package that writes it — looking for the prefixed name finds nothing
+ * and reads as "the DDL isn't in the repo".
  *
- * <p>The DDL *is* in nr-mof-db — under `BIODIVERSITY_CHKLST_ATTACH`, without the `FREP_` prefix the
- * PL/SQL packages carry. `V999999999999.3` widens this to 2000, but that migration is not merged,
- * so 120 remains the deployed width; raise this only once it ships.
+ * <p>Migration `V202608051100.3` widens it to 2000, which is what this constant assumes.
+ * **The value is only correct once that migration has been deployed to the target environment** —
+ * shipping it ahead of the DDL lets the UI accept descriptions the insert will reject with an
+ * ORA-12899. If that migration is still pending anywhere this deploys, drop this back to 120.
  */
-const DESCRIPTION_LIMIT = 120;
+const DESCRIPTION_LIMIT = 2000;
 
 /**
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
@@ -52,36 +59,15 @@ type Props = {
   submitted: boolean;
 };
 
-// Allowed attachment extensions = the codes in THE.MIME_TYPE_CODE (keyed by extension). The
-// FREP_CHECKLIST_ATTACHMENTS proc rejects anything else (ORA-01400), so guard here for a friendly
-// message + native picker filter. The backend re-validates authoritatively.
-const ALLOWED_ATTACHMENT_EXTENSIONS = [
-  'bmp',
-  'csv',
-  'doc',
-  'gif',
-  'htm',
-  'ifm',
-  'jpg',
-  'jpk',
-  'mdb',
-  'mde',
-  'obd',
-  'pdf',
-  'png',
-  'pps',
-  'ppt',
-  'rpt',
-  'rtf',
-  'tif',
-  'txt',
-  'wav',
-  'xld',
-  'xls',
-  'xml',
-  'zip',
-];
-const ALLOWED_ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
+/**
+ * Extensions that get the "trim or compress" hint when they exceed the size cap.
+ *
+ * The 15 MB cap is deliberate for video: an untrimmed phone clip is roughly ten seconds of 1080p
+ * (two of 4K), so the limit is expected to bite and the intent is to push users to compress before
+ * attaching — not to be raised. Raising it isn't a config change anyway: the scan, the
+ * object-storage write and the BLOB path each hold the whole file as a byte[] on a 400 MB heap.
+ */
+const VIDEO_EXTENSIONS = new Set(['mp4']);
 
 // Shared with CHR photos so the two screens can't drift; see utils/uploadLimits for how this
 // relates to max-file-size, max-request-size and the Coraza body limit.
@@ -246,12 +232,20 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
    */
   const rejectionReason = (file: File): string | null => {
     const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
-    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
-      return ext ? `".${ext}" is not a supported type` : 'has no file extension';
+    // An extensionless file is refused whatever the configured list says — the extension IS the
+    // stored MIME_TYPE_CODE, and the column is NOT NULL, so it could never be saved.
+    if (!ext) return 'has no file extension';
+    if (!isAllowedAttachmentExtension(ext)) {
+      return `".${ext}" is not a supported type`;
     }
     if (file.size === 0) return 'is empty';
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      return `is ${formatMb(file.size)} MB (max ${MAX_ATTACHMENT_MB} MB)`;
+      const over = `is ${formatMb(file.size)} MB (max ${MAX_ATTACHMENT_MB} MB)`;
+      // Video is the one type where the cap is routinely hit and the fix isn't obvious: an
+      // untouched phone clip is ~10s of 1080p at this size, so "too big" alone reads as a defect.
+      // The cap is deliberate — it exists to push compression rather than to be raised — so say
+      // what to do about it. Every other type is either already small or obviously trimmable.
+      return VIDEO_EXTENSIONS.has(ext) ? `${over}. Trim or compress the video and try again` : over;
     }
     return null;
   };

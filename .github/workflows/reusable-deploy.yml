@@ -185,6 +185,7 @@ jobs:
             -p CLAMAV_HOST="$CLAMAV_HOST"
             -p CLAMAV_PORT="${{ vars.CLAMAV_PORT || '3310' }}"
             -p CLAMAV_FAIL_OPEN="${{ vars.CLAMAV_FAIL_OPEN || 'false' }}"
+            -p ATTACHMENT_ALLOWED_TYPES="${{ vars.ATTACHMENT_ALLOWED_TYPES }}"
           triggers: ${{ inputs.triggers }}
 
   frontend:
@@ -230,6 +231,7 @@ jobs:
             -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_SILVA_BASE_URL="${{ vars.VITE_SILVA_BASE_URL }}"
+            -p VITE_ATTACHMENT_TYPES="${{ vars.ATTACHMENT_ALLOWED_TYPES }}"
             -p VITE_SUPPORT_EMAIL="${{ vars.SUPPORT_EMAIL }}"
             -p VITE_ACCESS_REQUEST_EMAIL="${{ vars.ACCESS_REQUEST_EMAIL }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"

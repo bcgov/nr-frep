@@ -34,7 +34,14 @@ export default defineConfig(({ mode }) => {
   // in src/styles.
   const css = {
     preprocessorOptions: {
-      scss: { quietDeps: true },
+      scss: {
+        // Carbon's own SCSS trips Sass's mixed-decls and global-builtin deprecations roughly 1200
+        // times per build, which buried any warning about our stylesheets. quietDeps silences
+        // warnings raised *inside* node_modules only — our own files still report, which is how
+        // the dead time-picker rules in _overrides.scss surfaced. Prefer this to
+        // silenceDeprecations, which would mute those categories everywhere including our code.
+        quietDeps: true,
+      },
     },
   };
 
@@ -44,18 +51,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': resolve(projectRootDir, 'src'),
-      },
-    },
-    css: {
-      preprocessorOptions: {
-        scss: {
-          // Carbon's own SCSS trips Sass's mixed-decls and global-builtin deprecations roughly 1200
-          // times per build, which buried any warning about our stylesheets. quietDeps silences
-          // warnings raised *inside* node_modules only — our own files still report, which is how
-          // the dead time-picker rules in _overrides.scss surfaced. Prefer this to
-          // silenceDeprecations, which would mute those categories everywhere including our code.
-          quietDeps: true,
-        },
       },
     },
     plugins: [
@@ -207,11 +202,10 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
-          css,
-          plugins: [react(), tsconfigPaths()],
           // Vitest projects do not inherit the root-level `css` option; without this the Carbon
           // deprecation warnings silenced for the build reappear on every test run.
-          css: { preprocessorOptions: { scss: { quietDeps: true } } },
+          css,
+          plugins: [react(), tsconfigPaths()],
           test: {
             name: 'node',
             setupFiles: [
@@ -228,11 +222,10 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
-          css,
-          plugins: [react(), tsconfigPaths()],
           // Vitest projects do not inherit the root-level `css` option; without this the Carbon
           // deprecation warnings silenced for the build reappear on every test run.
-          css: { preprocessorOptions: { scss: { quietDeps: true } } },
+          css,
+          plugins: [react(), tsconfigPaths()],
           // Pre-bundle these up front instead of letting Vite discover them mid-run.
           //
           // They arrive through the API client's auth chain, so only the tests that touch it pull

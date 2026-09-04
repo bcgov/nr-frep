@@ -76,6 +76,30 @@ public class ObjectStorageService {
   }
 
   /**
+   * Whether {@code key} is present, without transferring it.
+   *
+   * <p>Kept alongside {@link #getObjectBytesIfPresent}, which serves the download path: there a
+   * check followed by a GET was two round trips for one file, so the two were folded into one call.
+   * The migration asks a different question — "has this one been done already?" over thousands of
+   * rows — and answering it by downloading each object would move the whole corpus to decide it did
+   * not need to.
+   */
+  public boolean objectExists(String key) {
+    try (S3Client client = client()) {
+      client.headObject(builder -> builder.bucket(properties.bucket()).key(key));
+      return true;
+    } catch (NoSuchKeyException ex) {
+      return false;
+    } catch (Exception ex) {
+      // A missing object and an unreachable bucket both answered "false" silently, so a storage
+      // outage was indistinguishable from a not-yet-migrated attachment — and the caller served an
+      // empty file as though that were normal. Still false (the caller's contract), but recorded.
+      log.error("Object storage check failed for key :: {}", key, ex);
+      return false;
+    }
+  }
+
+  /**
    * The stored size of {@code key} in bytes, or {@code -1} when the object is missing.
    *
    * <p>A HEAD per object, called only for the rows on the page being returned. Deliberately not a

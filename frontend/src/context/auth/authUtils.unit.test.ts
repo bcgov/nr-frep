@@ -48,11 +48,41 @@ describe('parseToken', () => {
     ).toBeUndefined();
   });
 
+  it('ignores a bare FREP_CHR_EDITOR rather than granting every district', () => {
+    // The role with no district scope flattened onto it — reachable if someone is granted it in FAM
+    // without picking a district. It must NOT become a global role: the backend only counts prefixed
+    // district roles, so "all districts" in the UI would mean 403 on every one of them.
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'JSMITH',
+      client_roles: ['FREP_CHR_EDITOR', 'FREP_EDITOR'],
+    });
+
+    expect(user?.privileges.FREP_CHR_EDITOR).toBeUndefined();
+    expect(user?.roles).toEqual(['FREP_EDITOR']);
+  });
+
+  it('reads the real token shape: district flattened onto the role name with a hyphen', () => {
+    // Exactly what a DEV token carried on 2026-09-09.
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'ASODHI',
+      display_name: 'Sodhi, Avisha WLRS:EX',
+      client_roles: ['FREP_CHR_EDITOR_DISTRICT-DCC', 'FREP_EDITOR'],
+    });
+
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC']);
+    expect(user?.roles).toEqual(expect.arrayContaining(['FREP_EDITOR', 'FREP_CHR_EDITOR']));
+    // The ministry suffix on display_name must not leak into the first name.
+    expect(user?.firstName).toBe('Avisha');
+    expect(user?.lastName).toBe('Sodhi');
+  });
+
   it('collapses per-district CHR roles into a scoped FREP_CHR_EDITOR role', () => {
     const user = parseToken({
       identity_provider: 'azureidir',
       idir_username: 'JSMITH',
-      client_roles: ['FREP_CHR_EDITOR_DISTRICT_DCK', 'FREP_CHR_EDITOR_DISTRICT_DCC'],
+      client_roles: ['FREP_CHR_EDITOR_DISTRICT-DCK', 'FREP_CHR_EDITOR_DISTRICT-DCC'],
     });
 
     // Surfaces as the synthetic FREP_CHR_EDITOR role (so hasAnyRole works) with the district codes.

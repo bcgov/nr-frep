@@ -26,7 +26,7 @@ public final class FrepAuthorities {
 
   /**
    * Coarse "may this caller touch CHR at all" gate: {@code FREP_ADMINISTRATOR} or any per-district CHR editor
-   * role ({@code FREP_CHR_EDITOR_DISTRICT_*}). A global {@code FREP_EDITOR} (Biodiversity) is
+   * role ({@code FREP_CHR_EDITOR_DISTRICT-*}). A global {@code FREP_EDITOR} (Biodiversity) is
    * intentionally excluded — CHR access is district-scoped. Evaluated via the {@code @auth} bean
    * ({@link LoggedUserHelper}).
    *

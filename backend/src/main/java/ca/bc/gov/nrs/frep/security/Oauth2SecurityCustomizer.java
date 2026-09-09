@@ -176,7 +176,7 @@ public class Oauth2SecurityCustomizer implements
    * lands them on /unauthorized as though their access had been revoked.
    *
    * <p>Authorities are exposed with no {@code ROLE_} prefix, matching the role codes FREP checks
-   * ({@code FREP_ADMINISTRATOR}, {@code FREP_EDITOR}, {@code FREP_CHR_EDITOR_DISTRICT_<code>}) — see
+   * ({@code FREP_ADMINISTRATOR}, {@code FREP_EDITOR}, {@code FREP_CHR_EDITOR_DISTRICT-<code>}) — see
    * {@link FrepAuthorities}. {@link #FAM_BOOKKEEPING_PREFIX} entries are dropped.
    */
   private Converter<Jwt, Collection<GrantedAuthority>> authoritiesConverter() {

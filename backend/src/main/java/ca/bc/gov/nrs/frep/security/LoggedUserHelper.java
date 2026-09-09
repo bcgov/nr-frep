@@ -86,7 +86,7 @@ public class LoggedUserHelper {
 
   /**
    * The set of Natural Resource District codes (e.g. {@code "DCK"}) the user may access CHR checklists
-   * for, parsed from the {@code FREP_CHR_EDITOR_DISTRICT_<code>} authorities. Empty when the user holds
+   * for, parsed from the {@code FREP_CHR_EDITOR_DISTRICT-<code>} authorities. Empty when the user holds
    * none. Codes are upper-cased so comparisons against {@code org_unit_code} are case-insensitive.
    */
   public Set<String> chrDistrictCodes() {

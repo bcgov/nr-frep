@@ -142,7 +142,7 @@ class ApiAuthorizationSecurityTest {
     /**
      * The {@code @chrAuth} bean referenced by the per-district CHR {@code @PreAuthorize}. Every
      * checklist resolves to {@link #CHECKLIST_DISTRICT}, so a caller holding
-     * {@code FREP_CHR_EDITOR_DISTRICT_DCK} passes and one holding another district is denied. The
+     * {@code FREP_CHR_EDITOR_DISTRICT-DCK} passes and one holding another district is denied. The
      * save tests use no-id bodies (the coarse {@code canAnyChr} fallback) and never reach the lookup.
      * A hand-rolled stub avoids a Mockito in-context mock; per-district resolution itself is covered
      * by {@code ChrChecklistAuthorizerTest}.
@@ -210,7 +210,7 @@ class ApiAuthorizationSecurityTest {
   // sites their checklists hang off — CONTENT_EDIT locked them out of a record they maintain.
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMaySaveSiteResources() {
     assertDoesNotThrow(() -> siteDetailApi.saveResources("1", List.of()));
   }
@@ -224,13 +224,13 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayCreateATargetedSite() {
     assertDoesNotThrow(() -> siteDetailApi.createTargetedSite(null));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayReadSiteDetail() {
     assertDoesNotThrow(() -> siteDetailApi.getSiteDetail("1"));
   }
@@ -257,7 +257,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorPassesTheChrWriteGate() {
     assertDoesNotThrow(() -> chrChecklistApi.saveChecklist(new CheckList()));
   }
@@ -270,14 +270,14 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrEditorMayReadAChecklistInTheirOwnDistrict() {
     // The stub checklist resolves to DCK; this caller holds DCK.
     assertDoesNotThrow(() -> chrChecklistApi.getChecklist(1L));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DPC")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DPC")
   void chrEditorIsForbiddenFromReadingAnotherDistrictsChecklist() {
     // Reads are district-scoped like writes: holding CHR somewhere is not enough. Previously this
     // passed under the coarse "any CHR" gate, leaving a cross-district read reachable by guessing a
@@ -295,7 +295,7 @@ class ApiAuthorizationSecurityTest {
   // ── FREP_EDIT (protocol-checklist / Biodiversity read gate) ──────────
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrOnlyUserIsForbiddenFromReadingBioChecklist() {
     // A CHR district editor has no Bio access, so even reading a Bio checklist is denied.
     assertThrows(
@@ -338,7 +338,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrOnlyUserMayGenerateAJasperReport() {
     assertDoesNotThrow(
         () -> reportApi.generateReport("checklist-rejection-reason", emptyRequest()));
@@ -376,7 +376,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayReadTheRandomList() {
     assertDoesNotThrow(() -> randomListApi.getRandomList("2026", null));
   }
@@ -396,7 +396,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayExportTheRandomList() {
     assertDoesNotThrow(() -> reportApi.exportRandomListCsv("2026", null));
   }
@@ -407,7 +407,7 @@ class ApiAuthorizationSecurityTest {
   // four-table union to be told nothing matched.
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMaySearchChecklists() {
     assertDoesNotThrow(
         () -> searchApi.searchChecklistsPaginated(
@@ -438,7 +438,7 @@ class ApiAuthorizationSecurityTest {
   // handed an empty list.
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayReadAcceptedSites() {
     assertDoesNotThrow(() -> acceptedSiteApi.getAcceptedSites("2026", "1", null));
   }

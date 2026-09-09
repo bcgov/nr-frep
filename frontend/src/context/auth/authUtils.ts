@@ -129,7 +129,7 @@ const resolveUsername = (claims: JwtClaims): string => {
  * - Global roles that exactly match {@link AVAILABLE_ROLES} (e.g. "FREP_ADMINISTRATOR", "FREP_EDITOR")
  *   map to a `null` value (null = global, non-scoped role).
  * - Per-district CHR roles ({@link CHR_DISTRICT_EDITOR_PREFIX}`<code>`, e.g.
- *   "FREP_CHR_EDITOR_DISTRICT_DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
+ *   "FREP_CHR_EDITOR_DISTRICT-DCK") are collapsed into the synthetic `FREP_CHR_EDITOR` role whose
  *   value is the `string[]` of district codes the user may edit CHR for (a scoped role).
  * - Any other role is ignored.
  *
@@ -143,6 +143,18 @@ export function parsePrivileges(input: string[]): USER_PRIVILEGE_TYPE {
     if (item.startsWith(CHR_DISTRICT_EDITOR_PREFIX)) {
       const code = item.slice(CHR_DISTRICT_EDITOR_PREFIX.length).trim().toUpperCase();
       if (code) chrDistricts.push(code);
+    } else if (item === 'FREP_CHR_EDITOR') {
+      // A BARE FREP_CHR_EDITOR — the role with no district scope flattened onto it.
+      //
+      // Deliberately ignored rather than treated as a global role. FREP_CHR_EDITOR is in
+      // AVAILABLE_ROLES as the *synthetic aggregate* the branch above builds, so falling through to
+      // the next branch would set it to `null` — which means "global, every district" — and hand a
+      // mis-granted user CHR access to the whole province in the UI, while the backend (which only
+      // ever counts prefixed district roles) denied every request. Seeing all 23 districts and
+      // getting 403 on each is a worse failure than seeing none.
+      //
+      // Reachable if someone is granted the role in FAM without selecting a district.
+      continue;
     } else if (AVAILABLE_ROLES.includes(item as ROLE_TYPE)) {
       // Direct match against known global role names (legacy WebADE role names).
       result[item as ROLE_TYPE] = null; // null = global (non-scoped) role

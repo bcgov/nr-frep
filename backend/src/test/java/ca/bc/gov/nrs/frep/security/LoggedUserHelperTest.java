@@ -28,7 +28,7 @@ class LoggedUserHelperTest {
   @Test
   void parsesDistrictCodesFromChrRoles() {
     LoggedUserHelper helper =
-        withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK", "FREP_CHR_EDITOR_DISTRICT_DCC");
+        withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK", "FREP_CHR_EDITOR_DISTRICT-DCC");
 
     assertThat(helper.chrDistrictCodes()).containsExactlyInAnyOrder("DCK", "DCC");
     assertThat(helper.canAnyChr()).isTrue();
@@ -60,7 +60,7 @@ class LoggedUserHelperTest {
 
   @Test
   void canChrHandlesNullDistrict() {
-    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canChr(null)).isFalse();
+    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK").canChr(null)).isFalse();
     assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr(null)).isTrue(); // admin passes regardless
   }
 
@@ -69,7 +69,7 @@ class LoggedUserHelperTest {
     // Site records are shared across protocols, so canEditSite is deliberately wider than canEdit.
     assertThat(withAuthorities("FREP_EDITOR").canEditSite()).isTrue();
     assertThat(withAuthorities("FREP_ADMINISTRATOR").canEditSite()).isTrue();
-    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK").canEditSite()).isTrue();
     // ...but it is still a role check: view-only and no-role users cannot edit.
     // No global FREP role and no CHR district — the roleless case, now that FREP_VIEW_ONLY is gone.
     assertThat(withAuthorities("SOME_OTHER_APP_ROLE").canEditSite()).isFalse();
@@ -78,7 +78,7 @@ class LoggedUserHelperTest {
 
   @Test
   void chrDistrictEditorGainsSiteEditingWithoutGainingBiodiversityWrite() {
-    LoggedUserHelper helper = withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK");
+    LoggedUserHelper helper = withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK");
 
     assertThat(helper.canEditSite()).isTrue();
     assertThat(helper.canEdit()).isFalse();

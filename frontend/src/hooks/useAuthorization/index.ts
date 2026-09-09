@@ -24,7 +24,7 @@ export type AuthorizationInfo = {
   canDelete: boolean;
   /** `true` for admin-only actions (legacy {@code ACTIVATECHECKLIST} parity). */
   canPerformSysAdminActions: boolean;
-  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT_*`). */
+  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT-*`). */
   chrDistricts: string[];
   /** `true` when the user may access CHR for any district (sys-admin, or holds ≥1 district role). */
   canAnyChr: boolean;

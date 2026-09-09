@@ -16,8 +16,18 @@ export const AVAILABLE_ROLES = ['FREP_ADMINISTRATOR', 'FREP_EDITOR', 'FREP_CHR_E
 
 export type ROLE_TYPE = (typeof AVAILABLE_ROLES)[number];
 
-/** Prefix of the per-district CHR editor roles: `FREP_CHR_EDITOR_DISTRICT_<code>`. */
-export const CHR_DISTRICT_EDITOR_PREFIX = 'FREP_CHR_EDITOR_DISTRICT_';
+/**
+ * Prefix of the per-district CHR editor roles: `FREP_CHR_EDITOR_DISTRICT-<code>`.
+ *
+ * **The trailing separator is a HYPHEN, not an underscore, and it is not a typo.** CSS defines one
+ * role, `FREP_CHR_EDITOR`, with the district as a *scope* on the grant; FAM flattens the pair into a
+ * single Keycloak role string joined with `-`, so a user scoped to DCC arrives as
+ * `client_roles: ["FREP_CHR_EDITOR_DISTRICT-DCC", "FREP_EDITOR"]`. Verified against a real DEV token
+ * on 2026-09-09. The legacy FAM/Cognito roles used underscores throughout
+ * (`FREP_CHR_EDITOR_DISTRICT_DCC`), which is why this reads as a mistake — changing it back silently
+ * removes every district editor's CHR access. Mirrored by `RoleConstants` on the backend.
+ */
+export const CHR_DISTRICT_EDITOR_PREFIX = 'FREP_CHR_EDITOR_DISTRICT-';
 
 type RoleValue = string[] | null;
 

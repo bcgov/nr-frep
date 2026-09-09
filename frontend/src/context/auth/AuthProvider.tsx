@@ -165,12 +165,18 @@ const decodeAccessToken = (accessToken: string): Record<string, unknown> | undef
     if (!payload) return undefined;
     // base64url → base64, re-padded: JWT segments drop the '=' padding that atob() requires.
     const base64 = payload
-      .replace(/-/g, '+')
-      .replace(/_/g, '/')
+      .replaceAll('-', '+')
+      .replaceAll('_', '/')
       .padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '=');
-    // Decode as UTF-8 rather than trusting atob's latin-1 output — display names carry accents,
-    // and mangling them here would put the mojibake straight into the header.
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    // Decode as UTF-8 rather than trusting atob's latin-1 output — display names carry accents
+    // (and a ministry suffix like "WLRS:EX"), and mangling them here would put the mojibake
+    // straight into the header.
+    //
+    // codePointAt is exact rather than merely adequate here: atob returns a binary string whose
+    // every character is a single code unit <= 0xFF, so there are no surrogate pairs for it and
+    // charCodeAt to disagree about. The `?? 0` is for the type signature only — the callback is
+    // never handed an empty string.
+    const bytes = Uint8Array.from(atob(base64), (char) => char.codePointAt(0) ?? 0);
     return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   } catch {
     return undefined;

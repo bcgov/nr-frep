@@ -88,13 +88,13 @@ public class Oauth2SecurityCustomizer implements
       @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
       @Value("${ca.bc.gov.nrs.keycloak.client-id}") String clientId
   ) {
-    this.jwkSetUri = jwkSetUri;
-    this.clientId = clientId;
-    this.jwtDecoder = buildJwtDecoder(jwkSetUri);
+    this.jwkSetUri = stripWhitespace(jwkSetUri);
+    this.clientId = clientId == null ? "" : clientId.trim();
+    this.jwtDecoder = buildJwtDecoder(this.jwkSetUri);
 
     // ── Validate issuer + that the token was minted for THIS client ──
     this.jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-        JwtValidators.createDefaultWithIssuer(issuerUri),
+        JwtValidators.createDefaultWithIssuer(stripWhitespace(issuerUri)),
         token -> {
           String authorizedParty = token.getClaimAsString("azp");
           if (!clientId.equals(authorizedParty)) {
@@ -117,6 +117,24 @@ public class Oauth2SecurityCustomizer implements
     LOGGER.info("Configuring OAuth2 resource server with JWK set URI: {} (azp={})",
         jwkSetUri, clientId);
     customize.jwt(jwt -> jwt.jwtAuthenticationConverter(converter()).decoder(jwtDecoder));
+  }
+
+  /**
+   * Removes whitespace from a configured URI.
+   *
+   * <p>Not cosmetic. {@code jwk-set-uri} is composed in {@code application.yml} as
+   * {@code ${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/certs}, so a trailing space on the issuer
+   * variable lands in the <em>middle</em> of the result — {@code …/standard /protocol/…} — where
+   * {@code trim()} cannot reach it. That is not a hypothetical: a trailing space on the TEST
+   * variable took the whole API down on 2026-09-09 with {@code URISyntaxException: Illegal character
+   * in path}, while the SPA carried on fine because {@code services/keycloak.ts} already trims the
+   * same value. A URI cannot legally contain a raw space, so removing them changes nothing valid.
+   *
+   * <p>The configuration should still be correct — this only stops a copy-paste accident from
+   * being an outage.
+   */
+  private static String stripWhitespace(String uri) {
+    return uri == null ? "" : uri.replaceAll("\\s+", "");
   }
 
   /**

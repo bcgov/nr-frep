@@ -223,11 +223,26 @@ ca:
           # shared across BC Gov applications, so issuer + signature alone do not prove a token was
           # minted for FREP. Differs per environment, hence configuration rather than a constant.
           client-id: ${KEYCLOAK_CLIENT_ID}
-        identity-lookup:
-          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
-          default-page-size: 10
+        # nr-user-lookup-api — the shared BC Gov IDIR directory. Replaces the FAM
+        # identity-lookup integration: FAM still administers the FREP roles, it is just no longer
+        # the directory. Calls authenticate with FREP's OWN client_credentials service account, not
+        # the caller's token, because that is what nr-user-lookup-api validates.
+        #
+        # Set all of token-url / client-id / client-secret, or none — a partial trio fails fast at
+        # startup. Unset means an unauthenticated client and an empty directory, which is how PR
+        # previews run.
+        user-lookup:
+          base-url: ${USER_LOOKUP_BASE_URL:}
+          token-url: ${USER_LOOKUP_TOKEN_URL:}
+          client-id: ${USER_LOOKUP_CLIENT_ID:}
+          client-secret: ${USER_LOOKUP_CLIENT_SECRET:}
+          # Optional — the scopes are DEFAULT client scopes on the service account, so normally
+          # left blank.
+          scope: ${USER_LOOKUP_SCOPE:}
           connect-timeout: 15s
           read-timeout: 30s
+        user-directory:
+          default-page-size: 25
         frontend:
           url: http://localhost:3000
           cors:

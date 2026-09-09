@@ -9,7 +9,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RejectionReasonResponse;
 import ca.bc.gov.nrs.frep.endpoint.v1.ConfigurationApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.frep.ConfigurationService;
-import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
+import ca.bc.gov.nrs.frep.service.v1.frep.UserDirectoryService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,13 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConfigurationApiController implements ConfigurationApiEndpoint {
 
   private final ConfigurationService configurationService;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
 
   public ConfigurationApiController(
       ConfigurationService configurationService,
-      FamUserDirectoryService famUserDirectoryService) {
+      UserDirectoryService userDirectoryService) {
     this.configurationService = configurationService;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
   }
 
   @Override
@@ -166,6 +166,6 @@ public class ConfigurationApiController implements ConfigurationApiEndpoint {
   public ResponseEntity<EvaluatorSearchResponse> searchEvaluators(
       String userId, String firstName, String lastName, int page, int size) {
     return ResponseEntity.ok(
-        famUserDirectoryService.searchEvaluators(userId, firstName, lastName, page, size));
+        userDirectoryService.searchEvaluators(userId, firstName, lastName, page, size));
   }
 }

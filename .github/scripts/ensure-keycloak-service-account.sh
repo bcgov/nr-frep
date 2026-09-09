@@ -34,6 +34,20 @@
 # Keep SCOPES in sync with the endpoints the FREP backend actually calls
 # (UserLookupClient: idir-users/search + idir-account-detail). FREP does no
 # Business BCeID lookups, so that scope is deliberately not requested.
+# Every `echo "::error::…"` below deliberately goes to STDOUT, not stderr.
+#
+# These are GitHub Actions *workflow commands*, not ordinary diagnostics — the runner parses them
+# out of the step output and turns them into annotations on the job. GitHub's documentation
+# specifies the channel: workflow commands "are then sent to the runner over stdout". Whether the
+# runner also parses stderr is undocumented, so redirecting them (>&2) would move the error
+# annotations onto unspecified behaviour to satisfy a generic "errors belong on stderr" lint.
+#
+# The tradeoff is not worth it: if stderr turns out not to be parsed, the failure mode is that a
+# deploy fails with no annotation saying why. The same applies to `::add-mask::` below, which is
+# what keeps the client secret out of the logs.
+#
+# If a linter flags these, mark them won't-fix rather than redirecting them.
+
 set -euo pipefail
 
 : "${KEYCLOAK_ISSUER_URI:?KEYCLOAK_ISSUER_URI is required}"
@@ -64,7 +78,7 @@ token="$(curl -sS -X POST "${token_url}" \
   --data-urlencode "client_secret=${KC_SA_CLIENT_SECRET}" \
   | jq -r '.access_token // empty')"
 
-if [ -z "${token}" ]; then
+if [[ -z "${token}" ]]; then
   echo "::error::Could not obtain a Keycloak admin token. Check the admin service-account client id/secret and that it has the realm-management 'manage-clients' role."
   exit 1
 fi
@@ -75,7 +89,7 @@ auth=(-H "Authorization: Bearer ${token}")
 uuid="$(curl -sS "${auth[@]}" "${clients_url}?clientId=${FREP_CLIENT_ID}" \
   | jq -r '.[0].id // empty')"
 
-if [ -n "${uuid}" ]; then
+if [[ -n "${uuid}" ]]; then
   echo "✓ client exists: ${FREP_CLIENT_ID} (${uuid})"
 else
   echo "+ creating client: ${FREP_CLIENT_ID}"
@@ -95,14 +109,14 @@ else
 
   code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${clients_url}" \
     "${auth[@]}" -H 'Content-Type: application/json' -d "${body}")"
-  if [ "${code}" != "201" ]; then
+  if [[ "${code}" != "201" ]]; then
     echo "::error::Failed to create client '${FREP_CLIENT_ID}' (HTTP ${code})."
     exit 1
   fi
 
   uuid="$(curl -sS "${auth[@]}" "${clients_url}?clientId=${FREP_CLIENT_ID}" \
     | jq -r '.[0].id // empty')"
-  if [ -z "${uuid}" ]; then
+  if [[ -z "${uuid}" ]]; then
     echo "::error::Created client '${FREP_CLIENT_ID}' but could not resolve its id."
     exit 1
   fi
@@ -116,14 +130,14 @@ all_scopes="$(curl -sS "${auth[@]}" "${scopes_url}")"
 
 for scope in "${SCOPES[@]}"; do
   scope_id="$(jq -r --arg n "${scope}" '.[] | select(.name == $n) | .id' <<< "${all_scopes}")"
-  if [ -z "${scope_id}" ]; then
+  if [[ -z "${scope_id}" ]]; then
     echo "::error::Client scope '${scope}' does not exist in realm '${realm}'. It must be created first (nr-user-lookup-api owns scope creation)."
     exit 1
   fi
 
   code="$(curl -sS -o /dev/null -w '%{http_code}' -X PUT \
     "${clients_url}/${uuid}/default-client-scopes/${scope_id}" "${auth[@]}")"
-  if [ "${code}" != "204" ]; then
+  if [[ "${code}" != "204" ]]; then
     echo "::error::Failed to assign scope '${scope}' to '${FREP_CLIENT_ID}' (HTTP ${code})."
     exit 1
   fi
@@ -133,14 +147,14 @@ done
 # --- read the client secret + emit masked outputs --------------------------
 secret="$(curl -sS "${auth[@]}" "${clients_url}/${uuid}/client-secret" \
   | jq -r '.value // empty')"
-if [ -z "${secret}" ]; then
+if [[ -z "${secret}" ]]; then
   echo "::error::Could not read the client secret for '${FREP_CLIENT_ID}'."
   exit 1
 fi
 
 # Mask so it can't leak into logs even if a later step echoes an output.
 echo "::add-mask::${secret}"
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "client_id=${FREP_CLIENT_ID}"
     echo "client_secret=${secret}"

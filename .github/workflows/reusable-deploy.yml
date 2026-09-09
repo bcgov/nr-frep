@@ -218,16 +218,20 @@ jobs:
           # commit that uses NON-sensitive placeholder values.
           debug: false
           overwrite: true
+          # VITE_KEYCLOAK_URL / VITE_KEYCLOAK_CLIENT_ID below read the SAME two GitHub variables the
+          # backend job reads as KEYCLOAK_ISSUER_URI / KEYCLOAK_CLIENT_ID. The container env var
+          # names differ (VITE_ is load-bearing — Vite only exposes VITE_* to the bundle, and the
+          # entrypoint only copies VITE_*), but the CI variables must NOT: four variables holding two
+          # values is a pair nothing keeps in agreement, and both drifts fail only AFTER a successful
+          # sign-in, which sends you looking at roles instead of config.
+          #
+          # Keep comments out of the `parameters:` block itself — it is a multi-line plain scalar, and
+          # a '#' line inside it terminates the scalar and breaks the workflow parse.
           parameters:
             -p ZONE="${{ inputs.target }}"
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
-            # SAME two GitHub variables the backend job reads above. The container env var names
-            # differ (VITE_ is load-bearing — Vite only exposes VITE_* to the bundle, and the
-            # entrypoint only copies VITE_*), but the CI variables must NOT: four variables holding
-            # two values is a pair nothing keeps in agreement, and both drifts fail only AFTER a
-            # successful sign-in, which sends you looking at roles instead of config.
             -p VITE_KEYCLOAK_URL="${{ vars.KEYCLOAK_ISSUER_URI }}"
             -p VITE_KEYCLOAK_CLIENT_ID="${{ vars.KEYCLOAK_CLIENT_ID }}"
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"

@@ -39,7 +39,10 @@ curl http://localhost:8080/api/v1/accepted-sites?effectiveYear=2024&orgUnit=56
 | `KEYCLOAK_ISSUER_URI` | Realm issuer URI (`https://<env>.loginproxy.gov.bc.ca/auth/realms/standard`). The JWKS URI is derived from it — Keycloak publishes at `/protocol/openid-connect/certs`, not `/.well-known/jwks.json`. |
 | `KEYCLOAK_CLIENT_ID` | The CSS integration's client id, validated as the token's `azp`. The standard realm is shared across BC Gov apps, so issuer + signature alone do not prove a token was minted for FREP. |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Defaults to `http://localhost:3000`. |
-| `IDENTITY_LOOKUP_BASE_URL` | Optional: identity lookup service base URL. Leave blank to disable. |
+| `USER_LOOKUP_BASE_URL` | nr-user-lookup-api base URL (the IDIR directory). Blank disables the directory. |
+| `USER_LOOKUP_TOKEN_URL` | Keycloak token endpoint for `client_credentials`. **Derived from the *forests* realm issuer, not `KEYCLOAK_ISSUER_URI`.** |
+| `USER_LOOKUP_CLIENT_ID` | FREP's Keycloak service-account client id. |
+| `USER_LOOKUP_CLIENT_SECRET` | FREP's Keycloak service-account secret. Set all three or none. |
 
 See `.env.example` for the full list.
 

@@ -95,7 +95,7 @@ public class ProtocolChecklistService {
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
   private final VirusScanner virusScanner;
   private final ObjectStorageService objectStorage;
 
@@ -104,7 +104,7 @@ public class ProtocolChecklistService {
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService,
+      UserDirectoryService userDirectoryService,
       VirusScanner virusScanner,
       ObjectStorageService objectStorage
   ) {
@@ -112,7 +112,7 @@ public class ProtocolChecklistService {
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
     this.virusScanner = virusScanner;
     this.objectStorage = objectStorage;
   }
@@ -190,7 +190,7 @@ public class ProtocolChecklistService {
     if (opening == null || StringUtils.isBlank(opening.teamLeadNameId())) {
       return opening;
     }
-    String name = famUserDirectoryService.resolveName(opening.teamLeadNameId())
+    String name = userDirectoryService.resolveName(opening.teamLeadNameId())
         .orElse(opening.teamLeadNameId());
     return opening.withTeamLead(opening.teamLeadNameId(), name, opening.teamLeadRevisionCount());
   }
@@ -629,14 +629,14 @@ public class ProtocolChecklistService {
    * header shows, falling back to the bare userid when the assessor no longer has FREP access (or
    * FAM is unavailable). Plot assessors are stored bare, so this is the only place a name exists.
    *
-   * <p>Cheap for a plot list: {@link FamUserDirectoryService#resolveName} caches by userid, and a
+   * <p>Cheap for a plot list: {@link UserDirectoryService#resolveName} caches by userid, and a
    * stratum's plots are usually all assessed by the same person, so the list costs one lookup.
    */
   private String assessorDisplayName(String userid) {
     if (StringUtils.isBlank(userid)) {
       return userid;
     }
-    return famUserDirectoryService.resolveName(userid).orElse(userid);
+    return userDirectoryService.resolveName(userid).orElse(userid);
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {
@@ -930,7 +930,7 @@ public class ProtocolChecklistService {
     String evaluatorUserid = header.evaluatorUserid();
     String evaluatorName = StringUtils.isBlank(evaluatorUserid)
         ? evaluatorUserid
-        : famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
+        : userDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
     return Optional.of(new ProtocolChecklistResponse(
         checklistId,
         recordType,

@@ -51,6 +51,9 @@ jobs:
       object_storage_access_key: ${{ secrets.object_storage_access_key }}
       object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
       clamav_host: ${{ secrets.CLAMAV_HOST }}
+      keycloak_sa_client_id: ${{ secrets.KEYCLOAK_SA_CLIENT_ID }}
+      keycloak_sa_client_secret: ${{ secrets.KEYCLOAK_SA_CLIENT_SECRET }}
+      user_lookup_base_url: ${{ secrets.USER_LOOKUP_BASE_URL }}
     with:
       environment: test
       target: test

@@ -105,12 +105,6 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
     return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
   }
 
-  /** Upstream FAM identity service failed/unreachable — not caller-correctable, so 502. */
-  @ExceptionHandler(FamServiceException.class)
-  protected ResponseEntity<Object> handleFamService(FamServiceException ex) {
-    log.error("FAM service unavailable: {}", ex.getMessage(), ex);
-    return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
-  }
 
   /** Concurrent-export limit reached (ExportSlotLimiter) — transient backpressure, so 429. */
   @ExceptionHandler(TooManyExportsException.class)

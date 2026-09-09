@@ -62,16 +62,24 @@ describe('parseToken', () => {
     expect(user?.roles).toEqual(['FREP_EDITOR']);
   });
 
-  it('reads the real token shape: district flattened onto the role name with a hyphen', () => {
-    // Exactly what a DEV token carried on 2026-09-09.
+  it('reads the real token shape: one role string per district, hyphen-separated', () => {
+    // Verbatim from a TEST token on 2026-09-09, for an account holding CHR in TWO districts.
+    // FAM flattens each (role, scope) pair into its own Keycloak role string rather than
+    // combining the scopes into one entry — so a multi-district grant is several roles, not one
+    // role carrying a list. A combined "…DISTRICT-DCC,DCS" would parse as a single district named
+    // "DCC,DCS", match no org unit, and lock the user out of both.
     const user = parseToken({
       identity_provider: 'azureidir',
       idir_username: 'ASODHI',
       display_name: 'Sodhi, Avisha WLRS:EX',
-      client_roles: ['FREP_CHR_EDITOR_DISTRICT-DCC', 'FREP_EDITOR'],
+      client_roles: [
+        'FREP_CHR_EDITOR_DISTRICT-DCC',
+        'FREP_CHR_EDITOR_DISTRICT-DCS',
+        'FREP_EDITOR',
+      ],
     });
 
-    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC']);
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC', 'DCS']);
     expect(user?.roles).toEqual(expect.arrayContaining(['FREP_EDITOR', 'FREP_CHR_EDITOR']));
     // The ministry suffix on display_name must not leak into the first name.
     expect(user?.firstName).toBe('Avisha');

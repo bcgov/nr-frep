@@ -1,29 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/env', () => ({ env: { VITE_USER_POOLS_WEB_CLIENT_ID: 'test-client' } }));
+vi.mock('@/env', () => ({ env: { VITE_KEYCLOAK_CLIENT_ID: 'frep-app' } }));
 
-import { clearStoredTokens, parseToken } from './authUtils';
-
-import type { JWT } from './types';
-
-/** Build a minimal JWT stand-in — parseToken only reads `.payload`. */
-const jwt = (payload: Record<string, unknown>): JWT => ({ payload }) as unknown as JWT;
+import { extractRoles, normalizeProvider, parseToken } from './authUtils';
 
 describe('parseToken', () => {
-  it('returns undefined when no token is provided', () => {
+  it('returns undefined when there are no claims', () => {
     expect(parseToken(undefined)).toBeUndefined();
   });
 
-  it('parses an IDIR token: provider, username, and roles from cognito:groups', () => {
-    const user = parseToken(
-      jwt({
-        'custom:idp_name': 'idir',
-        'custom:idp_username': 'JSMITH',
-        'custom:idp_display_name': 'Smith, John',
-        'email': 'john.smith@gov.bc.ca',
-        'cognito:groups': ['FREP_EDITOR'],
-      }),
-    );
+  it('parses an IDIR token: provider, username, and roles from client_roles', () => {
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'JSMITH',
+      display_name: 'Smith, John',
+      email: 'john.smith@gov.bc.ca',
+      client_roles: ['FREP_EDITOR'],
+    });
 
     expect(user?.idpProvider).toBe('IDIR');
     expect(user?.providerUsername).toBe(String.raw`IDIR\JSMITH`);
@@ -33,42 +26,64 @@ describe('parseToken', () => {
     expect(user?.roles).toEqual(['FREP_EDITOR']);
   });
 
-  it('parses a BCeID Business token: provider kept as FAM name, username prefix normalized to BCEID', () => {
-    const user = parseToken(
-      jwt({
-        'custom:idp_name': 'bceidbusiness',
-        'custom:idp_username': 'CONTRACTOR1',
-        'custom:idp_display_name': 'Doe, Jane',
-        'email': 'jane@example.com',
-        'cognito:groups': ['FREP_EDITOR'],
-      }),
-    );
+  it('parses a BCeID Business token, normalizing the username prefix to BCEID', () => {
+    const user = parseToken({
+      identity_provider: 'bceidbusiness',
+      bceid_username: 'CONTRACTOR1',
+      display_name: 'Doe, Jane',
+      email: 'jane@example.com',
+      client_roles: ['FREP_EDITOR'],
+    });
 
-    // idpProvider keeps the accurate FAM provider for display...
+    // idpProvider keeps the accurate provider for display...
     expect(user?.idpProvider).toBe('BCEIDBUSINESS');
-    // ...but providerUsername mirrors the backend-stored userid (BCEIDBUSINESS normalized to BCEID).
+    // ...but providerUsername mirrors the backend-stored userid (BCEIDBUSINESS -> BCEID).
     expect(user?.providerUsername).toBe(String.raw`BCEID\CONTRACTOR1`);
     expect(user?.roles).toEqual(['FREP_EDITOR']);
   });
 
   it('leaves idpProvider undefined for an unrecognized provider', () => {
-    const user = parseToken(
-      jwt({
-        'custom:idp_name': 'somethingelse',
-        'custom:idp_username': 'X',
-      }),
-    );
-    expect(user?.idpProvider).toBeUndefined();
+    expect(
+      parseToken({ identity_provider: 'somethingelse', idir_username: 'X' })?.idpProvider,
+    ).toBeUndefined();
   });
 
-  it('collapses per-district CHR groups into a scoped FREP_CHR_EDITOR role', () => {
-    const user = parseToken(
-      jwt({
-        'custom:idp_name': 'idir',
-        'custom:idp_username': 'JSMITH',
-        'cognito:groups': ['FREP_CHR_EDITOR_DISTRICT_DCK', 'FREP_CHR_EDITOR_DISTRICT_DCC'],
-      }),
-    );
+  it('ignores a bare FREP_CHR_EDITOR rather than granting every district', () => {
+    // The role with no district scope flattened onto it — reachable if someone is granted it in FAM
+    // without picking a district. It must NOT become a global role: the backend only counts prefixed
+    // district roles, so "all districts" in the UI would mean 403 on every one of them.
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'JSMITH',
+      client_roles: ['FREP_CHR_EDITOR', 'FREP_EDITOR'],
+    });
+
+    expect(user?.privileges.FREP_CHR_EDITOR).toBeUndefined();
+    expect(user?.roles).toEqual(['FREP_EDITOR']);
+  });
+
+  it('reads the real token shape: district flattened onto the role name with a hyphen', () => {
+    // Exactly what a DEV token carried on 2026-09-09.
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'ASODHI',
+      display_name: 'Sodhi, Avisha WLRS:EX',
+      client_roles: ['FREP_CHR_EDITOR_DISTRICT-DCC', 'FREP_EDITOR'],
+    });
+
+    expect(user?.privileges.FREP_CHR_EDITOR).toEqual(['DCC']);
+    expect(user?.roles).toEqual(expect.arrayContaining(['FREP_EDITOR', 'FREP_CHR_EDITOR']));
+    // The ministry suffix on display_name must not leak into the first name.
+    expect(user?.firstName).toBe('Avisha');
+    expect(user?.lastName).toBe('Sodhi');
+  });
+
+  it('collapses per-district CHR roles into a scoped FREP_CHR_EDITOR role', () => {
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'JSMITH',
+      client_roles: ['FREP_CHR_EDITOR_DISTRICT-DCK', 'FREP_CHR_EDITOR_DISTRICT-DCC'],
+    });
 
     // Surfaces as the synthetic FREP_CHR_EDITOR role (so hasAnyRole works) with the district codes.
     expect(user?.roles).toEqual(['FREP_CHR_EDITOR']);
@@ -76,41 +91,89 @@ describe('parseToken', () => {
   });
 });
 
-describe('clearStoredTokens', () => {
-  const prefix = 'CognitoIdentityServiceProvider.test-client';
-
-  beforeEach(() => window.localStorage.clear());
-  afterEach(() => window.localStorage.clear());
-
-  it('removes every Amplify token entry for the configured client', () => {
-    window.localStorage.setItem(`${prefix}.LastAuthUser`, 'idir\\jsmith');
-    window.localStorage.setItem(`${prefix}.idir\\jsmith.accessToken`, 'a.b.c');
-    window.localStorage.setItem(`${prefix}.idir\\jsmith.idToken`, 'd.e.f');
-    window.localStorage.setItem(`${prefix}.idir\\jsmith.refreshToken`, 'ghi');
-    window.localStorage.setItem(`${prefix}.idir\\jsmith.clockDrift`, '0');
-
-    clearStoredTokens();
-
-    const remaining = Object.keys(window.localStorage).filter((k) => k.startsWith(prefix));
-    expect(remaining).toEqual([]);
+describe('normalizeProvider — the azureidir trap', () => {
+  it('folds every IDIR alias, in any case, onto IDIR', () => {
+    // azureidir is what the realm actually reports: FREP's CSS integration selects IDIR - MFA.
+    // Mapping it verbatim would build userids matching nothing the backend has stored.
+    expect(normalizeProvider('azureidir')).toBe('IDIR');
+    expect(normalizeProvider('AzureIDIR')).toBe('IDIR');
+    // The non-MFA broker folds identically, so switching the integration changes no stored string.
+    expect(normalizeProvider('idir')).toBe('IDIR');
   });
 
-  it("leaves unrelated keys (and another client's tokens) untouched", () => {
-    window.localStorage.setItem(`${prefix}.LastAuthUser`, 'idir\\jsmith');
-    window.localStorage.setItem('theme', 'dark');
-    window.localStorage.setItem('CognitoIdentityServiceProvider.other-client.LastAuthUser', 'x');
+  it('folds the BCeID aliases onto BCEIDBUSINESS', () => {
+    expect(normalizeProvider('bceidbusiness')).toBe('BCEIDBUSINESS');
+    expect(normalizeProvider('BCEIDBASIC')).toBe('BCEIDBUSINESS');
+  });
 
-    clearStoredTokens();
+  it('returns undefined for an empty or unknown provider', () => {
+    expect(normalizeProvider(undefined)).toBeUndefined();
+    expect(normalizeProvider('')).toBeUndefined();
+    expect(normalizeProvider('twitter')).toBeUndefined();
+  });
+});
 
-    expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
-    expect(window.localStorage.getItem('theme')).toBe('dark');
+describe('username resolution — GUIDs are case-folded, usernames are not', () => {
+  it('prefers idir_username and passes it through exactly as issued', () => {
+    const user = parseToken({
+      identity_provider: 'azureidir',
+      idir_username: 'JSmith',
+      idir_user_guid: '0a1b2c3d',
+      preferred_username: '0a1b2c3d@azureidir',
+    });
+    expect(user?.providerUsername).toBe(String.raw`IDIR\JSmith`);
+  });
+
+  it('upper-cases the GUID whichever claim it falls back to, so one person is one identity', () => {
+    const fromPreferred = parseToken({
+      identity_provider: 'azureidir',
+      preferred_username: '0a1b2c3d4e5f60718293a4b5c6d7e8f9@azureidir',
+    });
+    const fromGuidClaim = parseToken({
+      identity_provider: 'azureidir',
+      idir_user_guid: '0A1B2C3D4E5F60718293A4B5C6D7E8F9',
+    });
+
+    expect(fromPreferred?.providerUsername).toBe(String.raw`IDIR\0A1B2C3D4E5F60718293A4B5C6D7E8F9`);
+    expect(fromGuidClaim?.providerUsername).toBe(fromPreferred?.providerUsername);
+  });
+});
+
+describe('extractRoles', () => {
+  it('reads the flat client_roles claim that CSS emits', () => {
+    expect(extractRoles({ client_roles: ['FREP_ADMINISTRATOR'] })).toEqual(['FREP_ADMINISTRATOR']);
+  });
+
+  it('reads resource_access.<client>.roles, which stock Keycloak uses instead', () => {
+    expect(extractRoles({ resource_access: { 'frep-app': { roles: ['FREP_EDITOR'] } } })).toEqual([
+      'FREP_EDITOR',
+    ]);
+  });
+
+  it('ignores roles belonging to another client', () => {
+    expect(extractRoles({ resource_access: { account: { roles: ['manage-account'] } } })).toEqual(
+      [],
+    );
+  });
+
+  it('merges both locations without duplicating', () => {
     expect(
-      window.localStorage.getItem('CognitoIdentityServiceProvider.other-client.LastAuthUser'),
-    ).toBe('x');
+      extractRoles({
+        client_roles: ['FREP_ADMINISTRATOR'],
+        resource_access: { 'frep-app': { roles: ['FREP_ADMINISTRATOR', 'FREP_EDITOR'] } },
+      }),
+    ).toEqual(['FREP_ADMINISTRATOR', 'FREP_EDITOR']);
   });
 
-  it('is a no-op when there is nothing to clear', () => {
-    expect(() => clearStoredTokens()).not.toThrow();
-    expect(window.localStorage).toHaveLength(0);
+  it("drops FAM's per-grant expiry bookkeeping roles", () => {
+    // FAM assigns expiry as a role on the person; it is not a role anyone holds.
+    expect(
+      extractRoles({ client_roles: ['FREP_EDITOR', 'FAM:EXPIRES:2026-09-30:FREP_EDITOR'] }),
+    ).toEqual(['FREP_EDITOR']);
+  });
+
+  it('returns an empty array when there are no roles at all', () => {
+    expect(extractRoles(undefined)).toEqual([]);
+    expect(extractRoles({})).toEqual([]);
   });
 });

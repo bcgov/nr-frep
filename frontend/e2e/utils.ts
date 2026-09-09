@@ -40,8 +40,20 @@ export const waitForSettled = async (page: Page, prefix: string): Promise<void> 
   ).toBeHidden({ timeout: 60_000 });
 };
 
-/** Path to the saved auth state produced by auth.setup.ts. */
+/** Path to the saved auth state produced by auth.setup.ts (cookies + localStorage). */
 export const STORAGE_STATE = path.join(import.meta.dirname, '.auth', 'user.json');
+
+/**
+ * Path to the saved sessionStorage snapshot.
+ *
+ * <p>A second file because Playwright's own `storageState` does not capture sessionStorage — and
+ * that is exactly where `oidc-client-ts` keeps the tokens. See `e2e/fixtures.ts`.
+ */
+export const SESSION_STORAGE_STATE = path.join(
+  import.meta.dirname,
+  '.auth',
+  'session-storage.json',
+);
 
 /**
  * Unique-ish identifier suffix for test artifacts so concurrent runs and

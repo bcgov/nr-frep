@@ -1,7 +1,7 @@
 # FREP Backend
 
 Spring Boot backend scaffold for the FREP application. Runs as an OAuth 2.0
-resource server validating AWS Cognito access tokens; CSRF is enforced for
+resource server validating BC Gov SSO (Keycloak) access tokens; CSRF is enforced for
 state-changing requests via the cookie-token strategy.
 
 ## Run locally
@@ -17,7 +17,7 @@ java -version   # should report 21.x
 
 ```bash
 cp .env.example .env
-# Fill in AWS_COGNITO_ISSUER_URI and COGNITO_USERINFO_URI from the FAM/Cognito console.
+# Fill in KEYCLOAK_ISSUER_URI and KEYCLOAK_CLIENT_ID from the CSS console.
 set -a && source .env && set +a
 mvn spring-boot:run
 ```
@@ -29,15 +29,15 @@ curl http://localhost:8080/api/hello
 # "Hello World" — public endpoint, no auth required.
 
 curl http://localhost:8080/api/v1/accepted-sites?effectiveYear=2024&orgUnit=56
-# 401 Unauthorized — Cognito bearer token required.
+# 401 Unauthorized — bearer token required.
 ```
 
 ## Required environment variables
 
 | Variable | Description |
 |---|---|
-| `AWS_COGNITO_ISSUER_URI` | Cognito user-pool URL (`https://cognito-idp.<region>.amazonaws.com/<pool-id>`). |
-| `COGNITO_USERINFO_URI` | Cognito `/oauth2/userInfo` endpoint URL. |
+| `KEYCLOAK_ISSUER_URI` | Realm issuer URI (`https://<env>.loginproxy.gov.bc.ca/auth/realms/standard`). The JWKS URI is derived from it — Keycloak publishes at `/protocol/openid-connect/certs`, not `/.well-known/jwks.json`. |
+| `KEYCLOAK_CLIENT_ID` | The CSS integration's client id, validated as the token's `azp`. The standard realm is shared across BC Gov apps, so issuer + signature alone do not prove a token was minted for FREP. |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Defaults to `http://localhost:3000`. |
 | `IDENTITY_LOOKUP_BASE_URL` | Optional: identity lookup service base URL. Leave blank to disable. |
 
@@ -67,7 +67,7 @@ truststore defaults to {@code /cert/jssecacerts} in-cluster).
 
 ```bash
 cp .env.example .env
-# Set DATABASE_* (and Cognito) in .env, or use application-local.yml for compose
+# Set DATABASE_* (and the Keycloak values) in .env, or use application-local.yml for compose
 set -a && source .env && set +a
 mvn spring-boot:run
 ```

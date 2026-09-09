@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-
+import { expect, test } from './fixtures';
 import { gotoProtected } from './utils';
 
 test('an unknown route renders the Not Found page, not the error boundary', async ({ page }) => {

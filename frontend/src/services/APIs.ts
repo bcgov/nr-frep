@@ -1,5 +1,3 @@
-import { fetchAuthSession } from 'aws-amplify/auth';
-
 import type { APIConfig } from '@/config/api/types';
 
 import { ensureSessionFresh } from '@/context/auth/refreshSession';
@@ -7,6 +5,7 @@ import { env } from '@/env';
 import { AcceptedSitesService } from '@/services/acceptedSites.service';
 import { ChrChecklistService } from '@/services/chrChecklist.service';
 import { ConfigurationService } from '@/services/configuration.service';
+import { ensureFreshUser } from '@/services/keycloak';
 import { MasterListAdminService } from '@/services/masterListAdmin.service';
 import { ProtocolChecklistService } from '@/services/protocolChecklist.service';
 import { RandomListService } from '@/services/randomList.service';
@@ -29,18 +28,18 @@ export const BackendApiConfig: APIConfig = {
 };
 
 /**
- * Resolve the Cognito access token for the current session. Refreshes a
- * near-expiry token first (via {@link ensureSessionFresh}) so a write fired
- * after the form has been open a while doesn't race a 401; if the session is
- * fully expired, {@link ensureSessionFresh} signs out and redirects to login.
- * Returns an empty string when no session exists so the request fires
- * unauthenticated and the backend can respond with 401.
+ * Resolve the access token for the current session. Renews a near-expiry token
+ * first (via {@link ensureSessionFresh}) so a write fired after the form has
+ * been open a while doesn't race a 401; if the session is fully expired,
+ * {@link ensureSessionFresh} signs out and redirects to login. Returns an empty
+ * string when no session exists so the request fires unauthenticated and the
+ * backend can respond with 401.
  */
 BackendApiConfig.TOKEN = async () => {
   try {
     await ensureSessionFresh();
-    const { tokens } = (await fetchAuthSession()) ?? {};
-    return tokens?.accessToken?.toString() ?? '';
+    const current = await ensureFreshUser();
+    return current?.access_token ?? '';
   } catch {
     return '';
   }

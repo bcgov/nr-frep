@@ -20,7 +20,7 @@ describe('routePaths', () => {
   });
 
   it('getMenuEntries exposes Generate Master List to sys-admins', () => {
-    const entries = routePaths.getMenuEntries(['FREP_ADMIN']);
+    const entries = routePaths.getMenuEntries(['FREP_ADMINISTRATOR']);
     expect(entries.some((e) => e.id === 'Generate Master List')).toBe(true);
   });
 

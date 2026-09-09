@@ -21,10 +21,12 @@ parameters:
     description: PR number or 'test' (must match the deploy's object suffix)
     required: true
   # SLOT decouples the public-facing Route hostname from the OpenShift object
-  # names so per-PR previews can share a fixed pool of Cognito callback URIs.
-  # AWS Cognito user pool app clients don't accept wildcards in CallbackURLs;
+  # names so per-PR previews can share a fixed pool of registered redirect URIs.
+  # Inherited from Cognito, whose app clients reject wildcards in CallbackURLs:
   # we pre-register 50 URIs (nr-frep-0…nr-frep-49.apps.gold.devops.gov.bc.ca)
-  # and bucket PRs into them via PR % 50.
+  # and bucket PRs into them via PR % 50. Whether a CSS integration would accept
+  # a wildcard instead — letting this go entirely — is an open question for the
+  # CSS team; see the note in pr-open.yml.
   # pr-open.yml computes SLOT = PR % 50; merge.yml passes SLOT = ZONE = test.
   - name: SLOT
     description: Route hostname slot — PR % 50 for previews, or 'test' for TEST

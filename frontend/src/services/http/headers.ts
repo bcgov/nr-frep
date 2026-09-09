@@ -1,6 +1,5 @@
-import { fetchAuthSession } from 'aws-amplify/auth';
-
 import { getCookie } from '@/context/auth/authUtils';
+import { getUserManager } from '@/services/keycloak';
 
 export type HeaderRecord = Record<string, string>;
 
@@ -36,8 +35,8 @@ const getCsrfToken = (): string | null => {
 
 const getAccessToken = async (): Promise<string | undefined> => {
   try {
-    const session = await fetchAuthSession();
-    return session.tokens?.accessToken?.toString();
+    const current = await getUserManager().getUser();
+    return current?.access_token;
   } catch {
     return undefined;
   }
@@ -45,7 +44,7 @@ const getAccessToken = async (): Promise<string | undefined> => {
 
 /**
  * Build a header map for an authorized backend call. Layers, in order:
- *   1. Bearer access token (if a Cognito session exists).
+ *   1. Bearer access token (if a session exists).
  *   2. X-XSRF-TOKEN echoed back from the XSRF cookie set by the backend.
  *   3. Any per-call header overrides supplied by the caller.
  */

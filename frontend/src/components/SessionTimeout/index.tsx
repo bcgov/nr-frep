@@ -9,21 +9,32 @@ import { useNotification } from '@/context/notification/useNotification';
 import './SessionTimeout.scss';
 
 // ── Tuning constants ────────────────────────────────────────────────
-// Log the user out after this much INACTIVITY — no mouse/keyboard/scroll/touch
-// (and no API traffic, which rides the same activity). Kept well under the
-// Cognito refresh-token TTL (60 min) so the idle timeout is the effective
-// session policy and the token is only a backstop; activity also keeps the
-// token fresh (see the keepalive below), so an active user is never logged out.
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
+// RECOMPUTED FOR BC GOV SSO. Show the arithmetic, because the old numbers were
+// arrived at against a different ceiling and looked fine:
+//
+//   Keycloak standard-realm refresh token (SSO session idle) ... 30:00
+//   minus headroom so the sign-out is never racing its own credentials ...  5:00
+//   = idle timeout ......................................................  25:00
+//   warning opens 5:00 before that ......................................  20:00
+//
+// Under Cognito the refresh token lived 60 minutes, so a 30-minute idle window
+// sat comfortably inside it. Keycloak gives half that. Carrying 30 minutes over
+// would put the idle logout at exactly the moment its own refresh token dies —
+// "Stay logged in" would be a button that cannot keep its promise, failing at
+// the one moment the user is watching it.
+const IDLE_TIMEOUT_MS = 25 * 60 * 1000; // 25 minutes of inactivity
 // How long before the idle deadline the warning modal appears (with its live
-// countdown): warn at 25:00 idle (5:00 remaining), log out at 30:00.
+// countdown): warn at 20:00 idle (5:00 remaining), log out at 25:00.
 const WARNING_BEFORE_MS = 5 * 60 * 1000;
 // Below this the countdown turns red ($support-error) and the warning icon
 // appears — see the mock "Countdown: from 30 seconds onward".
 const DANGER_AT_MS = 30 * 1000;
 // Throttles: resetting the idle clock on activity is cheap (once/sec is
 // plenty); the token keepalive runs at most once/min (a no-op unless the
-// access token is near its 5-min expiry).
+// access token is inside the 60s renewal margin). Access tokens live about five
+// minutes, and reading a screen for five minutes is an ordinary thing to do, so
+// the activity-driven keepalive carries more weight here than it did against
+// Cognito's longer-lived tokens.
 const ACTIVITY_RESET_THROTTLE_MS = 1000;
 const KEEPALIVE_THROTTLE_MS = 60 * 1000;
 // User activity that counts as "still here" and resets the idle clock.
@@ -39,10 +50,24 @@ const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
 /**
  * sessionStorage flag set right before a timeout logout so the Landing page
  * can render the "You've been logged out / session expired" notice after the
- * Cognito sign-out redirect round-trips back. Survives the logout navigation
- * because sessionStorage lives for the tab.
+ * sign-out redirect round-trips back. Survives the logout navigation because
+ * sessionStorage lives for the tab.
  */
 export const SESSION_EXPIRED_FLAG = 'frep.sessionExpired';
+
+/**
+ * True inside a browser driven by WebDriver (Playwright, Selenium).
+ *
+ * <p>The e2e suite runs serially off ONE saved session, and Keycloak rotates the refresh token on
+ * every renewal — so a keepalive fired from a background component in spec 1 invalidates the token
+ * spec 2 restores, and the failure lands nowhere near its cause. A test run also has long stretches
+ * with no synthetic input at all, which this component reads as an idle user and signs out
+ * mid-suite. Neither is a bug in the app, and neither is worth debugging twice.
+ *
+ * <p>Read at effect time rather than at module load so the component's own tests — which themselves
+ * run in a WebDriver-driven browser — can turn it off and exercise the real behaviour.
+ */
+const isAutomated = () => typeof navigator !== 'undefined' && navigator.webdriver === true;
 
 /** ms → "M:SS" (e.g. 289_000 → "4:49"). Never negative. */
 const formatRemaining = (ms: number): string => {
@@ -59,21 +84,22 @@ const formatRemaining = (ms: number): string => {
  * once the warning is open it's frozen — the user must actively choose "Stay
  * logged in" or "Log out" (per the design spec).
  *
- * Because the idle window (30 min) is shorter than the Cognito refresh-token
- * TTL (60 min), inactivity is the effective policy. Activity also keeps the
- * token fresh (throttled ensureFreshToken), so an active-but-API-idle user's
- * token never dies out from under them — they're only logged out for genuine
+ * Because the idle window (25 min) is shorter than the refresh-token TTL
+ * (30 min), inactivity is the effective policy. Activity also keeps the token
+ * fresh (throttled ensureFreshToken), so an active-but-API-idle user's token
+ * never dies out from under them — they're only logged out for genuine
  * inactivity.
  *
- * Mounted once, high in the tree, only while logged in (see App.tsx).
+ * Mounted once, high in the tree, only while logged in (see App.tsx). Inert
+ * under automation — see {@link isAutomated}.
  *
  * <p>The dialog is a true alertdialog: no close (X), ESC/backdrop can't
  * dismiss it, focus is trapped, and the per-second countdown updates ONLY its
  * text node — the dialog never re-renders while ticking (value/colour/icon are
  * written through refs).
  *
- * <p>"Stay logged in" forces a silent token refresh (rotating the refresh
- * token, sliding the 60-min backstop) and resets the idle clock. "Log out" and
+ * <p>"Stay logged in" forces a silent token renewal (rotating the refresh
+ * token, sliding the 30-min backstop) and resets the idle clock. "Log out" and
  * the 0:00 timeout both sign out (the timeout leaves the login-screen notice).
  */
 export default function SessionTimeout() {
@@ -115,7 +141,7 @@ export default function SessionTimeout() {
   };
 
   // Deadline reached — force the security logout. Stash the flag so the login
-  // screen explains why, then sign out (redirects through Cognito).
+  // screen explains why, then sign out (redirects through the realm).
   const handleExpire = useCallback(() => {
     clearTick();
     openRef.current = false;
@@ -128,7 +154,7 @@ export default function SessionTimeout() {
     void logout();
   }, [logout]);
 
-  // "Stay logged in": force a silent token refresh (slides the 60-min
+  // "Stay logged in": force a silent token renewal (slides the 30-min
   // backstop) and restart the idle clock, then close.
   const handleStay = useCallback(async () => {
     if (busyRef.current) return;
@@ -166,6 +192,8 @@ export default function SessionTimeout() {
   // sleep / tab-throttling. While the warning is open, activity is ignored so
   // the countdown runs and the user must choose.
   useEffect(() => {
+    if (isAutomated()) return;
+
     let lastReset = 0;
     let lastKeepalive = 0;
 
@@ -178,8 +206,8 @@ export default function SessionTimeout() {
       }
       if (now - lastKeepalive >= KEEPALIVE_THROTTLE_MS) {
         lastKeepalive = now;
-        // No-op unless the access token is near expiry; when it refreshes it
-        // rotates the refresh token, sliding the 60-min backstop so an
+        // No-op unless the access token is near expiry; when it renews it
+        // rotates the refresh token, sliding the 30-min backstop so an
         // active-but-API-idle user isn't cut off before the idle timeout.
         void ensureFreshToken();
       }

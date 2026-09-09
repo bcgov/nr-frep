@@ -333,7 +333,7 @@ const ChrChecklistPage: FC = () => {
   // editability depends only on its status, not the online role check (which requires a session
   // that doesn't exist offline; the backend re-checks permission on upload). Online (server) copies
   // keep the role + status gating.
-  // CHR editing is district-scoped: sys-admin or the FREP_CHR_EDITOR_DISTRICT_<code> role matching
+  // CHR editing is district-scoped: sys-admin or the FREP_CHR_EDITOR_DISTRICT-<code> role matching
   // this checklist's org unit. (Replaces the old global canEdit, which excluded district editors.)
   const canEditThisChr = canChr(checkList?.orgUnitCode);
   const readOnly = isOfflineCopy

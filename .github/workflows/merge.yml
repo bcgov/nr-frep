@@ -58,17 +58,36 @@ jobs:
       backend_replicas: "2"
       frontend_replicas: "2"
 
-  tests:
-    name: Tests
-    needs: [deploy-test]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/reusable-tests.yml
-    secrets:
-      e2e_idir_user: ${{ secrets.E2E_IDIR_USER }}
-      e2e_idir_password: ${{ secrets.E2E_IDIR_PASSWORD }}
-    with:
-      target: test
+  # ── Playwright E2E: DISABLED 2026-09-09 ══════════════════════════════
+  #
+  # Unattended CI login is not currently possible. FREP's CSS integration brokers IDIR - MFA
+  # (`kc_idp_hint=azureidir`), and a second factor is by construction something the credentials in
+  # E2E_IDIR_USER / E2E_IDIR_PASSWORD cannot supply — `auth.setup.ts` cannot get a session, so every
+  # spec fails at setup rather than on anything it is testing.
+  #
+  # Re-enabling needs ONE of:
+  #   - an MFA-exempt service account from the IDIR team, or
+  #   - a test strategy that never goes through the browser login (API-level, or a mocked session).
+  #
+  # The suite itself is current and runs locally against a deployed environment:
+  #   cd frontend && npm run e2e:login && E2E_BASE_URL=<url> npm run e2e
+  # It already handles this migration — `e2e/fixtures.ts` saves and restores the sessionStorage half
+  # of the session, which Playwright's own storageState does not capture. Leave that in place.
+  #
+  # NOTE: unit and browser-mode tests are NOT affected. `analysis.yml` still runs `npm run
+  # test:coverage` (Vitest, which installs Chromium via the pretest hook) on every PR and merge.
+  #
+  # tests:
+  #   name: Tests
+  #   needs: [deploy-test]
+  #   permissions:
+  #     contents: read
+  #   uses: ./.github/workflows/reusable-tests.yml
+  #   secrets:
+  #     e2e_idir_user: ${{ secrets.E2E_IDIR_USER }}
+  #     e2e_idir_password: ${{ secrets.E2E_IDIR_PASSWORD }}
+  #   with:
+  #     target: test
 
   # ── PROD deploy + monitor + promote: DISABLED 2026-09-04 ═════════════
   #

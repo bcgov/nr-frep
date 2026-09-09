@@ -35,10 +35,22 @@ Config: `frontend/playwright.config.ts`. Specs: `frontend/e2e/*.spec.ts`. Shared
 
 ### How it runs
 
-- Tests target a **deployed** app via `E2E_BASE_URL` (defaults to DEV; a per-PR slot in CI — see
-  [deployment.md](./deployment.md)). `utils.ts` throws if `E2E_BASE_URL` is unset.
-- **Serial execution** (`workers: 1`): all tests share one Cognito refresh token via `storageState`;
-  parallel workers race that refresh and get stuck on the loading overlay.
+> **Not run in CI as of 2026-09-09.** Both call sites in `pr-open.yml` and `merge.yml` are commented
+> out: the CSS integration brokers IDIR - MFA, and a second factor is by construction something the
+> CI credentials cannot supply, so `auth.setup.ts` never gets a session and every spec fails at setup
+> rather than on what it tests. Re-enabling needs an MFA-exempt service account or a strategy that
+> avoids the browser login. **Run it by hand against a deployed environment instead** — the suite is
+> kept current. Unit and browser-mode tests still run in CI via `analysis.yml`.
+
+- Tests target a **deployed** app via `E2E_BASE_URL` (defaults to DEV). `utils.ts` throws if
+  `E2E_BASE_URL` is unset.
+- **Serial execution** (`workers: 1`): all tests share one refresh token, and Keycloak **rotates**
+  it on every renewal — parallel workers race that rotation and the loser is left holding a spent
+  token, which surfaces as a context stuck on the loading overlay.
+- **Two state files, not one.** Playwright's `storageState` captures cookies + localStorage;
+  `oidc-client-ts` keeps its tokens in **sessionStorage**, which `storageState` does not touch. The
+  sessionStorage half is saved separately and restored by `e2e/fixtures.ts` through an overridden
+  `page` fixture — so specs must `import { test } from './fixtures'`, not from `@playwright/test`.
 
 ### Auth setup
 

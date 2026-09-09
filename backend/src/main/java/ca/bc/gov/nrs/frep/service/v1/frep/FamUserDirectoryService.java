@@ -34,9 +34,16 @@ import org.springframework.web.client.RestClientResponseException;
  * the FAM-lookup pattern from nr-fspts' {@code UserDirectoryService}, but hits the role-filtered
  * {@code /external/v1/users} endpoint (paged, max 100/page) instead of the IDIR name-search one.
  *
- * <p>The caller's Cognito access token is passed straight through as the Bearer token — FAM
- * resolves the calling application from that token's client_id (no service account). Mirrors
- * {@link ca.bc.gov.nrs.frep.security.CognitoUserInfoService}.
+ * <p>The caller's access token is passed straight through as the Bearer token — FAM resolves the
+ * calling application from that token's client_id (no service account).
+ *
+ * <p><b>Open item after the BC Gov SSO migration.</b> That token is now minted by the standard
+ * realm, not by Cognito, so whether legacy FAM still accepts it here has to be confirmed against a
+ * real environment. The documented replacement is {@code nr-user-lookup-api}, which authenticates
+ * with FREP's <em>own</em> client-credentials service account rather than the caller's token — a
+ * different integration, needing a service-account client from CSS. Until that lands this service
+ * degrades the way it always has: an unconfigured or failing lookup yields an empty evaluator
+ * search rather than breaking the page.
  *
  * <p><strong>Scope note:</strong> FAM has no district / org-unit scoping (only forest-client), so
  * results are FREP editors province-wide, not the district-scoped list the legacy WebADE lookup
@@ -57,7 +64,7 @@ public class FamUserDirectoryService {
   private static final int DEFAULT_PAGE_SIZE = 25;
   private static final List<String> IDP_TYPES = List.of("IDIR", "BCEID");
   private static final List<String> FREP_ACCESS_ROLES =
-      List.of("FREP_EDITOR", "FREP_ADMIN");
+      List.of("FREP_EDITOR", "FREP_ADMINISTRATOR");
   private static final int MAX_CACHE_ENTRIES = 5000;
   private static final String EVALUATOR_SEARCH_UNAVAILABLE =
       "The evaluator directory is unavailable right now. Please try again later.";
@@ -174,7 +181,7 @@ public class FamUserDirectoryService {
   /**
    * Resolves a checklist evaluator's display name from FAM by userid — used to show names (instead of
    * raw userids) for evaluators who currently have access to the FREP app. Queries
-   * {@code /external/v1/users?role=FREP_EDITOR,FREP_ADMIN&idpType=IDIR,BCEID&idpUsername=…}
+   * {@code /external/v1/users?role=FREP_EDITOR,FREP_ADMINISTRATOR&idpType=IDIR,BCEID&idpUsername=…}
    * and exact-matches the username (FAM's filter is "starts-with"). Returns empty when the lookup base
    * URL is unset, the userid isn't a current FREP user, or FAM errors — the caller falls back to the
    * userid. Results are cached by userid (names rarely change; identical for every caller).

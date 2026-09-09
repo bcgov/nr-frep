@@ -13,7 +13,7 @@ master-list year; the app supports site selection, checklist capture/edit, searc
 | Offline / maps | Dexie (IndexedDB) + `vite-plugin-pwa` for offline CHR; Leaflet for maps |
 | Backend | Spring Boot 3.5, Java 21, Undertow (Tomcat excluded), Maven |
 | Persistence | Spring Data JPA + Oracle `ojdbc11`; JasperReports + Commons CSV for reports; AWS S3 SDK for attachments |
-| Auth | AWS Cognito (FAM), IDIR sign-in |
+| Auth | BC Gov SSO (Keycloak, standard realm), IDIR sign-in |
 | Database | External, shared Oracle `THE` schema |
 
 Runtimes: backend targets **Java 21**; the frontend production image and CI pin **Node 24** (the local Compose dev image uses Node 22; the README minimum is Node 20).
@@ -33,9 +33,9 @@ flowchart TB
     user([Evaluator / Admin<br/>browser])
 
     subgraph auth["Identity"]
-        cognito["AWS Cognito<br/>(FAM)"]
-        idir["IDIR / BCEIDBUSINESS<br/>(federated IdP)"]
-        cognito <--> idir
+        kc["BC Gov SSO<br/>(Keycloak, standard realm)"]
+        idir["IDIR - MFA (azureidir)<br/>BCeID Business<br/>(brokered IdPs)"]
+        kc <--> idir
     end
 
     subgraph app["nr-frep (this repo)"]
@@ -47,17 +47,17 @@ flowchart TB
     db[("Oracle THE schema")]
     mofdb["nr-mof-db<br/>schema + FREP_* procs<br/>(Flyway-versioned)"]
 
-    user -->|"login (IDIR)"| cognito
+    user -->|"login (IDIR)"| kc
     user -->|HTTPS| fe
     fe -->|"/api  (Vite proxy in dev)"| be
-    fe -.->|"access token"| cognito
-    be -.->|"validate JWT / userInfo"| cognito
+    fe -.->|"code + PKCE / refresh"| kc
+    be -.->|"validate JWT (JWKS)"| kc
     be -->|"{call FREP_*} stored procs"| db
     be -->|attachments| s3
     mofdb -.->|"deploys schema + procs"| db
 
     classDef ext fill:#eee,stroke:#999,color:#333;
-    class cognito,idir,mofdb,s3 ext;
+    class kc,idir,mofdb,s3 ext;
 ```
 
 ## Frontend domains
@@ -76,7 +76,7 @@ Routes are declared in `src/routes/routePaths.tsx` and selected by auth state in
 | CHR checklist | `/protocol-checklists/chr/:id`, `/chr/offline` | CHR editor + offline (IndexedDB) list |
 | Checklist Search | `/search/checklists` | Cross-protocol checklist search |
 | Reports | `/reports` | Jasper/CSV report generation |
-| Admin | `/admin/master-list` | Generate the master list (role-gated `FREP_ADMIN`) |
+| Admin | `/admin/master-list` | Generate the master list (role-gated `FREP_ADMINISTRATOR`) |
 
 The sidebar is derived from routes flagged as menu entries and filtered by role. An offline route set
 exposes only Dashboard + CHR.
@@ -120,33 +120,65 @@ project's migration notes.
 
 ## Authentication & authorization
 
-**Identity:** AWS Cognito fronting BC Gov **FAM**, which federates to **IDIR** (and BCEIDBUSINESS)
-as the upstream IdP. The app talks to Cognito; Cognito federates to `<ENV>-IDIR`.
+**Identity:** BC Gov SSO — Keycloak's **standard realm**, integrated through CSS — brokering
+**IDIR - MFA** (published by the realm as `azureidir`) and **BCeID Business**. The whole client configuration is one issuer URI plus a client
+id; `oidc-client-ts` reads the realm's `.well-known/openid-configuration` and discovers the
+authorize, token, JWKS and end-session endpoints from it.
 
-**Frontend** (`src/context/auth/AuthProvider.tsx`): AWS Amplify drives the Cognito flow —
-`login()` calls `signInWithRedirect` with the env-prefixed IDIR provider; the session is hydrated
-from the Amplify token on mount, refreshed proactively near expiry, and read synchronously by the
-axios interceptors. `src/hooks/useAuthorization` derives role helpers (`canEdit`, `canCreate`,
-`isViewOnly`, …) from Cognito groups. Routing gates on auth state: no session → public/offline set;
-session but no FREP role → `/unauthorized`; session with a role → the protected app.
+**Frontend** (`src/services/keycloak.ts`, `src/context/auth/AuthProvider.tsx`): Authorization Code +
+PKCE, public client, tokens in `sessionStorage`. `login()` starts the redirect with
+`kc_idp_hint=azureidir` (IDIR) or `bceidbusiness`; `/authCallback` (`src/pages/AuthCallback`)
+completes the code exchange and is the route that creates the session. Redirect URIs are derived from
+`window.location.origin`, so one built image serves every environment. `src/hooks/useAuthorization`
+derives role helpers from the roles on the access token. Routing gates on auth state: no session →
+public/offline set; session but no FREP role → `/unauthorized`; session with a role → the protected
+app.
 
 **Backend** (`configuration/SecurityConfiguration`, `security/*`): an OAuth2 **resource server**
-validates Cognito **access** tokens (Nimbus JWT decoder with cached JWKS; rejects non-access tokens),
-maps the `cognito:groups` claim to authorities (no `ROLE_` prefix), and enforces CSRF via a
-cookie-token strategy. URL rules are coarse (`/actuator/**` and `OPTIONS` public, everything else
-authenticated); fine-grained checks are per-endpoint `@PreAuthorize`.
+validates access tokens (Nimbus JWT decoder with cached JWKS at
+`<issuer>/protocol/openid-connect/certs`), and enforces CSRF via a cookie-token strategy. URL rules
+are coarse (`/actuator/**` and `OPTIONS` public, everything else authenticated); fine-grained checks
+are per-endpoint `@PreAuthorize`.
 
-**Roles** (Cognito groups → legacy WebADE semantics):
+**Roles** (CSS roles → legacy WebADE semantics):
 
-| Group | Meaning | Grants |
+| Role | Meaning | Grants |
 |---|---|---|
-| `FREP_ADMIN` | Sys-admin | All, incl. `/api/v1/admin/**` and master-list generation |
+| `FREP_ADMINISTRATOR` | Sys-admin | All, incl. `/api/v1/admin/**` and master-list generation |
 | `FREP_EDITOR` | Update | Create/edit/delete checklists & sites |
-| `FREP_VIEW_ONLY` | Read | `GET` only |
+| `FREP_CHR_EDITOR_DISTRICT_<code>` | District CHR editor | CHR checklists for that district only |
 
-Write endpoints require `CONTENT_EDIT` (`FREP_ADMIN` or `FREP_EDITOR`); admin endpoints require
-`ADMIN` (`FREP_ADMIN`). Because the app sends the access token (not the ID token), profile claims are
-fetched from Cognito `/oauth2/userInfo` and cached briefly.
+Write endpoints require `CONTENT_EDIT` (`FREP_ADMINISTRATOR` or `FREP_EDITOR`); admin endpoints require
+`ADMIN` (`FREP_ADMINISTRATOR`). The legacy read-only role `FREP_VIEW_ONLY` has been retired.
+
+### Three things about this integration that fail silently
+
+Each of these produces a working-looking application, so they are worth knowing before debugging
+anything else:
+
+1. **No `token_use` claim.** Cognito emitted one and the resource server required it to be
+   `"access"`. Keycloak emits nothing of the kind, so that validator would 401 every request —
+   health probes included, which reads as a failed deploy rather than failed auth. It is replaced by
+   an **`azp` check** against the configured client id: the standard realm is shared across BC Gov
+   applications, and every one of their tokens verifies against the same JWKS, so signature + issuer
+   alone do not establish that a token was meant for FREP.
+2. **The realm reports IDIR as `azureidir`.** FREP's integration selects IDIR - MFA, which
+   federates via Azure AD. Mapping the value verbatim writes `AZUREIDIR\jsmith` into `create_user` /
+   `update_user` for the same person whose older rows say `IDIR\jsmith` — no error, no failing test,
+   an audit trail that stops joining up at the cutover date. Both `JwtPrincipalUtil` (backend) and
+   `authUtils` (frontend) normalise every IDIR alias to the single string `IDIR`. Relatedly, an
+   unrecognised `kc_idp_hint` is **silently ignored** — Keycloak falls through to whatever provider
+   the client has, so a wrong alias still looks like it works. Verify against the realm (a 303 to
+   `/broker/azureidir/login`) rather than concluding from a successful login.
+3. **Roles arrive in one of two places.** CSS emits a flat `client_roles` array; stock Keycloak nests
+   them under `resource_access.<client>.roles`. Which one is populated depends on the realm's
+   mappers, and reading only the other yields a user with no roles — indistinguishable from revoked
+   access. Both are read, on both sides. FAM's per-grant expiry bookkeeping (`FAM:EXPIRES:…`) is
+   filtered out, also on both sides.
+
+Profile claims (`idir_username`, `idir_user_guid`, `identity_provider`, `display_name`) ride the
+**access token**, so there is no per-request userinfo call. If `idir_username` is absent, the
+integration's mappers were added to the ID token only — a CSS console setting, not a code change.
 
 ## Related
 

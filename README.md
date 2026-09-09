@@ -9,7 +9,7 @@ Heritage), search across checklists, and generate reports.
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (`spring.datasource.*`, same as nr-fspts) |
-| Auth | AWS Cognito (FAM) — IDIR sign-in |
+| Auth | BC Gov SSO (Keycloak, standard realm) — IDIR sign-in |
 
 ## Documentation
 
@@ -27,28 +27,30 @@ Full project documentation lives in [`docs/`](./docs/README.md):
 > Quickstart below. See [docs/local-development.md](./docs/local-development.md) for the full guide —
 > Docker Compose, VPN/Oracle setup, and auth-on vs. auth-off modes.
 
-Authentication runs against the real FAM Cognito user pool; you'll need
-Cognito client / domain values in both `.env` files before the app will
-fully boot. The frontend will render the landing page without them and the
-backend will respond `401` to `/api/**` until you sign in.
+Authentication runs against a real BC Gov SSO realm; you'll need the realm issuer URI and the CSS
+integration's client id in both `.env` files before the app will fully boot. The two files use
+different variable names (`VITE_` is load-bearing — Vite only exposes `VITE_*` to the bundle) but
+must hold the **same two values**: if they drift, sign-in succeeds and then every API call 401s.
+The frontend will render the landing page without them and the backend will respond `401` to
+`/api/**` until you sign in.
 
 ### Prerequisites
 
 - Java 21+ and Maven 3.9+
 - Node.js 20+ and npm (CI and the production image use Node 24)
-- Cognito user pool details (see `frontend/.env.example` and `backend/.env.example`)
+- BC Gov SSO realm issuer URI + client id (see `frontend/.env.example` and `backend/.env.example`)
 
 ### 1. Start the backend
 
 ```bash
 cd backend
-cp .env.example .env       # fill in AWS_COGNITO_ISSUER_URI + COGNITO_USERINFO_URI
+cp .env.example .env       # fill in KEYCLOAK_ISSUER_URI + KEYCLOAK_CLIENT_ID
 set -a && source .env && set +a
 mvn spring-boot:run
 ```
 
 Backend listens on **http://localhost:8080**. Hitting `/api/**` without a
-Cognito bearer token returns `401`.
+bearer token returns `401`.
 
 ### 2. Start the frontend
 
@@ -56,12 +58,15 @@ In a second terminal:
 
 ```bash
 cd frontend
-cp .env.example .env       # fill in VITE_USER_POOLS_ID + VITE_USER_POOLS_WEB_CLIENT_ID
+cp .env.example .env       # fill in VITE_KEYCLOAK_URL + VITE_KEYCLOAK_CLIENT_ID
 npm run dev
 ```
 
 Open **http://localhost:3000**. The landing page's **Log in with IDIR** button
-redirects through Cognito → BCGov SSO → back to `/dashboard`.
+redirects to BC Gov SSO and back through `/authCallback` to `/dashboard`.
+
+`http://localhost:3000/authCallback` has to be registered as a redirect URI on the CSS integration,
+and `http://localhost:3000` as a post-logout redirect URI, or the realm refuses the round trip.
 
 ### Port layout
 
@@ -78,6 +83,6 @@ Leave `VITE_BACKEND_URL` empty in `frontend/.env` so Vite proxies `/api` to the 
 - **Protocol checklists** — biodiversity (SLB/SLR) and Culture Heritage (CHR, offline-capable):
   capture, edit, and submit.
 - **Search & reports** — cross-protocol checklist search plus Jasper/CSV reporting.
-- **Role-aware access** — FAM/IDIR sign-in with `FREP_ADMIN` / `FREP_EDITOR` / `FREP_VIEW_ONLY` roles.
+- **Role-aware access** — IDIR sign-in with `FREP_ADMINISTRATOR` / `FREP_EDITOR` / `FREP_CHR_EDITOR` roles.
 
 See [docs/architecture.md](./docs/architecture.md) for the full breakdown.

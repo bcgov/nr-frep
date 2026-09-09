@@ -584,6 +584,10 @@ than a broken page.
 - Whether legacy FAM's `/external/v1/users` accepts a standard-realm token, or whether the
   `nr-user-lookup-api` service account is needed now rather than later (§4).
 - Whether programmatic CI login is possible at all: IDIR - MFA requires a second factor a script
-  cannot supply, so unattended e2e needs an MFA-exempt service account. Find this out early — it
-  decides the shape of the whole e2e strategy.
-- The realm's actual refresh-token TTL, which the session-timeout constants are derived from (§5).
+  cannot supply. **The Playwright job was disabled on 2026-09-09 for this reason** — both call sites
+  in `pr-open.yml` and `merge.yml` are commented out, and re-enabling needs an MFA-exempt service
+  account or a strategy that avoids the browser login. The suite is still run by hand against a
+  deployed environment; unit and browser-mode tests are unaffected.
+- ~~The realm's actual refresh-token TTL~~ — **answered: 1800s (30 min)**, read off a real DEV token
+  on 2026-09-09. The session-timeout constants (25 min idle / 20 min warning) are derived from
+  exactly that, so they stand as computed.

@@ -22,11 +22,8 @@ escape() {
 cat > "$CONFIG_FILE" <<EOF
 // Generated at container start by docker-entrypoint.sh from VITE_* env vars.
 window.config = {
-  VITE_USER_POOLS_ID: "$(escape "${VITE_USER_POOLS_ID:-}")",
-  VITE_USER_POOLS_WEB_CLIENT_ID: "$(escape "${VITE_USER_POOLS_WEB_CLIENT_ID:-}")",
-  VITE_LOGOUT_SITEMINDER_URL: "$(escape "${VITE_LOGOUT_SITEMINDER_URL:-}")",
-  VITE_LOGOUT_KEYCLOAK_URL: "$(escape "${VITE_LOGOUT_KEYCLOAK_URL:-}")",
-  VITE_LOGOUT_KEYCLOAK_CLIENT_ID: "$(escape "${VITE_LOGOUT_KEYCLOAK_CLIENT_ID:-}")",
+  VITE_KEYCLOAK_URL: "$(escape "${VITE_KEYCLOAK_URL:-}")",
+  VITE_KEYCLOAK_CLIENT_ID: "$(escape "${VITE_KEYCLOAK_CLIENT_ID:-}")",
   VITE_BACKEND_URL: "$(escape "${VITE_BACKEND_URL:-}")",
   VITE_SILVA_BASE_URL: "$(escape "${VITE_SILVA_BASE_URL:-https://silva.nrs.gov.bc.ca}")",
   VITE_SUPPORT_EMAIL: "$(escape "${VITE_SUPPORT_EMAIL:-}")",

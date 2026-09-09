@@ -90,7 +90,7 @@ class ApiAuthorizationSecurityTest {
     /** The {@code @auth} bean referenced by {@code FrepAuthorities.CHR_EDIT}. */
     @Bean(name = "auth")
     LoggedUserHelper auth() {
-      return new LoggedUserHelper(Mockito.mock(CognitoUserInfoService.class));
+      return new LoggedUserHelper();
     }
 
     /**
@@ -287,7 +287,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_ADMIN")
+  @WithMockUser(authorities = "FREP_ADMINISTRATOR")
   void sysAdminMayReadAnyDistrictsChecklist() {
     assertDoesNotThrow(() -> chrChecklistApi.getChecklist(1L));
   }
@@ -320,7 +320,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_ADMIN")
+  @WithMockUser(authorities = "FREP_ADMINISTRATOR")
   void adminMayActivateChecklist() {
     assertDoesNotThrow(() -> chrChecklistApi.activateChecklist(1L));
   }

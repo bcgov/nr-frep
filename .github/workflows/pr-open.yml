@@ -10,19 +10,23 @@ concurrency:
 permissions: {}
 
 jobs:
-  # AWS Cognito user pool app clients don't accept wildcards in CallbackURLs,
-  # and registering one per PR via the Cognito API on every open/close is
-  # rate-limited and race-prone. Instead, the Cognito client is configured
-  # once with 50 fixed redirect URIs of the form
-  #   https://nr-frep-<N>.apps.gold.devops.gov.bc.ca/...   for N in 0..49
-  # and each PR is bucketed into a slot via `slot = PR # mod 50`. The PR's
-  # OpenShift objects still carry the full PR # (so cleanup is unambiguous),
-  # but the frontend Route's `spec.host` uses the slot.
+  # PR previews are bucketed into a fixed pool of 50 hostnames — the CSS integration is configured
+  # once with 50 redirect URIs of the form
+  #   https://nr-frep-<N>.apps.gold.devops.gov.bc.ca/authCallback   for N in 0..49
+  # and each PR takes `slot = PR # mod 50`. The PR's OpenShift objects still carry the full PR #
+  # (so cleanup is unambiguous), but the frontend Route's `spec.host` uses the slot.
   #
-  # Trade-off: if two PRs land in the same slot (PR 7 and PR 57) and are
-  # both open simultaneously, the second deploy's Route will fail to be
-  # admitted by the OpenShift router with `HostAlreadyClaimed`. Bounded by
-  # having 50 slots and our typical concurrent-PR count being a handful.
+  # Trade-off: if two PRs land in the same slot (PR 7 and PR 57) and are both open simultaneously,
+  # the second deploy's Route will fail to be admitted by the OpenShift router with
+  # `HostAlreadyClaimed`. Bounded by having 50 slots and our typical concurrent-PR count being a
+  # handful.
+  #
+  # WORTH REVISITING NOW THAT COGNITO IS GONE. This scheme exists because Cognito user-pool app
+  # clients reject wildcards in CallbackURLs and registering one per PR through its API on every
+  # open/close was rate-limited and race-prone. Whether CSS accepts a wildcard redirect URI on a
+  # real (non-sandbox) integration is a question for the CSS team — if it does, this whole slot
+  # mechanism can be deleted rather than carried forward out of habit. Do NOT assume it: a client
+  # that accepts any redirect URI will hand an authorization code to any origin.
 
   vars:
     name: Variables
@@ -34,7 +38,7 @@ jobs:
         run: |
           slot=$(( ${{ github.event.number }} % 50 ))
           echo "slot=${slot}" >> "$GITHUB_OUTPUT"
-          echo "PR ${{ github.event.number }} -> Cognito slot ${slot}"
+          echo "PR ${{ github.event.number }} -> redirect-URI slot ${slot}"
 
   # Build per-PR images tagged with the PR number. `tag_fallback: latest`
   # means a frontend-only PR doesn't trigger a backend rebuild — the action

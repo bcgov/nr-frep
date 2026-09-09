@@ -37,8 +37,13 @@ Config: `frontend/playwright.config.ts`. Specs: `frontend/e2e/*.spec.ts`. Shared
 
 - Tests target a **deployed** app via `E2E_BASE_URL` (defaults to DEV; a per-PR slot in CI — see
   [deployment.md](./deployment.md)). `utils.ts` throws if `E2E_BASE_URL` is unset.
-- **Serial execution** (`workers: 1`): all tests share one Cognito refresh token via `storageState`;
-  parallel workers race that refresh and get stuck on the loading overlay.
+- **Serial execution** (`workers: 1`): all tests share one refresh token, and Keycloak **rotates**
+  it on every renewal — parallel workers race that rotation and the loser is left holding a spent
+  token, which surfaces as a context stuck on the loading overlay.
+- **Two state files, not one.** Playwright's `storageState` captures cookies + localStorage;
+  `oidc-client-ts` keeps its tokens in **sessionStorage**, which `storageState` does not touch. The
+  sessionStorage half is saved separately and restored by `e2e/fixtures.ts` through an overridden
+  `page` fixture — so specs must `import { test } from './fixtures'`, not from `@playwright/test`.
 
 ### Auth setup
 

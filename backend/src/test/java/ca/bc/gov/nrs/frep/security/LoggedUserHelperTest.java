@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -10,7 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Unit tests for the protocol/district capability helpers. Drives {@link LoggedUserHelper} through a
- * real {@link SecurityContextHolder} populated with the raw Cognito-group authority strings.
+ * real {@link SecurityContextHolder} populated with the raw role strings the token carries.
  */
 class LoggedUserHelperTest {
 
@@ -23,7 +22,7 @@ class LoggedUserHelperTest {
     TestingAuthenticationToken auth = new TestingAuthenticationToken("user", "creds", authorities);
     auth.setAuthenticated(true);
     SecurityContextHolder.getContext().setAuthentication(auth);
-    return new LoggedUserHelper(mock(CognitoUserInfoService.class));
+    return new LoggedUserHelper();
   }
 
   @Test
@@ -51,7 +50,7 @@ class LoggedUserHelperTest {
 
   @Test
   void adminSeesBioAndEveryChrDistrict() {
-    LoggedUserHelper helper = withAuthorities("FREP_ADMIN");
+    LoggedUserHelper helper = withAuthorities("FREP_ADMINISTRATOR");
 
     assertThat(helper.canEdit()).isTrue();
     assertThat(helper.canAnyChr()).isTrue();
@@ -62,14 +61,14 @@ class LoggedUserHelperTest {
   @Test
   void canChrHandlesNullDistrict() {
     assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canChr(null)).isFalse();
-    assertThat(withAuthorities("FREP_ADMIN").canChr(null)).isTrue(); // admin passes regardless
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr(null)).isTrue(); // admin passes regardless
   }
 
   @Test
   void siteEditingIsOpenToEditorsAndChrDistrictEditorsAlike() {
     // Site records are shared across protocols, so canEditSite is deliberately wider than canEdit.
     assertThat(withAuthorities("FREP_EDITOR").canEditSite()).isTrue();
-    assertThat(withAuthorities("FREP_ADMIN").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canEditSite()).isTrue();
     assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canEditSite()).isTrue();
     // ...but it is still a role check: view-only and no-role users cannot edit.
     // No global FREP role and no CHR district — the roleless case, now that FREP_VIEW_ONLY is gone.

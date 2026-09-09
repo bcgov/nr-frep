@@ -90,8 +90,13 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AWS_COGNITO_ISSUER_URI}
-          jwk-set-uri: ${AWS_COGNITO_ISSUER_URI}/.well-known/jwks.json
+          # BC Gov SSO (Keycloak) standard realm, e.g.
+          # https://test.loginproxy.gov.bc.ca/auth/realms/standard
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+          # Keycloak publishes its keys at /protocol/openid-connect/certs — NOT the
+          # /.well-known/jwks.json path Cognito used. Pointing at the latter 404s, which surfaces as
+          # a blanket 401 on every request rather than as a configuration error.
+          jwk-set-uri: ${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/certs
   mvc:
     problemdetails:
       enabled: true
@@ -213,13 +218,16 @@ ca:
     gov:
       nrs:
         self-uri: http://localhost:3000
+        keycloak:
+          # The CSS integration's client id. Validated as the token's `azp` — the standard realm is
+          # shared across BC Gov applications, so issuer + signature alone do not prove a token was
+          # minted for FREP. Differs per environment, hence configuration rather than a constant.
+          client-id: ${KEYCLOAK_CLIENT_ID}
         identity-lookup:
           base-url: ${IDENTITY_LOOKUP_BASE_URL:}
           default-page-size: 10
           connect-timeout: 15s
           read-timeout: 30s
-        cognito:
-          userinfo-uri: ${COGNITO_USERINFO_URI}
         frontend:
           url: http://localhost:3000
           cors:

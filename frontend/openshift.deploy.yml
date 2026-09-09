@@ -32,19 +32,16 @@ parameters:
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   # Runtime VITE_* config (rendered into /srv/config.js by the entrypoint).
-  - name: VITE_USER_POOLS_ID
+  # BC Gov SSO (Keycloak, standard realm). Two values, and only two — oidc-client-ts discovers the
+  # authorize / token / JWKS / end-session endpoints from the issuer, so there is no logout URL to
+  # configure here. The backend takes the SAME pair as KEYCLOAK_ISSUER_URI / KEYCLOAK_CLIENT_ID;
+  # both templates are fed from one GitHub variable each so the two cannot drift apart.
+  - name: VITE_KEYCLOAK_URL
+    description: Realm issuer URI (https://<env>.loginproxy.gov.bc.ca/auth/realms/standard)
     required: true
-  - name: VITE_USER_POOLS_WEB_CLIENT_ID
+  - name: VITE_KEYCLOAK_CLIENT_ID
+    description: The CSS integration's client id
     required: true
-  # Federated logout chain (Siteminder → Keycloak → Cognito → app). Optional:
-  # if any is blank, logout falls back to Amplify's plain sign-out. TEST hosts
-  # use logontest7 / test.loginproxy; PROD drops the "test"/"7".
-  - name: VITE_LOGOUT_SITEMINDER_URL
-    description: Siteminder logoff.cgi (e.g. https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi)
-  - name: VITE_LOGOUT_KEYCLOAK_URL
-    description: Keycloak end-session URL (<loginproxy-host>/auth/realms/standard/protocol/openid-connect/logout)
-  - name: VITE_LOGOUT_KEYCLOAK_CLIENT_ID
-    description: FAM Keycloak client id for FREP
   - name: VITE_BACKEND_URL
     description: Browser-facing API base path; usually '/api'
     value: /api
@@ -67,9 +64,10 @@ parameters:
   - name: VITE_ACCESS_REQUEST_EMAIL
     description: Mailbox for access requests; empty hides the landing link
     value: ""
-  # VITE_ZONE = the deploy zone. AuthProvider uppercases this to pick the
-  # Cognito identity provider (e.g. ZONE=42 → identity_provider=42-IDIR,
-  # which won't exist; map PR ZONEs to 'dev' below in reusable-deploy.yml).
+  # VITE_ZONE = the deploy zone, now a display label only. Under Cognito it selected the identity
+  # provider (ZONE=42 → identity_provider=42-IDIR, which does not exist), which is why PR zones had
+  # to be remapped to 'dev'. The Keycloak IdP hint is the constant 'azureidir' everywhere, so a
+  # numeric zone is harmless.
   - name: VITE_ZONE
     value: dev
 
@@ -142,16 +140,10 @@ objects:
                   value: /tmp
                 - name: XDG_CONFIG_HOME
                   value: /tmp
-                - name: VITE_USER_POOLS_ID
-                  value: ${VITE_USER_POOLS_ID}
-                - name: VITE_USER_POOLS_WEB_CLIENT_ID
-                  value: ${VITE_USER_POOLS_WEB_CLIENT_ID}
-                - name: VITE_LOGOUT_SITEMINDER_URL
-                  value: ${VITE_LOGOUT_SITEMINDER_URL}
-                - name: VITE_LOGOUT_KEYCLOAK_URL
-                  value: ${VITE_LOGOUT_KEYCLOAK_URL}
-                - name: VITE_LOGOUT_KEYCLOAK_CLIENT_ID
-                  value: ${VITE_LOGOUT_KEYCLOAK_CLIENT_ID}
+                - name: VITE_KEYCLOAK_URL
+                  value: ${VITE_KEYCLOAK_URL}
+                - name: VITE_KEYCLOAK_CLIENT_ID
+                  value: ${VITE_KEYCLOAK_CLIENT_ID}
                 - name: VITE_BACKEND_URL
                   value: ${VITE_BACKEND_URL}
                 - name: VITE_SILVA_BASE_URL

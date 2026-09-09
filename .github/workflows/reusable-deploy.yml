@@ -23,7 +23,7 @@ on:
       slot:
         description: |
           Route hostname slot — PR # mod-50'd into a fixed pool of pre-registered
-          Cognito callback URIs (see pr-open.yml). Omit for TEST/PROD; defaults to
+          registered redirect URIs (see pr-open.yml). Omit for TEST/PROD; defaults to
           `target` in that case so the host stays `nr-frep-{test,prod}.apps...`.
         default: ""
         type: string
@@ -169,8 +169,8 @@ jobs:
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
             -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
-            -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
-            -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
+            -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
+            -p KEYCLOAK_CLIENT_ID="${{ vars.KEYCLOAK_CLIENT_ID }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
             -p DATABASE_HOST="${{ secrets.database_host }}"
             -p DATABASE_SERVICE_NAME="${{ secrets.database_service_name }}"
@@ -223,11 +223,13 @@ jobs:
             -p NAME="nr-frep"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
-            -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
-            -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
-            -p VITE_LOGOUT_SITEMINDER_URL="${{ vars.VITE_LOGOUT_SITEMINDER_URL }}"
-            -p VITE_LOGOUT_KEYCLOAK_URL="${{ vars.VITE_LOGOUT_KEYCLOAK_URL }}"
-            -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
+            # SAME two GitHub variables the backend job reads above. The container env var names
+            # differ (VITE_ is load-bearing — Vite only exposes VITE_* to the bundle, and the
+            # entrypoint only copies VITE_*), but the CI variables must NOT: four variables holding
+            # two values is a pair nothing keeps in agreement, and both drifts fail only AFTER a
+            # successful sign-in, which sends you looking at roles instead of config.
+            -p VITE_KEYCLOAK_URL="${{ vars.KEYCLOAK_ISSUER_URI }}"
+            -p VITE_KEYCLOAK_CLIENT_ID="${{ vars.KEYCLOAK_CLIENT_ID }}"
             -p VITE_BACKEND_URL="${{ vars.VITE_BACKEND_URL }}"
             -p VITE_SILVA_BASE_URL="${{ vars.VITE_SILVA_BASE_URL }}"
             -p VITE_SUPPORT_EMAIL="${{ vars.SUPPORT_EMAIL }}"

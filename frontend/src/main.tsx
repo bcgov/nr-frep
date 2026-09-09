@@ -1,7 +1,4 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Amplify } from 'aws-amplify';
-import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
-import { CookieStorage } from 'aws-amplify/utils';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -14,22 +11,14 @@ import PageTitleProvider from '@/context/pageTitle/PageTitleProvider';
 import { PreferenceProvider } from '@/context/preference/PreferenceProvider.tsx';
 import ThemeProvider from '@/context/theme/ThemeProvider.tsx';
 
-import amplifyconfig from '@/config/fam/config';
 import { queryClientConfig } from '@/config/react-query/config';
-import { env } from '@/env';
 
 const queryClient = new QueryClient(queryClientConfig);
 
-cognitoUserPoolsTokenProvider.setKeyValueStorage(
-  new CookieStorage({
-    domain: window.location.hostname,
-    path: env.VITE_BASE_PATH || '/',
-    secure: window.location.protocol === 'https:',
-    sameSite: 'strict',
-    expires: undefined,
-  }),
-);
-Amplify.configure(amplifyconfig);
+// No auth bootstrapping here on purpose. Amplify needed its token storage installed *before*
+// configure(), so that whole block had to run ahead of the app. `oidc-client-ts` has no such
+// ordering constraint: the UserManager is built lazily on first use (services/keycloak.ts), from a
+// single issuer URI it discovers everything else from.
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

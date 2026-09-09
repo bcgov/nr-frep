@@ -1,5 +1,4 @@
-import { test } from '@playwright/test';
-
+import { test } from './fixtures';
 import { expectNoGlobalError, gotoProtected } from './utils';
 
 /**

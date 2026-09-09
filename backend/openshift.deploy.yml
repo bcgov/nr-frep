@@ -55,9 +55,15 @@ parameters:
     value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
-  - name: AWS_COGNITO_ISSUER_URI
+  # BC Gov SSO (Keycloak, standard realm). The resource server derives the JWKS URI from the issuer
+  # and validates the token's azp against the client id — the standard realm is shared across BC Gov
+  # apps, so issuer + signature alone do not prove a token was minted for FREP. Same two values the
+  # frontend takes as VITE_KEYCLOAK_URL / VITE_KEYCLOAK_CLIENT_ID; fed from one GitHub variable each.
+  - name: KEYCLOAK_ISSUER_URI
+    description: Realm issuer URI (https://<env>.loginproxy.gov.bc.ca/auth/realms/standard)
     required: true
-  - name: COGNITO_USERINFO_URI
+  - name: KEYCLOAK_CLIENT_ID
+    description: The CSS integration's client id, validated as the token's azp
     required: true
   - name: IDENTITY_LOOKUP_BASE_URL
     required: true
@@ -172,10 +178,10 @@ objects:
                   value: ${TZ}
                 - name: SERVER_PORT
                   value: "8080"
-                - name: AWS_COGNITO_ISSUER_URI
-                  value: ${AWS_COGNITO_ISSUER_URI}
-                - name: COGNITO_USERINFO_URI
-                  value: ${COGNITO_USERINFO_URI}
+                - name: KEYCLOAK_ISSUER_URI
+                  value: ${KEYCLOAK_ISSUER_URI}
+                - name: KEYCLOAK_CLIENT_ID
+                  value: ${KEYCLOAK_CLIENT_ID}
                 - name: IDENTITY_LOOKUP_BASE_URL
                   value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
@@ -402,7 +408,7 @@ objects:
       policyTypes:
         - Ingress
 
-  # ── NetworkPolicy: permit-all egress (DB, object storage, Cognito, and the shared ClamAV
+  # ── NetworkPolicy: permit-all egress (DB, object storage, BC Gov SSO, and the shared ClamAV
   #    service). Explicit permit-all — nr-frep relies on default-allow egress today; this
   #    documents intent without restricting existing traffic.
   #

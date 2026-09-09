@@ -1,22 +1,24 @@
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchAuthSessionMock, signOutMock } = vi.hoisted(() => ({
-  fetchAuthSessionMock: vi.fn(),
-  signOutMock: vi.fn().mockResolvedValue(undefined),
+const { getUserMock, signOutRedirectMock, clearLocalSessionMock } = vi.hoisted(() => ({
+  getUserMock: vi.fn(),
+  signOutRedirectMock: vi.fn().mockResolvedValue(undefined),
+  clearLocalSessionMock: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('aws-amplify/auth', () => ({
-  fetchAuthSession: fetchAuthSessionMock,
-  signInWithRedirect: vi.fn(),
-  signOut: signOutMock,
+vi.mock('@/services/keycloak', () => ({
+  getUserManager: () => ({ getUser: getUserMock, signinCallback: vi.fn() }),
+  signIn: vi.fn(),
+  signOutRedirect: signOutRedirectMock,
+  clearLocalSession: clearLocalSessionMock,
+  ensureFreshUser: vi.fn(),
+  forceRenew: vi.fn(),
 }));
 vi.mock('@/env', () => ({
   env: {
     VITE_BASE_PATH: '',
-    VITE_USER_POOLS_WEB_CLIENT_ID: 'cognito-client',
-    VITE_LOGOUT_SITEMINDER_URL: 'https://sm/logoff',
-    VITE_LOGOUT_KEYCLOAK_URL: 'https://kc/logout',
-    VITE_LOGOUT_KEYCLOAK_CLIENT_ID: 'kc-client',
+    VITE_KEYCLOAK_URL: 'https://test.loginproxy.gov.bc.ca/auth/realms/standard',
+    VITE_KEYCLOAK_CLIENT_ID: 'frep-app',
     VITE_ZONE: 'TEST',
   },
 }));
@@ -44,8 +46,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   assigned = [];
   sessionStorage.clear();
-  // No session: hydrate resolves with no tokens, so the provider settles quickly.
-  fetchAuthSessionMock.mockResolvedValue({ tokens: undefined });
+  // No session: hydrate resolves with no user, so the provider settles quickly.
+  getUserMock.mockResolvedValue(null);
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: {
@@ -66,15 +68,16 @@ const renderProvider = async () => {
 };
 
 describe('logout while offline', () => {
-  it('signs out locally instead of navigating to an unreachable logout chain', async () => {
-    // The chain is a full-page navigation. Offline it lands on the browser's
-    // ERR_INTERNET_DISCONNECTED page — outside the app, tokens already cleared.
+  it('signs out locally instead of starting a redirect that cannot complete', async () => {
+    // signoutRedirect is a full-page navigation. Offline it lands on the browser's
+    // ERR_INTERNET_DISCONNECTED page — outside the app, session already cleared.
     setOnline(false);
     await renderProvider();
 
     await act(async () => screen.getByRole('button').click());
 
-    expect(assigned).toEqual([]);
+    expect(signOutRedirectMock).not.toHaveBeenCalled();
+    expect(clearLocalSessionMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button').textContent).toBe('signed-out');
   });
 
@@ -101,18 +104,20 @@ describe('logout while offline', () => {
 
     await act(async () => screen.getByRole('button').click());
 
-    // The upstream IDIR/Keycloak/Cognito sessions are untouched and unreachable from here.
+    // The upstream IDIR / Keycloak sessions are untouched and unreachable from here.
     expect(sessionStorage.getItem(OFFLINE_SIGNOUT_FLAG)).toBe('1');
   });
 
-  it('still drives the full federated chain when online', async () => {
+  it('drives the realm sign-out when online, leaving the stored user for it to read', async () => {
     setOnline(true);
     await renderProvider();
 
     await act(async () => screen.getByRole('button').click());
 
-    expect(assigned).toHaveLength(1);
-    expect(assigned[0]).toContain('https://sm/logoff');
+    expect(signOutRedirectMock).toHaveBeenCalledTimes(1);
+    // NOT cleared first: signoutRedirect() needs the stored user to build id_token_hint, without
+    // which Keycloak cannot attribute the logout and the realm session survives it.
+    expect(clearLocalSessionMock).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(OFFLINE_SIGNOUT_FLAG)).toBeNull();
   });
 });

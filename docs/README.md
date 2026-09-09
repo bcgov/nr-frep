@@ -17,6 +17,7 @@ versioned alongside the code — update them in the same PR as the change they d
 | [Deployment](./deployment.md) | OpenShift per-PR slots, environments, and cross-repo release coordination |
 | [Database](./database.md) | Oracle `THE` schema, the `FREP_*` stored-proc pattern, and `nr-mof-db` migrations |
 | [Testing](./testing.md) | Unit tests and Playwright E2E (auth setup, target URLs) |
+| [BC Gov SSO cutover](./bcgov-sso-cutover.md) | The parts of the Keycloak migration that live outside this repo — CSS console setup, realm probes, and moving the FAM access grants across |
 
 ## Component READMEs
 

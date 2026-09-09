@@ -32,6 +32,7 @@ import { Navigate, type RouteObject } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import AcceptedSitesPage from '@/pages/AcceptedSites';
 import AddTargetSitePage from '@/pages/AddTargetSite';
+import AuthCallbackPage from '@/pages/AuthCallback';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
 import ChrChecklistPage from '@/pages/ChrChecklist';
 import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
@@ -81,12 +82,15 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
-    // OAuth redirect target (redirectSignIn). Amplify completes the code exchange on load; once
-    // auth has hydrated we bounce to home (Landing if still unauthenticated, Dashboard if logged
-    // in via the protected set).
-    path: '/auth/callback',
+    // OAuth redirect target. AuthCallbackPage performs the authorization-code exchange, which is
+    // what creates the session — hence its place in the PUBLIC table rather than the protected one.
+    //
+    // ORDER IS LOAD-BEARING: it must sit above the '*' catch-all below, which would otherwise match
+    // the callback URL (arriving as /authCallback?code=…&state=…) and render Not Found before the
+    // code could be spent.
+    path: '/authCallback',
     id: 'Auth callback',
-    element: <Navigate to="/" replace />,
+    element: <AuthCallbackPage />,
     isSideMenu: false,
   },
   {
@@ -106,8 +110,10 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
   },
   {
-    // OAuth redirect target (redirectSignIn) — once logged in, bounce off the callback URL to home.
-    path: '/auth/callback',
+    // OAuth redirect target — once the session exists, bounce off the callback URL to home. (The
+    // exchange itself happens on the public route above; this entry only catches a reload of the
+    // callback URL by an already-signed-in user.)
+    path: '/authCallback',
     id: 'Auth callback',
     element: <Navigate to="/dashboard" replace />,
     isSideMenu: false,
@@ -192,7 +198,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
     // Biodiversity: sys-admin or the (Bio-scoped) FREP_EDITOR. A CHR-only user can't open it. The
     // backend also gates the Bio reads (BIO_EDIT).
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+    roles: ['FREP_ADMINISTRATOR', 'FREP_EDITOR'],
   },
   {
     path: '/protocol-checklists/chr/:id',
@@ -206,7 +212,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isSideMenu: false,
     // CHR: sys-admin or any CHR district editor (coarse gate). The specific district is enforced on
     // the page (edit vs read-only) and by the backend read gate.
-    roles: ['FREP_ADMIN', 'FREP_CHR_EDITOR'],
+    roles: ['FREP_ADMINISTRATOR', 'FREP_CHR_EDITOR'],
   },
   {
     path: '/chr/offline',
@@ -251,7 +257,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: true,
-    roles: ['FREP_ADMIN'],
+    roles: ['FREP_ADMINISTRATOR'],
   },
   {
     path: '/unauthorized',

@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 /**
  * Exposes role constants as Spring beans for use in SpEL expressions and security configuration.
  *
- * <p>Cognito group names match legacy WebADE roles ({@code FrepUser} in nr-frep-legacy).
+ * <p>BC Gov SSO (CSS) role names match legacy WebADE roles ({@code FrepUser} in nr-frep-legacy).
  * URL-level rules use {@code hasAuthority()} / {@code hasAnyAuthority()} in
  * {@link ApiAuthorizationCustomizer}.
  *
@@ -19,14 +19,20 @@ import org.springframework.stereotype.Component;
 @Component("roles")
 public class RoleConstants {
 
-  /** Cognito group for full administrative access (legacy WebADE: FREP_SYS_ADMIN). */
-  public static final String SYS_ADMIN_AUTHORITY = "FREP_ADMIN";
+  /**
+   * CSS role for full administrative access.
+   *
+   * <p>Renamed twice: legacy WebADE called it {@code FREP_SYS_ADMIN}, FAM/Cognito
+   * {@code FREP_ADMIN}, and the CSS integration {@code FREP_ADMINISTRATOR}. Only the last one is
+   * ever seen on a token — the earlier names survive only in the legacy FAM extracts.
+   */
+  public static final String SYS_ADMIN_AUTHORITY = "FREP_ADMINISTRATOR";
 
-  /** Cognito group for create, edit, and submit workflows (legacy WebADE: FREP_UPDATE). */
+  /** CSS role for create, edit, and submit workflows (legacy WebADE: FREP_UPDATE). */
   public static final String UPDATE_AUTHORITY = "FREP_EDITOR";
 
   /**
-   * Prefix for the per-district CHR editor roles (FAM V92): {@code FREP_CHR_EDITOR_DISTRICT_<code>},
+   * Prefix for the per-district CHR editor roles: {@code FREP_CHR_EDITOR_DISTRICT_<code>},
    * where {@code <code>} is the 3-letter Natural Resource District org-unit code (e.g. DCK). A user
    * holding one may edit/submit CHR checklists for that district only. Distinct from the global roles
    * above: a plain {@code FREP_EDITOR} is Biodiversity-only and grants no CHR access.

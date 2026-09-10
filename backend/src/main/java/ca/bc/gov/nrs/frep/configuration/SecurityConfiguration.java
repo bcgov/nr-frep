@@ -1,9 +1,5 @@
 package ca.bc.gov.nrs.frep.configuration;
 
-import jakarta.servlet.http.HttpServletRequest;
-import java.util.Arrays;
-import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -13,9 +9,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import ca.bc.gov.nrs.frep.security.ApiAuthorizationCustomizer;
 import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
@@ -24,6 +17,13 @@ import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
  * Main security configuration. The API runs as an OAuth 2.0 resource server
  * validating BC Gov SSO (Keycloak) access tokens. It is stateless: no session, no login form, and
  * no cookie is ever used as a credential.
+ *
+ * <p><b>No CORS configuration.</b> The SPA and this API share an origin — Caddy serves the app and
+ * proxies {@code /api*} on the same host, and local dev goes through the Vite proxy — so the browser
+ * never issues a cross-origin request and no preflight has to be satisfied. Confirmed on TEST, where
+ * {@code config.js} carries an empty {@code VITE_BACKEND_URL} and the client falls back to a
+ * same-origin {@code /api}. Matches nr-fspts, which has no CORS config at all. If an environment
+ * ever points the SPA at an absolute cross-origin API URL, this has to come back.
  *
  * <p><b>CSRF is disabled, and that is not an oversight.</b> CSRF attacks work because the browser
  * attaches an <em>ambient</em> credential — a cookie or session — to a cross-site request without
@@ -45,8 +45,6 @@ import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
 @EnableMethodSecurity
 public class SecurityConfiguration {
 
-  @Value("${ca.bc.gov.nrs.frontend.url:http://localhost:3000}")
-  private String allowedOrigins;
 
   @Bean
   public SecurityFilterChain filterChain(
@@ -61,7 +59,6 @@ public class SecurityConfiguration {
         // incidental one, and CSRF is only safe to drop because of it.
         .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .csrf(AbstractHttpConfigurer::disable)
-        .cors(Customizer.withDefaults())
         .authorizeHttpRequests(apiCustomizer)
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
@@ -70,25 +67,5 @@ public class SecurityConfiguration {
     return http.build();
   }
 
-  @Bean
-  public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
-    List<String> origins = Arrays.asList(allowedOrigins.split(","));
-    configuration.setAllowedOrigins(origins);
-    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-    configuration.setAllowedHeaders(List.of("*"));
-    configuration.setAllowCredentials(true);
-    configuration.setMaxAge(3600L);
-
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource() {
-      @Override
-      public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
-        return configuration;
-      }
-    };
-
-    source.registerCorsConfiguration("/**", configuration);
-    return source;
-  }
 
 }

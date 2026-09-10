@@ -44,19 +44,34 @@
 	header {
 		-Server
 		X-Frame-Options "SAMEORIGIN"
-		X-XSS-Protection "1;mode=block"
 		Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate"
 		X-Content-Type-Options "nosniff"
 		Strict-Transport-Security "max-age=31536000"
-		Content-Security-Policy "default-src 'self' https://*.gov.bc.ca;
-			script-src 'self'  https://*.gov.bc.ca ;
-			style-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline';
-			font-src 'self' https://fonts.gstatic.com;
-			img-src 'self' data: blob: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org https://server.arcgisonline.com;
+		# The host list below is derived from what this app actually loads, not inherited. Verified
+		# against src/ on 2026-09-10 — so it is deliberately tighter than the near-identical policy in
+		# sibling repos, which still permit fonts.googleapis.com, use.fontawesome.com and www.w3.org
+		# that nothing here requests.
+		#
+		#   img-src     *.gov.bc.ca is LOAD-BEARING — OpeningMap renders WMS overlays straight from
+		#               openmaps.gov.bc.ca (see components/OpeningMap/mapLayers.ts); the two tile
+		#               hosts back the OSM and ArcGIS base layers; blob: backs attachment previews.
+		#   connect-src *.gov.bc.ca is the BC Gov SSO realm — discovery, token and JWKS.
+		#   style-src   'unsafe-inline' stays: Carbon injects <style> at runtime.
+		#   base-uri    stated explicitly because it does NOT fall back to default-src, so without
+		#               this line it is unset and an injected <base> can re-point every relative URL.
+		#
+		# Removed as deprecated: X-XSS-Protection (the legacy auditor introduced vulnerabilities of
+		# its own) and block-all-mixed-content (superseded; HSTS above covers the intent).
+		Content-Security-Policy "default-src 'self';
+			script-src 'self';
+			style-src 'self' 'unsafe-inline';
+			font-src 'self';
+			img-src 'self' data: blob: https://*.gov.bc.ca https://*.tile.openstreetmap.org https://server.arcgisonline.com;
+			connect-src 'self' https://*.gov.bc.ca;
 			frame-ancestors 'self';
 			form-action 'self';
-			block-all-mixed-content;
-			connect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca;"
+			base-uri 'self';
+			object-src 'none';"
 		Referrer-Policy "same-origin"
 		Permissions-Policy "fullscreen=(self), camera=(), microphone=()"
 		Cross-Origin-Resource-Policy "cross-origin"

@@ -3,7 +3,11 @@ server:
   servlet:
     context-path: /
   error:
-    include-message: always
+    # never (the Spring default) — this governs the fallback /error path for anything the
+    # @ControllerAdvice does not handle. `always` put raw exception text in those bodies, which is
+    # the same leak ApiError.debugMessage had. Handled errors still carry a deliberate, written
+    # message; unhandled ones say nothing and the detail goes to the log.
+    include-message: never
   # Use the SERVER_PORT placeholder so application-local.yml's SERVER_PORT
   # value (and the OpenShift env var) can override the default. Local dev
   # needs 8080 because Vite's dev server claims 3000.
@@ -225,7 +229,6 @@ ca:
   bc:
     gov:
       nrs:
-        self-uri: http://localhost:3000
         keycloak:
           # The CSS integration's client id. Validated as the token's `azp` — the standard realm is
           # shared across BC Gov applications, so issuer + signature alone do not prove a token was
@@ -251,37 +254,6 @@ ca:
           read-timeout: 30s
         user-directory:
           default-page-size: 25
-        frontend:
-          url: http://localhost:3000
-          cors:
-            headers:
-              - x-requested-with
-              - X-REQUESTED-WITH
-              - authorization
-              - Authorization
-              - Content-Type
-              - content-type
-              - credential
-              - CREDENTIAL
-              - access-control-allow-origin
-              - Access-Control-Allow-Origin
-              - DNT
-              - Keep-Alive,
-              - User-Agent,
-              - X-Requested-With,
-              - If-Modified-Since,
-              - Cache-Control,
-              - Content-Range,
-              - Range
-              - Location
-              - location
-            methods:
-              - OPTIONS
-              - GET
-              - POST
-              - PUT
-              - DELETE
-            age: 5m
 
 # Logging — Spring Boot default stack (SLF4j + Logback).
 #

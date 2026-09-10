@@ -76,7 +76,7 @@ class ProtocolChecklistServiceTest {
   private LoggedUserHelper loggedUserHelper;
 
   @Mock
-  private FamUserDirectoryService famUserDirectoryService;
+  private UserDirectoryService userDirectoryService;
 
   @Mock
   private VirusScanner virusScanner;
@@ -522,7 +522,7 @@ class ProtocolChecklistServiceTest {
   void listBioPlotsResolvesTheAssessorDisplayNameButKeepsTheUserid() {
     when(writeRepository.listBioPlots("900"))
         .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
-    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.of("Jane Doe (jdoe)"));
+    when(userDirectoryService.resolveName("jdoe")).thenReturn(Optional.of("Jane Doe (jdoe)"));
 
     BioPlotRow row = service.listBioPlots("900").get(0);
 
@@ -534,7 +534,7 @@ class ProtocolChecklistServiceTest {
   void listBioPlotsFallsBackToTheUseridWhenFamHasNoName() {
     when(writeRepository.listBioPlots("900"))
         .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
-    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.empty());
+    when(userDirectoryService.resolveName("jdoe")).thenReturn(Optional.empty());
 
     assertEquals("jdoe", service.listBioPlots("900").get(0).assessorDisplayName());
   }

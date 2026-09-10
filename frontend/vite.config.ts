@@ -94,8 +94,8 @@ export default defineConfig(({ mode }) => {
           // was served forever, and every later deploy's values — backend URL, logout endpoints,
           // support mailbox, allowed attachment types — were silently ignored.
           globIgnores: ['config.js'],
-          // The bundled app (Carbon + Amplify) exceeds Workbox's 2 MiB default; raise the
-          // precache ceiling so the full app shell is cached for offline field use.
+          // The bundled app (Carbon) exceeds Workbox's 2 MiB default; raise the precache ceiling
+          // so the full app shell is cached for offline field use.
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           // CHR checklists are persisted in IndexedDB; this just lets read-only
           // GETs resolve from cache when briefly offline.
@@ -112,11 +112,11 @@ export default defineConfig(({ mode }) => {
               // NOT precached (see globIgnores): a precached config.js is keyed by a build-time
               // revision hash taken from the static placeholder, so it never changes and the copy
               // fetched on a user's first visit is served forever — every later deploy's backend
-              // URL, logout endpoints and feature config silently ignored.
+              // URL, realm issuer and feature config silently ignored.
               //
               // NOT NetworkOnly either: window.config is defined BY this file, so a failed offline
               // fetch leaves it undefined, env falls back to build-time vars the container image
-              // does not carry, and Amplify.configure gets an undefined user pool — breaking the
+              // does not carry, and the UserManager is built with an empty authority — breaking the
               // offline CHR editor exactly when it is needed. NetworkFirst gives a fresh config
               // whenever the network answers and the last-known-good one when it does not.
               urlPattern: ({ url }) => url.pathname === '/config.js',
@@ -133,14 +133,7 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
     },
     optimizeDeps: {
-      include: [
-        '@tanstack/react-query',
-        'aws-amplify',
-        'aws-amplify/auth/cognito',
-        'aws-amplify/utils',
-        'react-dom/client',
-        'aws-amplify/auth',
-      ],
+      include: ['@tanstack/react-query', 'oidc-client-ts', 'react-dom/client'],
     },
     server: {
       host: devHost,
@@ -178,7 +171,6 @@ export default defineConfig(({ mode }) => {
           '**/vite-env.d.ts',
           '**/types/**',
           '**/constants/**',
-          '**/config/fam/*',
           '**/config/react-query/*',
           '**/config/tests/*',
           '**/*.env.ts',

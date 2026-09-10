@@ -110,7 +110,7 @@ describe('AppRoutes', () => {
     (useAuthModule.useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
       isLoading: false,
       isLoggedIn: true,
-      user: { roles: ['FREP_ADMIN'] },
+      user: { roles: ['FREP_ADMINISTRATOR'] },
     });
 
     onlineRef.current = false; // WiFi off, as in the field

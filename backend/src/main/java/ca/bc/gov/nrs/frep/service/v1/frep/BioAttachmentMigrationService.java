@@ -29,7 +29,7 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
  * object storage since the storage switch; this only backfills rows the legacy app wrote.
  *
  * <p>Driven to completion by {@link BioAttachmentMigrationScheduler}, which calls the two methods
- * below batch by batch. There is no HTTP surface: the API requires a Cognito access token that
+ * below batch by batch. There is no HTTP surface: the API requires a BC Gov SSO access token that
  * only an interactive IDIR login can produce, so an endpoint would have to be either driven by a
  * hand-copied short-lived token or left open — neither is a good way to run a production cutover.
  *

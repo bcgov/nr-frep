@@ -12,7 +12,7 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolResponse;
 import java.util.List;
 
 import ca.bc.gov.nrs.frep.service.v1.frep.ConfigurationService;
-import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
+import ca.bc.gov.nrs.frep.service.v1.frep.UserDirectoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,14 +28,14 @@ class ConfigurationApiControllerTest {
   private ConfigurationService configurationService;
 
   @Mock
-  private FamUserDirectoryService famUserDirectoryService;
+  private UserDirectoryService userDirectoryService;
 
   private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders
-        .standaloneSetup(new ConfigurationApiController(configurationService, famUserDirectoryService))
+        .standaloneSetup(new ConfigurationApiController(configurationService, userDirectoryService))
         .build();
   }
 

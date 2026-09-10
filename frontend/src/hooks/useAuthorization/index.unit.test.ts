@@ -20,6 +20,7 @@ function withUser(user: Partial<FamLoginUser>) {
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
+    completeSignIn: vi.fn(),
     ensureFreshToken: vi.fn(),
     forceRefreshSession: vi.fn(),
   });
@@ -30,8 +31,8 @@ function withRoles(roles: FamLoginUser['roles']) {
 }
 
 describe('useAuthorization (legacy WebADE role parity)', () => {
-  it('grants full write and admin actions to FREP_ADMIN', () => {
-    withRoles(['FREP_ADMIN']);
+  it('grants full write and admin actions to FREP_ADMINISTRATOR', () => {
+    withRoles(['FREP_ADMINISTRATOR']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -99,7 +100,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
    * - CHECKLIST, ACCEPTEDSITES: both remaining roles (the legacy read-only role is retired)
    */
   it('maps legacy write actions to sys-admin and update roles', () => {
-    const writeActionsRoles: Array<FamLoginUser['roles']> = [['FREP_ADMIN'], ['FREP_EDITOR']];
+    const writeActionsRoles: Array<FamLoginUser['roles']> = [['FREP_ADMINISTRATOR'], ['FREP_EDITOR']];
 
     for (const roles of writeActionsRoles) {
       withRoles(roles);
@@ -114,7 +115,7 @@ describe('useAuthorization (legacy WebADE role parity)', () => {
       false,
     );
 
-    withRoles(['FREP_ADMIN']);
+    withRoles(['FREP_ADMINISTRATOR']);
     expect(renderHook(() => useAuthorization()).result.current.canPerformSysAdminActions).toBe(
       true,
     );
@@ -147,7 +148,7 @@ describe('useAuthorization — protocol + district scope', () => {
   });
 
   it('sys-admin sees Bio and every CHR district', () => {
-    withRoles(['FREP_ADMIN']);
+    withRoles(['FREP_ADMINISTRATOR']);
 
     const { result } = renderHook(() => useAuthorization());
 
@@ -171,7 +172,7 @@ describe('useAuthorization — protocol + district scope', () => {
 
   it.each([
     ['FREP_EDITOR', true],
-    ['FREP_ADMIN', true],
+    ['FREP_ADMINISTRATOR', true],
     // A group FREP no longer issues: it must grant nothing rather than fall through to a default.
     ['FREP_VIEW_ONLY', false],
   ])('canEditSite for %s is %s', (role, expected) => {

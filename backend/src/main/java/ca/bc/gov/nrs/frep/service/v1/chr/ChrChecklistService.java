@@ -33,7 +33,7 @@ import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
-import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
+import ca.bc.gov.nrs.frep.service.v1.frep.UserDirectoryService;
 import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,7 +77,7 @@ public class ChrChecklistService {
   private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
   private final VirusScanner virusScanner;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
 
   public ChrChecklistService(
       AttachmentTypes attachmentTypes,
@@ -87,7 +87,7 @@ public class ChrChecklistService {
       ObjectStorageService objectStorageService,
       ObjectStorageProperties objectStorageProperties,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService,
+      UserDirectoryService userDirectoryService,
       VirusScanner virusScanner
   ) {
     this.attachmentTypes = attachmentTypes;
@@ -98,7 +98,7 @@ public class ChrChecklistService {
     this.objectStorageProperties = objectStorageProperties;
     this.loggedUserHelper = loggedUserHelper;
     this.virusScanner = virusScanner;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
   }
 
   public CheckList getChecklist(long checklistId) {
@@ -646,7 +646,7 @@ public class ChrChecklistService {
       // Biodiversity evaluator field. The raw userid stays in assessedBy for the save round-trip and
       // the "Assign it to me" comparison; assessedByName is display-only.
       if (ChrStringUtils.hasAValue(checkList.getAssessedBy())) {
-        checkList.setAssessedByName(famUserDirectoryService.resolveName(checkList.getAssessedBy())
+        checkList.setAssessedByName(userDirectoryService.resolveName(checkList.getAssessedBy())
             .orElse(checkList.getAssessedBy()));
       }
       // Photo *metadata* rides along (the mapper fills it); the bytes do not. Every photo is fetched

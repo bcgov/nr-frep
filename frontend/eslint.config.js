@@ -73,4 +73,13 @@ export default tseslint.config([
       '@typescript-eslint/ban-ts-comment': 'off',
     },
   },
+  // Playwright fixtures hand control back to the test by calling `use()`. That is Playwright's
+  // API, not a React hook, but it trips the rules-of-hooks name heuristic — which only looks at
+  // the name — inside a fixture named `page`.
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ]);

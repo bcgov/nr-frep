@@ -192,7 +192,7 @@ const LandingPage: FC = () => {
             <li>Organization</li>
           </ul>
 
-          {/* CHR editing is granted per district (FREP_CHR_EDITOR_DISTRICT_<code>), not globally, so
+          {/* CHR editing is granted per district (FREP_CHR_EDITOR_DISTRICT-<code>), not globally, so
               a request that omits the districts can't be actioned. */}
           <p className="landing-request-modal__group-title">For Cultural Heritage (CHR) editing</p>
           <ul>

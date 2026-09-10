@@ -10,9 +10,9 @@ import { useAuth } from '@/context/auth/useAuth';
  * Role semantics mirror legacy WebADE ({@code FrepUser} / {@code RestAction}).
  */
 export type AuthorizationInfo = {
-  /** `true` when the user holds the `FREP_ADMIN` Cognito group. */
+  /** `true` when the user holds the `FREP_ADMINISTRATOR` role. */
   isSysAdmin: boolean;
-  /** `true` when the user holds the `FREP_EDITOR` Cognito group. */
+  /** `true` when the user holds the `FREP_EDITOR` role. */
   isUpdate: boolean;
   /** `true` when the user has at least one recognized FREP role. */
   hasAnyRole: boolean;
@@ -24,7 +24,7 @@ export type AuthorizationInfo = {
   canDelete: boolean;
   /** `true` for admin-only actions (legacy {@code ACTIVATECHECKLIST} parity). */
   canPerformSysAdminActions: boolean;
-  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT_*`). */
+  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT-*`). */
   chrDistricts: string[];
   /** `true` when the user may access CHR for any district (sys-admin, or holds ≥1 district role). */
   canAnyChr: boolean;
@@ -46,7 +46,7 @@ export type AuthorizationInfo = {
 
 /**
  * Hook that provides role-based authorization helpers derived from the
- * authenticated user's Cognito groups.
+ * authenticated user's roles.
  *
  * @example
  * ```tsx
@@ -65,7 +65,7 @@ export const useAuthorization = (): AuthorizationInfo => {
 
   return useMemo<AuthorizationInfo>(() => {
     const roles = user?.roles ?? [];
-    const isSysAdmin = roles.includes('FREP_ADMIN');
+    const isSysAdmin = roles.includes('FREP_ADMINISTRATOR');
     const isUpdate = roles.includes('FREP_EDITOR');
     // Per-district CHR access: the FREP_CHR_EDITOR privilege value is the list of district codes.
     const chrDistricts = user?.privileges?.FREP_CHR_EDITOR ?? [];

@@ -23,7 +23,7 @@ const HeaderPanelProfile: FC = () => {
 
   const providerLabel = PROVIDER_LABELS[user?.idpProvider ?? ''] ?? 'IDIR';
 
-  // Offline the Cognito session can't be refreshed, so a reload leaves no user to describe — the
+  // Offline the session can't be renewed, so a reload leaves no user to describe — the
   // panel used to render the literal "undefined undefined". Nothing here is needed on-device (an
   // offline copy is already checked out to whoever took it), so the identity block is simply left
   // out rather than shown empty. Change theme and Logout stay.

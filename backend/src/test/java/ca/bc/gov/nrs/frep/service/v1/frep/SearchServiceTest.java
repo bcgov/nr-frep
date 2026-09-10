@@ -44,7 +44,7 @@ class SearchServiceTest {
   private SearchRepository searchRepository;
 
   @Mock
-  private FamUserDirectoryService famUserDirectoryService;
+  private UserDirectoryService userDirectoryService;
 
   @Mock
   private LoggedUserHelper loggedUserHelper;
@@ -92,7 +92,7 @@ class SearchServiceTest {
         .thenReturn(List.of(new ChecklistSearchRow(
             "9001", "SLB", "Biodiversity", "2024", "DCK", "L1", "CP", "BLK", "OP", "CL",
             "2024-05-01", "JDOE", "SUB")));
-    when(famUserDirectoryService.resolveName("JDOE")).thenReturn(Optional.of("Jane Doe (JDOE)"));
+    when(userDirectoryService.resolveName("JDOE")).thenReturn(Optional.of("Jane Doe (JDOE)"));
 
     PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
         null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");
@@ -108,7 +108,7 @@ class SearchServiceTest {
         .thenReturn(List.of(new ChecklistSearchRow(
             "9002", "SLB", "Biodiversity", "2024", "DCK", "L1", "CP", "BLK", "OP", "CL",
             "2024-05-01", "OLDUSER", "SUB")));
-    when(famUserDirectoryService.resolveName("OLDUSER")).thenReturn(Optional.empty());
+    when(userDirectoryService.resolveName("OLDUSER")).thenReturn(Optional.empty());
 
     PagedResponse<ChecklistSearchResult> page = service.searchChecklistsPaged(
         null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, "");

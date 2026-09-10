@@ -1,7 +1,6 @@
-import { fetchAuthSession } from 'aws-amplify/auth';
-
 import { ensureSessionFresh, handleUnauthorized } from '@/context/auth/refreshSession';
 import { BackendApiConfig } from '@/services/APIs';
+import { ensureFreshUser } from '@/services/keycloak';
 
 /**
  * Report-generation client. Models the nr-fspts `services/reports.ts`: POST a
@@ -9,8 +8,7 @@ import { BackendApiConfig } from '@/services/APIs';
  * download it (CSV) or open it in a new tab (PDF). The filename comes from the
  * backend `Content-Disposition` header.
  *
- * <p>Auth + base URL reuse the shared {@link BackendApiConfig} (Cognito bearer
- * token + the same `/api` base every service uses), so this stays consistent
+ * <p>Auth + base URL reuse the shared {@link BackendApiConfig} (bearer token + the same `/api` base every service uses), so this stays consistent
  * with the `doRequest`-based JSON services without forcing a blob response
  * through that pipeline.</p>
  */
@@ -39,14 +37,14 @@ export interface ReportResponse {
   contentType: string;
 }
 
-// Resolve the Cognito access token the same way APIs.ts does — refresh a
-// near-expiry session first, then read the access token. Returns '' when there's
-// no session so the request fires unauthenticated and the backend returns 401.
+// Resolve the access token the same way APIs.ts does — renew a near-expiry
+// session first, then read the access token. Returns '' when there's no session
+// so the request fires unauthenticated and the backend returns 401.
 const resolveToken = async (): Promise<string> => {
   try {
     await ensureSessionFresh();
-    const { tokens } = (await fetchAuthSession()) ?? {};
-    return tokens?.accessToken?.toString() ?? '';
+    const current = await ensureFreshUser();
+    return current?.access_token ?? '';
   } catch {
     return '';
   }

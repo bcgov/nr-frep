@@ -25,8 +25,8 @@ import org.springframework.stereotype.Component;
  *   <li>{@code form-action 'self'} — prevents XSS payloads from exfiltrating
  *       data via rogue {@code <form>} submissions to attacker-controlled
  *       hosts.</li>
- *   <li>{@code connect-src} explicitly lists the Cognito domain so that
- *       Amplify token refresh and userInfo calls are permitted.</li>
+ *   <li>{@code connect-src} allows the BC Gov SSO hosts so that the OIDC discovery, token
+ *       and refresh calls are permitted.</li>
  * </ul>
  *
  * <h3>HSTS</h3>
@@ -80,9 +80,9 @@ public class HeadersSecurityCustomizer implements Customizer<HeadersConfigurer<H
       // ── Production / deployed CSP ────────────────────────────────
       policyDirectives = String.join("; ",
           "default-src 'self'",
-          "connect-src 'self' " + selfUri
-              + " https://cognito-idp.ca-central-1.amazonaws.com"
-              + " https://lza-prod-fam-user-pool-domain.auth.ca-central-1.amazoncognito.com",
+          // *.gov.bc.ca covers every loginproxy environment (dev/test/prod), which is where
+          // oidc-client-ts fetches discovery, the JWKS, and the token endpoint.
+          "connect-src 'self' " + selfUri + " https://*.gov.bc.ca",
           "script-src 'self'",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data:",

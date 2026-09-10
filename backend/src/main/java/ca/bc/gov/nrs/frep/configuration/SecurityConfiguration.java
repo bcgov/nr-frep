@@ -25,7 +25,7 @@ import ca.bc.gov.nrs.frep.security.Oauth2SecurityCustomizer;
 
 /**
  * Main security configuration. The API runs as an OAuth 2.0 resource server
- * validating Cognito access tokens; CSRF is enforced for state-changing
+ * validating BC Gov SSO (Keycloak) access tokens; CSRF is enforced for state-changing
  * requests using the cookie-token strategy.
  */
 @Configuration

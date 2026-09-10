@@ -16,8 +16,10 @@ per-PR into numbered slots; the **database is a single shared external Oracle**,
 
 ## Per-PR slots
 
-- Each PR deploys to an app slot computed as **`slot = PR# % 50`**. The cap of 50 exists because AWS
-  Cognito has 50 pre-registered callback URIs for the IDIR redirect.
+- Each PR deploys to an app slot computed as **`slot = PR# % 50`**. The cap of 50 exists because 50
+  redirect URIs are pre-registered for the IDIR round trip. This is inherited from Cognito, whose app
+  clients reject wildcards in CallbackURLs; whether a CSS integration would accept a wildcard —
+  letting the whole slot scheme go — is an open question for the CSS team.
 - Only the **application pods** (backend + frontend) are per-PR. The per-PR **database was
   deliberately dropped** — all slots point at the **same shared DEV Oracle**.
 - **Implication:** any data created on any slot (via the UI/API or a test) lands in the shared DEV
@@ -28,13 +30,20 @@ per-PR into numbered slots; the **database is a single shared external Oracle**,
 
 Located in `.github/workflows/`:
 
-- **`pr-open.yml`** (on `pull_request`) → build → `reusable-deploy.yml` (deploy to the PR slot) →
-  `reusable-tests.yml` (Playwright E2E against the slot).
-- **`merge.yml`** (on merge to `main`) → deploy + run the same tests against **TEST**.
-- **`reusable-deploy.yml`** — the shared deploy job; injects Oracle + Cognito + object-storage secrets
-  into the pods. (Note: DB credentials go to the **app pod only**, never to the test job.)
-- **`reusable-tests.yml`** — the shared E2E job; receives only `E2E_IDIR_USER` / `E2E_IDIR_PASSWORD`.
-  It resolves `E2E_BASE_URL` to the slot/target URL and runs `npx playwright test`.
+- **`pr-open.yml`** (on `pull_request`) → build → `reusable-deploy.yml` (deploy to the PR slot).
+- **`merge.yml`** (on merge to `main`) → deploy to **TEST**.
+- **`reusable-deploy.yml`** — the shared deploy job; injects Oracle + BC Gov SSO + object-storage
+  values into the pods. The realm issuer and client id are each stored **once** as a GitHub variable
+  and fed to both deploy templates — the container env var names differ (`VITE_` is load-bearing) but
+  the CI variables must not, or the pair drifts and every request 401s after a successful sign-in. (Note: DB credentials go to the **app pod only**, never to the test job.)
+- **`reusable-tests.yml`** — the shared Playwright E2E job. **Currently not invoked** (2026-09-09):
+  both call sites are commented out because FREP's CSS integration brokers IDIR - MFA, and a second
+  factor is something the `E2E_IDIR_USER` / `E2E_IDIR_PASSWORD` credentials cannot supply, so
+  `auth.setup.ts` cannot get a session unattended. Re-enabling needs an MFA-exempt service account
+  or a strategy that avoids the browser login. The workflow and the suite are both kept current —
+  see [testing.md](./testing.md).
+- **Unit and browser-mode tests are unaffected.** `analysis.yml` runs `npm run test:coverage`
+  (Vitest) plus lint and SonarCloud on every PR and merge.
 
 ### Deploy flow
 
@@ -46,16 +55,14 @@ flowchart TD
     open --> slot["Compute slot<br/>= PR# % 50"]
     slot --> build1["Build<br/>backend + frontend images"]
     build1 --> dep1["reusable-deploy.yml<br/>→ slot pods"]
-    dep1 --> test1["reusable-tests.yml<br/>Playwright E2E"]
-    test1 --> url1["nr-frep-&lt;slot&gt;<br/>.apps.gold.devops.gov.bc.ca"]
+    dep1 --> url1["nr-frep-&lt;slot&gt;<br/>.apps.gold.devops.gov.bc.ca"]
 
     mrg --> build2["Build images"]
     build2 --> dep2["reusable-deploy.yml<br/>→ TEST"]
-    dep2 --> test2["reusable-tests.yml<br/>Playwright E2E"]
-    test2 --> url2["nr-frep-test<br/>.apps.gold.devops.gov.bc.ca"]
+    dep2 --> url2["nr-frep-test<br/>.apps.gold.devops.gov.bc.ca"]
 
     db[("Shared DEV Oracle")]
-    dep1 -. "app pods only<br/>(DB + Cognito + S3 secrets)" .-> db
+    dep1 -. "app pods only<br/>(DB + SSO + S3 secrets)" .-> db
     url1 -. reads/writes .-> db
     url2 -. reads/writes .-> db
 

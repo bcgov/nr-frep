@@ -3,7 +3,7 @@ package ca.bc.gov.nrs.frep.security;
 /**
  * SpEL authorization expressions for {@code @PreAuthorize} on the API endpoints. Modelled on the
  * nr-fspts {@code FspAuthorities} pattern (one constant per access level, referenced from each
- * endpoint), adapted to nr-frep's authority naming: the Cognito-groups converter exposes authorities
+ * endpoint), adapted to nr-frep's authority naming: the role converter exposes authorities
  * <em>without</em> the {@code ROLE_} prefix (see {@code Oauth2SecurityCustomizer}), so these use
  * {@code hasAnyAuthority(...)} rather than {@code hasAnyRole(...)}.
  *
@@ -15,18 +15,18 @@ public final class FrepAuthorities {
 
   /**
    * Roles permitted to create or modify FREP content (checklists, site evaluations, etc.):
-   * {@code FREP_ADMIN} and {@code FREP_EDITOR} — the only two global roles FREP has.
+   * {@code FREP_ADMINISTRATOR} and {@code FREP_EDITOR} — the only two global roles FREP has.
    */
-  public static final String CONTENT_EDIT = "hasAnyAuthority('FREP_ADMIN','FREP_EDITOR')";
+  public static final String CONTENT_EDIT = "hasAnyAuthority('FREP_ADMINISTRATOR','FREP_EDITOR')";
 
   /**
-   * Sys-admin-only actions (FREP700 master-list administration, checklist activation): {@code FREP_ADMIN}.
+   * Sys-admin-only actions (FREP700 master-list administration, checklist activation): {@code FREP_ADMINISTRATOR}.
    */
-  public static final String ADMIN = "hasAuthority('FREP_ADMIN')";
+  public static final String ADMIN = "hasAuthority('FREP_ADMINISTRATOR')";
 
   /**
-   * Coarse "may this caller touch CHR at all" gate: {@code FREP_ADMIN} or any per-district CHR editor
-   * role ({@code FREP_CHR_EDITOR_DISTRICT_*}). A global {@code FREP_EDITOR} (Biodiversity) is
+   * Coarse "may this caller touch CHR at all" gate: {@code FREP_ADMINISTRATOR} or any per-district CHR editor
+   * role ({@code FREP_CHR_EDITOR_DISTRICT-*}). A global {@code FREP_EDITOR} (Biodiversity) is
    * intentionally excluded — CHR access is district-scoped. Evaluated via the {@code @auth} bean
    * ({@link LoggedUserHelper}).
    *
@@ -40,13 +40,13 @@ public final class FrepAuthorities {
   public static final String CHR_EDIT = "@auth.canAnyChr()";
 
   /**
-   * FREP editor access: {@code FREP_ADMIN} or {@code FREP_EDITOR}. Gates the protocol-checklist
+   * FREP editor access: {@code FREP_ADMINISTRATOR} or {@code FREP_EDITOR}. Gates the protocol-checklist
    * (Biodiversity) reads (writes use {@link #CONTENT_EDIT}, which is equivalent).
    */
-  public static final String FREP_EDIT = "hasAnyAuthority('FREP_ADMIN','FREP_EDITOR')";
+  public static final String FREP_EDIT = "hasAnyAuthority('FREP_ADMINISTRATOR','FREP_EDITOR')";
 
   /**
-   * Site Details resource editing (FREP110): {@code FREP_ADMIN}, {@code FREP_EDITOR}, <em>or</em> any
+   * Site Details resource editing (FREP110): {@code FREP_ADMINISTRATOR}, {@code FREP_EDITOR}, <em>or</em> any
    * per-district CHR editor. Broader than {@link #CONTENT_EDIT} because site records are shared
    * across protocols — see {@link LoggedUserHelper#canEditSite()}. Creating a targeted site (FREP200)
    * remains {@link #CONTENT_EDIT}.

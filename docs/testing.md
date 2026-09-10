@@ -39,8 +39,10 @@ Config: `frontend/playwright.config.ts`. Specs: `frontend/e2e/*.spec.ts`. Shared
 > out: the CSS integration brokers IDIR - MFA, and a second factor is by construction something the
 > CI credentials cannot supply, so `auth.setup.ts` never gets a session and every spec fails at setup
 > rather than on what it tests. Re-enabling needs an MFA-exempt service account or a strategy that
-> avoids the browser login. **Run it by hand against a deployed environment instead** — the suite is
-> kept current. Unit and browser-mode tests still run in CI via `analysis.yml`.
+> avoids the browser login. **Run the Playwright suite by hand against a deployed environment
+> instead** — the suite is kept current, and with E2E off nothing else exercises a real login against
+> a real realm, so run it on every TEST and PROD deploy. Unit and browser-mode tests still run in CI
+> via `analysis.yml`.
 
 - Tests target a **deployed** app via `E2E_BASE_URL` (defaults to DEV). `utils.ts` throws if
   `E2E_BASE_URL` is unset.

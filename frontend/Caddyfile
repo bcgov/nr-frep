@@ -24,11 +24,18 @@
 	file_server
 	@spa_router {
 		not path /api*
+		not path /health
 		file {
 			try_files {path} /index.html
 		}
 	}
 	rewrite @spa_router {http.matchers.file.relative}
+	# Connectivity probe target for the frontend (see src/hooks/useOnlineStatus.ts). Must be excluded
+	# from @spa_router above, or try_files rewrites it to /index.html before `respond` ever runs, and
+	# the probe pays for the whole app shell instead of two bytes. `respond` is ordered ahead of
+	# file_server, so this wins without a handle block. The site-wide no-store Cache-Control below
+	# keeps intermediaries from answering it from cache.
+	respond /health "OK" 200
 	# Proxy requests to API service
 	reverse_proxy /api* {$BACKEND_URL} {
 		header_up Host {http.reverse_proxy.upstream.hostport}

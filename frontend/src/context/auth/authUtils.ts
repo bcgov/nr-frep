@@ -10,20 +10,10 @@ import {
 
 import { env } from '@/env';
 
-// ── Cookie helpers ───────────────────────────────────────────────────
-
-/** Reads a browser cookie value by name. Returns '' if not found. */
-export const getCookie = (name: string): string => {
-  const cookie = document.cookie
-    .split(';')
-    .find((cookieValue) => cookieValue.trim().startsWith(name));
-  return cookie ? (cookie.split('=')[1] ?? '') : '';
-};
-
 /**
  * Note on token reads: the tokens live in sessionStorage under `oidc-client-ts`'s own keys and are
  * read through the `UserManager` (see `services/keycloak.ts`), never as DOM-visible cookies. The
- * only cookie read directly is the backend-set XSRF token, via {@link getCookie} above.
+ * app reads no cookies at all — the CSRF token it used to echo went away with the CSRF filter.
  */
 
 /**

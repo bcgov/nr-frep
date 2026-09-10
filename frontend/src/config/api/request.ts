@@ -236,7 +236,6 @@ export const sendRequest = async <T>(
     // Binary endpoints must opt out of JSON parsing or the bytes are corrupted on arrival.
     ...(options.responseType ? { responseType: options.responseType } : {}),
     withCredentials: config.WITH_CREDENTIALS,
-    withXSRFToken: config.CREDENTIALS === 'include' ? config.WITH_CREDENTIALS : false,
     cancelToken: source.token,
   };
 

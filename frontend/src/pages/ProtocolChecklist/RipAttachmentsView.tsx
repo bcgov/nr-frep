@@ -47,7 +47,7 @@ const DESCRIPTION_LIMIT = 2000;
  * Checklist Attachments tab (legacy {@code checklistAttachment} / FREP_CHECKLIST_ATTACHMENTS) —
  * list, download, upload, and delete file attachments. Uploads are `multipart/form-data`: the raw
  * `File` goes on the wire, so there's no base64 inflation and the server can spool it to disk
- * instead of holding it in heap. Auth + CSRF still ride on the standard API client.
+ * instead of holding it in heap. Auth still rides on the standard API client.
  *
  * Downloads are still base64 JSON — the read path is a separate piece of work.
  */

@@ -263,7 +263,6 @@ ca:
               - content-type
               - credential
               - CREDENTIAL
-              - X-XSRF-TOKEN
               - access-control-allow-origin
               - Access-Control-Allow-Origin
               - DNT

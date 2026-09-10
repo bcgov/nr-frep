@@ -1,4 +1,3 @@
-import { getCookie } from '@/context/auth/authUtils';
 import { getUserManager } from '@/services/keycloak';
 
 export type HeaderRecord = Record<string, string>;
@@ -28,11 +27,6 @@ const normalizeHeaders = (headers?: HeadersInit): HeaderRecord => {
   }, {});
 };
 
-const getCsrfToken = (): string | null => {
-  const raw = getCookie('XSRF-TOKEN');
-  return raw ? decodeURIComponent(raw) : null;
-};
-
 const getAccessToken = async (): Promise<string | undefined> => {
   try {
     const current = await getUserManager().getUser();
@@ -45,8 +39,11 @@ const getAccessToken = async (): Promise<string | undefined> => {
 /**
  * Build a header map for an authorized backend call. Layers, in order:
  *   1. Bearer access token (if a session exists).
- *   2. X-XSRF-TOKEN echoed back from the XSRF cookie set by the backend.
- *   3. Any per-call header overrides supplied by the caller.
+ *   2. Any per-call header overrides supplied by the caller.
+ *
+ * <p>No CSRF header. The API authenticates solely on the Bearer token and holds no session, so a
+ * cross-site request carries no ambient credential and is rejected as unauthenticated — see
+ * `SecurityConfiguration` on the backend.
  */
 export const buildAuthorizedHeaders = async (
   ...headerSets: Array<HeadersInit | undefined>
@@ -56,11 +53,6 @@ export const buildAuthorizedHeaders = async (
   const accessToken = await getAccessToken();
   if (accessToken) {
     baseHeaders.Authorization = `Bearer ${accessToken}`;
-  }
-
-  const csrfToken = getCsrfToken();
-  if (csrfToken) {
-    baseHeaders['X-XSRF-TOKEN'] = csrfToken;
   }
 
   return headerSets.reduce<HeaderRecord>((acc, headerSet) => {

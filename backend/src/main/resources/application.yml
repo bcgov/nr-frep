@@ -3,7 +3,11 @@ server:
   servlet:
     context-path: /
   error:
-    include-message: always
+    # never (the Spring default) — this governs the fallback /error path for anything the
+    # @ControllerAdvice does not handle. `always` put raw exception text in those bodies, which is
+    # the same leak ApiError.debugMessage had. Handled errors still carry a deliberate, written
+    # message; unhandled ones say nothing and the detail goes to the log.
+    include-message: never
   # Use the SERVER_PORT placeholder so application-local.yml's SERVER_PORT
   # value (and the OpenShift env var) can override the default. Local dev
   # needs 8080 because Vite's dev server claims 3000.
@@ -144,6 +148,14 @@ info:
 
 frep:
   package-name: FREP
+  attachments:
+    # Which file types may be attached to a Biodiversity checklist. REQUIRED — there is no in-code
+    # default; a blank value makes AttachmentTypes throw at startup rather than quietly accepting
+    # nothing. Adding a format is an edit to the GitHub variable + a redeploy;
+    # there is no database change, because FREP no longer validates the type against
+    # THE.MIME_TYPE_CODE. Entries are extensions only ("PDF,PNG,WEBP"); the media type each
+    # downloads as comes from the AttachmentType enum.
+    allowed-types: ${ATTACHMENT_ALLOWED_TYPES:}
   codelist-package-name: FREP_CODE_LISTS
   # BC Gov DataBC public WFS, proxied for the in-app Leaflet map (opening polygon GeoJSON by
   # OPENING_ID). Public endpoint — overridable per environment but the default is production-correct.
@@ -217,7 +229,6 @@ ca:
   bc:
     gov:
       nrs:
-        self-uri: http://localhost:3000
         keycloak:
           # The CSS integration's client id. Validated as the token's `azp` — the standard realm is
           # shared across BC Gov applications, so issuer + signature alone do not prove a token was
@@ -243,38 +254,6 @@ ca:
           read-timeout: 30s
         user-directory:
           default-page-size: 25
-        frontend:
-          url: http://localhost:3000
-          cors:
-            headers:
-              - x-requested-with
-              - X-REQUESTED-WITH
-              - authorization
-              - Authorization
-              - Content-Type
-              - content-type
-              - credential
-              - CREDENTIAL
-              - X-XSRF-TOKEN
-              - access-control-allow-origin
-              - Access-Control-Allow-Origin
-              - DNT
-              - Keep-Alive,
-              - User-Agent,
-              - X-Requested-With,
-              - If-Modified-Since,
-              - Cache-Control,
-              - Content-Range,
-              - Range
-              - Location
-              - location
-            methods:
-              - OPTIONS
-              - GET
-              - POST
-              - PUT
-              - DELETE
-            age: 5m
 
 # Logging — Spring Boot default stack (SLF4j + Logback).
 #

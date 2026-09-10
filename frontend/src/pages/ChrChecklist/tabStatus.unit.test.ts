@@ -310,7 +310,9 @@ describe('chrTabStatuses', () => {
     const feature = {
       featureLabel: '1',
       compositeFeatureInd: 'false',
-      featureComment: 'x'.repeat(600),
+      // Must exceed FEATURE_TEXT_LIMITS.featureComment, which the column widening took to 2000.
+      // At 600 this asserted a limit that no longer exists and could never report "Too long".
+      featureComment: 'x'.repeat(2100),
     };
     const { outstanding } = chrTabStatuses(completeChecklist({ features: [feature] }));
     expect(outstanding.features.some((item) => item.includes('Too long'))).toBe(true);

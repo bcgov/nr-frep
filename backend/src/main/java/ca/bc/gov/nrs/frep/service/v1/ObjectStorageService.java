@@ -57,6 +57,33 @@ public class ObjectStorageService {
     }
   }
 
+  /**
+   * The object's bytes, or {@code null} when the key does not exist.
+   *
+   * <p>Replaces an {@code objectExists} HEAD followed by a GET: one round trip instead of two, and
+   * — more importantly — only a genuine {@code NoSuchKey} is treated as "not there". The HEAD it
+   * replaces caught every exception, so a transient storage failure looked identical to a
+   * not-yet-migrated attachment and silently served the empty Oracle BLOB in its place, handing the
+   * user a 0-byte file. Anything that is not NoSuchKey now propagates.
+   */
+  public byte[] getObjectBytesIfPresent(String key) {
+    try (S3Client client = client()) {
+      return client.getObjectAsBytes(builder -> builder.bucket(properties.bucket()).key(key))
+          .asByteArray();
+    } catch (NoSuchKeyException ex) {
+      return null;
+    }
+  }
+
+  /**
+   * Whether {@code key} is present, without transferring it.
+   *
+   * <p>Kept alongside {@link #getObjectBytesIfPresent}, which serves the download path: there a
+   * check followed by a GET was two round trips for one file, so the two were folded into one call.
+   * The migration asks a different question — "has this one been done already?" over thousands of
+   * rows — and answering it by downloading each object would move the whole corpus to decide it did
+   * not need to.
+   */
   public boolean objectExists(String key) {
     try (S3Client client = client()) {
       client.headObject(builder -> builder.bucket(properties.bucket()).key(key));

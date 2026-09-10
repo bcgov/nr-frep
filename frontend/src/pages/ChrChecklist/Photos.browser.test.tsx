@@ -155,7 +155,7 @@ describe('Photos display', () => {
     await userEvent.upload(fileInput, new File(['x'], 'photo.jpg', { type: 'image/jpeg' }));
 
     // Empty description → inline error, no save round-trip.
-    expect(await screen.findByText('Enter a description before uploading a photo.')).toBeTruthy();
+    expect(await screen.findByText('Enter a description before uploading a file.')).toBeTruthy();
     expect(onAdd).not.toHaveBeenCalled();
   });
 });

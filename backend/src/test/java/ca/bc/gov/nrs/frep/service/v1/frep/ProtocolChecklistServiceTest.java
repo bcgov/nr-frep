@@ -40,9 +40,14 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -78,6 +83,14 @@ class ProtocolChecklistServiceTest {
 
   @Mock
   private ca.bc.gov.nrs.frep.service.v1.ObjectStorageService objectStorage;
+
+  // A real instance rather than a @Mock: the allow-list behaviour these tests exercise IS this
+  // bean's behaviour. There is no in-code default, so the value ATTACHMENT_ALLOWED_TYPES is expected
+  // to carry is spelled out here. @Spy so @InjectMocks picks it up.
+  @Spy
+  private AttachmentTypes attachmentTypes = new AttachmentTypes(
+      "BMP,CSV,DOC,DOCX,GIF,HTM,IFM,JPG,JPK,MDB,MDE,MP4,OBD,PDF,PNG,PPS,PPT,PPTX,RPT,RTF,TIF,"
+          + "TIFF,TXT,WAV,WEBP,XLD,XLS,XLSX,XML,ZIP");
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -685,6 +698,31 @@ class ProtocolChecklistServiceTest {
     verifyNoInteractions(virusScanner);
   }
 
+  // The modern Office formats and the four-letter image spellings. These are the only allowed
+  // extensions longer than three characters, and MIME_TYPE_CODE is VARCHAR2(3 BYTE) — the write
+  // path maps them down (EXTENSION_MIME_CODE), so accepting them here must stay paired with that.
+  @ParameterizedTest
+  @ValueSource(strings = {"report.docx", "data.xlsx", "deck.pptx", "scan.tiff", "photo.webp"})
+  void acceptsTheFourCharacterExtensions(String fileName) {
+    assertDoesNotThrow(
+        () -> service.saveAttachment("bio", "1", upload(fileName, new byte[] {1, 2, 3}), "desc"));
+  }
+
+  @Test
+  void listsTheNewTypesInTheRejectionMessageSoTheUserCanSeeThemAllowed() {
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+
+    String reason = String.valueOf(ex.getReason());
+    // The display string is maintained separately from the enforcing Set; if they drift, the error
+    // tells the user a type is unsupported while the validator happily accepts it.
+    assertTrue(reason.contains("DOCX"), reason);
+    assertTrue(reason.contains("XLSX"), reason);
+    assertTrue(reason.contains("PPTX"), reason);
+    assertTrue(reason.contains("TIFF"), reason);
+    assertTrue(reason.contains("WEBP"), reason);
+  }
+
   @Test
   void scansTheUploadedBytesBeforePersistingThem() {
     byte[] content = {1, 2, 3, 4};
@@ -701,13 +739,29 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void storesOurMediaTypeRatherThanTheOneTheBrowserClaimed() {
+    // The value handed to the repository is what object storage records as the object's
+    // Content-Type. The browser's claim varies by OS/browser for the same format and is blank for
+    // the legacy MoF types, so it must not be what we persist — .webp here is deliberately uploaded
+    // as a generic binary, which is exactly what some browsers send.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\SOMEONE");
+    byte[] content = {1, 2};
+
+    service.saveAttachment("bio", "1",
+        new MockMultipartFile("file", "map.webp", "application/octet-stream", content), "desc");
+
+    verify(writeRepository).saveAttachment(
+        eq("1"), eq("SLR"), eq("map.webp"), eq("desc"), eq("image/webp"), eq(content),
+        eq("IDIR\\SOMEONE"));
+  }
+
+  @Test
   void readsTheUploadedFileOnlyOnce() throws Exception {
     // getBytes() allocates a fresh array per call, so calling it for the scan and again for the
     // write would put two copies of the file on a 400m heap. nr-fspts does exactly that.
     MultipartFile file = mock(MultipartFile.class);
     when(file.isEmpty()).thenReturn(false);
     when(file.getOriginalFilename()).thenReturn("notes.pdf");
-    when(file.getContentType()).thenReturn("application/pdf");
     when(file.getBytes()).thenReturn(new byte[] {9, 9});
 
     assertDoesNotThrow(() -> service.saveAttachment("bio", "1", file, "desc"));
@@ -772,6 +826,43 @@ class ProtocolChecklistServiceTest {
     // A negative size means "not found in object storage" and must surface as null, not "-1".
     assertEquals(null, page.attachments().get(1).fileSize());
     assertEquals(2, page.totalCount());
+  }
+
+  // --- Media types (the extension -> MIME map that replaced MIME_TYPE_CODE.DESCRIPTION) ---
+
+  @Test
+  void resolvesTheMediaTypeFromTheExtensionRatherThanTheDatabase() {
+    // The proc's out-param is NULL for anything the shared code table never had (WEBP is the
+    // motivating case: it is previewable, so a null used to yield data:WEBP;base64,...).
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("map.webp", null, new byte[] {1}));
+
+    AttachmentContent content = service.getAttachmentContent("bio", "1", "9");
+
+    assertEquals("image/webp", content.mimeType());
+  }
+
+  @Test
+  void prefersTheMappedMediaTypeOverAStaleStoredValue() {
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("report.pdf", "text/plain", new byte[] {1}));
+
+    assertEquals("application/pdf", service.getAttachmentContent("bio", "1", "9").mimeType());
+  }
+
+  @Test
+  void fallsBackForAnExtensionThatIsNotMapped() {
+    // Rows predating the map (or a file stored without an extension) must still download, just
+    // without a specific type — never null, which is what the client cannot handle.
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("legacy", null, new byte[] {1}));
+    assertEquals("application/octet-stream",
+        service.getAttachmentContent("bio", "1", "9").mimeType());
+
+    when(writeRepository.getAttachmentContent("1", "SLR", "8"))
+        .thenReturn(new AttachmentContent("legacy.odd", "application/x-odd", new byte[] {1}));
+    assertEquals("application/x-odd",
+        service.getAttachmentContent("bio", "1", "8").mimeType());
   }
 
   @Nested

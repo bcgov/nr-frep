@@ -2,9 +2,14 @@
  * Length limits for the CHR free-text fields, keyed by the draft field each form edits.
  *
  * <p>Every limit is a **byte** count — see `@/utils/textLimits` for why that matters and for the
- * helpers that measure and report it. Values are transcribed from the legacy DDL
- * (`nr-frep-legacy/database/ddl/tab/`); the comment on each entry names the column so the two can
- * be re-checked against each other.
+ * helpers that measure and report it. Values are transcribed from nr-mof-db
+ * (`scripts/THE/TABLES/`); the comment on each entry names the column so the two can be re-checked
+ * against each other.
+ *
+ * <p>`featureComment`, `ratingRationale` and the Notes tab's `commentaires` were widened by
+ * migration `V202608051100.*` (nr-mof-db). **These values are only correct once that migration has
+ * been deployed to the target environment** — shipping them ahead of it lets the UI accept text the
+ * insert will reject.
  */
 
 /** CHR_FEATURE_DETAIL / CHR_FEATURE_IDENTITY free-text columns, keyed by `Feature` field. */
@@ -15,7 +20,7 @@ export const FEATURE_TEXT_LIMITS: Record<string, number> = {
   q5Description: 2000, // CHR_FEATURE_DETAIL.EFFECTIVE_STRATS_USED_DESC
   q6Description: 2000, // CHR_FEATURE_DETAIL.ALTERNATE_STRATS_AVAIL_DESC
   featureRatingRationale: 2000, // CHR_FEATURE_DETAIL.EVALUATION_RATING_RATIONALE
-  featureComment: 500, // CHR_FEATURE_IDENTITY.COMMENTS
+  featureComment: 2000, // CHR_FEATURE_IDENTITY.COMMENTS
 };
 
 /** CHR_CHECKLIST free-text columns, keyed by the opening-information draft field. */
@@ -28,15 +33,15 @@ export const BLOCK_TEXT_LIMITS: Record<string, number> = {
   q8Comments: 2000, // CHR_CHECKLIST.LIMITING_OPERATNL_FACTORS_DESC
   q9Comments: 2000, // CHR_CHECKLIST.EFFECTIVE_STRATS_USED_DESC
   q10Comments: 2000, // CHR_CHECKLIST.ALTERNATE_STRATS_AVAIL_DESC
-  ratingRationale: 2000, // CHR_CHECKLIST.EVALUATION_RATING_RATIONALE
+  ratingRationale: 4000, // CHR_CHECKLIST.EVALUATION_RATING_RATIONALE
 };
 
 /**
- * The CHR Notes tab. Persisted through the block-summary save, so it is the same column the legacy
- * CHR "Comments" tab wrote — noticeably tighter than the 2000-byte question boxes beside it.
+ * The CHR Notes tab. Persisted through the block-summary save, so it writes the same column the
+ * legacy CHR "Comments" tab did.
  */
 export const NOTES_TEXT_LIMITS: Record<string, number> = {
-  commentaires: 500, // CHR_CHECKLIST.BLOCK_COMMENTS
+  commentaires: 2000, // CHR_CHECKLIST.BLOCK_COMMENTS
 };
 
 /** The Photos tab's upload form — one description per uploaded image. */

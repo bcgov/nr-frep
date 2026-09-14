@@ -102,6 +102,14 @@
     object-fit: cover;
     border: 1px solid var(--cds-border-subtle, #e0e0e0);
 
+    /* Holds the file name for anything with no thumbnail — and since this table has no file-name
+       column, it is the only place that name is shown.
+
+       A file name is a single unbreakable token as far as wrapping is concerned: neither `_` nor
+       `.` is a break opportunity, so `2025_FREP_checklist_rejection_reason.PDF` was laid out as one
+       long line, centred on the 120px box, and spilled out of both sides across the neighbouring
+       column. `overflow-wrap: anywhere` lets it break mid-token to fill the box; `overflow: hidden`
+       bounds what still will not fit, and the full name stays on the element's title. */
     &--placeholder {
       display: flex;
       align-items: center;
@@ -110,6 +118,8 @@
       font-size: 0.75rem;
       padding: 0.5rem;
       color: var(--cds-text-secondary, #525252);
+      overflow: hidden;
+      overflow-wrap: anywhere;
     }
   }
 

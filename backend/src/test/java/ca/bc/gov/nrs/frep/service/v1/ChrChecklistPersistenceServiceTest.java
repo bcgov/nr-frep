@@ -53,6 +53,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Verifies the {@code saveFeatures} port against a mocked {@link EntityManager}: feature identity
@@ -572,6 +573,27 @@ class ChrChecklistPersistenceServiceTest {
     feature.setChrChecklist(checklist);
     checklist.getChrFeatureIdentities().add(feature);
     return feature;
+  }
+
+  @Test
+  void addPhotoStoresACodeThatFitsTheColumnAndKeysTheObjectByIt() {
+    // MIME_TYPE_CODE is VARCHAR2(10). The caller now passes the extension code, so this is what the
+    // column receives; the object's key and Content-Type are both derived from that same code, so a
+    // PDF is stored as a PDF rather than being keyed .application/pdf or labelled octet-stream.
+    ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> contentType = ArgumentCaptor.forClass(String.class);
+
+    service.addPhoto(1001L, "permit.pdf", "A permit", null, null, "PDF",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = (ChrChecklistAttachment)
+        checklist.getChrChecklistAttachments().iterator().next();
+    assertEquals("PDF", stored.getMimeTypeCode());
+    assertTrue(stored.getMimeTypeCode().length() <= 10,
+        "MIME_TYPE_CODE is VARCHAR2(10); " + stored.getMimeTypeCode() + " would not fit");
+    verify(objectStorage).putObject(key.capture(), contentType.capture(), any());
+    assertTrue(key.getValue().endsWith(".pdf"), key.getValue());
+    assertEquals("application/pdf", contentType.getValue());
   }
 
   @Test

@@ -46,7 +46,8 @@ describe('addTextLimitErrors', () => {
     const errors: Record<string, string> = {};
     addTextLimitErrors(
       errors,
-      { featureComment: 'a'.repeat(501), featureDescription: 'a'.repeat(999) },
+      // featureComment is capped at 2000, featureDescription at 1000 — only the first is over.
+      { featureComment: 'a'.repeat(2001), featureDescription: 'a'.repeat(999) },
       FEATURE_TEXT_LIMITS,
     );
 
@@ -71,8 +72,8 @@ describe('addTextLimitErrors', () => {
 
 describe('the limit tables', () => {
   it('matches the legacy DDL column widths', () => {
-    // Transcribed from nr-frep-legacy/database/ddl/tab/CHR_FEATURE_DETAIL.tab and
-    // CHR_FEATURE_IDENTITY.tab — a mismatch here means a save fails at the database instead.
+    // Transcribed from nr-mof-db scripts/THE/TABLES/ — a mismatch here means a save fails at the
+    // database instead. featureComment reflects the widening in migration V202608051100.2.
     expect(FEATURE_TEXT_LIMITS).toEqual({
       featureDescription: 1000,
       descriptionofdamage: 1000,
@@ -80,9 +81,9 @@ describe('the limit tables', () => {
       q5Description: 2000,
       q6Description: 2000,
       featureRatingRationale: 2000,
-      featureComment: 500,
+      featureComment: 2000,
     });
-    // The Notes tab writes CHR_CHECKLIST.BLOCK_COMMENTS — 500, not the 2000 of the question boxes.
-    expect(NOTES_TEXT_LIMITS).toEqual({ commentaires: 500 });
+    // The Notes tab writes CHR_CHECKLIST.BLOCK_COMMENTS, widened to 2000 by V202608051100.1.
+    expect(NOTES_TEXT_LIMITS).toEqual({ commentaires: 2000 });
   });
 });

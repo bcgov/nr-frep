@@ -34,8 +34,9 @@ export type AuthorizationInfo = {
    * `true` when the user may edit a site's resources (FREP110 Site Details) — editors *or* any
    * per-district CHR editor. Broader than {@link canEdit}: site records are shared across protocols,
    * so a CHR district editor maintaining their districts' checklists can edit the sites those
-   * checklists hang off. Mirrors `LoggedUserHelper.canEditSite()`. Creating a targeted site
-   * (FREP200) still requires {@link canCreate}.
+   * checklists hang off. Mirrors `LoggedUserHelper.canEditSite()`. The Add Target Site flow
+   * (FREP200) is on this same check end to end, so a CHR district editor may add one — do NOT gate
+   * that button on {@link canCreate}, which would hide it from the role the backend admits.
    */
   canEditSite: boolean;
   /** Checks if the user holds a specific role. */

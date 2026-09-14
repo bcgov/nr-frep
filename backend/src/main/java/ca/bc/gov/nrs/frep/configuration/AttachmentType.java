@@ -87,6 +87,27 @@ public enum AttachmentType {
     return mediaType;
   }
 
+  /**
+   * The uppercased extension of {@code fileName}, or {@code ""} when it has none — the one place
+   * that answers "what type is this file?".
+   *
+   * <p>The filename, not the browser's {@code Content-Type} claim: {@code file.type} is empty for
+   * some drag sources and for formats the OS has no mapping for, and it is a <em>media type</em>
+   * ({@code application/pdf}), which is not what {@code MIME_TYPE_CODE} holds. That column is
+   * {@code VARCHAR2(10)} and stores the short code {@code PDF}, so writing the media type there
+   * fails at insert for anything longer than ten characters — which is every type but the images,
+   * since {@code image/jpeg} and {@code image/webp} are exactly ten. Deriving the value from the
+   * filename gives the allow-list check and the stored code one source, so a type that validates
+   * is a type that saves.
+   */
+  public static String extensionOf(String fileName) {
+    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length() - 1) {
+      return "";
+    }
+    return fileName.substring(dot + 1).toUpperCase();
+  }
+
   /** The constant for {@code extension} (any case), or {@code null} when the table has none. */
   public static AttachmentType fromExtension(String extension) {
     return extension == null ? null : BY_EXTENSION.get(extension.trim().toUpperCase());

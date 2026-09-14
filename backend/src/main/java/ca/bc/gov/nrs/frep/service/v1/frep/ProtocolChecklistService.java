@@ -22,6 +22,7 @@ import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
 import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
@@ -877,8 +878,7 @@ public class ProtocolChecklistService {
 
   /** Uppercased extension of {@code fileName}, or "" when it has none. */
   private static String extensionOf(String fileName) {
-    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
-    return dot < 0 || dot == fileName.length() - 1 ? "" : fileName.substring(dot + 1).toUpperCase();
+    return AttachmentType.extensionOf(fileName);
   }
 
   /**

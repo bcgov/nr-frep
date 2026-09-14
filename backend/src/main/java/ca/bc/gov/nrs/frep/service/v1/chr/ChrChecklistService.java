@@ -175,9 +175,14 @@ public class ChrChecklistService {
     byte[] content = readBytes(file);
     // Scan before anything is persisted — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(content, file.getOriginalFilename());
+    // The extension, not file.getContentType(): MIME_TYPE_CODE is VARCHAR2(10) and holds the short
+    // code (PDF), so passing the media type stored "APPLICATION/PDF" — 15 characters — and every
+    // non-image upload died on the insert. It is also the value validateNewPhoto just checked, so
+    // what is validated and what is stored are now one value. The object's Content-Type is derived
+    // from the code by the persistence layer, deliberately not taken from the browser's claim.
     persistenceService.addPhoto(
         checklistId, file.getOriginalFilename(), description.trim(), fileDate, featureId,
-        file.getContentType(), content, loggedUserHelper.getLoggedUserId());
+        extensionOf(file.getOriginalFilename()), content, loggedUserHelper.getLoggedUserId());
     log.info("Added attachment :: {} ({} bytes) to CHR checklist :: {} by user :: {}",
         file.getOriginalFilename(), content.length, checklistId,
         loggedUserHelper.getLoggedUserId());
@@ -233,8 +238,7 @@ public class ChrChecklistService {
 
   /** Uppercased extension of {@code fileName}, or "" when it has none. */
   private static String extensionOf(String fileName) {
-    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
-    return dot < 0 || dot == fileName.length() - 1 ? "" : fileName.substring(dot + 1).toUpperCase();
+    return AttachmentType.extensionOf(fileName);
   }
 
   private void validateNewPhoto(MultipartFile file, String description) {

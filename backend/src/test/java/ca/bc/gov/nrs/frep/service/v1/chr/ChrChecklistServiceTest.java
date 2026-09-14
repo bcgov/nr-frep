@@ -35,12 +35,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import org.mockito.InOrder;
 import org.springframework.mock.web.MockMultipartFile;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.reset;
+import static org.mockito.ArgumentMatchers.isNull;
 import java.util.ArrayList;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class ChrChecklistServiceTest {
@@ -262,8 +266,39 @@ class ChrChecklistServiceTest {
     InOrder order = inOrder(virusScanner, persistenceService);
     order.verify(virusScanner).scanOrThrow(content, "site.jpg");
     order.verify(persistenceService).addPhoto(
-        eq(1001L), eq("site.jpg"), eq("A description"), eq("2026-05-01"), eq(42L), eq("image/jpeg"),
+        eq(1001L), eq("site.jpg"), eq("A description"), eq("2026-05-01"), eq(42L), eq("JPG"),
         eq(content), eq("IDIR\\tester"));
+  }
+
+  @Test
+  void addPhotoStoresTheExtensionCodeNotTheBrowsersMediaType() {
+    // The bug this pins: addPhoto used to hand file.getContentType() to the persistence layer, which
+    // writes it to MIME_TYPE_CODE — VARCHAR2(10). "application/pdf" is 15 characters, so every PDF
+    // upload died with ORA-12899. Images hid it: "image/jpeg" and "image/webp" are exactly 10.
+    when(checklistRepository.getChecklistStatus(1001L))
+        .thenReturn(ChrConstants.FrepChecklistStatusCode.ACT);
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\tester");
+
+    Map<String, String> byFileName = new LinkedHashMap<>();
+    byFileName.put("permit.pdf", "PDF");
+    byFileName.put("report.docx", "DOCX");
+    byFileName.put("sheet.xlsx", "XLSX");
+    byFileName.put("site.JPG", "JPG");
+
+    byFileName.forEach((fileName, expectedCode) -> {
+      MockMultipartFile file =
+          new MockMultipartFile("file", fileName, "application/octet-stream", new byte[] {1, 2, 3});
+
+      service.addPhoto(1001L, file, "A file", "2026-05-01", null, null);
+
+      ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+      verify(persistenceService).addPhoto(eq(1001L), eq(fileName), eq("A file"), eq("2026-05-01"),
+          isNull(), code.capture(), any(), eq("IDIR\\tester"));
+      assertEquals(expectedCode, code.getValue(), fileName + " should store its extension code");
+      assertTrue(code.getValue().length() <= 10,
+          "MIME_TYPE_CODE is VARCHAR2(10); " + code.getValue() + " would not fit");
+      reset(persistenceService);
+    });
   }
 
   @Test

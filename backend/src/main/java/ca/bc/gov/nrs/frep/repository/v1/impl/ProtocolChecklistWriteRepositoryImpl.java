@@ -1,4 +1,5 @@
 package ca.bc.gov.nrs.frep.repository.v1.impl;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.*;
@@ -1249,14 +1250,11 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
    * into a 400 naming the column.
    */
   private static String mimeTypeCode(String fileName) {
-    if (fileName == null) {
-      return null;
-    }
-    int dot = fileName.lastIndexOf('.');
-    if (dot < 0 || dot == fileName.length() - 1) {
-      return null;
-    }
-    return fileName.substring(dot + 1).toUpperCase();
+    // Null, not "", when there is no extension: this value goes to the proc as the column's own
+    // contents, where the absence of a code is NULL. AttachmentType.extensionOf is the shared
+    // derivation; only the empty case is translated.
+    String extension = AttachmentType.extensionOf(fileName);
+    return extension.isEmpty() ? null : extension;
   }
 
   /** Null for a blank string, so empty values are not passed to NUMBER struct attrs (ORA-17059). */

@@ -451,7 +451,10 @@ const Photos: FC<{
                         />
                       </button>
                     ) : (
-                      <span className="chr-checklist__thumb chr-checklist__thumb--placeholder">
+                      <span
+                        className="chr-checklist__thumb chr-checklist__thumb--placeholder"
+                        title={picture.fileName || undefined}
+                      >
                         {picture.fileName || 'Saved file'}
                       </span>
                     )}

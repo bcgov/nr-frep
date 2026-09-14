@@ -380,6 +380,41 @@ const AcceptedSitesPage: FC = () => {
           {!loading && !configLoading && hasError && (
             <p data-testid="accepted-sites-error">We couldn&apos;t load accepted sites.</p>
           )}
+          {/* The header bar sits OUTSIDE the `sites.length > 0` branch on purpose: "Add target
+              site" is gated on a district being selected, not on that district already having
+              accepted sites. Adding the first site to an empty district is precisely when the
+              action is needed, and keeping the bar rendered means one definition of the action
+              rather than a second copy in the empty state that can drift from this one. Print
+              stays disabled while there is nothing to print. */}
+          {!loading && !configLoading && !hasError && (
+            <TableHeaderBar
+              title={`Accepted sites — ${tableRows.length} result${
+                tableRows.length === 1 ? '' : 's'
+              }`}
+              actions={
+                <>
+                  {/* Add Target Site: enabled once a district is selected (legacy gate). */}
+                  <Button
+                    kind="tertiary"
+                    size="lg"
+                    renderIcon={Add}
+                    onClick={goToAddTargetSite}
+                    disabled={configLoading || !orgUnit}
+                  >
+                    Add target site
+                  </Button>
+                  <Button
+                    kind="tertiary"
+                    size="md"
+                    onClick={() => globalThis.print()}
+                    disabled={loading || configLoading || tableRows.length === 0}
+                  >
+                    Print
+                  </Button>
+                </>
+              }
+            />
+          )}
           {!loading && !configLoading && !hasError && sites.length === 0 && (
             <p data-testid="accepted-sites-empty">No accepted sites match the selected filters.</p>
           )}
@@ -391,33 +426,6 @@ const AcceptedSitesPage: FC = () => {
             >
               {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
                 <TableContainer>
-                  <TableHeaderBar
-                    title={`Accepted sites — ${tableRows.length} result${
-                      tableRows.length === 1 ? '' : 's'
-                    }`}
-                    actions={
-                      <>
-                        {/* Add Target Site: enabled once a district is selected (legacy gate). */}
-                        <Button
-                          kind="tertiary"
-                          size="lg"
-                          renderIcon={Add}
-                          onClick={goToAddTargetSite}
-                          disabled={configLoading || !orgUnit}
-                        >
-                          Add target site
-                        </Button>
-                        <Button
-                          kind="tertiary"
-                          size="md"
-                          onClick={() => globalThis.print()}
-                          disabled={loading || configLoading || tableRows.length === 0}
-                        >
-                          Print
-                        </Button>
-                      </>
-                    }
-                  />
                   <Table {...getTableProps()}>
                     <TableHead>
                       <TableRow>

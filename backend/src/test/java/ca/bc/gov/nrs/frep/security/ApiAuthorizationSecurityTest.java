@@ -43,6 +43,12 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import ca.bc.gov.nrs.frep.controller.v1.OpeningTargetApiController;
+import ca.bc.gov.nrs.frep.endpoint.v1.OpeningTargetApiEndpoint;
+import ca.bc.gov.nrs.frep.service.v1.frep.OpeningTargetService;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OpeningSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
+import org.springframework.http.ResponseEntity;
 
 /**
  * Verifies the {@code @PreAuthorize} gates on the API endpoints actually enforce — authorization now
@@ -121,6 +127,11 @@ class ApiAuthorizationSecurityTest {
     }
 
     @Bean
+    OpeningTargetApiController openingTargetApiController() {
+      return new OpeningTargetApiController(Mockito.mock(OpeningTargetService.class));
+    }
+
+    @Bean
     SearchApiController searchApiController() {
       return new SearchApiController(Mockito.mock(SearchService.class));
     }
@@ -183,6 +194,16 @@ class ApiAuthorizationSecurityTest {
   @Autowired
   private AcceptedSiteApiEndpoint acceptedSiteApi;
 
+  @Autowired
+  private OpeningTargetApiEndpoint openingTargetApi;
+
+  /** The opening search takes 29 filter params; these tests assert only on the authorization gate. */
+  private ResponseEntity<PagedResponse<OpeningSearchResult>> searchOpenings() {
+    return openingTargetApi.searchOpenings(
+        "DCK", null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, 0, 10);
+  }
+
   /** A filter-less report request; these tests assert only on the authorization gate. */
   private static ReportRequest emptyRequest() {
     return new ReportRequest(
@@ -227,6 +248,42 @@ class ApiAuthorizationSecurityTest {
   @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayCreateATargetedSite() {
     assertDoesNotThrow(() -> siteDetailApi.createTargetedSite(null));
+  }
+
+  // The other two steps of the SAME flow. createTargetedSite above is SITE_EDIT, but these were
+  // CONTENT_EDIT until 2026-09-14 — so a district editor was allowed to create a targeted site and
+  // denied the search needed to pick one. Untested endpoints are how that survived; these pin all
+  // three steps to one authority.
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMaySearchOpeningsToTarget() {
+    assertDoesNotThrow(this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMayValidateATargetedSite() {
+    assertDoesNotThrow(() -> openingTargetApi.validateTargetedSite(null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_EDITOR")
+  void editorMayStillSearchOpeningsToTarget() {
+    assertDoesNotThrow(this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotSearchOpeningsToTarget() {
+    assertThrows(AccessDeniedException.class, this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotValidateATargetedSite() {
+    assertThrows(
+        AccessDeniedException.class, () -> openingTargetApi.validateTargetedSite(null));
   }
 
   @Test

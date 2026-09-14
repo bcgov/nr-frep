@@ -127,3 +127,83 @@ describe('AcceptedSitesPage — filters persist via the URL', () => {
     );
   });
 });
+
+describe('AcceptedSitesPage — "Add target site" does not depend on there being results', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const primeConfig = (sites: unknown[]) => {
+    config.getMasterListYears.mockResolvedValue(YEARS);
+    config.getOrgUnits.mockResolvedValue(ORG_UNITS);
+    config.getProtocols.mockResolvedValue(PROTOCOLS);
+    acceptedSites.getAcceptedSites.mockResolvedValue(sites);
+  };
+
+  const addButton = () => screen.getByRole('button', { name: /Add target site/i });
+
+  it('offers the action when no sites match the filters', async () => {
+    // The regression: the header bar holding this button used to render only alongside the table,
+    // so a district with no accepted sites yet — exactly when you need to add the first one —
+    // offered no way to do it.
+    primeConfig([]);
+    renderPage('/accepted-sites?year=2026&orgUnit=5&protocol=CHR');
+
+    await screen.findByTestId('accepted-sites-empty');
+    expect(addButton()).toBeEnabled();
+  });
+
+  it('navigates with the selected district context from the empty state', async () => {
+    primeConfig([]);
+    renderPage('/accepted-sites?year=2026&orgUnit=5&protocol=CHR');
+
+    await screen.findByTestId('accepted-sites-empty');
+    await userEvent.click(addButton());
+
+    await waitFor(() => {
+      const search = screen.getByTestId('loc-search').textContent ?? '';
+      expect(search).toContain('orgUnit=5');
+      expect(search).toContain('year=2026');
+    });
+  });
+
+  it('disables Print while there is nothing to print', async () => {
+    primeConfig([]);
+    renderPage('/accepted-sites?year=2026&orgUnit=5&protocol=CHR');
+
+    await screen.findByTestId('accepted-sites-empty');
+    expect(screen.getByRole('button', { name: /^Print$/i })).toBeDisabled();
+  });
+
+  it('still offers the action once sites do match, alongside the table', async () => {
+    // Guards the other half of the hoist: moving the bar out of the table branch must not drop it
+    // from the populated case.
+    primeConfig([
+      {
+        checklistId: '901',
+        checklistType: 'CHR',
+        sampleNumber: '1',
+        targeted: true,
+        openingNumber: 'OP-1',
+        openingId: '12345',
+        licenceId: 'A1234',
+        cuttingPermitId: 'CP1',
+        cutBlockId: 'BLK1',
+        harvestCompleteDate: '',
+        checklistStatusCode: 'ACT',
+        checklistStatus: 'Active',
+        protocolCode: 'CHR',
+        protocolName: 'Cultural Heritage',
+        effectiveYear: '2026',
+        orgUnitNo: '5',
+      },
+    ]);
+    renderPage('/accepted-sites?year=2026&orgUnit=5&protocol=CHR');
+
+    // Assert on the rendered table, not a data-testid: Carbon's DataTable is a render-prop
+    // component and does not forward arbitrary props to the DOM, so that testid never exists.
+    // findAllByText, because the off-screen PrintableTable renders the same rows a second time.
+    await screen.findAllByRole('table');
+    expect(await screen.findAllByText('OP-1')).not.toHaveLength(0);
+    expect(screen.queryByTestId('accepted-sites-empty')).toBeNull();
+    expect(addButton()).toBeEnabled();
+  });
+});

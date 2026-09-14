@@ -123,7 +123,9 @@ public class LoggedUserHelper {
    * <p>Deliberately the coarse "CHR anywhere" check, not per-district — Site Details is keyed by site
    * id, and the district-scoped variant would need the site's org unit resolved the way
    * {@code ChrChecklistAuthorizer} does for checklists. <em>Creating</em> a targeted site (FREP200)
-   * stays editor-only.
+   * runs on this same check — the whole Add Target Site flow (opening search, validation, create) is
+   * SITE_EDIT, so a district editor can target a site in a district they maintain. An earlier version
+   * of this sentence said creation was editor-only; the code never agreed with it.
    */
   public boolean canEditSite() {
     return canEdit() || canAnyChr();

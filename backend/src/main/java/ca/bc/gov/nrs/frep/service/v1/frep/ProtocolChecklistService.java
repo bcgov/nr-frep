@@ -888,6 +888,11 @@ public class ProtocolChecklistService {
    */
   public void saveAttachment(
       String protocol, String checklistId, MultipartFile file, String description) {
+    // A multipart form part never passes through Jackson, so the trimming deserializer in
+    // GlobalConfiguration does not reach it — trim here, as the CHR photo upload already does.
+    // It matters more than it looks: the column is VARCHAR2(2000 BYTE) and trailing whitespace
+    // spends that budget, so an otherwise-fitting description can fail with ORA-12899.
+    description = description == null ? null : description.trim();
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "The selected file is empty. Choose a file with content and try again.");

@@ -154,6 +154,12 @@ export const TextAreaField: FC<{
    * how an evaluator loses a paragraph without noticing. Blocking Save is the caller's job.
    */
   limit?: number;
+  /**
+   * How `limit` is measured. Defaults to UTF-8 bytes, which is what a JSON body delivers. Pass
+   * {@link multipartByteLength} for a field submitted as a multipart form part — that encoding
+   * rewrites every lone LF as CRLF, so its value reaches the column a byte longer per line break.
+   */
+  measure?: (v: string | undefined) => number;
   invalid?: boolean;
   invalidText?: string;
 }> = ({
@@ -165,10 +171,11 @@ export const TextAreaField: FC<{
   rows = 3,
   maxLength,
   limit,
+  measure = byteLength,
   invalid,
   invalidText,
 }) => {
-  const used = limit === undefined ? 0 : byteLength(value);
+  const used = limit === undefined ? 0 : measure(value);
   const over = limit !== undefined && used > limit;
   const field = (
     <TextArea
@@ -180,7 +187,7 @@ export const TextAreaField: FC<{
       disabled={disabled}
       maxLength={maxLength}
       invalid={invalid || over}
-      invalidText={over ? overLimitError(value, limit) : invalidText}
+      invalidText={over ? overLimitError(value, limit, measure) : invalidText}
       onChange={(e) => onChange(e.target.value)}
     />
   );

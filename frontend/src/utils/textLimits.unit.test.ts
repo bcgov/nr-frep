@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { FEATURE_TEXT_LIMITS, NOTES_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
-import { addTextLimitErrors, byteLength, overLimitError } from '@/utils/textLimits';
+import {
+  addTextLimitErrors,
+  byteLength,
+  multipartByteLength,
+  overLimitError,
+} from '@/utils/textLimits';
 
 describe('byteLength', () => {
   it('counts ASCII as one each', () => {
@@ -85,5 +90,40 @@ describe('the limit tables', () => {
     });
     // The Notes tab writes CHR_CHECKLIST.BLOCK_COMMENTS, widened to 2000 by V202608051100.1.
     expect(NOTES_TEXT_LIMITS).toEqual({ commentaires: 2000 });
+  });
+});
+
+describe('multipartByteLength — what the wire actually carries', () => {
+  it('counts a lone LF as the CRLF that multipart will send', () => {
+    // Verified against a real FormData serialisation: `a\nb` goes out as `a\r\nb`, 4 bytes not 3.
+    // This is the D4 failure — a 2000-byte description with one line break arrived as 2001 and hit
+    // ORA-12899 on a VARCHAR2(2000 BYTE) column, after a counter that had read exactly 2000.
+    expect(byteLength('a\nb')).toBe(3);
+    expect(multipartByteLength('a\nb')).toBe(4);
+  });
+
+  it('does not double-count a CRLF that is already there', () => {
+    expect(multipartByteLength('a\r\nb')).toBe(4);
+  });
+
+  it('counts a lone CR as CRLF as well', () => {
+    expect(multipartByteLength('a\rb')).toBe(4);
+  });
+
+  it('matches byteLength when there are no line breaks', () => {
+    expect(multipartByteLength('plain text')).toBe(byteLength('plain text'));
+    expect(multipartByteLength('em—dash')).toBe(byteLength('em—dash'));
+  });
+
+  it('is what tips a limit-length description over', () => {
+    const at = 'x'.repeat(1999) + '\n';
+    expect(byteLength(at)).toBe(2000);
+    expect(multipartByteLength(at)).toBe(2001);
+    expect(overLimitError(at, 2000)).toBe('');
+    expect(overLimitError(at, 2000, multipartByteLength)).toContain('2001');
+  });
+
+  it('handles undefined', () => {
+    expect(multipartByteLength(undefined)).toBe(0);
   });
 });

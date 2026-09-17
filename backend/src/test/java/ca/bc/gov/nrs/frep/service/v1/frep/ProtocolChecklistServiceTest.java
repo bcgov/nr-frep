@@ -733,8 +733,11 @@ class ProtocolChecklistServiceTest {
     InOrder order = inOrder(virusScanner, writeRepository);
     order.verify(virusScanner).scanOrThrow(content, "notes.pdf");
     // SLR, not the {protocol} segment: the type is resolved from the record (@BeforeEach stub).
+    // The description arrives TRIMMED: a multipart part never passes through Jackson, so this
+    // service trims it itself (GlobalConfiguration's deserializer covers the JSON bodies). The
+    // column is VARCHAR2(2000 BYTE) and trailing whitespace spends that budget.
     order.verify(writeRepository).saveAttachment(
-        eq("1"), eq("SLR"), eq("notes.pdf"), eq(" spaced desc "), eq("application/pdf"),
+        eq("1"), eq("SLR"), eq("notes.pdf"), eq("spaced desc"), eq("application/pdf"),
         eq(content), eq("IDIR\\SOMEONE"));
   }
 

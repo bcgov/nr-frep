@@ -20,7 +20,7 @@ import {
   isPreviewableRecord,
 } from '@/utils/attachmentTypes';
 import { formatShortDate } from '@/utils/date';
-import { overLimitError } from '@/utils/textLimits';
+import { multipartByteLength, overLimitError } from '@/utils/textLimits';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, dataUrlByteLength, formatMb } from '@/utils/uploadLimits';
 
 /**
@@ -230,7 +230,8 @@ const Photos: FC<{
     }
     // Over-length is reported by the field's own counter; just don't start an upload that the
     // database would reject at the end of it.
-    if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description)) return;
+    // multipartByteLength, not byteLength: this description is sent as a form part.
+    if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description, multipartByteLength)) return;
     setDescriptionInvalid(false);
     // Photos are image-only. The database used to enforce this as well (a 3-char MIME_TYPE_CODE with
     // a FK to the shared code table, so a non-image failed on save); that FK is gone, so the app is
@@ -355,6 +356,7 @@ const Photos: FC<{
                   rows={3}
                   disabled={busy}
                   limit={ATTACHMENT_TEXT_LIMITS.description}
+                  measure={multipartByteLength}
                   invalid={descriptionInvalid}
                   invalidText="Enter a description before uploading a file."
                   onChange={(v) => {

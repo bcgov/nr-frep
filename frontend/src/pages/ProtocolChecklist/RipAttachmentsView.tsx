@@ -17,7 +17,7 @@ import {
   ALLOWED_ATTACHMENT_EXTENSIONS,
   isAllowedAttachmentExtension,
 } from '@/utils/attachmentTypes';
-import { byteLength, overLimitError } from '@/utils/textLimits';
+import { multipartByteLength, overLimitError } from '@/utils/textLimits';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, formatMb } from '@/utils/uploadLimits';
 
 /**
@@ -112,7 +112,9 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
   const [descInvalid, setDescInvalid] = useState(false);
   // Checked here rather than left to the database: the column is byte-limited and nothing else
   // enforces it, so an over-long description used to surface only as a failed upload.
-  const descLimitError = overLimitError(description, DESCRIPTION_LIMIT);
+  // multipartByteLength, not byteLength: this description rides in a multipart form part, whose
+  // encoding turns every lone LF into CRLF — a byte per line break the plain count cannot see.
+  const descLimitError = overLimitError(description, DESCRIPTION_LIMIT, multipartByteLength);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -430,7 +432,7 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                   }
                   aria-live="polite"
                 >
-                  {byteLength(description)} / {DESCRIPTION_LIMIT}
+                  {multipartByteLength(description)} / {DESCRIPTION_LIMIT}
                 </span>
               </div>
             </div>

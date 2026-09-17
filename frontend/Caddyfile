@@ -53,8 +53,11 @@
 		# that nothing here requests.
 		#
 		#   img-src     *.gov.bc.ca is LOAD-BEARING — OpeningMap renders WMS overlays straight from
-		#               openmaps.gov.bc.ca (see components/OpeningMap/mapLayers.ts); the two tile
-		#               hosts back the OSM and ArcGIS base layers; blob: backs attachment previews.
+		#               openmaps.gov.bc.ca (see components/OpeningMap/mapLayers.ts);
+		#               server.arcgisonline.com backs the two ESRI base layers; blob: backs
+		#               attachment previews. *.tile.openstreetmap.org was dropped on 2026-09-17
+		#               with the OSM base layer — OSM blocked the app under their tile usage
+		#               policy, so the host is no longer requested and no longer permitted.
 		#   connect-src *.gov.bc.ca is the BC Gov SSO realm — discovery, token and JWKS.
 		#   style-src   'unsafe-inline' stays: Carbon injects <style> at runtime.
 		#   base-uri    stated explicitly because it does NOT fall back to default-src, so without
@@ -66,7 +69,7 @@
 			script-src 'self';
 			style-src 'self' 'unsafe-inline';
 			font-src 'self';
-			img-src 'self' data: blob: https://*.gov.bc.ca https://*.tile.openstreetmap.org https://server.arcgisonline.com;
+			img-src 'self' data: blob: https://*.gov.bc.ca https://server.arcgisonline.com;
 			connect-src 'self' https://*.gov.bc.ca;
 			frame-ancestors 'self';
 			form-action 'self';

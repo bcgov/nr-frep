@@ -4,7 +4,7 @@ import { bioDb } from '@/services/offline/bioDb';
 import { deriveStratumComputed, withBioOffline } from '@/services/offline/bioFacade';
 import { bioOfflineRepo, isTmpId } from '@/services/offline/bioOfflineRepo';
 
-import type { ProtocolChecklistService } from '@/services/protocolChecklist.service';
+import { ProtocolChecklistService } from '@/services/protocolChecklist.service';
 import type { BioSnapshot } from '@/types/protocolChecklist';
 
 /**
@@ -59,6 +59,49 @@ const stubClient = () =>
     getNewStratumComputed: vi.fn().mockResolvedValue({ nar: 'online' }),
     submit: vi.fn().mockResolvedValue(undefined),
   }) as unknown as ProtocolChecklistService;
+
+describe('withBioOffline — wrapping the real class, not a mock', () => {
+  // The escaped defect, twice over: the facade used `{ ...client, ...facade }`. ProtocolChecklistService
+  // is a class, so everything it does not override lives on the prototype — and object spread copies
+  // only OWN enumerable properties. Eight methods came back `undefined`, and they were the whole
+  // feature: takeOffline, getSnapshot, uploadSnapshot, releaseCheckout, activateCheckout,
+  // getCheckoutState, plus getChecklist and unsubmit.
+  //
+  // Every other test in this file wraps a plain-object mock, whose methods ARE own properties — so the
+  // spread worked in the harness and nowhere else. These use a real instance.
+  const real = () => new ProtocolChecklistService({ BASE: '', VERSION: '1' } as never);
+
+  it('keeps the offline lifecycle methods the facade does not override', () => {
+    const api = withBioOffline(real());
+
+    ['takeOffline', 'getSnapshot', 'uploadSnapshot', 'releaseCheckout', 'activateCheckout',
+      'getCheckoutState', 'getChecklist', 'unsubmit'].forEach((name) => {
+      expect(typeof (api as never)[name], name).toBe('function');
+    });
+  });
+
+  it('exposes every own and inherited method of the client', () => {
+    const client = real();
+    const api = withBioOffline(client);
+    const names = new Set<string>();
+    for (let o = client as object; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+      Object.getOwnPropertyNames(o).forEach((n) => names.add(n));
+    }
+
+    const missing = [...names].filter(
+      (n) => n !== 'constructor' && typeof (client as never)[n] === 'function'
+        && typeof (api as never)[n] !== 'function',
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('still overrides the ones it does serve offline', () => {
+    const client = real();
+    const api = withBioOffline(client);
+
+    expect(api.getBiodiversityOpening).not.toBe(client.getBiodiversityOpening);
+  });
+});
 
 describe('withBioOffline', () => {
   let client: ProtocolChecklistService;

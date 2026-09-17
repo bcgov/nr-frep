@@ -371,7 +371,26 @@ export const withBioOffline = (client: Client): Client => {
     },
   };
 
-  return { ...client, ...facade } as Client;
+  // A Proxy, not `{ ...client, ...facade }` — the same defect that broke `withBioReferenceCache`.
+  //
+  // ProtocolChecklistService is a CLASS, so every method this facade does not override lives on the
+  // prototype, and object spread copies only OWN enumerable properties. The spread returned an object
+  // carrying the facade's methods and nothing else: the client's other 9 — `getChecklist`,
+  // `unsubmit`, the checkout calls and the rest — came back `undefined`, and every Bio screen that
+  // called one died with "… is not a function".
+  //
+  // Invisible to the tests, which wrap a plain-object mock whose methods ARE own properties.
+  // Forwarding through a Proxy keeps the prototype chain, and binding to `target` keeps `this`
+  // pointing at the real instance.
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (Object.prototype.hasOwnProperty.call(facade, prop)) {
+        return (facade as Record<PropertyKey, unknown>)[prop];
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as Client;
 };
 
 /** Blob → base64, matching the envelope the online content endpoint returns. */

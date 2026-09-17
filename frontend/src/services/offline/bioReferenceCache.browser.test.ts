@@ -4,7 +4,7 @@ import { bioDb } from '@/services/offline/bioDb';
 import { withBioReferenceCache } from '@/services/offline/bioConfigurationFacade';
 import { bioReferenceCache, filterBec } from '@/services/offline/bioReferenceCache';
 
-import type { ConfigurationService } from '@/services/configuration.service';
+import { ConfigurationService } from '@/services/configuration.service';
 import type { BecRow } from '@/types/configuration';
 
 const bec = (over: Partial<BecRow> = {}): BecRow => ({
@@ -60,6 +60,48 @@ describe('bioReferenceCache', () => {
     await bioReferenceCache.refresh(client);
 
     expect(await bioDb.bioReference.count()).toBe(5);
+  });
+
+  describe('facade wrapping — against the real class, not a mock', () => {
+    // The escaped defect: the facade used `{ ...client, ...facade }`. ConfigurationService is a class,
+    // so everything it does not override lives on the prototype, and object spread copies only OWN
+    // enumerable properties — leaving a wrapper with six methods and nothing else. DEV died with
+    // "yt.configuration.getMasterListYears is not a function" on the first page that called one.
+    //
+    // Every other test here wraps a plain-object mock, whose methods ARE own properties, so the
+    // spread worked in the harness and only in the harness. These use a real instance.
+    const real = () => new ConfigurationService({ BASE: '', VERSION: '1' } as never);
+
+    it('keeps the prototype methods the facade does not override', () => {
+      const api = withBioReferenceCache(real());
+
+      expect(typeof api.getMasterListYears).toBe('function');
+      expect(typeof api.getOrgUnits).toBe('function');
+      expect(typeof api.getProtocols).toBe('function');
+    });
+
+    it('still overrides the ones it does cache', () => {
+      const client = real();
+      const api = withBioReferenceCache(client);
+
+      // Same name, different function object — proof the facade won, not the prototype.
+      expect(api.getSpecies).not.toBe(client.getSpecies);
+    });
+
+    it('exposes every own and inherited method of the client', () => {
+      const client = real();
+      const api = withBioReferenceCache(client);
+      const names = new Set<string>();
+      for (let o = client as object; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+        Object.getOwnPropertyNames(o).forEach((n) => names.add(n));
+      }
+
+      const missing = [...names].filter(
+        (n) => n !== 'constructor' && typeof (client as never)[n] === 'function'
+          && typeof (api as never)[n] !== 'function',
+      );
+      expect(missing).toEqual([]);
+    });
   });
 
   describe('facade routing', () => {

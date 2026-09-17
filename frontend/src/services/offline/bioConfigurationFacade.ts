@@ -78,5 +78,27 @@ export const withBioReferenceCache = (client: ConfigurationService): Configurati
       ),
   };
 
-  return { ...client, ...facade } as ConfigurationService;
+  // A Proxy, not `{ ...client, ...facade }`.
+  //
+  // ConfigurationService is a CLASS extending HttpClient, so every method it does not override lives
+  // on the prototype — and object spread copies only OWN enumerable properties. The spread therefore
+  // produced an object with the six facade methods and nothing else: `getMasterListYears`,
+  // `getOrgUnits`, `getProtocols` and the rest all came back `undefined`, and the app died on the
+  // first page that called one ("yt.configuration.getMasterListYears is not a function").
+  //
+  // The unit tests could not see it: they wrap a plain-object mock, whose methods ARE own properties,
+  // so the spread works there and only there.
+  //
+  // `Object.create(client)` would fix the lookup but rebind `this` to the wrapper, which breaks any
+  // private field the client hierarchy uses. Forwarding through a Proxy — binding methods back to the
+  // real instance — keeps both the prototype chain and `this`.
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (Object.prototype.hasOwnProperty.call(facade, prop)) {
+        return (facade as Record<PropertyKey, unknown>)[prop];
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as ConfigurationService;
 };

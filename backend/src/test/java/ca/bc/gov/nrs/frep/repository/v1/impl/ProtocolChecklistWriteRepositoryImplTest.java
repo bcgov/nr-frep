@@ -339,9 +339,8 @@ class ProtocolChecklistWriteRepositoryImplTest {
     when(cs.getString(10)).thenReturn(null); // GET_BLOB ok
     when(cs.getString(4)).thenReturn("f.pdf"); // file name (metadata)
     when(cs.getString(7)).thenReturn("application/pdf"); // mime (metadata)
-    when(objectStorage.objectExists("slr/777")).thenReturn(true);
     byte[] s3Bytes = {9, 8, 7};
-    when(objectStorage.getObjectBytes("slr/777")).thenReturn(s3Bytes);
+    when(objectStorage.getObjectBytesIfPresent("slr/777")).thenReturn(s3Bytes);
 
     var content = repository.getAttachmentContent("1001", "SLB", "777");
 
@@ -360,12 +359,25 @@ class ProtocolChecklistWriteRepositoryImplTest {
     when(blob.length()).thenReturn(2L);
     when(blob.getBytes(1, 2)).thenReturn(blobBytes);
     when(cs.getBlob(8)).thenReturn(blob);
-    when(objectStorage.objectExists("slr/777")).thenReturn(false); // pre-migration row
+    when(objectStorage.getObjectBytesIfPresent("slr/777")).thenReturn(null); // pre-migration row
 
     var content = repository.getAttachmentContent("1001", "SLB", "777");
 
     assertArrayEquals(blobBytes, content.data()); // served from the Oracle BLOB
-    verify(objectStorage, never()).getObjectBytes(anyString());
+  }
+
+  @Test
+  void getAttachmentContentBioPropagatesAnObjectStorageFailureRatherThanServingAnEmptyBlob()
+      throws Exception {
+    // The HEAD this replaced swallowed every exception, so a storage outage was indistinguishable
+    // from a not-yet-migrated attachment and handed the user a 0-byte "download" that looked like a
+    // successful one. Only a genuine NoSuchKey (null) may fall back.
+    when(cs.getString(10)).thenReturn(null);
+    when(objectStorage.getObjectBytesIfPresent("slr/777"))
+        .thenThrow(new IllegalStateException("object storage unavailable"));
+
+    assertThrows(IllegalStateException.class,
+        () -> repository.getAttachmentContent("1001", "SLB", "777"));
   }
 
   @Test

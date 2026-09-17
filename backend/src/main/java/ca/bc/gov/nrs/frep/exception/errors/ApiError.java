@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.exception.errors;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -32,6 +33,17 @@ public class ApiError implements Serializable {
   private LocalDateTime timestamp;
 
   private String message;
+  /**
+   * Underlying exception text, for logs and debugging.
+   *
+   * <p>{@code @JsonIgnore} because this is <b>not</b> for the client. It carries whatever the
+   * failure produced — Oracle {@code ORA-} text naming tables and columns, stored-procedure
+   * internals, driver detail — and serialising it handed all of that to any authenticated caller on
+   * every 500. The catch-all handler's own comment already claimed "internal detail never leaks to
+   * the UI"; this makes that true. The detail still reaches the logs, which is where it was always
+   * meant to go.
+   */
+  @JsonIgnore
   private String debugMessage;
   private List<ApiSubError> subErrors;
 

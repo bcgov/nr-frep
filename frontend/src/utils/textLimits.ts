@@ -17,12 +17,31 @@ export const byteLength = (value: string | undefined): number =>
   value ? new TextEncoder().encode(value).length : 0;
 
 /**
+ * Bytes as `multipart/form-data` will actually send them.
+ *
+ * <p>The multipart encoding algorithm rewrites every lone LF as CRLF, so a value with line breaks
+ * arrives at the database **one byte longer per break** than {@link byteLength} reports. Verified,
+ * not assumed: `FormData.append('d', 'a\nb')` serialises as `a\r\nb` — 18 bytes on the wire for a
+ * 17-byte string. A 2000-byte description containing a single newline is therefore 2001 bytes in a
+ * `VARCHAR2(2000 BYTE)` column, and fails with ORA-12899 after passing a counter that read 2000.
+ *
+ * <p>Use this for any field submitted as a multipart form part — the two upload descriptions. JSON
+ * bodies are unaffected: a `\n` there decodes back to a single byte, so they keep {@link byteLength}.
+ */
+export const multipartByteLength = (value: string | undefined): number =>
+  byteLength(value?.replace(/\r\n|\r|\n/g, "\r\n"));
+
+/**
  * The over-limit message, or '' when the value fits. Phrased in the same units as the counter, and
  * without the word "characters" — the limit is bytes, so "480 characters" can legitimately be over
  * a 500 limit and telling the user otherwise would look like a bug.
  */
-export const overLimitError = (value: string | undefined, limit: number): string => {
-  const used = byteLength(value);
+export const overLimitError = (
+  value: string | undefined,
+  limit: number,
+  measure: (v: string | undefined) => number = byteLength,
+): string => {
+  const used = measure(value);
   return used > limit ? `Too long — the limit is ${limit} and this entry uses ${used}.` : '';
 };
 

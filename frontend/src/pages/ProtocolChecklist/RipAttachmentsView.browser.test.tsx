@@ -6,6 +6,18 @@ import RipAttachmentsView from './RipAttachmentsView';
 
 import API from '@/services/APIs';
 
+// Pin the attachment allow-list rather than inheriting it from the developer's gitignored `.env`.
+// The upload path rejects any extension outside `ALLOWED_ATTACHMENT_EXTENSIONS`, and that constant
+// is built at module load from `env.VITE_ATTACHMENT_TYPES`. With the variable unset the list is
+// empty, every file in the batch is refused before a request is made, and the upload assertions
+// read "expected 3 times, got 0" — a config gap wearing the costume of a broken component.
+vi.mock('@/env', () => ({
+  env: {
+    VITE_ATTACHMENT_TYPES:
+      'BMP,CSV,DOC,DOCX,GIF,JPEG,JPG,MP4,PDF,PNG,RTF,TIF,TIFF,TXT,WEBP,XLS,XLSX,ZIP',
+  },
+}));
+
 vi.mock('@/services/APIs', () => ({
   default: {
     protocolChecklist: {

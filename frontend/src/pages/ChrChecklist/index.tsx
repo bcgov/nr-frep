@@ -847,7 +847,7 @@ const ChrChecklistPage: FC = () => {
       .catch((err: unknown) => {
         // A failed photo page must not block the rest of the checklist, but it must not be silent
         // either — swallowing it entirely is what made the missing call above invisible.
-        reportError("We couldn't load the photos", err);
+        reportError("We couldn't load the attachments", err);
       });
     // photoPageSize is deliberately omitted: a page-size change is handled by loadPhotos, and
     // including it here would fire a second, competing fetch for the same page.
@@ -879,10 +879,10 @@ const ChrChecklistPage: FC = () => {
           );
         }
         await loadPhotos();
-        display({ kind: 'success', title: 'Photo saved', timeout: 4000 });
+        display({ kind: 'success', title: 'Attachment saved', timeout: 4000 });
         return true;
       } catch (err) {
-        reportError('Could not save the photo', err);
+        reportError('Could not save the attachment', err);
         return false;
       } finally {
         setBusy(false);
@@ -914,10 +914,10 @@ const ChrChecklistPage: FC = () => {
           await API.chrChecklist.deletePhoto(id, picture.id);
         }
         await loadPhotos();
-        display({ kind: 'success', title: 'Photo removed', timeout: 4000 });
+        display({ kind: 'success', title: 'Attachment removed', timeout: 4000 });
         return true;
       } catch (err) {
-        reportError('Could not remove the photo', err);
+        reportError('Could not remove the attachment', err);
         return false;
       } finally {
         setBusy(false);

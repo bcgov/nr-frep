@@ -1,4 +1,5 @@
 package ca.bc.gov.nrs.frep.repository.v1.impl;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
 import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.repository.v1.AbstractFrepRepository;
 import ca.bc.gov.nrs.frep.repository.v1.bean.*;
@@ -1012,10 +1013,13 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
       return viaBlob;
     }
     String key = bioObjectKey(attachmentId);
-    if (objectStorage.objectExists(key)) {
-      return new AttachmentContent(viaBlob.fileName(), viaBlob.mimeType(), objectStorage.getObjectBytes(key));
+    byte[] stored = objectStorage.getObjectBytesIfPresent(key);
+    if (stored != null) {
+      return new AttachmentContent(viaBlob.fileName(), viaBlob.mimeType(), stored);
     }
-    // Not in object storage yet — pre-migration row whose bytes are still in the Oracle BLOB.
+    // Not in object storage — pre-migration row whose bytes are still in the Oracle BLOB. Reached
+    // only on a real NoSuchKey; a storage outage propagates rather than quietly serving the empty
+    // BLOB as a 0-byte download.
     log.warn("BIO attachment {} not found in object storage (key {}); serving from Oracle BLOB",
         attachmentId, key);
     return viaBlob;
@@ -1233,17 +1237,24 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
         });
   }
 
-  /** A short stored mime-type code derived from the file extension (no reference table). */
+  /**
+   * The stored mime-type code for an upload, derived from its file extension and uppercased.
+   *
+   * <p>The extension IS the code (JPG, PDF, DOCX, WEBP …) and is stored verbatim — the proc no
+   * longer resolves it through {@code THE.MIME_TYPE_CODE}, so what we send is what lands in the
+   * column. Nothing is truncated: {@code ProtocolChecklistService.ALLOWED_ATTACHMENT_TYPES} rejects
+   * unknown extensions before this runs, and every entry on that list fits the
+   * {@code VARCHAR2(10 BYTE)} column. Truncating would now store a <em>wrong</em> code rather than
+   * being the harmless backstop it was when the proc validated the result; an over-long extension
+   * added to the allow-list is better surfaced as the ORA-12899 that {@code ColumnOverflow} turns
+   * into a 400 naming the column.
+   */
   private static String mimeTypeCode(String fileName) {
-    if (fileName == null) {
-      return null;
-    }
-    int dot = fileName.lastIndexOf('.');
-    if (dot < 0 || dot == fileName.length() - 1) {
-      return null;
-    }
-    String ext = fileName.substring(dot + 1).toUpperCase();
-    return ext.length() > 20 ? ext.substring(0, 20) : ext;
+    // Null, not "", when there is no extension: this value goes to the proc as the column's own
+    // contents, where the absence of a code is NULL. AttachmentType.extensionOf is the shared
+    // derivation; only the empty case is translated.
+    String extension = AttachmentType.extensionOf(fileName);
+    return extension.isEmpty() ? null : extension;
   }
 
   /** Null for a blank string, so empty values are not passed to NUMBER struct attrs (ORA-17059). */

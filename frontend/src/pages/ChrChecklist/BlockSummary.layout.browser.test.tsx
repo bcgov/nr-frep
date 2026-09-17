@@ -25,6 +25,23 @@ const answered = {
   q9Comments: 'b',
 } as unknown as CheckList;
 
+describe('BlockSummary — long-form field sizing', () => {
+  it('gives Rating rationale a box matching its 4000-char limit', async () => {
+    // It carried no `rows`, so it fell back to the 3-row default — the largest free-text column in
+    // CHR with the shortest box. 10 is what Notes and Feature comments use.
+    await page.viewport(1300, 1400);
+    render(<BlockSummary value={answered} onSave={vi.fn()} readOnly={false} busy={false} />);
+    const edit = [...document.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Edit'),
+    );
+    if (edit) await userEvent.click(edit);
+
+    const ta = document.querySelector('#chr-rating-rationale') as HTMLTextAreaElement;
+    expect(ta).toBeTruthy();
+    expect(ta.rows).toBe(10);
+  });
+});
+
 describe('BlockSummary — Q8/Q9/Q10 layout', () => {
   it('puts each description under its own question, not across the page from it', async () => {
     await page.viewport(1300, 1400);

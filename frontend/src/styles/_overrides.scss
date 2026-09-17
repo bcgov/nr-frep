@@ -1,5 +1,18 @@
 @use "sass:map";
 
+// MUST be first: Sass refuses `with` on an already-loaded module, and every @carbon/* import below
+// pulls this config in.
+//
+// $css--font-face: false — Carbon otherwise emits 90 @font-face rules whose URLs are
+// `~@ibm/plex/...`. The `~` prefix is a webpack convention Vite does not resolve, so they shipped as
+// literal paths, 404'd, and the SPA fallback answered each one with index.html — which the browser
+// then tried to parse as a font ("OTS parsing error: invalid sfntVersion: 1008821359", those bytes
+// being `<!do`). @ibm/plex is not a dependency either, so the files never existed to serve: the app
+// has always rendered in the fallback stack. Switching these off changes nothing visually and drops
+// 90 dead requests per load. To actually ship IBM Plex, add @ibm/plex and set $font-path — a
+// separate decision, not a silent side effect of this one.
+@use "@carbon/react/scss/config" with ($css--font-face: false);
+
 @use "./variables" as variables;
 
 @use "@carbon/react/scss/themes";

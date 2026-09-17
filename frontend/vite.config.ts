@@ -78,7 +78,25 @@ export default defineConfig(({ mode }) => {
           background_color: '#ffffff',
           display: 'standalone',
           start_url: '/',
-          icons: [{ src: '/vite.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+          // The scaffold's '/vite.svg' was never added to public/, so the manifest pointed at a
+          // path the SPA fallback answered with index.html — "Download error or resource isn't a
+          // valid image" in the console, and no installable icon. These three exist; the two PNG
+          // sizes are what makes the app installable at all.
+          icons: [
+            {
+              src: '/icons/android-chrome-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/icons/android-chrome-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          ],
         },
         workbox: {
           navigateFallback: '/index.html',

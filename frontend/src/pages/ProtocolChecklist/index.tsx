@@ -49,6 +49,7 @@ import { PROTOCOL_TYPE_LABEL, PROTOCOL_TYPE_TO_BACKEND } from '@/types/protocolC
 import { apiErrorMessage } from '@/utils/apiError';
 import { statusLabel, statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
+import { READ_ONLY_CHECKED_OUT, READ_ONLY_SUBMITTED } from '@/utils/readOnlyReason';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 import './protocolChecklist.scss';
@@ -91,13 +92,8 @@ const readOnlyReason = ({
   if (isLegacySlb) {
     return 'This is a historical Stand Level Retention (SLB) record and is read-only.';
   }
-  if (checkedOut) {
-    return (
-      'This checklist is checked out to a field device, so the online copy is read-only. ' +
-      'Check it in from that device, or have an administrator reactivate it, to edit here.'
-    );
-  }
-  return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
+  if (checkedOut) return READ_ONLY_CHECKED_OUT;
+  return READ_ONLY_SUBMITTED;
 };
 
 const ProtocolChecklistPage: FC = () => {
@@ -256,7 +252,7 @@ const ProtocolChecklistPage: FC = () => {
       // upload a second time, so a submit the proc then refuses leaves us cleanly on the online ACT
       // checklist, where the evaluator can fix it and resubmit.
       if (offlineRecord) {
-        setOfflineBusy('Checking in…');
+        setOfflineBusy('Syncing changes…');
         try {
           await runCheckIn();
         } finally {
@@ -277,7 +273,7 @@ const ProtocolChecklistPage: FC = () => {
       if (err instanceof CheckInBlockedError) {
         display({
           kind: 'error',
-          title: 'Check in stopped — nothing was submitted',
+          title: 'Sync stopped — nothing was submitted',
           subtitle: err.message,
           timeout: 9000,
         });
@@ -426,17 +422,22 @@ const ProtocolChecklistPage: FC = () => {
 
   /** Check the local copy back in: attachments first, then the graph. */
   const handleCheckIn = async () => {
-    setOfflineBusy('Checking in…');
+    setOfflineBusy('Syncing changes…');
     try {
       await runCheckIn();
       await refreshOfflineState();
-      display({ kind: 'success', title: 'Checked in', timeout: 5000 });
+      display({
+        kind: 'success',
+        title: 'Checklist uploaded',
+        subtitle: 'Your changes are checked in and the offline copy has been removed.',
+        timeout: 5000,
+      });
       setReloadKey((k) => k + 1);
     } catch (err) {
       await refreshOfflineState();
       display({
         kind: 'error',
-        title: 'Check in stopped',
+        title: 'Sync stopped',
         subtitle: err instanceof CheckInBlockedError ? err.message : apiErrorMessage(err),
         timeout: 9000,
       });
@@ -617,12 +618,15 @@ const ProtocolChecklistPage: FC = () => {
                         Submit checklist
                       </Button>
                     )}
+                    {/* "Sync changes", matching CHR — the same operation on both pages: upload,
+                        release the checkout (RDO → ACT) and delete the local copy. The handler keeps
+                        the check-in name internally because that is what the server call is. */}
                     <Button
                       kind="tertiary"
                       onClick={() => void handleCheckIn()}
                       disabled={!!offlineBusy || !online || busy}
                     >
-                      {offlineBusy ?? 'Check in'}
+                      {offlineBusy ?? 'Sync changes'}
                     </Button>
                   </>
                 ) : (

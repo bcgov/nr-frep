@@ -8,6 +8,7 @@ import ChrChecklistPage from './index';
 import * as useAuthorizationModule from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import { READ_ONLY_CHECKED_OUT } from '@/utils/readOnlyReason';
 
 // The checklist's dropdowns read their options from the code tables.
 vi.mock('@/services/APIs', async () => ({
@@ -510,6 +511,8 @@ describe('ChrChecklistPage', () => {
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     // Checked-out server copy is read-only and shows the recovery banner; tabs are not editable.
     expect(screen.getByText('Read only')).toBeTruthy();
+    // Same sentence the SLR page shows for the same state — both read it from @/utils/readOnlyReason.
+    expect(screen.getByText(READ_ONLY_CHECKED_OUT)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reactivate' }));

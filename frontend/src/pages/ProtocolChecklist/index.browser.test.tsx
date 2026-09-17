@@ -10,6 +10,7 @@ import API from '@/services/APIs';
 import { CheckInBlockedError, checkInBioChecklist } from '@/services/offline/bioCheckIn';
 import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 import { takeBioChecklistOffline } from '@/services/offline/bioTakeOffline';
+import { READ_ONLY_CHECKED_OUT } from '@/utils/readOnlyReason';
 
 vi.mock('@/services/APIs', () => ({
   default: {
@@ -287,7 +288,9 @@ describe('ProtocolChecklistPage when checked out', () => {
     renderPage();
 
     expect(await screen.findByText('Read only')).toBeTruthy();
-    expect(screen.getByText(/checked out to a field device/i)).toBeTruthy();
+    // The shared constant, not a loose match: CHR asserts the same one, so a page that goes back to
+    // wording its own version of this state fails here.
+    expect(screen.getByText(READ_ONLY_CHECKED_OUT)).toBeTruthy();
   });
 
   it('offers neither Submit nor Unsubmit while a device holds it', async () => {
@@ -413,7 +416,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     expect(screen.queryByText('Active')).toBeNull();
   });
 
-  it('swaps Take offline for Check in once a copy is held, and keeps Submit', async () => {
+  it('swaps Take offline for Sync changes once a copy is held, and keeps Submit', async () => {
     // Take offline goes: while a local copy exists it is the authoritative one, and offering a
     // second download over the top of unsynced field work is a trap. Submit stays — CHR offers it
     // on an offline copy and checks in on the way through, and withholding it here made an
@@ -422,7 +425,7 @@ describe('ProtocolChecklistPage offline actions', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: 'Check in' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Sync changes' })).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Submit checklist' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Take offline' })).toBeNull();
   });
@@ -438,7 +441,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
 
     expect(screen.getByText('Offline copy')).toBeTruthy();
   });
@@ -449,7 +452,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
 
     expect(screen.queryByText('Active')).toBeNull();
   });
@@ -458,7 +461,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
 
     expect(screen.queryByText('Saved on this device')).toBeNull();
   });
@@ -467,13 +470,13 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
 
     expect(screen.queryByText('Read only')).toBeNull();
   });
 
   it('never offers Reactivate on a copy this device holds', async () => {
-    // Reactivate discards unsynced work. Beside Check in, which saves it, that is a trap.
+    // Reactivate discards unsynced work. Beside Sync changes, which saves it, that is a trap.
     //
     // The server MUST be RDO here, which is the real shape once take-offline has claimed the
     // checkout: `getChecklist` is not facaded, so it returns the server's view. With an ACT fixture
@@ -483,7 +486,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
 
     expect(screen.queryByRole('button', { name: 'Reactivate' })).toBeNull();
     authMock.canPerformSysAdminActions = false;
@@ -505,7 +508,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
 
     renderPage();
-    await userEvent.click(await screen.findByRole('button', { name: 'Check in' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Sync changes' }));
 
     expect(checkInBioChecklist).toHaveBeenCalledWith('9001', expect.anything());
   });
@@ -544,7 +547,7 @@ describe('ProtocolChecklistPage offline actions', () => {
 
     await vi.waitFor(() =>
       expect(display).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Check in stopped — nothing was submitted' }),
+        expect.objectContaining({ title: 'Sync stopped — nothing was submitted' }),
       ),
     );
     // Asserted so the case cannot pass by the pre-flight having blocked before check-in was reached.
@@ -559,7 +562,7 @@ describe('ProtocolChecklistPage offline actions', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByRole('button', { name: 'Sync changes' });
     expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
     onlineMock.mockReturnValue(true);
   });

@@ -318,12 +318,17 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
  * checklist pages it links to (all device-local IndexedDB). The two superseded list paths stay in
  * the set so a cached bookmark still redirects rather than falling through to the catch-all.
  */
-const OFFLINE_PATHS = new Set([
+export const OFFLINE_PATHS = new Set([
   '/offline',
   '/chr/offline',
   '/protocol-checklists/chr/:id',
   '/protocol-checklists/offline',
-  '/protocol-checklists/:protocolType/:checklistId',
+  // Must match a PROTECTED_ROUTES `path` EXACTLY — this is a string-set filter, not a matcher. It
+  // held '/protocol-checklists/:protocolType/:checklistId', the generic route from before the SLR
+  // rename split it, so no route matched: offline, an SLR checklist fell through to the catch-all
+  // and bounced to the landing page while CHR (whose path did match) worked. offlineRoutes.unit.test
+  // now fails if any entry here names a route that does not exist.
+  '/protocol-checklists/slr/:id',
 ]);
 export const getOfflineRoutes = (): RouteDescription[] => [
   {

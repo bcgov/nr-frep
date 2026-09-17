@@ -56,6 +56,7 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 import { pictureToFile } from '@/utils/pictureFile';
+import { READ_ONLY_CHECKED_OUT, READ_ONLY_SUBMITTED } from '@/utils/readOnlyReason';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 // Reuse the Biodiversity checklist form primitives (rip-form / rip-form__group / rip-form__grid /
@@ -125,12 +126,8 @@ const errorKey = (e: ValidationError): string =>
 
 // The "Read only" banner copy, by why the checklist is locked.
 const readOnlyReason = (status: CheckList['status']): string => {
-  if (status === CHR_STATUS.READ_ONLY_OFFLINE) {
-    return 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.';
-  }
-  if (status === CHR_STATUS.SUBMITTED) {
-    return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
-  }
+  if (status === CHR_STATUS.READ_ONLY_OFFLINE) return READ_ONLY_CHECKED_OUT;
+  if (status === CHR_STATUS.SUBMITTED) return READ_ONLY_SUBMITTED;
   return 'This checklist is not active, so it is read-only.';
 };
 

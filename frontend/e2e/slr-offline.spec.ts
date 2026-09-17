@@ -57,7 +57,7 @@ const openAnActiveSlrChecklist = async (page: Page): Promise<string | null> => {
   const link = activeRow.getByRole('link').first();
   const href = await link.getAttribute('href');
   await link.click();
-  await expect(page.getByRole('button', { name: /Take offline|Check in/ })).toBeVisible({
+  await expect(page.getByRole('button', { name: /Take offline|Sync changes/ })).toBeVisible({
     timeout: 30_000,
   });
   return href?.split('/').pop() ?? null;
@@ -102,7 +102,7 @@ test.describe('SLR offline round trip', () => {
     try {
       // ── 1. Take offline ────────────────────────────────────────────
       await page.getByRole('button', { name: 'Take offline' }).click();
-      await expect(page.getByRole('button', { name: 'Check in' })).toBeVisible({ timeout: 120_000 });
+      await expect(page.getByRole('button', { name: 'Sync changes' })).toBeVisible({ timeout: 120_000 });
       checkedOut = true;
 
       // Stored, checked out, and marked clean — not merely rendered.
@@ -138,10 +138,10 @@ test.describe('SLR offline round trip', () => {
       // input, depending on which mode the reload lands in.
       await expect(shownAnywhere(page, edited)).toBeVisible();
 
-      // ── 3. Check in ────────────────────────────────────────────────
+      // ── 3. Sync changes ────────────────────────────────────────────
       await goOnline(page);
       await page.reload();
-      await page.getByRole('button', { name: 'Check in' }).click();
+      await page.getByRole('button', { name: 'Sync changes' }).click();
 
       // Take offline returning means the copy is gone and the page is back on the server record.
       await expect(page.getByRole('button', { name: 'Take offline' })).toBeVisible({

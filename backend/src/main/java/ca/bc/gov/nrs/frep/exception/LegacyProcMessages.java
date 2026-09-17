@@ -51,7 +51,24 @@ public final class LegacyProcMessages {
       Map.entry("frep.data.error.attachment.illegalFile",
           "Files with a {0} extension can't be saved."),
       Map.entry("frep.submit.unsubmit",
-          "Unsubmission failed, usually because of a data error. Contact the FREP help desk.")
+          "Unsubmission failed, usually because of a data error. Contact the FREP help desk."),
+      // --- SLR stratum + plot (frep_biodiversity_plot / frep_biodiversity_stratum) ---
+      // plot_number is unique per stratum; validate() rejects a second plot with the same number.
+      Map.entry("frep.web.usr.database.record.plot.number.already.exists",
+          "A plot with this number already exists in this stratum. Give the plot a different number."),
+      // The Stratum Id mask. The legacy text was one line of &nbsp;/<br> markup; the rules are the
+      // same, set out as a sentence because this is rendered as text, never as HTML.
+      Map.entry("frep.web.usr.database.record.badStratumFormat",
+          "Stratum Id must start with a letter, hold at most 3 letters and 2 digits, contain no "
+              + "spaces, not be digits alone, not begin with a zero, and never place a letter "
+              + "after a digit."),
+      Map.entry("frep.submit.biodiversity.stratum.clearcutWithTreesExistPlot",
+          "Stratum type can't be Clear Cut while a plot in this stratum has \u201cTrees exist\u201d ticked."),
+      // The generic legacy required-field key: the proc supplies the field name as the argument.
+      Map.entry("sil.error.usr.isrequired", "{0} is required."),
+      Map.entry("sil.web.error.usr.recordExists", "This record already exists."),
+      Map.entry("sil.web.usr.database.record.modified.no.params",
+          "Someone else changed this data. Reload the checklist and try again.")
   );
 
   /**

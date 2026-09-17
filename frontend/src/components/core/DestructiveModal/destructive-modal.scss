@@ -8,8 +8,12 @@
     letter-spacing: var(--cds-body-long-01-letter-spacing, 0.16px);
   }
 
+  /* Bottom-right, the way every other confirm-then-act dialog in the app closes: the eye lands on
+     the message first and finishes on the action it is being asked about. */
   &__actions {
     display: flex;
+    justify-content: flex-end;
     gap: 1rem;
+    margin-block-start: 1.5rem;
   }
 }

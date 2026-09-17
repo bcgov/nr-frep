@@ -31,6 +31,23 @@ describe('plotHeaderErrors', () => {
     expect(withSignal.utmNorthing).toMatch(/required/);
   });
 
+  it('exempts a plot that never answered the UTM question', () => {
+    // Legacy rows: UTM_SIGNAL is nullable and predates this app, which always writes 'Y' or 'N'.
+    // Silence is not a yes — neither the columns, nor FREP_BIODIVERSITY_PLOT.VALIDATE, nor legacy's
+    // UtmSignalCompleteValidator (which tested `equals("Y")`) ever asked those rows for coordinates.
+    expect(plotHeaderErrors(validHeader({ utmSignal: undefined }), 'DO')).toEqual({});
+    expect(plotHeaderErrors(validHeader({ utmSignal: '' }), 'DO')).toEqual({});
+  });
+
+  it('still checks the shape of a coordinate that was entered, whatever the signal says', () => {
+    // Exempt from being *required* is not exempt from being right: legacy registered its
+    // Easting/Northing field validators unconditionally, and only a blank field is ever excused.
+    const e = plotHeaderErrors(validHeader({ utmSignal: undefined, utmEasting: '123' }), 'DO');
+    expect(e.utmEasting).toMatch(/exactly 6 digits/);
+    expect(e.utmZone).toBeUndefined();
+    expect(e.utmNorthing).toBeUndefined();
+  });
+
   it('checks easting/northing digit counts', () => {
     const e = plotHeaderErrors(
       validHeader({ utmSignal: 'Y', utmZone: '10', utmEasting: '123', utmNorthing: '12' }),
@@ -46,7 +63,7 @@ describe('plotHeaderErrors', () => {
     );
     expect(
       plotHeaderErrors(validHeader({ secondLegTransect: '400' }), 'DO').secondLegTransect,
-    ).toMatch(/from 0 to 359/);
+    ).toMatch(/at most 359/);
   });
 
   it('requires Evaluated by', () => {
@@ -58,7 +75,7 @@ describe('plotHeaderErrors', () => {
   it('requires Plot # and enforces 0–999 when present', () => {
     expect(plotHeaderErrors(validHeader({ plotNumber: '' }), 'DO').plotNumber).toMatch(/required/);
     expect(plotHeaderErrors(validHeader({ plotNumber: '1000' }), 'DO').plotNumber).toMatch(
-      /from 0 to 999/,
+      /at most 999/,
     );
   });
 
@@ -75,7 +92,7 @@ describe('plotHeaderErrors', () => {
 
   it('enforces BAF / fixed-area / full-count ranges and decimals', () => {
     expect(plotHeaderErrors(validHeader({ basalAreaFactor: '0' }), 'DO').basalAreaFactor).toMatch(
-      /from 1 to 99/,
+      /at least 1/,
     );
     expect(
       plotHeaderErrors(validHeader({ basalAreaFactor: '', fixedAreaRadius: '1.234' }), 'DO')
@@ -84,7 +101,7 @@ describe('plotHeaderErrors', () => {
     expect(
       plotHeaderErrors(validHeader({ basalAreaFactor: '', fullCountArea: '0' }), 'DO')
         .fullCountArea,
-    ).toMatch(/between 0.01 and 9999.99/);
+    ).toMatch(/at least 0.01/);
   });
 
   it('requires exactly one measurement method (non clear-cut)', () => {
@@ -117,9 +134,9 @@ describe('standRowErrors', () => {
   });
 
   it('enforces DBH/height range and 1 decimal', () => {
-    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/greater than 12.5/);
+    expect(standRowErrors({ dbh: '10' }).dbh).toMatch(/must be over 12.5/);
     expect(standRowErrors({ dbh: '20.55' }).dbh).toMatch(/1 decimal place/);
-    expect(standRowErrors({ height: '0.5' }).height).toMatch(/between 1.4 and 99.9/);
+    expect(standRowErrors({ height: '0.5' }).height).toMatch(/at least 1.4/);
   });
 
   it('passes a complete row', () => {
@@ -139,8 +156,8 @@ describe('cwdRowErrors', () => {
   });
 
   it('enforces diameter/length ranges (length must be > 0)', () => {
-    expect(cwdRowErrors({ logDiameter: '5' }).logDiameter).toMatch(/between 7.6 and 400/);
-    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/greater than 0/);
+    expect(cwdRowErrors({ logDiameter: '5' }).logDiameter).toMatch(/at least 7.6/);
+    expect(cwdRowErrors({ logLength: '0' }).logLength).toMatch(/must be over 0/);
   });
 
   it('passes a complete row', () => {
@@ -152,5 +169,94 @@ describe('cwdRowErrors', () => {
         logLength: '3.5',
       }),
     ).toEqual({});
+  });
+});
+
+describe('plotHeaderErrors — plot number uniqueness', () => {
+  it('reports a number another plot in the stratum already holds', () => {
+    // Otherwise FREP_BIODIVERSITY_PLOT.VALIDATE rejects the save with
+    // frep.web.usr.database.record.plot.number.already.exists, costing a round-trip.
+    const e = plotHeaderErrors(validHeader({ plotNumber: '2' }), 'DO', ['1', '2', '3']);
+    expect(e.plotNumber).toBe('Plot 2 already exists in this stratum. Use a different number.');
+  });
+
+  it('accepts a number no other plot holds', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['1', '2', '3'])).toEqual({});
+  });
+
+  it('compares numerically, the way the column does', () => {
+    // PLOT_NUMBER is NUMBER(3), so "01" and "1" are the same plot number to Oracle. Comparing as
+    // text would pass this straight through to the proc.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '01' }), 'DO', ['1']).plotNumber).toMatch(
+      /already exists/,
+    );
+  });
+
+  it('says the number is invalid before it says it is taken', () => {
+    // "Plot # must be a whole number" is the more useful of the two messages.
+    const e = plotHeaderErrors(validHeader({ plotNumber: 'abc' }), 'DO', ['abc']);
+    expect(e.plotNumber).not.toMatch(/already exists/);
+  });
+
+  it('ignores blanks among the taken numbers', () => {
+    expect(plotHeaderErrors(validHeader({ plotNumber: '4' }), 'DO', ['', ' '])).toEqual({});
+  });
+
+  it('reports nothing when no other plots are passed', () => {
+    // The default keeps every existing caller behaving exactly as before.
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO')).toEqual({});
+  });
+});
+
+/**
+ * What may be said on every keystroke, and what has to wait for Save. A value no further typing can
+ * rescue is reported at once; a value that is merely unfinished is not. See utils/validation.ts.
+ */
+describe('plot rules while the user is still typing', () => {
+  const typing = (over: Partial<BioPlot>) =>
+    plotHeaderErrors(validHeader(over), 'DO', [], 'typing');
+
+  it('holds an Easting that is only part-typed, and names one that has overshot', () => {
+    // Every six-digit Easting is typed through one, two and three digits first.
+    expect(typing({ utmSignal: 'Y', utmEasting: '123' }).utmEasting).toBeUndefined();
+    expect(typing({ utmSignal: 'Y', utmEasting: '1234567' }).utmEasting).toMatch(/exactly 6/);
+    expect(typing({ utmSignal: 'Y', utmEasting: '12x' }).utmEasting).toMatch(/exactly 6/);
+  });
+
+  it('names a bearing past the compass straight away', () => {
+    expect(typing({ firstLegTransect: '400' }).firstLegTransect).toMatch(/at most 359/);
+  });
+
+  it('holds a plot number that clashes until the save', () => {
+    // "1" is a legitimate step towards "12"; the clash is reported once the number is finished.
+    expect(
+      plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO', ['1'], 'typing').plotNumber,
+    ).toBeUndefined();
+    expect(plotHeaderErrors(validHeader({ plotNumber: '1' }), 'DO', ['1']).plotNumber).toMatch(
+      /already exists/,
+    );
+  });
+
+  it('holds a measurement value below its floor, and names one above its ceiling', () => {
+    expect(typing({ basalAreaFactor: '0' }).basalAreaFactor).toBeUndefined();
+    expect(typing({ basalAreaFactor: '100' }).basalAreaFactor).toMatch(/at most 99/);
+  });
+
+  it('says nothing about a blank the plot still owes', () => {
+    expect(plotHeaderErrors({ utmSignal: 'N' } as BioPlot, 'DO', [], 'typing')).toEqual({});
+  });
+
+  it('holds a stand row below its minimum, and names a decimal place too many', () => {
+    // DBH starts at 12.5, so "1" is the first keystroke of every valid entry.
+    expect(standRowErrors({ dbh: '1', height: '10' }, 'typing').dbh).toBeUndefined();
+    expect(standRowErrors({ dbh: '20.55', height: '10' }, 'typing').dbh).toMatch(/1 decimal place/);
+    expect(standRowErrors({ dbh: '20', height: '10' }, 'typing').speciesCode).toBeUndefined();
+  });
+
+  it('holds a CWD length that is still being typed', () => {
+    expect(cwdRowErrors({ logDiameter: '1', logLength: '2.' }, 'typing')).toEqual({});
+    expect(cwdRowErrors({ logDiameter: '1', logLength: '2.' }).logLength).toMatch(
+      /must be a number/,
+    );
   });
 });

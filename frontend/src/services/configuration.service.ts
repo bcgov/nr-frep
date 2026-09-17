@@ -107,11 +107,58 @@ export class ConfigurationService extends HttpClient {
     });
   }
 
-  /** Resource-value status options for the biodiversity data-extract report filter. */
-  getResourceValueStatusCodes(): CancelablePromise<CodeOption[]> {
+  /**
+   * Resource-value status options. Pass the code to exclude, or nothing for every status — the
+   * data-extract report filter hides REJ, Site Details has to offer it.
+   */
+  getResourceValueStatusCodes(exclude?: string): CancelablePromise<CodeOption[]> {
     return this.doRequest<CodeOption[]>(this.config, {
       method: 'GET',
       url: '/v1/configuration/resource-value-status-codes',
+      query: exclude ? { exclude } : undefined,
+    });
+  }
+
+  /**
+   * CHR feature-class options. Named `chr-` throughout: `/site-evaluation-codes` already serves
+   * SLR from a different table, and reusing it for CHR would be a silent wrong-values bug.
+   */
+  getChrFeatureClassCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/chr-feature-class-codes',
+    });
+  }
+
+  /** CHR information-source options. */
+  getChrFeatureInfoSourceCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/chr-feature-info-source-codes',
+    });
+  }
+
+  /** CHR reserve-type options. */
+  getChrReserveTypeCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/chr-reserve-type-codes',
+    });
+  }
+
+  /** CHR feature / block rating options (CHR_SITE_EVALUATION_CODE, not the SLR table). */
+  getChrSiteEvaluationCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/chr-site-evaluation-codes',
+    });
+  }
+
+  /** CHR contact-role options. */
+  getChrParticipantRoleCodes(): CancelablePromise<CodeOption[]> {
+    return this.doRequest<CodeOption[]>(this.config, {
+      method: 'GET',
+      url: '/v1/configuration/chr-participant-role-codes',
     });
   }
 
@@ -181,5 +228,4 @@ export class ConfigurationService extends HttpClient {
       query: { checklistId, protocol },
     });
   }
-
 }

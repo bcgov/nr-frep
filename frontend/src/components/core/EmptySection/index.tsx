@@ -1,15 +1,27 @@
-import * as Icons from '@carbon/icons-react';
-import * as Pictograms from '@carbon/pictograms-react';
+import { ErrorFilled, WarningFilled } from '@carbon/icons-react';
+import { Airplane, UnauthorizedUserAccess } from '@carbon/pictograms-react';
 import { type FC } from 'react';
 
 import Subtitle from '@/components/core/Subtitle';
 import './index.scss';
 
+/**
+ * Deliberately explicit, rather than `import * as Icons from '@carbon/icons-react'`.
+ *
+ * A namespace import read dynamically (`Icons[icon]`) can't be tree-shaken — Rollup can't prove
+ * which members are reachable, so it keeps every icon and all 1382 pictograms. That cost about
+ * 2.8 MB of the production bundle, roughly 45% of it, to render one pictogram on one page.
+ *
+ * Add an entry here when an empty state needs a glyph these don't cover.
+ */
+const ICONS = { ErrorFilled, WarningFilled };
+const PICTOGRAMS = { Airplane, UnauthorizedUserAccess };
+
 interface EmptySectionProps {
-  icon?: keyof typeof Icons;
+  icon?: keyof typeof ICONS;
   title: string;
   description: string | React.ReactNode;
-  pictogram?: keyof typeof Pictograms;
+  pictogram?: keyof typeof PICTOGRAMS;
   className?: string;
   whiteLayer?: boolean;
 }
@@ -29,10 +41,10 @@ interface EmptySectionProps {
  * />
  * ```
  *
- * @param {keyof typeof Icons} [icon] - Optional Carbon icon name.
+ * @param {keyof typeof ICONS} [icon] - Optional Carbon icon name.
  * @param {string} title - Title text for the empty section.
  * @param {string | React.ReactNode} description - Supporting description text.
- * @param {keyof typeof Pictograms} [pictogram] - Optional Carbon pictogram name.
+ * @param {keyof typeof PICTOGRAMS} [pictogram] - Optional Carbon pictogram name.
  * @param {string} [className] - Optional custom class names.
  * @param {boolean} [whiteLayer] - Optional flag to apply white background layer.
  * @returns {JSX.Element} A styled empty state section.
@@ -47,12 +59,12 @@ const EmptySection: FC<EmptySectionProps> = ({
 }) => {
   let Img: React.ElementType | undefined;
 
-  if (icon && Icons[icon]) {
-    Img = Icons[icon] as React.ElementType;
+  if (icon && ICONS[icon]) {
+    Img = ICONS[icon] as React.ElementType;
   }
 
-  if (pictogram && Pictograms[pictogram]) {
-    Img = Pictograms[pictogram] as React.ElementType;
+  if (pictogram && PICTOGRAMS[pictogram]) {
+    Img = PICTOGRAMS[pictogram] as React.ElementType;
   }
 
   return (

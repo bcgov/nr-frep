@@ -28,15 +28,15 @@ import org.springframework.web.server.ResponseStatusException;
 public class SearchService {
 
   private final SearchRepository searchRepository;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
   private final LoggedUserHelper loggedUserHelper;
 
   public SearchService(
       SearchRepository searchRepository,
-      FamUserDirectoryService famUserDirectoryService,
+      UserDirectoryService userDirectoryService,
       LoggedUserHelper loggedUserHelper) {
     this.searchRepository = searchRepository;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
     this.loggedUserHelper = loggedUserHelper;
   }
 
@@ -286,7 +286,7 @@ public class SearchService {
     if (StringUtils.isBlank(evaluatorUserid)) {
       return evaluatorUserid;
     }
-    return famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
+    return userDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
   }
 
   static ClientSearchResult toClientSearchResult(ClientSearchRow row) {

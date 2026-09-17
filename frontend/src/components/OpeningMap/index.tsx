@@ -109,12 +109,14 @@ const OpeningMap: FC<Props> = ({ polygon, height = 460 }) => (
           attribution="Tiles &copy; Esri"
         />
       </LayersControl.BaseLayer>
-      <LayersControl.BaseLayer name="OpenStreetMap">
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-      </LayersControl.BaseLayer>
+      {/* No OpenStreetMap base layer. Their volunteer-run tile servers returned 403 "Access
+          blocked — App is not following the tile usage policy" (osm.wiki/Blocked), which rendered
+          as a grid of warning tiles that reads as a bug in this app. It is not: OSM's policy does
+          not permit an application to use those servers this way, so the layer cannot be repaired
+          by changing anything here, and the `{s}.` subdomain form it used is deprecated besides.
+          Two base layers remain, and the BC Gov WMS overlays below are unaffected. If an
+          OSM-style basemap is wanted back, it needs a provider that permits it — a paid tile host
+          or a self-hosted server — not openstreetmap.org. */}
       {WMS_LAYERS.map((layer) => (
         <LayersControl.Overlay key={layer.name} name={layer.name}>
           <WMSTileLayer

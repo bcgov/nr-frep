@@ -34,7 +34,14 @@ export default defineConfig(({ mode }) => {
   // in src/styles.
   const css = {
     preprocessorOptions: {
-      scss: { quietDeps: true },
+      scss: {
+        // Carbon's own SCSS trips Sass's mixed-decls and global-builtin deprecations roughly 1200
+        // times per build, which buried any warning about our stylesheets. quietDeps silences
+        // warnings raised *inside* node_modules only — our own files still report, which is how
+        // the dead time-picker rules in _overrides.scss surfaced. Prefer this to
+        // silenceDeprecations, which would mute those categories everywhere including our code.
+        quietDeps: true,
+      },
     },
   };
 
@@ -75,7 +82,10 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
-          globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // png/jpg included so the landing page — which is the *offline* entry point
+          // (getOfflineRoutes serves it) — still has its logo and cover art with no network. They
+          // were missing, so both rendered as broken-image alt text offline.
+          globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff,woff2}'],
           // config.js is generated per-container at start-up by docker-entrypoint.sh — it is the
           // ONLY file whose contents differ between environments and deploys. Precaching it froze
           // the runtime config: Workbox fetches a precached URL once at service-worker install and
@@ -84,8 +94,8 @@ export default defineConfig(({ mode }) => {
           // was served forever, and every later deploy's values — backend URL, logout endpoints,
           // support mailbox, allowed attachment types — were silently ignored.
           globIgnores: ['config.js'],
-          // The bundled app (Carbon + Amplify) exceeds Workbox's 2 MiB default; raise the
-          // precache ceiling so the full app shell is cached for offline field use.
+          // The bundled app (Carbon) exceeds Workbox's 2 MiB default; raise the precache ceiling
+          // so the full app shell is cached for offline field use.
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           // CHR checklists are persisted in IndexedDB; this just lets read-only
           // GETs resolve from cache when briefly offline.
@@ -102,11 +112,11 @@ export default defineConfig(({ mode }) => {
               // NOT precached (see globIgnores): a precached config.js is keyed by a build-time
               // revision hash taken from the static placeholder, so it never changes and the copy
               // fetched on a user's first visit is served forever — every later deploy's backend
-              // URL, logout endpoints and feature config silently ignored.
+              // URL, realm issuer and feature config silently ignored.
               //
               // NOT NetworkOnly either: window.config is defined BY this file, so a failed offline
               // fetch leaves it undefined, env falls back to build-time vars the container image
-              // does not carry, and Amplify.configure gets an undefined user pool — breaking the
+              // does not carry, and the UserManager is built with an empty authority — breaking the
               // offline CHR editor exactly when it is needed. NetworkFirst gives a fresh config
               // whenever the network answers and the last-known-good one when it does not.
               urlPattern: ({ url }) => url.pathname === '/config.js',
@@ -123,14 +133,7 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
     },
     optimizeDeps: {
-      include: [
-        '@tanstack/react-query',
-        'aws-amplify',
-        'aws-amplify/auth/cognito',
-        'aws-amplify/utils',
-        'react-dom/client',
-        'aws-amplify/auth',
-      ],
+      include: ['@tanstack/react-query', 'oidc-client-ts', 'react-dom/client'],
     },
     server: {
       host: devHost,
@@ -168,7 +171,6 @@ export default defineConfig(({ mode }) => {
           '**/vite-env.d.ts',
           '**/types/**',
           '**/constants/**',
-          '**/config/fam/*',
           '**/config/react-query/*',
           '**/config/tests/*',
           '**/*.env.ts',
@@ -192,6 +194,8 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          // Vitest projects do not inherit the root-level `css` option; without this the Carbon
+          // deprecation warnings silenced for the build reappear on every test run.
           css,
           plugins: [react(), tsconfigPaths()],
           test: {
@@ -210,8 +214,29 @@ export default defineConfig(({ mode }) => {
               '@': resolve(projectRootDir, 'src'),
             },
           },
+          // Vitest projects do not inherit the root-level `css` option; without this the Carbon
+          // deprecation warnings silenced for the build reappear on every test run.
           css,
           plugins: [react(), tsconfigPaths()],
+          // Pre-bundle these up front instead of letting Vite discover them mid-run.
+          //
+          // They arrive through the API client's auth chain, so only the tests that touch it pull
+          // them in. Discovering a dependency late makes Vite re-optimize and reload the page, and
+          // Vitest warns that this "may cause tests to fail, lead to flaky behaviour or duplicated
+          // test runs" — it names `optimizeDeps.include` as the fix.
+          //
+          // Precautionary, not a diagnosed failure: the reload was reproducible on a cold
+          // single-file run (every time), but no test was ever observed failing because of it.
+          // Listing the deps removes the warning and the race behind it.
+          optimizeDeps: {
+            include: [
+              'aws-amplify',
+              'aws-amplify/auth',
+              'aws-amplify/auth/cognito',
+              'aws-amplify/utils',
+              'react-dom/client',
+            ],
+          },
           test: {
             name: 'browser',
             setupFiles: [
@@ -224,6 +249,16 @@ export default defineConfig(({ mode }) => {
               instances: [{ browser: 'chromium' }],
             },
             include: ['src/**/*.browser.test.{ts,tsx}'],
+            // Browser mode starts a real Chromium context per worker. Unbounded on a CI runner
+            // that has a couple of cores, workers time out starting up and Vitest reports
+            // "Failed to import test file … Vitest failed to find the runner" — the whole file
+            // never loads, so no test in it even runs. The giveaway is a `prepare` time far
+            // larger than the test time (1061s of prepare for 22s of tests).
+            //
+            // Capped rather than serialised: two workers keep most of the parallelism while
+            // leaving the runner enough headroom to start them. Left uncapped locally, where
+            // there are cores to spare.
+            ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
           },
         },
       ],

@@ -81,17 +81,29 @@
 // margin that would push the counter away from the textarea, so it is zeroed and re-applied below
 // the counter instead — keeping the count visually attached to the field it describes.
 .frep-field {
+  position: relative;
   margin-bottom: 1rem;
 
   .cds--form-item {
     margin-bottom: 0;
   }
+
+  // Room for the counter parked at the end of the label's line, so a long label runs out of width
+  // before it runs into the count rather than overlapping it.
+  .cds--label {
+    padding-right: 5rem;
+  }
 }
 
+// On the label's line, not below the field: the count belongs to the label that names the limit,
+// and out of flow it costs no height — under the field it sat marooned in the gap to whatever came
+// next. Anchored to `.frep-field`, whose first line box is the label's.
 .frep-field__footer {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   justify-content: flex-end;
-  margin-top: 0.25rem;
 }
 
 .frep-field__counter {

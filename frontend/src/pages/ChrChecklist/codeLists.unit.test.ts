@@ -2,22 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Feature } from '@/types/chrChecklist';
 
-import {
-  CONTACT_ROLE_CODES,
-  FEATURE_CLASS_CODES,
-  RATING_CODES,
-  RESERVE_TYPE_CODES,
-  calculateMrvaRatingCode,
-} from '@/pages/ChrChecklist/codeLists';
-
-describe('CHR code lists', () => {
-  it('ports the legacy static lists', () => {
-    expect(FEATURE_CLASS_CODES.map((c) => c.code)).toContain('CMT');
-    expect(CONTACT_ROLE_CODES.map((c) => c.code)).toEqual(['', 'FN', 'PROPONENT']);
-    expect(RATING_CODES.map((c) => c.code)).toEqual(['V', 'P', 'M', 'W', 'E', 'U']);
-    expect(RESERVE_TYPE_CODES.map((c) => c.code)).toContain('OGMA');
-  });
-});
+import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 
 describe('calculateMrvaRatingCode', () => {
   const featureRated = (rating: string): Feature[] => [{ featureRating: rating }];

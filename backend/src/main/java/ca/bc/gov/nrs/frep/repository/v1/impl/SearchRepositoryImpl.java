@@ -55,10 +55,10 @@ public class SearchRepositoryImpl extends AbstractFrepRepository implements Sear
 
   /** Maps a checklist-search result-set row. Shared by the paged and streaming reads. */
   private static final RowMapper<ChecklistSearchRow> CHECKLIST_ROW_MAPPER = (rs, n) -> new ChecklistSearchRow(
-      clean(rs.getString("checklist_id")),
+      clean(numberString(rs, "checklist_id")),
       clean(rs.getString("protocol_code")),
       clean(rs.getString("protocol_name")),
-      clean(rs.getString("effective_year")),
+      clean(numberString(rs, "effective_year")),
       clean(rs.getString("org_unit_code")),
       clean(rs.getString("licence_id")),
       clean(rs.getString("cutting_permit_id")),

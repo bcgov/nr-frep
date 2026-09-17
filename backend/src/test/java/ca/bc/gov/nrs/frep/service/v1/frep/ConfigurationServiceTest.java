@@ -151,6 +151,23 @@ class ConfigurationServiceTest {
     assertEquals(List.of("1", "2", "3", "4"), codes.stream().map(o -> o.code()).toList());
   }
 
+  @Test
+  void resourceValueStatusesPassTheExclusionThrough() {
+    // The report filter hides REJ; Site Details edits the status and needs every one of them. The
+    // exclusion is the caller's to state — it used to be hard-coded into the query, which silently
+    // stripped Rejected from the only screen that can set it.
+    when(codeListRepository.getResourceValueStatusCode(null))
+        .thenReturn(List.of(decayRow("ACC", "Accepted"), decayRow("REJ", "Rejected"),
+            decayRow("TAR", "Targeted")));
+    when(codeListRepository.getResourceValueStatusCode("REJ"))
+        .thenReturn(List.of(decayRow("ACC", "Accepted"), decayRow("TAR", "Targeted")));
+
+    assertEquals(List.of("ACC", "REJ", "TAR"),
+        service.getResourceValueStatusCodes(null).stream().map(o -> o.code()).toList());
+    assertEquals(List.of("ACC", "TAR"),
+        service.getResourceValueStatusCodes("REJ").stream().map(o -> o.code()).toList());
+  }
+
   private static Map<String, Object> decayRow(String code, String description) {
     Map<String, Object> row = new LinkedHashMap<>();
     row.put("CODE", code);

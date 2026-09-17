@@ -4,11 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import ca.bc.gov.nrs.frep.controller.v1.ChrChecklistApiController;
+import ca.bc.gov.nrs.frep.controller.v1.AcceptedSiteApiController;
+import ca.bc.gov.nrs.frep.controller.v1.RandomListApiController;
+import ca.bc.gov.nrs.frep.controller.v1.SearchApiController;
 import ca.bc.gov.nrs.frep.controller.v1.ReportApiController;
 import ca.bc.gov.nrs.frep.controller.v1.ProtocolChecklistApiController;
 import ca.bc.gov.nrs.frep.controller.v1.SiteDetailApiController;
 import ca.bc.gov.nrs.frep.endpoint.v1.ChrChecklistApiEndpoint;
 import ca.bc.gov.nrs.frep.endpoint.v1.ProtocolChecklistApiEndpoint;
+import ca.bc.gov.nrs.frep.endpoint.v1.AcceptedSiteApiEndpoint;
+import ca.bc.gov.nrs.frep.endpoint.v1.RandomListApiEndpoint;
+import ca.bc.gov.nrs.frep.endpoint.v1.SearchApiEndpoint;
 import ca.bc.gov.nrs.frep.endpoint.v1.ReportApiEndpoint;
 import ca.bc.gov.nrs.frep.endpoint.v1.SiteDetailApiEndpoint;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
@@ -18,6 +24,9 @@ import ca.bc.gov.nrs.frep.service.v1.frep.SiteDetailService;
 import ca.bc.gov.nrs.frep.service.v1.report.CSVReportService;
 import ca.bc.gov.nrs.frep.service.v1.report.ExportSlotLimiter;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportResult;
+import ca.bc.gov.nrs.frep.service.v1.frep.AcceptedSiteService;
+import ca.bc.gov.nrs.frep.service.v1.frep.RandomListService;
+import ca.bc.gov.nrs.frep.service.v1.frep.SearchService;
 import ca.bc.gov.nrs.frep.service.v1.report.ReportService;
 import ca.bc.gov.nrs.frep.struct.v1.report.ReportRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
@@ -34,6 +43,12 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import ca.bc.gov.nrs.frep.controller.v1.OpeningTargetApiController;
+import ca.bc.gov.nrs.frep.endpoint.v1.OpeningTargetApiEndpoint;
+import ca.bc.gov.nrs.frep.service.v1.frep.OpeningTargetService;
+import ca.bc.gov.nrs.frep.struct.v1.frep.OpeningSearchResult;
+import ca.bc.gov.nrs.frep.struct.v1.frep.PagedResponse;
+import org.springframework.http.ResponseEntity;
 
 /**
  * Verifies the {@code @PreAuthorize} gates on the API endpoints actually enforce — authorization now
@@ -81,7 +96,7 @@ class ApiAuthorizationSecurityTest {
     /** The {@code @auth} bean referenced by {@code FrepAuthorities.CHR_EDIT}. */
     @Bean(name = "auth")
     LoggedUserHelper auth() {
-      return new LoggedUserHelper(Mockito.mock(CognitoUserInfoService.class));
+      return new LoggedUserHelper();
     }
 
     /**
@@ -98,8 +113,32 @@ class ApiAuthorizationSecurityTest {
 
     @Bean
     ReportApiController reportApiController(ReportService reportService) {
-      return new ReportApiController(
-          reportService, Mockito.mock(CSVReportService.class), Mockito.mock(ExportSlotLimiter.class));
+      // Stubbed rather than a bare mock: the random-list export tests assert the caller gets *past*
+      // the gate, so the service beneath it has to return something.
+      CSVReportService csv = Mockito.mock(CSVReportService.class);
+      Mockito.when(csv.generateRandomListCsv(Mockito.anyString(), Mockito.any()))
+          .thenReturn(new ReportResult(new byte[0], "random-list.csv", new MediaType("text", "csv")));
+      return new ReportApiController(reportService, csv, Mockito.mock(ExportSlotLimiter.class));
+    }
+
+    @Bean
+    AcceptedSiteApiController acceptedSiteApiController() {
+      return new AcceptedSiteApiController(Mockito.mock(AcceptedSiteService.class));
+    }
+
+    @Bean
+    OpeningTargetApiController openingTargetApiController() {
+      return new OpeningTargetApiController(Mockito.mock(OpeningTargetService.class));
+    }
+
+    @Bean
+    SearchApiController searchApiController() {
+      return new SearchApiController(Mockito.mock(SearchService.class));
+    }
+
+    @Bean
+    RandomListApiController randomListApiController() {
+      return new RandomListApiController(Mockito.mock(RandomListService.class));
     }
 
     /** The {@code @reportAuth} bean referenced by the CSV data-extract {@code @PreAuthorize}. */
@@ -114,7 +153,7 @@ class ApiAuthorizationSecurityTest {
     /**
      * The {@code @chrAuth} bean referenced by the per-district CHR {@code @PreAuthorize}. Every
      * checklist resolves to {@link #CHECKLIST_DISTRICT}, so a caller holding
-     * {@code FREP_CHR_EDITOR_DISTRICT_DCK} passes and one holding another district is denied. The
+     * {@code FREP_CHR_EDITOR_DISTRICT-DCK} passes and one holding another district is denied. The
      * save tests use no-id bodies (the coarse {@code canAnyChr} fallback) and never reach the lookup.
      * A hand-rolled stub avoids a Mockito in-context mock; per-district resolution itself is covered
      * by {@code ChrChecklistAuthorizerTest}.
@@ -146,6 +185,25 @@ class ApiAuthorizationSecurityTest {
   @Autowired
   private ReportApiEndpoint reportApi;
 
+  @Autowired
+  private RandomListApiEndpoint randomListApi;
+
+  @Autowired
+  private SearchApiEndpoint searchApi;
+
+  @Autowired
+  private AcceptedSiteApiEndpoint acceptedSiteApi;
+
+  @Autowired
+  private OpeningTargetApiEndpoint openingTargetApi;
+
+  /** The opening search takes 29 filter params; these tests assert only on the authorization gate. */
+  private ResponseEntity<PagedResponse<OpeningSearchResult>> searchOpenings() {
+    return openingTargetApi.searchOpenings(
+        "DCK", null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, 0, 10);
+  }
+
   /** A filter-less report request; these tests assert only on the authorization gate. */
   private static ReportRequest emptyRequest() {
     return new ReportRequest(
@@ -155,8 +213,8 @@ class ApiAuthorizationSecurityTest {
   // ── CONTENT_EDIT (writers) ───────────────────────────────────────────
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyIsForbiddenFromSavingSiteResources() {
+  @WithMockUser
+  void userWithNoFrepRoleCannotSaveSiteResources() {
     assertThrows(
         AccessDeniedException.class,
         () -> siteDetailApi.saveResources("1", List.of()));
@@ -173,36 +231,72 @@ class ApiAuthorizationSecurityTest {
   // sites their checklists hang off — CONTENT_EDIT locked them out of a record they maintain.
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMaySaveSiteResources() {
     assertDoesNotThrow(() -> siteDetailApi.saveResources("1", List.of()));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyStillCannotSaveSiteResources() {
+  @WithMockUser
+  void userWithNoFrepRoleStillCannotSaveSiteResources() {
     assertThrows(
         AccessDeniedException.class,
         () -> siteDetailApi.saveResources("1", List.of()));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayCreateATargetedSite() {
     assertDoesNotThrow(() -> siteDetailApi.createTargetedSite(null));
   }
 
+  // The other two steps of the SAME flow. createTargetedSite above is SITE_EDIT, but these were
+  // CONTENT_EDIT until 2026-09-14 — so a district editor was allowed to create a targeted site and
+  // denied the search needed to pick one. Untested endpoints are how that survived; these pin all
+  // three steps to one authority.
+
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMaySearchOpeningsToTarget() {
+    assertDoesNotThrow(this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMayValidateATargetedSite() {
+    assertDoesNotThrow(() -> openingTargetApi.validateTargetedSite(null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_EDITOR")
+  void editorMayStillSearchOpeningsToTarget() {
+    assertDoesNotThrow(this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotSearchOpeningsToTarget() {
+    assertThrows(AccessDeniedException.class, this::searchOpenings);
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotValidateATargetedSite() {
+    assertThrows(
+        AccessDeniedException.class, () -> openingTargetApi.validateTargetedSite(null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorMayReadSiteDetail() {
     assertDoesNotThrow(() -> siteDetailApi.getSiteDetail("1"));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyCannotReadSiteDetail() {
+  @WithMockUser
+  void userWithNoFrepRoleCannotReadSiteDetail() {
     // The read was previously ungated. It now matches the rest of the surface — and the
-    // protocol-checklist / CHR reads, which exclude view-only too.
+    // protocol-checklist / CHR reads, which exclude a roleless caller too.
     assertThrows(AccessDeniedException.class, () -> siteDetailApi.getSiteDetail("1"));
   }
 
@@ -220,7 +314,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrDistrictEditorPassesTheChrWriteGate() {
     assertDoesNotThrow(() -> chrChecklistApi.saveChecklist(new CheckList()));
   }
@@ -233,14 +327,14 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrEditorMayReadAChecklistInTheirOwnDistrict() {
     // The stub checklist resolves to DCK; this caller holds DCK.
     assertDoesNotThrow(() -> chrChecklistApi.getChecklist(1L));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DPC")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DPC")
   void chrEditorIsForbiddenFromReadingAnotherDistrictsChecklist() {
     // Reads are district-scoped like writes: holding CHR somewhere is not enough. Previously this
     // passed under the coarse "any CHR" gate, leaving a cross-district read reachable by guessing a
@@ -250,7 +344,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_ADMIN")
+  @WithMockUser(authorities = "FREP_ADMINISTRATOR")
   void sysAdminMayReadAnyDistrictsChecklist() {
     assertDoesNotThrow(() -> chrChecklistApi.getChecklist(1L));
   }
@@ -258,7 +352,7 @@ class ApiAuthorizationSecurityTest {
   // ── FREP_EDIT (protocol-checklist / Biodiversity read gate) ──────────
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrOnlyUserIsForbiddenFromReadingBioChecklist() {
     // A CHR district editor has no Bio access, so even reading a Bio checklist is denied.
     assertThrows(
@@ -283,7 +377,7 @@ class ApiAuthorizationSecurityTest {
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_ADMIN")
+  @WithMockUser(authorities = "FREP_ADMINISTRATOR")
   void adminMayActivateChecklist() {
     assertDoesNotThrow(() -> chrChecklistApi.activateChecklist(1L));
   }
@@ -291,17 +385,17 @@ class ApiAuthorizationSecurityTest {
   // ── Jasper template reports (unrestricted) ───────────────────────────
   // The Reports screen shows Checklist Completion Status / Rejection Reason to everyone
   // (pages/Reports/index.tsx), so the endpoint must not gate them on CONTENT_EDIT — it previously
-  // did, and a view-only or CHR-only user saw both listed and got a 403 on generate.
+  // did, and a CHR-only user saw both listed and got a 403 on generate.
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyMayGenerateAJasperReport() {
+  @WithMockUser
+  void userWithNoFrepRoleMayGenerateAJasperReport() {
     assertDoesNotThrow(
         () -> reportApi.generateReport("checklist-completion-status", emptyRequest()));
   }
 
   @Test
-  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT_DCK")
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
   void chrOnlyUserMayGenerateAJasperReport() {
     assertDoesNotThrow(
         () -> reportApi.generateReport("checklist-rejection-reason", emptyRequest()));
@@ -310,8 +404,8 @@ class ApiAuthorizationSecurityTest {
   // ── CSV data extracts (still gated by @reportAuth) ───────────────────
 
   @Test
-  @WithMockUser(authorities = "FREP_VIEW_ONLY")
-  void viewOnlyIsForbiddenFromTheBiodiversityExtract() {
+  @WithMockUser
+  void userWithNoFrepRoleIsForbiddenFromTheBiodiversityExtract() {
     assertThrows(
         AccessDeniedException.class,
         () -> reportApi.generateCsvReport("biodiversity-extract-block", emptyRequest()));
@@ -324,5 +418,98 @@ class ApiAuthorizationSecurityTest {
     assertThrows(
         AccessDeniedException.class,
         () -> reportApi.generateCsvReport("chr-data-extract", emptyRequest()));
+  }
+
+  // ── District Random List (SITE_EDIT) ─────────────────────────────────
+  // The sampling frame was the one data endpoint with no gate at either layer. SITE_EDIT is the
+  // widest check FREP has (canEdit() || canAnyChr()), so every role that can use the app keeps
+  // access and only a caller holding no FREP role is refused. It is not a district scope — the
+  // response still spans every district.
+
+  @Test
+  @WithMockUser(authorities = "FREP_EDITOR")
+  void editorMayReadTheRandomList() {
+    assertDoesNotThrow(() -> randomListApi.getRandomList("2026", null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMayReadTheRandomList() {
+    assertDoesNotThrow(() -> randomListApi.getRandomList("2026", null));
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotReadTheRandomList() {
+    assertThrows(AccessDeniedException.class, () -> randomListApi.getRandomList("2026", null));
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotExportTheRandomList() {
+    // The CSV carries the same rows as the screen, so it takes the same gate.
+    assertThrows(
+        AccessDeniedException.class, () -> reportApi.exportRandomListCsv("2026", null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMayExportTheRandomList() {
+    assertDoesNotThrow(() -> reportApi.exportRandomListCsv("2026", null));
+  }
+
+  // ── Checklist search (SITE_EDIT in front of the SQL scoping) ─────────
+  // Which rows come back is decided in SQL from the caller. The annotation is the admission check
+  // in front of that: without it a role-less caller still ran a COUNT and a paged SELECT over the
+  // four-table union to be told nothing matched.
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMaySearchChecklists() {
+    assertDoesNotThrow(
+        () -> searchApi.searchChecklistsPaginated(
+            null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, ""));
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotSearchChecklists() {
+    assertThrows(
+        AccessDeniedException.class,
+        () -> searchApi.searchChecklistsPaginated(
+            null, null, null, null, null, null, null, null, null, null, null, null, 0, 20, ""));
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotExportTheChecklistSearch() {
+    assertThrows(
+        AccessDeniedException.class,
+        () -> reportApi.exportChecklistSearchCsv(
+            null, null, null, null, null, null, null, null, null, null, null, null));
+  }
+
+  // ── Accepted Sites (SITE_EDIT in front of the service-side row filter) ─
+  // AcceptedSiteService filters the mapped rows on canChr(districtCode) / canEdit(), which is a row
+  // scope rather than an admission check — a role-less caller still ran the native query to be
+  // handed an empty list.
+
+  @Test
+  @WithMockUser(authorities = "FREP_CHR_EDITOR_DISTRICT-DCK")
+  void chrDistrictEditorMayReadAcceptedSites() {
+    assertDoesNotThrow(() -> acceptedSiteApi.getAcceptedSites("2026", "1", null));
+  }
+
+  @Test
+  @WithMockUser(authorities = "FREP_EDITOR")
+  void editorMayReadAcceptedSites() {
+    assertDoesNotThrow(() -> acceptedSiteApi.getAcceptedSites("2026", "1", null));
+  }
+
+  @Test
+  @WithMockUser
+  void userWithNoFrepRoleCannotReadAcceptedSites() {
+    assertThrows(
+        AccessDeniedException.class, () -> acceptedSiteApi.getAcceptedSites("2026", "1", null));
   }
 }

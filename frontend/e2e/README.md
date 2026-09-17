@@ -5,16 +5,33 @@ environment; override with `E2E_BASE_URL=...` to point at local dev or another d
 
 ## One-time auth bootstrap
 
-Cognito + BC Gov IDIR can't be scripted headlessly. Run the setup project
-once interactively to capture an authenticated session:
+FREP authenticates through IDIR - MFA, and a second factor is by construction something a script
+cannot supply, so headless login needs an MFA-exempt service account. Without one, run the setup
+project once interactively to capture an authenticated session:
 
 ```bash
 npm run e2e:login
 ```
 
 A Chromium window opens, navigates to the landing page, and clicks **Log in
-with IDIR**. Finish the IDIR sign-in (and any MFA) by hand. Once the app
-lands on `/dashboard`, the session is saved to `e2e/.auth/user.json` (gitignored).
+with IDIR**. Finish the IDIR sign-in (and the MFA prompt) by hand. Once the app lands on
+`/dashboard`, the
+session is saved to **two** gitignored files:
+
+| File | Holds |
+|---|---|
+| `e2e/.auth/user.json` | cookies + localStorage (Playwright's own `storageState`) |
+| `e2e/.auth/session-storage.json` | sessionStorage — **where the tokens actually live** |
+
+The second file exists because `storageState` does not capture sessionStorage, and `oidc-client-ts`
+keeps its tokens there. Restoring only the first gives you a browser that loads cleanly and is signed
+out. `e2e/fixtures.ts` restores the second half through an overridden `page` fixture (overridden
+rather than auto, so the init script is registered before the page navigates), and writes it back
+after every test — Keycloak rotates the refresh token on each renewal, so a spec that renews
+invalidates the token the next spec would otherwise restore.
+
+**Import `test` from `./fixtures`, not from `@playwright/test`.** A spec that imports the bare
+Playwright `test` gets no sessionStorage and runs signed out.
 
 Re-run `npm run e2e:login` whenever the saved session expires — you'll know
 because tests start bouncing back to the IDIR domain or seeing 401s.

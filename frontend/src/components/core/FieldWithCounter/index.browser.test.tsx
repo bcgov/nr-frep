@@ -70,3 +70,25 @@ describe('the byte counter on text areas', () => {
     expect(screen.getByText('8 / 5').className).toContain('frep-field__counter--over');
   });
 });
+
+// Geometry, so the real stylesheet has to be loaded — a browser spec loads none by default, and
+// without it every measurement reports the unstyled layout.
+import '@/styles/index.scss';
+
+describe('FieldWithCounter — placement', () => {
+  it('sits the count at the end of the label’s line, not below the field', () => {
+    render(<Harness limit={2000} />);
+
+    const field = document.querySelector('.frep-field')!;
+    const label = field.querySelector('.cds--label')!.getBoundingClientRect();
+    const counter = field.querySelector('.frep-field__counter')!.getBoundingClientRect();
+    const input = document.querySelector('textarea')!.getBoundingClientRect();
+
+    // Same line as the label…
+    expect(Math.round(counter.top)).toBe(Math.round(label.top));
+    // …at the far end of it, clear of the label text…
+    expect(counter.left).toBeGreaterThan(label.left);
+    // …and above the field, not stranded in the gap beneath it.
+    expect(counter.bottom).toBeLessThanOrEqual(input.top);
+  });
+});

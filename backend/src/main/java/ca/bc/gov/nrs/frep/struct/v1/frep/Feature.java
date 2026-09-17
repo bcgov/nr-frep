@@ -537,7 +537,9 @@ public class Feature{
 		this.inharvestedarea = "false";
 		this.post1846 = "false";
 		this.q1Isthereevidenceofdamagetothesiteorfeature = "false";
-		this.q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse = "false";
+		// Q3 is deliberately absent: it holds a FREP_CHECKLIST_ANSWER_CODE (Y / N / D), not an
+		// indicator, so "false" was never a value it could legally take. Left unset, an unanswered
+		// Q3 stays unanswered instead of arriving at the save as a code that does not exist.
 		this.windthrow = "false";
 		this.trailfeatures = "false";
 		this.q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective = "false";

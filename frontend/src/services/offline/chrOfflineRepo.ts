@@ -75,7 +75,13 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
     const file = pictureToFile(picture);
     if (!file) continue;
     await API.chrChecklist.addPhoto(
-      checklistId, file, picture.description ?? '', picture.date, guid, picture.featureId);
+      checklistId,
+      file,
+      picture.description ?? '',
+      picture.date,
+      guid,
+      picture.featureId,
+    );
   }
 };
 
@@ -140,9 +146,7 @@ export const chrOfflineRepo = {
       dirty: true,
       deviceCheckoutGuid: existing?.deviceCheckoutGuid ?? checkList.deviceCheckoutGuid,
       revisionCount: checkList.revisionCount ?? existing?.revisionCount,
-      deletedPhotoIds: [
-        ...new Set([...(existing?.deletedPhotoIds ?? []), ...deletedPhotoIds]),
-      ],
+      deletedPhotoIds: [...new Set([...(existing?.deletedPhotoIds ?? []), ...deletedPhotoIds])],
       updatedAt: Date.now(),
     });
   },

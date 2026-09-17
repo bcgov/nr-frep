@@ -26,6 +26,8 @@ import ca.bc.gov.nrs.frep.repository.v1.ProtocolChecklistWriteRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
@@ -68,15 +70,23 @@ public class ProtocolChecklistService {
 
   private static final Logger log = LoggerFactory.getLogger(ProtocolChecklistService.class);
 
-  // Allowed attachment types = the codes in THE.MIME_TYPE_CODE (keyed by file extension). The
-  // FREP_CHECKLIST_ATTACHMENTS proc stores only these and rejects anything else with an ORA-01400
-  // (NULL mime_type_code). Guard here so an unsupported type is a clean 400 instead of a 500.
-  private static final Set<String> ALLOWED_ATTACHMENT_TYPES = Set.of(
-      "BMP", "CSV", "DOC", "GIF", "HTM", "IFM", "JPG", "JPK", "MDB", "MDE", "OBD", "PDF", "PNG",
-      "PPS", "PPT", "RPT", "RTF", "TIF", "TXT", "WAV", "XLD", "XLS", "XML", "ZIP");
-  private static final String ALLOWED_ATTACHMENT_TYPES_DISPLAY =
-      "BMP, CSV, DOC, GIF, HTM, IFM, JPG, JPK, MDB, MDE, OBD, PDF, PNG, PPS, PPT, RPT, RTF, TIF, TXT, "
-          + "WAV, XLD, XLS, XML, ZIP";
+  // Which file types FREP accepts is CONFIGURATION, not code — see AttachmentTypes, bound from
+  // frep.attachments.allowed-types (env ATTACHMENT_ALLOWED_TYPES, set from a GitHub variable).
+  // Adding a format is a variable edit and a redeploy: there is no database change (FREP no longer
+  // validates the type against THE.MIME_TYPE_CODE — the extension we send is stored verbatim) and
+  // no code change. The frontend picker reads the same list via VITE_ATTACHMENT_TYPES.
+  //
+  // MP4 is on the shipped list for short, compressed clips. The 15 MB cap is expected to bite on
+  // video — an untrimmed phone recording is roughly ten seconds of 1080p, two of 4K — and that is
+  // deliberate: the cap is the forcing function that keeps users compressing before they attach, so
+  // do NOT raise it in response to "the video is too big". The client names the fix in its rejection
+  // message (VIDEO_EXTENSIONS in RipAttachmentsView).
+  //
+  // It could not safely be raised regardless: the ClamAV scan, the object-storage write and the
+  // BLOB path each hold the whole file as a byte[] on a 400 MB heap under
+  // -XX:+ExitOnOutOfMemoryError, so a larger cap trades a rejected upload for a killed pod — one
+  // that takes out every other user's request, not just the uploader's. Lifting it would mean
+  // streaming (scan(InputStream) + RequestBody.fromInputStream), which is a different piece of work.
 
   // Numeric-format guards for user-supplied field values.
   //
@@ -101,28 +111,31 @@ public class ProtocolChecklistService {
   /** Hard cap on attachment rows returned per call; matches SearchService / OpeningTargetService. */
   private static final int MAX_PAGE_SIZE = 100;
 
+  private final AttachmentTypes attachmentTypes;
   private final ChecklistRepository checklistRepository;
   private final CodeListRepository codeListRepository;
   private final ProtocolChecklistWriteRepository writeRepository;
   private final LoggedUserHelper loggedUserHelper;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
   private final VirusScanner virusScanner;
   private final ObjectStorageService objectStorage;
 
   public ProtocolChecklistService(
+      AttachmentTypes attachmentTypes,
       ChecklistRepository checklistRepository,
       CodeListRepository codeListRepository,
       ProtocolChecklistWriteRepository writeRepository,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService,
+      UserDirectoryService userDirectoryService,
       VirusScanner virusScanner,
       ObjectStorageService objectStorage
   ) {
+    this.attachmentTypes = attachmentTypes;
     this.checklistRepository = checklistRepository;
     this.codeListRepository = codeListRepository;
     this.writeRepository = writeRepository;
     this.loggedUserHelper = loggedUserHelper;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
     this.virusScanner = virusScanner;
     this.objectStorage = objectStorage;
   }
@@ -200,7 +213,7 @@ public class ProtocolChecklistService {
     if (opening == null || StringUtils.isBlank(opening.teamLeadNameId())) {
       return opening;
     }
-    String name = famUserDirectoryService.resolveName(opening.teamLeadNameId())
+    String name = userDirectoryService.resolveName(opening.teamLeadNameId())
         .orElse(opening.teamLeadNameId());
     return opening.withTeamLead(opening.teamLeadNameId(), name, opening.teamLeadRevisionCount());
   }
@@ -281,8 +294,12 @@ public class ProtocolChecklistService {
       return;
     }
     double number = Double.parseDouble(text);
-    if (number < 0.01 || number > 99999.99) {
-      errors.add("FREP gross area override must be between 0.01 and 99999.99.");
+    if (number > 99999.99) {
+      errors.add("FREP gross area override must be at most 99999.99.");
+      return;
+    }
+    if (number < 0.01) {
+      errors.add("FREP gross area override must be at least 0.01.");
       return;
     }
     int dot = text.indexOf('.');
@@ -369,6 +386,11 @@ public class ProtocolChecklistService {
     maxLength(s.otherEcoAnchorDesc(), "Other eco anchor description", 30, errors);
     maxLength(s.patchGeneralComment(), "Patch general comment", 2000, errors);
 
+    // The total is a percentage in a NUMBER(3) column. It needed a rule of its own: the block below
+    // only *guards* on the range, so a total of "500" — or "abc" — skipped every check here and went
+    // to the proc, where it is either stored as nonsense or fails as a conversion error.
+    intRange(s.constrainedTotal(), "Total constrained %", 0, 100, errors);
+
     if (isIntInRange(trimmedOrEmpty(s.constrainedTotal()), 0, 100)) {
       int total = Integer.parseInt(s.constrainedTotal().trim());
       int maxSingle = maxConstraintPct(s);
@@ -449,17 +471,41 @@ public class ProtocolChecklistService {
     }
   }
 
+  /**
+   * Range check that names the end that failed, matching the client's wording.
+   *
+   * <p>One message covering shape and both bounds ran to "Wetland % must be a whole number from 1 to
+   * 100." — too long for the bare table cells these live in, where it was clipped mid-sentence, and it
+   * described three rules to someone who broke one.
+   */
   private static void intRange(String value, String label, int min, int max, List<String> errors) {
-    if (StringUtils.isNotBlank(value) && !isIntInRange(value.trim(), min, max)) {
-      errors.add(label + " must be a whole number from " + min + " to " + max + ".");
+    if (StringUtils.isBlank(value) || isIntInRange(value.trim(), min, max)) {
+      return;
     }
+    String text = value.trim();
+    if (!text.matches("-?\\d+")) {
+      errors.add(label + " must be a whole number.");
+      return;
+    }
+    long n = Long.parseLong(text);
+    errors.add(n > max ? label + " must be at most " + max + "."
+        : label + " must be at least " + min + ".");
   }
 
+  /** As {@link #intRange}, for a field whose column carries decimals. */
   private static void numRange(String value, String label, double min, double max,
       List<String> errors) {
-    if (StringUtils.isNotBlank(value) && !isNumInRange(value.trim(), min, max)) {
-      errors.add(label + " must be a number from " + fmt(min) + " to " + fmt(max) + ".");
+    if (StringUtils.isBlank(value) || isNumInRange(value.trim(), min, max)) {
+      return;
     }
+    String text = value.trim();
+    if (!UNSIGNED_DECIMAL.matcher(text).matches()) {
+      errors.add(label + " must be a number.");
+      return;
+    }
+    double n = Double.parseDouble(text);
+    errors.add(n > max ? label + " must be at most " + fmt(max) + "."
+        : label + " must be at least " + fmt(min) + ".");
   }
 
   private static void decimalLimit(String value, String label, int max, List<String> errors) {
@@ -574,7 +620,26 @@ public class ProtocolChecklistService {
         .toList();
   }
 
+
+  /**
+   * Reject a non-numeric id before it reaches the driver.
+   *
+   * {@code BIODIVERSITY_PLOT.BIODIVERSITY_PLOT_ID} is a NUMBER, so binding a blank or non-numeric
+   * string fails inside Oracle as "Invalid Input Number" — which surfaces to the evaluator as
+   * "A database error occurred… contact the FREP help desk" and is logged as a system fault, with
+   * nothing anywhere naming the value that caused it. A 400 that quotes the id says what happened
+   * and leaves a usable trace.
+   */
+  private static void requireNumericId(String value, String what) {
+    if (!StringUtils.isNumeric(value)) {
+      log.warn("Rejected non-numeric {}: '{}'", what, value);
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Invalid " + what + ": '" + value + "'");
+    }
+  }
+
   public BioPlot getBioPlot(String plotId) {
+    requireNumericId(plotId, "plot id");
     BioPlot plot = writeRepository.getBioPlot(plotId);
     if (plot == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plot not found: " + plotId);
@@ -587,14 +652,14 @@ public class ProtocolChecklistService {
    * header shows, falling back to the bare userid when the assessor no longer has FREP access (or
    * FAM is unavailable). Plot assessors are stored bare, so this is the only place a name exists.
    *
-   * <p>Cheap for a plot list: {@link FamUserDirectoryService#resolveName} caches by userid, and a
+   * <p>Cheap for a plot list: {@link UserDirectoryService#resolveName} caches by userid, and a
    * stratum's plots are usually all assessed by the same person, so the list costs one lookup.
    */
   private String assessorDisplayName(String userid) {
     if (StringUtils.isBlank(userid)) {
       return userid;
     }
-    return famUserDirectoryService.resolveName(userid).orElse(userid);
+    return userDirectoryService.resolveName(userid).orElse(userid);
   }
 
   public BioPlot saveBioPlot(BioPlot plot) {
@@ -621,15 +686,22 @@ public class ProtocolChecklistService {
 
     // UTM and the bearings are nullable, so a plot recorded before the GPS fix (or before the
     // transect is walked) stores fine — the missing values are counted on the tab and block submit.
-    // A value that *is* entered still has to be the right shape.
-    if (!"N".equals(trimmedOrEmpty(p.utmSignal()))) {
-      if (StringUtils.isNotBlank(p.utmEasting()) && !p.utmEasting().trim().matches("\\d{6}")) {
-        errors.add("Easting must be exactly 6 digits.");
-      }
-      if (StringUtils.isNotBlank(p.utmNorthing()) && !p.utmNorthing().trim().matches("\\d{7}")) {
-        errors.add("Northing must be exactly 7 digits.");
-      }
+    //
+    // A value that *is* entered still has to be the right shape, whatever the signal says: a
+    // coordinate has to be storable even on a plot claiming no signal, and the columns are what
+    // decide that. Only the requiredness of the three is conditional, and that is advisory. Mirrors
+    // the standing rule in the client's plotValidation.ts.
+    if (StringUtils.isNotBlank(p.utmEasting()) && !p.utmEasting().trim().matches("\\d{6}")) {
+      errors.add("Easting must be exactly 6 digits.");
     }
+    if (StringUtils.isNotBlank(p.utmNorthing()) && !p.utmNorthing().trim().matches("\\d{7}")) {
+      errors.add("Northing must be exactly 7 digits.");
+    }
+    // BIODIVERSITY_PLOT.UTM_ZONE is NUMBER(2), and nothing checked it before: a non-numeric zone
+    // reached Oracle as a conversion error with nothing naming the field. Bounded by the column
+    // rather than by the five zones the picker offers (7-11), so a legacy row carrying another zone
+    // still re-saves.
+    intRange(p.utmZone(), "Zone", 1, 99, errors);
 
     intRange(p.firstLegTransect(), "Bearing 1st leg", 0, 359, errors);
     intRange(p.secondLegTransect(), "2nd leg", 0, 359, errors);
@@ -705,10 +777,12 @@ public class ProtocolChecklistService {
       return;
     }
     double n = Double.parseDouble(text);
-    if ((exclusiveMin ? n <= min : n < min) || n > max) {
+    if (n > max) {
+      errors.add(label + " must be at most " + fmt(max) + ".");
+    } else if (exclusiveMin ? n <= min : n < min) {
       errors.add(exclusiveMin
-          ? label + " must be greater than " + fmt(min) + " and no more than " + fmt(max) + "."
-          : label + " must be between " + fmt(min) + " and " + fmt(max) + ".");
+          ? label + " must be over " + fmt(min) + "."
+          : label + " must be at least " + fmt(min) + ".");
     }
   }
 
@@ -766,18 +840,55 @@ public class ProtocolChecklistService {
     return new AttachmentPage(withSizes, writeRepository.countAttachments(checklistId, resourceType));
   }
 
-  /** Object key for a Biodiversity attachment; mirrors the write path. */
+  /**
+   * Object key for a Biodiversity attachment; resolved through {@link
+   * ObjectStorageService#bioObjectKey} so the size shown in the list is HEADed from the same key the
+   * download reads. This one previously skipped the {@code trim()} the write path applies — harmless
+   * in practice, since ids come from a NUMBER column, but it meant a blank size rather than a failed
+   * download would have been the only symptom if that ever stopped holding.
+   */
   private static String bioObjectKey(String attachmentId) {
-    return "slr/" + attachmentId;
+    return ObjectStorageService.bioObjectKey(attachmentId);
   }
 
   /** A page of attachment metadata plus the total, for the pager. */
   public record AttachmentPage(List<AttachmentRow> attachments, int totalCount) {}
 
+  /**
+   * One attachment's bytes, with its media type resolved here rather than trusted from the database.
+   *
+   * <p>The proc's {@code p_mime_type} out-parameter comes from an OUTER join to
+   * {@code THE.MIME_TYPE_CODE}, which FREP no longer populates, so it is NULL for any type added
+   * after the decoupling. {@link AttachmentTypes} is the source of truth; the stored value is used
+   * only as a fallback for a row whose format is no longer on the configured list.
+   */
   public AttachmentContent getAttachmentContent(
       String protocol, String checklistId, String attachmentId) {
-    return writeRepository.getAttachmentContent(
+    AttachmentContent content = writeRepository.getAttachmentContent(
         checklistId, checklistRepository.resolveResourceType(checklistId), attachmentId);
+    return new AttachmentContent(
+        content.fileName(), mediaTypeFor(content.fileName(), content.mimeType()), content.data());
+  }
+
+  /**
+   * The media type to label a download with: the extension's registered type, else whatever the
+   * database held, else a generic binary type — never null, since the client builds a data URL from
+   * this and a null there yields an undecodable {@code data:WEBP;base64,...}.
+   */
+  private String mediaTypeFor(String fileName, String storedMimeType) {
+    String extension = extensionOf(fileName);
+    if (attachmentTypes.isAllowed(extension)) {
+      return attachmentTypes.mediaType(extension);
+    }
+    // Not a currently-allowed type: an older row whose format has since been removed from the list.
+    // Keep whatever the database held rather than mislabelling it, and only invent a type when it
+    // has none — the client cannot build a data: URL from null.
+    return StringUtils.isBlank(storedMimeType) ? "application/octet-stream" : storedMimeType;
+  }
+
+  /** Uppercased extension of {@code fileName}, or "" when it has none. */
+  private static String extensionOf(String fileName) {
+    return AttachmentType.extensionOf(fileName);
   }
 
   /**
@@ -793,6 +904,12 @@ public class ProtocolChecklistService {
     // — the offline flush pushes attachments through here while the checklist is still checked out,
     // since the RDO → ACT flip happens at the end of the sync.
     assertChecklistEditable(checklistId, deviceCheckoutGuid);
+    // Authorize first, then normalise. A multipart form part never passes through Jackson, so the
+    // trimming deserializer in GlobalConfiguration does not reach it — trim here, as the CHR
+    // upload already does. It matters more than it looks: the column is VARCHAR2(2000 BYTE) and
+    // trailing whitespace spends that budget, so an otherwise-fitting description can fail with
+    // ORA-12899.
+    description = description == null ? null : description.trim();
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "The selected file is empty. Choose a file with content and try again.");
@@ -804,8 +921,14 @@ public class ProtocolChecklistService {
     virusScanner.scanOrThrow(bytes, fileName);
     // Resource type comes from the record, not the {protocol} path segment (SLB legacy / SLR
     // go-forward) — see the section comment above.
+    // Our media type, not file.getContentType(). The browser's claim varies by OS and browser for
+    // the same format (and is blank for the legacy MoF types), so storing it made the object's
+    // Content-Type inconsistent across uploads of the same extension — and it is client-supplied.
+    // This value is what object storage records, so anything reading the bucket directly gets a
+    // correct type without a database or a lookup table in the path.
     writeRepository.saveAttachment(checklistId, checklistRepository.resolveResourceType(checklistId),
-        fileName, description, file.getContentType(), bytes, loggedUserHelper.getLoggedUserId());
+        fileName, description, attachmentTypes.mediaType(extensionOf(fileName)), bytes,
+        loggedUserHelper.getLoggedUserId());
     log.info("Uploaded attachment :: {} ({} bytes) to checklist :: {} by user :: {}", fileName,
         bytes.length, checklistId, loggedUserHelper.getLoggedUserId());
   }
@@ -820,15 +943,13 @@ public class ProtocolChecklistService {
     }
   }
 
-  /** Reject file types the attachment proc can't store (see {@link #ALLOWED_ATTACHMENT_TYPES}). */
-  private static void validateAttachmentType(String fileName) {
-    int dot = fileName == null ? -1 : fileName.lastIndexOf('.');
-    String ext = (dot < 0 || dot == fileName.length() - 1)
-        ? "" : fileName.substring(dot + 1).toUpperCase();
-    if (!ALLOWED_ATTACHMENT_TYPES.contains(ext)) {
+  /** Reject file types that are not on the configured allow-list (see {@link AttachmentTypes}). */
+  private void validateAttachmentType(String fileName) {
+    String ext = extensionOf(fileName);
+    if (!attachmentTypes.isAllowed(ext)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "Unsupported file type" + (ext.isEmpty() ? "" : " ." + ext.toLowerCase())
-              + ". Allowed types: " + ALLOWED_ATTACHMENT_TYPES_DISPLAY + ".");
+              + ". Allowed types: " + attachmentTypes.display() + ".");
     }
   }
 
@@ -882,7 +1003,7 @@ public class ProtocolChecklistService {
     String evaluatorUserid = header.evaluatorUserid();
     String evaluatorName = StringUtils.isBlank(evaluatorUserid)
         ? evaluatorUserid
-        : famUserDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
+        : userDirectoryService.resolveName(evaluatorUserid).orElse(evaluatorUserid);
     return Optional.of(new ProtocolChecklistResponse(
         checklistId,
         recordType,

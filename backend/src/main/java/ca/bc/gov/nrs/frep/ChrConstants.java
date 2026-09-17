@@ -120,7 +120,9 @@ public final class ChrConstants {
     public static final String SIL = "SIL";
     public static final String RECUSE = "RECUSE";
     public static final String FIRE = "FIRE";
-    public static final String INDUSTR = "INDUSTR";
+    // INDUST, not INDUSTR — legacy Constants.ChrFeatureDamageAgentCode has the extra letter and
+    // would fail the same way; the code table is the authority, not that file.
+    public static final String INDUSTR = "INDUST";
     public static final String ROADBD = "ROADBD";
     public static final String LVS = "LVS";
     public static final String WINDTHR = "WINDTHR";
@@ -129,13 +131,21 @@ public final class ChrConstants {
     private ChrFeatureDamageAgentCode() {}
   }
 
+  /**
+   * Windthrow treatments, as single letters — the values in THE.CHR_WINDTHROW_TREATMENT_CODE.
+   *
+   * <p>These are the codes, not the names. Spelling them out ("NONE", "FEATHERING") fit the
+   * VARCHAR2(10) column, so the insert reached the database and failed its foreign key instead:
+   * ORA-02291 on CHFWTX_CHWTC_FK, every time a treatment was ticked. Verified against legacy
+   * Constants.ChrWindthrowTreatmentCode.
+   */
   public static final class ChrWindthrowTreatmentCode {
-    public static final String NONE = "NONE";
-    public static final String BUFFER = "BUFFER";
-    public static final String PRUNING = "PRUNING";
-    public static final String FEATHERING = "FEATHERING";
-    public static final String TOPPING = "TOPPING";
-    public static final String OTHER = "OTHER";
+    public static final String NONE = "N";
+    public static final String BUFFER = "B";
+    public static final String PRUNING = "P";
+    public static final String FEATHERING = "F";
+    public static final String TOPPING = "T";
+    public static final String OTHER = "O";
 
     private ChrWindthrowTreatmentCode() {}
   }

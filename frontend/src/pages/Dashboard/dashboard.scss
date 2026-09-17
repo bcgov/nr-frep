@@ -45,3 +45,16 @@
   margin: 0;
   color: var(--#{vars.$bcgov-prefix}-text-secondary);
 }
+
+/* The welcome banner sits between the page heading and the tiles. Carbon caps an inline
+   notification's width for readability; this one spans the row it is in so it reads as a page-level
+   message rather than a warning attached to one tile. */
+.dashboard__welcome {
+  max-width: none;
+  width: 100%;
+  margin-block-end: 1.5rem;
+}
+
+.dashboard__welcome-text a {
+  color: inherit;
+}

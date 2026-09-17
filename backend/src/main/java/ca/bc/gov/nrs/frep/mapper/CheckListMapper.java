@@ -23,6 +23,7 @@ import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.UUID;
@@ -133,211 +134,8 @@ public final class CheckListMapper extends FrepMapper {
 			Iterator<ChrFeatureIdentity> it = hset.iterator();
 			while(it.hasNext()) {
 				ChrFeatureIdentity cFeatureIdentity = (ChrFeatureIdentity)it.next();
-				Feature feature = new Feature();
-				feature.setId(cFeatureIdentity.getChrFeatureId().toString());
-				feature.setFeatureLabel(cFeatureIdentity.getFeatureLabel());
-				feature.setCompositeFeatureInd(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getCompositeFeatureInd()));
-
-				// Get composite feature
-				HashSet<ChrFeatureIdentity> hsetChrFeatureIdentity = new HashSet<ChrFeatureIdentity>(chrChecklist.getChrFeatureIdentities());
-				Iterator<ChrFeatureIdentity> itChrFeatureIdentity = hsetChrFeatureIdentity.iterator();
-				while(itChrFeatureIdentity.hasNext()) {
-					ChrFeatureIdentity chrFeatureIdentity = (ChrFeatureIdentity)itChrFeatureIdentity.next();
-					if (chrFeatureIdentity.getChrFeatureId().equals(cFeatureIdentity.getCompositeChrFeatureIdentity())) {
-						feature.setCompositeFeature(chrFeatureIdentity.getFeatureLabel());
-						break;
-					}
-				}
-
-				if (cFeatureIdentity.getChrFeatureClassCode() != null) {
-					feature.setFeatureDescriptionCode(cFeatureIdentity.getChrFeatureClassCode().getChrFeatureClassCode());
-				}
-				feature.setFeatureComment(cFeatureIdentity.getComments());
-
-				if (cFeatureIdentity.getChrFeatureInfoSourceXrefs() != null && cFeatureIdentity.getChrFeatureInfoSourceXrefs().size() > 0) {
-					if (cFeatureIdentity.getChrFeatureInfoSourceXrefs().size() > 1) {
-						throw new Exception("More than one CHR_FEATURE_INFO_SOURCE_XREF returned for feature when only 1 expected.");
-					} else {
-						HashSet<ChrFeatureInfoSourceXref> hsetFeatureInfoSourceXref = new HashSet<ChrFeatureInfoSourceXref>(cFeatureIdentity.getChrFeatureInfoSourceXrefs());
-						Iterator<ChrFeatureInfoSourceXref> itChrFeatureInfoSourceXref = hsetFeatureInfoSourceXref.iterator();
-						while(itChrFeatureInfoSourceXref.hasNext()) {
-							ChrFeatureInfoSourceXref cFeatureInfoSourceXref = (ChrFeatureInfoSourceXref)itChrFeatureInfoSourceXref.next();
-							feature.setFeatureInfoSourceCode(cFeatureInfoSourceXref.getChrFeatureInfoSourceCode().getChrFeatureInfoSourceCode());
-						}
-					}
-				}
-
-				// Associated Features
-				if (cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId() != null && cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().size() > 0) {
-					HashSet<ChrAssociatedFeatureXref> hsetChrAssociatedFeatureXref = new HashSet<ChrAssociatedFeatureXref>(cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId());
-					Iterator<ChrAssociatedFeatureXref> itChrAssociatedFeatureXref = hsetChrAssociatedFeatureXref.iterator();
-					String[] associatedFeatures = new String[cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().size()];
-					int index = 0;
-					while(itChrAssociatedFeatureXref.hasNext()) {
-						ChrAssociatedFeatureXref chrAssociatedFeatureXref = (ChrAssociatedFeatureXref)itChrAssociatedFeatureXref.next();
-						hsetChrFeatureIdentity = new HashSet<ChrFeatureIdentity>(chrChecklist.getChrFeatureIdentities());
-						itChrFeatureIdentity = hsetChrFeatureIdentity.iterator();
-						while(itChrFeatureIdentity.hasNext()) {
-							ChrFeatureIdentity chrFeatureIdentity = (ChrFeatureIdentity)itChrFeatureIdentity.next();
-							if (chrFeatureIdentity.getChrFeatureId().equals(chrAssociatedFeatureXref.getId().getFromChrFeatureId())) {
-								associatedFeatures[index] = chrFeatureIdentity.getFeatureLabel();
-								index++;
-								break;
-							}
-						}
-					}
-					feature.setAssociatedFeatures(associatedFeatures);
-				}
-
-// 4. Site or Feature Description
-				feature.setChrRegisteredSite(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getRegdArchaeologicalSiteInd()));
-				feature.setPermit(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getPermitIssuedInd()));
-				feature.setFeatureDescription(cFeatureIdentity.getChrFeatureDetail().getDescription());
-				if (cFeatureIdentity.getChrFeatureDetail().getAreaWidthMeters() != null) {
-					feature.setWidthofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaWidthMeters().toString());
-				}
-				if (cFeatureIdentity.getChrFeatureDetail().getAreaLengthMeters() != null) {
-					feature.setLengthofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaLengthMeters().toString());
-				}
-				if (cFeatureIdentity.getChrFeatureDetail().getAreaHectares() != null) {
-					feature.setAreaofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaHectares().toString());
-				}
-				feature.setManagementStrategyFN(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getFnMgmtRecommendationsInd()));
-				feature.setManagementStrategySP(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getSitePlanStratsRecommndInd()));
-				feature.setBorden(cFeatureIdentity.getChrFeatureDetail().getBordenNo());
-
-				if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs().size() > 0) {
-					HashSet<ChrFeatureTypeXref> hsetChrFeatureTypeXref = new HashSet<ChrFeatureTypeXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs());
-					Iterator<ChrFeatureTypeXref> itChrFeatureTypeXref = hsetChrFeatureTypeXref.iterator();
-					while(itChrFeatureTypeXref.hasNext()) {
-						ChrFeatureTypeXref cFeatureTypeXref = (ChrFeatureTypeXref)itChrFeatureTypeXref.next();
-						mapForChrFeatureTypeXref(feature, cFeatureTypeXref.getChrFeatureTypeCode().getChrFeatureTypeCode(), cFeatureTypeXref.getOtherDescription(), cFeatureTypeXref.getQuantity());
-					}
-				}
-
-// 5. Location
-				if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails().size() > 0) {
-					HashSet<ChrFeatureLocationDetail> hsetChrFeatureLocationDetail = new HashSet<ChrFeatureLocationDetail>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails());
-					Iterator<ChrFeatureLocationDetail> itrChrFeatureLocationDetail = hsetChrFeatureLocationDetail.iterator();
-					while(itrChrFeatureLocationDetail.hasNext()) {
-						ChrFeatureLocationDetail cFeatureLocationDetail = (ChrFeatureLocationDetail)itrChrFeatureLocationDetail.next();
-						mapForChrFeatureLocationDetail(feature, cFeatureLocationDetail);
-					}
-				}
-
-// 6. Age
-				if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs().size() > 0) {
-					HashSet<ChrFeatureAgeXref> hsetChrFeatureAgeXref = new HashSet<ChrFeatureAgeXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs());
-					Iterator<ChrFeatureAgeXref> itrChrFeatureAgeXref = hsetChrFeatureAgeXref.iterator();
-					while(itrChrFeatureAgeXref.hasNext()) {
-						ChrFeatureAgeXref cFeatureAgeXref = (ChrFeatureAgeXref)itrChrFeatureAgeXref.next();
-						mapForChrFeatureAgeXref(feature, cFeatureAgeXref.getChrFeatureAgeCode().getChrFeatureAgeCode());
-					}
-				}
-// 7. Management Planning
-				feature.setPermit(cFeatureIdentity.getChrFeatureDetail().getPermitNumber());
-				feature.setSitePermitIssued(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getPermitIssuedInd()));
-				if (cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds() != null && cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds().size() > 0) {
-					HashSet<ChrMgmtStrategyPlanned> hsetChrMgmtStrategyPlanned = new HashSet<ChrMgmtStrategyPlanned>(cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds());
-					Iterator<ChrMgmtStrategyPlanned> itrChrMgmtStrategyPlanned = hsetChrMgmtStrategyPlanned.iterator();
-					while(itrChrMgmtStrategyPlanned.hasNext()) {
-						ChrMgmtStrategyPlanned cMgmtStrategyPlanned = (ChrMgmtStrategyPlanned)itrChrMgmtStrategyPlanned.next();
-						String chrReserveTypeCode = null;
-						if (cMgmtStrategyPlanned.getChrReserveTypeCode() != null) {
-							chrReserveTypeCode = cMgmtStrategyPlanned.getChrReserveTypeCode().getChrReserveTypeCode();
-						}
-						String bufferWidthMeters = null;
-						if (cMgmtStrategyPlanned.getBufferWidthMeters() != null) {
-							bufferWidthMeters = cMgmtStrategyPlanned.getBufferWidthMeters().toString();
-						}
-						mapForChrMgmtStrategyPlanned(feature,
-								                     cMgmtStrategyPlanned.getChrMgmtStrategySourceCode().getChrMgmtStrategySourceCode(),
-								                     cMgmtStrategyPlanned.getChrMgmtStrategyTypeCode().getChrMgmtStrategyTypeCode(),
-								                     chrReserveTypeCode,
-								                     bufferWidthMeters,
-								                     cMgmtStrategyPlanned.getOtherStrategy());
-					}
-				}
-
-// 8. Management Effectiveness
-				feature.setForCompositeFeaturesInd(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getUniformStrategyAppliedInd()));
-				feature.setUnabletoLocate(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getFeatureLocatedInd()));
-				feature.setNoManagement(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getManagementAppliedInd()));
-				if (cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds() != null && cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds().size() > 0) {
-					HashSet<ChrMgmtStrategyUsed> hsetChrMgmtStrategyUsed = new HashSet<ChrMgmtStrategyUsed>(cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds());
-					Iterator<ChrMgmtStrategyUsed> itrChrMgmtStrategyUsed = hsetChrMgmtStrategyUsed.iterator();
-					while(itrChrMgmtStrategyUsed.hasNext()) {
-						ChrMgmtStrategyUsed cMgmtStrategyUsed = (ChrMgmtStrategyUsed)itrChrMgmtStrategyUsed.next();
-						String chrReserveTypeCode = null;
-						if (cMgmtStrategyUsed.getChrReserveTypeCode() != null) {
-							chrReserveTypeCode = cMgmtStrategyUsed.getChrReserveTypeCode().getChrReserveTypeCode();
-						}
-						String bufferWidthMeters = null;
-						if (cMgmtStrategyUsed.getBufferWidthMeters() != null) {
-							bufferWidthMeters = cMgmtStrategyUsed.getBufferWidthMeters().toString();
-						}
-						mapForChrMgmtStrategyUsed(feature,
-								                  cMgmtStrategyUsed.getChrMgmtStrategyTypeCode().getChrMgmtStrategyTypeCode(),
-								                  chrReserveTypeCode,
-								                  bufferWidthMeters,
-								                  cMgmtStrategyUsed.getFullyConservedInd(),
-								                  cMgmtStrategyUsed.getOtherStrategy());
-					}
-				}
-
-				// Q1 Is there evidence of damage to the site or feature.
-				feature.setQ1Isthereevidenceofdamagetothesiteorfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getEvidenceOfDamageInd()));
-				if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs().size() > 0) {
-					HashSet<ChrFeatureDamageAgentXref> hsetChrFeatureDamageAgentXref = new HashSet<ChrFeatureDamageAgentXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs());
-					Iterator<ChrFeatureDamageAgentXref> itrChrFeatureDamageAgentXref = hsetChrFeatureDamageAgentXref.iterator();
-					while(itrChrFeatureDamageAgentXref.hasNext()) {
-						ChrFeatureDamageAgentXref chrFeatureDamageAgentXref = (ChrFeatureDamageAgentXref)itrChrFeatureDamageAgentXref.next();
-						mapForChrFeatureDamageAgentXref(feature, chrFeatureDamageAgentXref.getChrFeatureDamageAgentCode().getChrFeatureDamageAgentCode(), chrFeatureDamageAgentXref.getOtherDescription());
-					}
-				}
-
-				// Q3
-				feature.setQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse(cFeatureIdentity.getChrFeatureDetail().getDamageIrreversibleAnswerCd().getFrepChecklistAnswerCode());
-
-				feature.setDescriptionofdamage(cFeatureIdentity.getChrFeatureDetail().getDamageDescription());
-
-				// Windthrow management
-				feature.setWindthrowManagement(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getWindthrowMgmtApplicableInd()));
-				feature.setWindthrow(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getAreaWindfirmInd()));
-				if (cFeatureIdentity.getChrFeatureDetail().getEstWindthrowPercent() != null) {
-					feature.setEstwindthrow(cFeatureIdentity.getChrFeatureDetail().getEstWindthrowPercent().toString());
-				}
-				if (cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs().size() > 0) {
-					HashSet<ChrFeatWindthrTreatXref> hsetChrFeatWindthrTreatXref = new HashSet<ChrFeatWindthrTreatXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs());
-					Iterator<ChrFeatWindthrTreatXref> itrChrFeatWindthrTreatXref = hsetChrFeatWindthrTreatXref.iterator();
-					while(itrChrFeatWindthrTreatXref.hasNext()) {
-						ChrFeatWindthrTreatXref cFeatWindthrTreatXref = (ChrFeatWindthrTreatXref)itrChrFeatWindthrTreatXref.next();
-						mapForChrFeatWindthrTreatXref(feature, cFeatWindthrTreatXref.getChrWindthrowTreatmentCode().getChrWindthrowTreatmentCode(), feature.getIfotherpleasedescribe());
-					}
-				}
-
-				// Trail Features
-				feature.setTrailfeatures(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailFeaturesApplicableInd()));
-				feature.setCanthetrailstillbelocated(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailLocatableInd()));
-				feature.setHasthetrailbeenmadelesspassble(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailLessPassableInd()));
-				feature.setIsthereevidenceofdamage(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailAreaDamagedInd()));
-				if (cFeatureIdentity.getChrFeatureDetail().getEstTrailDamagePercent() != null) {
-					feature.setTrailLength(String.valueOf(cFeatureIdentity.getChrFeatureDetail().getEstTrailDamagePercent()));
-				}
-
-				// Summary
-				feature.setQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getLimitingOperatnlFactorsInd()));
-				feature.setQ4Description(cFeatureIdentity.getChrFeatureDetail().getLimitingOperatnlFactorsDesc());
-				feature.setQ5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getEffectiveStratsUsedInd()));
-				feature.setQ5Description(cFeatureIdentity.getChrFeatureDetail().getEffectiveStratsUsedDesc());
-				feature.setQ6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getAlternateStratsAvailInd()));
-				feature.setQ6Description(cFeatureIdentity.getChrFeatureDetail().getAlternateStratsAvailDesc());
-				if (cFeatureIdentity.getChrFeatureDetail().getChrSiteEvaluationCode() != null) {
-					feature.setFeatureRating(cFeatureIdentity.getChrFeatureDetail().getChrSiteEvaluationCode().getChrSiteEvaluationCode());
-				}
-				feature.setFeatureRatingRationale(cFeatureIdentity.getChrFeatureDetail().getEvaluationRatingRationale());
-
-				resource.getFeatures().add(feature);
+				resource.getFeatures().add(
+						toFeature(cFeatureIdentity, chrChecklist.getChrFeatureIdentities()));
 			}
 		}
 
@@ -869,6 +667,234 @@ public final class CheckListMapper extends FrepMapper {
 				feature.setIfotherpleasedescribe(otherDescription);
 				break;
 		}
+	}
+
+
+	/**
+	 * Map one stored feature to its DTO — the same mapping the checklist read performs, lifted out of
+	 * the loop so it can be applied to a single feature.
+	 *
+	 * <p>Extracted so the save path can ask "is this incoming feature the same as the stored one?"
+	 * against the very code that defines what a feature is on the wire. A hand-written field
+	 * comparison would drift from this mapping, and a field missing from one side fails silently in
+	 * the direction that looks like a successful save — which is how
+	 * {@code clearingANumberOrCodeOnAnExistingFeatureWritesNullRatherThanKeepingTheOldValue} happened.
+	 *
+	 * @param siblingIdentities every identity on the same checklist; needed to resolve the composite
+	 *                          parent's label and the associated-feature labels, which are stored as
+	 *                          ids but reported as labels.
+	 * @throws Exception exactly as the original loop did, when a feature carries more than one
+	 *                   info-source xref — a shape the schema allows but the DTO cannot express.
+	 */
+	public static Feature toFeature(ChrFeatureIdentity cFeatureIdentity, Set siblingIdentities)
+			throws Exception {
+		Feature feature = new Feature();
+		feature.setId(cFeatureIdentity.getChrFeatureId().toString());
+		feature.setFeatureLabel(cFeatureIdentity.getFeatureLabel());
+		feature.setCompositeFeatureInd(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getCompositeFeatureInd()));
+
+		// Get composite feature
+		HashSet<ChrFeatureIdentity> hsetChrFeatureIdentity = new HashSet<ChrFeatureIdentity>(siblingIdentities);
+		Iterator<ChrFeatureIdentity> itChrFeatureIdentity = hsetChrFeatureIdentity.iterator();
+		while(itChrFeatureIdentity.hasNext()) {
+			ChrFeatureIdentity chrFeatureIdentity = (ChrFeatureIdentity)itChrFeatureIdentity.next();
+			if (chrFeatureIdentity.getChrFeatureId().equals(cFeatureIdentity.getCompositeChrFeatureIdentity())) {
+				feature.setCompositeFeature(chrFeatureIdentity.getFeatureLabel());
+				break;
+			}
+		}
+
+		if (cFeatureIdentity.getChrFeatureClassCode() != null) {
+			feature.setFeatureDescriptionCode(cFeatureIdentity.getChrFeatureClassCode().getChrFeatureClassCode());
+		}
+		feature.setFeatureComment(cFeatureIdentity.getComments());
+
+		if (cFeatureIdentity.getChrFeatureInfoSourceXrefs() != null && cFeatureIdentity.getChrFeatureInfoSourceXrefs().size() > 0) {
+			if (cFeatureIdentity.getChrFeatureInfoSourceXrefs().size() > 1) {
+				throw new Exception("More than one CHR_FEATURE_INFO_SOURCE_XREF returned for feature when only 1 expected.");
+			} else {
+				HashSet<ChrFeatureInfoSourceXref> hsetFeatureInfoSourceXref = new HashSet<ChrFeatureInfoSourceXref>(cFeatureIdentity.getChrFeatureInfoSourceXrefs());
+				Iterator<ChrFeatureInfoSourceXref> itChrFeatureInfoSourceXref = hsetFeatureInfoSourceXref.iterator();
+				while(itChrFeatureInfoSourceXref.hasNext()) {
+					ChrFeatureInfoSourceXref cFeatureInfoSourceXref = (ChrFeatureInfoSourceXref)itChrFeatureInfoSourceXref.next();
+					feature.setFeatureInfoSourceCode(cFeatureInfoSourceXref.getChrFeatureInfoSourceCode().getChrFeatureInfoSourceCode());
+				}
+			}
+		}
+
+		// Associated Features
+		if (cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId() != null && cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().size() > 0) {
+			HashSet<ChrAssociatedFeatureXref> hsetChrAssociatedFeatureXref = new HashSet<ChrAssociatedFeatureXref>(cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId());
+			Iterator<ChrAssociatedFeatureXref> itChrAssociatedFeatureXref = hsetChrAssociatedFeatureXref.iterator();
+			String[] associatedFeatures = new String[cFeatureIdentity.getChrAssociatedFeatureXrefsForToChrFeatureId().size()];
+			int index = 0;
+			while(itChrAssociatedFeatureXref.hasNext()) {
+				ChrAssociatedFeatureXref chrAssociatedFeatureXref = (ChrAssociatedFeatureXref)itChrAssociatedFeatureXref.next();
+				hsetChrFeatureIdentity = new HashSet<ChrFeatureIdentity>(siblingIdentities);
+				itChrFeatureIdentity = hsetChrFeatureIdentity.iterator();
+				while(itChrFeatureIdentity.hasNext()) {
+					ChrFeatureIdentity chrFeatureIdentity = (ChrFeatureIdentity)itChrFeatureIdentity.next();
+					if (chrFeatureIdentity.getChrFeatureId().equals(chrAssociatedFeatureXref.getId().getFromChrFeatureId())) {
+						associatedFeatures[index] = chrFeatureIdentity.getFeatureLabel();
+						index++;
+						break;
+					}
+				}
+			}
+			feature.setAssociatedFeatures(associatedFeatures);
+		}
+
+// 4. Site or Feature Description
+		feature.setChrRegisteredSite(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getRegdArchaeologicalSiteInd()));
+		feature.setPermit(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getPermitIssuedInd()));
+		feature.setFeatureDescription(cFeatureIdentity.getChrFeatureDetail().getDescription());
+		if (cFeatureIdentity.getChrFeatureDetail().getAreaWidthMeters() != null) {
+			feature.setWidthofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaWidthMeters().toString());
+		}
+		if (cFeatureIdentity.getChrFeatureDetail().getAreaLengthMeters() != null) {
+			feature.setLengthofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaLengthMeters().toString());
+		}
+		if (cFeatureIdentity.getChrFeatureDetail().getAreaHectares() != null) {
+			feature.setAreaofFeature(cFeatureIdentity.getChrFeatureDetail().getAreaHectares().toString());
+		}
+		feature.setManagementStrategyFN(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getFnMgmtRecommendationsInd()));
+		feature.setManagementStrategySP(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getSitePlanStratsRecommndInd()));
+		feature.setBorden(cFeatureIdentity.getChrFeatureDetail().getBordenNo());
+
+		if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs().size() > 0) {
+			HashSet<ChrFeatureTypeXref> hsetChrFeatureTypeXref = new HashSet<ChrFeatureTypeXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureTypeXrefs());
+			Iterator<ChrFeatureTypeXref> itChrFeatureTypeXref = hsetChrFeatureTypeXref.iterator();
+			while(itChrFeatureTypeXref.hasNext()) {
+				ChrFeatureTypeXref cFeatureTypeXref = (ChrFeatureTypeXref)itChrFeatureTypeXref.next();
+				mapForChrFeatureTypeXref(feature, cFeatureTypeXref.getChrFeatureTypeCode().getChrFeatureTypeCode(), cFeatureTypeXref.getOtherDescription(), cFeatureTypeXref.getQuantity());
+			}
+		}
+
+// 5. Location
+		if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails().size() > 0) {
+			HashSet<ChrFeatureLocationDetail> hsetChrFeatureLocationDetail = new HashSet<ChrFeatureLocationDetail>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureLocationDetails());
+			Iterator<ChrFeatureLocationDetail> itrChrFeatureLocationDetail = hsetChrFeatureLocationDetail.iterator();
+			while(itrChrFeatureLocationDetail.hasNext()) {
+				ChrFeatureLocationDetail cFeatureLocationDetail = (ChrFeatureLocationDetail)itrChrFeatureLocationDetail.next();
+				mapForChrFeatureLocationDetail(feature, cFeatureLocationDetail);
+			}
+		}
+
+// 6. Age
+		if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs().size() > 0) {
+			HashSet<ChrFeatureAgeXref> hsetChrFeatureAgeXref = new HashSet<ChrFeatureAgeXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureAgeXrefs());
+			Iterator<ChrFeatureAgeXref> itrChrFeatureAgeXref = hsetChrFeatureAgeXref.iterator();
+			while(itrChrFeatureAgeXref.hasNext()) {
+				ChrFeatureAgeXref cFeatureAgeXref = (ChrFeatureAgeXref)itrChrFeatureAgeXref.next();
+				mapForChrFeatureAgeXref(feature, cFeatureAgeXref.getChrFeatureAgeCode().getChrFeatureAgeCode());
+			}
+		}
+// 7. Management Planning
+		feature.setPermit(cFeatureIdentity.getChrFeatureDetail().getPermitNumber());
+		feature.setSitePermitIssued(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getPermitIssuedInd()));
+		if (cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds() != null && cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds().size() > 0) {
+			HashSet<ChrMgmtStrategyPlanned> hsetChrMgmtStrategyPlanned = new HashSet<ChrMgmtStrategyPlanned>(cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyPlanneds());
+			Iterator<ChrMgmtStrategyPlanned> itrChrMgmtStrategyPlanned = hsetChrMgmtStrategyPlanned.iterator();
+			while(itrChrMgmtStrategyPlanned.hasNext()) {
+				ChrMgmtStrategyPlanned cMgmtStrategyPlanned = (ChrMgmtStrategyPlanned)itrChrMgmtStrategyPlanned.next();
+				String chrReserveTypeCode = null;
+				if (cMgmtStrategyPlanned.getChrReserveTypeCode() != null) {
+					chrReserveTypeCode = cMgmtStrategyPlanned.getChrReserveTypeCode().getChrReserveTypeCode();
+				}
+				String bufferWidthMeters = null;
+				if (cMgmtStrategyPlanned.getBufferWidthMeters() != null) {
+					bufferWidthMeters = cMgmtStrategyPlanned.getBufferWidthMeters().toString();
+				}
+				mapForChrMgmtStrategyPlanned(feature,
+						                     cMgmtStrategyPlanned.getChrMgmtStrategySourceCode().getChrMgmtStrategySourceCode(),
+						                     cMgmtStrategyPlanned.getChrMgmtStrategyTypeCode().getChrMgmtStrategyTypeCode(),
+						                     chrReserveTypeCode,
+						                     bufferWidthMeters,
+						                     cMgmtStrategyPlanned.getOtherStrategy());
+			}
+		}
+
+// 8. Management Effectiveness
+		feature.setForCompositeFeaturesInd(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getUniformStrategyAppliedInd()));
+		feature.setUnabletoLocate(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getFeatureLocatedInd()));
+		feature.setNoManagement(ChrStringUtils.indicatorToBooleanStrInverseLogic(cFeatureIdentity.getChrFeatureDetail().getManagementAppliedInd()));
+		if (cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds() != null && cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds().size() > 0) {
+			HashSet<ChrMgmtStrategyUsed> hsetChrMgmtStrategyUsed = new HashSet<ChrMgmtStrategyUsed>(cFeatureIdentity.getChrFeatureDetail().getChrMgmtStrategyUseds());
+			Iterator<ChrMgmtStrategyUsed> itrChrMgmtStrategyUsed = hsetChrMgmtStrategyUsed.iterator();
+			while(itrChrMgmtStrategyUsed.hasNext()) {
+				ChrMgmtStrategyUsed cMgmtStrategyUsed = (ChrMgmtStrategyUsed)itrChrMgmtStrategyUsed.next();
+				String chrReserveTypeCode = null;
+				if (cMgmtStrategyUsed.getChrReserveTypeCode() != null) {
+					chrReserveTypeCode = cMgmtStrategyUsed.getChrReserveTypeCode().getChrReserveTypeCode();
+				}
+				String bufferWidthMeters = null;
+				if (cMgmtStrategyUsed.getBufferWidthMeters() != null) {
+					bufferWidthMeters = cMgmtStrategyUsed.getBufferWidthMeters().toString();
+				}
+				mapForChrMgmtStrategyUsed(feature,
+						                  cMgmtStrategyUsed.getChrMgmtStrategyTypeCode().getChrMgmtStrategyTypeCode(),
+						                  chrReserveTypeCode,
+						                  bufferWidthMeters,
+						                  cMgmtStrategyUsed.getFullyConservedInd(),
+						                  cMgmtStrategyUsed.getOtherStrategy());
+			}
+		}
+
+		// Q1 Is there evidence of damage to the site or feature.
+		feature.setQ1Isthereevidenceofdamagetothesiteorfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getEvidenceOfDamageInd()));
+		if (cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs().size() > 0) {
+			HashSet<ChrFeatureDamageAgentXref> hsetChrFeatureDamageAgentXref = new HashSet<ChrFeatureDamageAgentXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatureDamageAgentXrefs());
+			Iterator<ChrFeatureDamageAgentXref> itrChrFeatureDamageAgentXref = hsetChrFeatureDamageAgentXref.iterator();
+			while(itrChrFeatureDamageAgentXref.hasNext()) {
+				ChrFeatureDamageAgentXref chrFeatureDamageAgentXref = (ChrFeatureDamageAgentXref)itrChrFeatureDamageAgentXref.next();
+				mapForChrFeatureDamageAgentXref(feature, chrFeatureDamageAgentXref.getChrFeatureDamageAgentCode().getChrFeatureDamageAgentCode(), chrFeatureDamageAgentXref.getOtherDescription());
+			}
+		}
+
+		// Q3
+		feature.setQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse(cFeatureIdentity.getChrFeatureDetail().getDamageIrreversibleAnswerCd().getFrepChecklistAnswerCode());
+
+		feature.setDescriptionofdamage(cFeatureIdentity.getChrFeatureDetail().getDamageDescription());
+
+		// Windthrow management
+		feature.setWindthrowManagement(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getWindthrowMgmtApplicableInd()));
+		feature.setWindthrow(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getAreaWindfirmInd()));
+		if (cFeatureIdentity.getChrFeatureDetail().getEstWindthrowPercent() != null) {
+			feature.setEstwindthrow(cFeatureIdentity.getChrFeatureDetail().getEstWindthrowPercent().toString());
+		}
+		if (cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs() != null && cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs().size() > 0) {
+			HashSet<ChrFeatWindthrTreatXref> hsetChrFeatWindthrTreatXref = new HashSet<ChrFeatWindthrTreatXref>(cFeatureIdentity.getChrFeatureDetail().getChrFeatWindthrTreatXrefs());
+			Iterator<ChrFeatWindthrTreatXref> itrChrFeatWindthrTreatXref = hsetChrFeatWindthrTreatXref.iterator();
+			while(itrChrFeatWindthrTreatXref.hasNext()) {
+				ChrFeatWindthrTreatXref cFeatWindthrTreatXref = (ChrFeatWindthrTreatXref)itrChrFeatWindthrTreatXref.next();
+				// The row's own description, not feature.getIfotherpleasedescribe() — that reads back
+				// off the half-built struct, which is empty at this point, so the saved text was
+				// overwritten with nothing on every load. Legacy has the same line.
+				mapForChrFeatWindthrTreatXref(feature, cFeatWindthrTreatXref.getChrWindthrowTreatmentCode().getChrWindthrowTreatmentCode(), cFeatWindthrTreatXref.getOtherDescription());
+			}
+		}
+
+		// Trail Features
+		feature.setTrailfeatures(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailFeaturesApplicableInd()));
+		feature.setCanthetrailstillbelocated(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailLocatableInd()));
+		feature.setHasthetrailbeenmadelesspassble(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailLessPassableInd()));
+		feature.setIsthereevidenceofdamage(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getTrailAreaDamagedInd()));
+		if (cFeatureIdentity.getChrFeatureDetail().getEstTrailDamagePercent() != null) {
+			feature.setTrailLength(String.valueOf(cFeatureIdentity.getChrFeatureDetail().getEstTrailDamagePercent()));
+		}
+
+		// Summary
+		feature.setQ4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getLimitingOperatnlFactorsInd()));
+		feature.setQ4Description(cFeatureIdentity.getChrFeatureDetail().getLimitingOperatnlFactorsDesc());
+		feature.setQ5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getEffectiveStratsUsedInd()));
+		feature.setQ5Description(cFeatureIdentity.getChrFeatureDetail().getEffectiveStratsUsedDesc());
+		feature.setQ6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature(ChrStringUtils.indicatorToBooleanStr(cFeatureIdentity.getChrFeatureDetail().getAlternateStratsAvailInd()));
+		feature.setQ6Description(cFeatureIdentity.getChrFeatureDetail().getAlternateStratsAvailDesc());
+		if (cFeatureIdentity.getChrFeatureDetail().getChrSiteEvaluationCode() != null) {
+			feature.setFeatureRating(cFeatureIdentity.getChrFeatureDetail().getChrSiteEvaluationCode().getChrSiteEvaluationCode());
+		}
+		feature.setFeatureRatingRationale(cFeatureIdentity.getChrFeatureDetail().getEvaluationRatingRationale());
+		return feature;
 	}
 
 }

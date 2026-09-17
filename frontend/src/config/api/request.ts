@@ -13,6 +13,7 @@ import {
   type APIConfig,
 } from '@/config/api/types';
 import { handleUnauthorized } from '@/context/auth/refreshSession';
+import { reportNetworkFailure } from '@/hooks/useOnlineStatus';
 
 export const isDefined = <T>(
   value: T | null | undefined,
@@ -235,7 +236,6 @@ export const sendRequest = async <T>(
     // Binary endpoints must opt out of JSON parsing or the bytes are corrupted on arrival.
     ...(options.responseType ? { responseType: options.responseType } : {}),
     withCredentials: config.WITH_CREDENTIALS,
-    withXSRFToken: config.CREDENTIALS === 'include' ? config.WITH_CREDENTIALS : false,
     cancelToken: source.token,
   };
 
@@ -256,6 +256,12 @@ export const sendRequest = async <T>(
     const axiosError = error as AxiosError<T>;
     if (axiosError.response) {
       return axiosError.response;
+    }
+    // No response at all — the request never reached a server. That is the strongest evidence of
+    // lost connectivity the app ever gets, so let the connectivity monitor re-probe now rather than
+    // waiting out its heartbeat. Cancellations are the user's doing, not the network's.
+    if (!axios.isCancel(error)) {
+      reportNetworkFailure();
     }
     throw error;
   } finally {

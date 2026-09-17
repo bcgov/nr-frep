@@ -29,8 +29,11 @@ public class ApiAuthorizationCustomizer implements
     // CORS preflight — must not require auth or the browser never sends the real request.
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
-    // Health / actuator endpoints — open for OpenShift probes and Prometheus scraping.
-    authorize.requestMatchers("/actuator/**").permitAll();
+    // Only the two actuator endpoints we actually expose
+    // (management.endpoints.web.exposure.include) are anonymous — for the OpenShift probes and
+    // Prometheus scraping. Named individually rather than a broad /actuator/** wildcard, which
+    // would silently publish any management endpoint added to that list later. Matches nr-fspts.
+    authorize.requestMatchers("/actuator/health", "/actuator/prometheus").permitAll();
 
     // Everything else requires a valid token; role checks are enforced per-endpoint via @PreAuthorize.
     authorize.anyRequest().authenticated();

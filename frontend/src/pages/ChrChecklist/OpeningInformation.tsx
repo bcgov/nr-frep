@@ -1,5 +1,5 @@
 import { Edit } from '@carbon/icons-react';
-import { Button, InlineNotification } from '@carbon/react';
+import { Button } from '@carbon/react';
 import { useState, type FC } from 'react';
 
 import {
@@ -8,6 +8,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
+import RequiredLegend from '@/pages/ProtocolChecklist/RequiredLegend';
 import { requiredLabel } from '@/utils/requiredLabel';
 
 import type { CheckList } from '@/types/chrChecklist';
@@ -19,6 +20,7 @@ import {
 } from '@/pages/ChrChecklist/checklistValidation';
 import { OPENING_TEXT_LIMITS } from '@/pages/ChrChecklist/textLimits';
 import { formatShortDate } from '@/utils/date';
+import ActionButton from '@/components/core/ActionButton';
 
 const RoField: FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="protocol-checklist__field">
@@ -62,7 +64,6 @@ const OpeningInformation: FC<{
   const editAssessedByDisplay =
     editAssessedBy === assessedBy ? value.assessedByName || editAssessedBy : editAssessedBy;
   const canAssignToMe = Boolean(me) && editAssessedBy !== me;
-  const assignPending = Boolean(draft.assessedBy) && draft.assessedBy !== value.assessedBy;
 
   const beginEdit = () => {
     setDraft({
@@ -101,7 +102,7 @@ const OpeningInformation: FC<{
         {!editing && !readOnly && (
           <Button kind="tertiary" size="lg" disabled={busy} onClick={beginEdit}>
             <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
+              Edit <Edit />
             </span>
           </Button>
         )}
@@ -118,27 +119,17 @@ const OpeningInformation: FC<{
             >
               Cancel
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
+            <ActionButton busy={busy} onClick={() => void save()} />
           </>
         )}
       </div>
+      {/* Only while editing — the read-only view marks nothing required. */}
+      {editing && <RequiredLegend />}
 
       <fieldset className="rip-form__group">
         <legend>Evaluation</legend>
         {editing ? (
           <>
-            {assignPending && (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                hideCloseButton
-                title="Save required"
-                subtitle="You must save the form to update the Evaluator value."
-                className="chr-checklist__assessed-by__notice"
-              />
-            )}
             <div className="rip-form__grid">
               <DateField
                 id="chr-evaluation-date"
@@ -178,12 +169,14 @@ const OpeningInformation: FC<{
                 maxLength={200}
                 onChange={(v) => setDraft((d) => ({ ...d, firstNationName: v }))}
               />
-              <IndicatorCheckbox
-                id="chr-targeted"
-                labelText="Targeted site"
-                value={draft.targeted}
-                onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
-              />
+              <div className="chr-checklist__grid-check">
+                <IndicatorCheckbox
+                  id="chr-targeted"
+                  labelText="Targeted site"
+                  value={draft.targeted}
+                  onToggle={(v) => setDraft((d) => ({ ...d, targeted: v }))}
+                />
+              </div>
             </div>
             <TextAreaField
               id="chr-general-location"

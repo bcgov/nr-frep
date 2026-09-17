@@ -15,7 +15,17 @@ public interface CodeListRepository {
   List<Map<String, Object>> getSiteAccessCode();
   List<Map<String, Object>> getEvaluationCode();
   List<Map<String, Object>> getStratumTypeCode();
-  List<Map<String, Object>> getResourceValueStatusCode();
+  List<Map<String, Object>> getResourceValueStatusCode(String excludeStatusCode);
+
+  List<Map<String, Object>> getChrFeatureClassCode();
+
+  List<Map<String, Object>> getChrFeatureInfoSourceCode();
+
+  List<Map<String, Object>> getChrReserveTypeCode();
+
+  List<Map<String, Object>> getChrSiteEvaluationCode();
+
+  List<Map<String, Object>> getChrParticipantRoleCode();
   List<Map<String, Object>> getChecklistStatusCode();
   List<Map<String, Object>> getFrepSpeciesCode();
   List<Map<String, Object>> getWildlifeTreeDecayCode();

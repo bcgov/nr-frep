@@ -2,6 +2,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// The button's own geometry is under test, so it needs the global Carbon overrides as well as the
+// page styles that ./index brings with it.
+import '@/styles/index.scss';
+
 import LandingPage from './index';
 
 import { APP_FULL_NAME } from '@/constants/appName';
@@ -59,6 +63,28 @@ describe('LandingPage', () => {
 
     fireEvent.click(bceid);
     expect(mockLogin).toHaveBeenCalledWith('bceid');
+  });
+
+  it('puts the login icon after its label, against the far edge', () => {
+    // These two buttons are the exception to the app-wide "icon leads the label" rule: a sign-in
+    // glyph points the way the button takes you, so it trails. The fixed 20rem width means the
+    // arrangement has to be stated — `space-between` is what pushes the icon to the edge.
+    renderPage();
+
+    const button = screen.getByTestId('landing-button__idir');
+    const icon = button.querySelector('svg') as SVGElement;
+    const text = Array.from(button.childNodes).find(
+      (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim(),
+    ) as Text;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+
+    // The icon starts after the label ends — the ordering, which geometry can see.
+    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(range.getBoundingClientRect().right);
+
+    // Asserted on the computed style: the button only reaches its 20rem in the real layout, so in
+    // here the gap collapses and geometry cannot tell "against the edge" from "just after the text".
+    expect(getComputedStyle(button).justifyContent).toBe('space-between');
   });
 
   it('spells out the app name under the acronym', () => {

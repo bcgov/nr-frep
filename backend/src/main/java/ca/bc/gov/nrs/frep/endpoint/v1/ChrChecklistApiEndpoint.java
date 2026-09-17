@@ -2,7 +2,13 @@ package ca.bc.gov.nrs.frep.endpoint.v1;
 
 import ca.bc.gov.nrs.frep.security.ChrChecklistAuthorizer;
 import ca.bc.gov.nrs.frep.security.FrepAuthorities;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AssociationsRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeCreateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUngroupRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUpdateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.PhotoPageResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import org.springframework.http.MediaType;
@@ -12,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
@@ -116,6 +123,109 @@ public interface ChrChecklistApiEndpoint {
       @PathVariable long id,
       @PathVariable long photoId,
       @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
+
+  /**
+   * Remove one feature and everything that hangs off it.
+   *
+   * <p>Deletion used to be expressed by a feature's <em>absence</em> from the features-section
+   * payload. That still holds for the offline check-in path, which posts the whole document; this
+   * endpoint is the online equivalent, so the editor no longer has to resend every feature to
+   * remove one.
+   *
+   * <p>{@code revisionCount} travels as a query parameter because DELETE carries no body — the same
+   * shape the BIO stratum and plot deletes use. It is the <em>checklist's</em> token, as every other
+   * CHR save uses, so a stale one fails the same way a stale section save does.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @DeleteMapping("/checklists/{id}/features/{featureId}")
+  ResponseEntity<Void> deleteFeature(
+      @PathVariable long id,
+      @PathVariable long featureId,
+      @RequestParam String revisionCount);
+
+  /**
+   * Create a composite over two or more features.
+   *
+   * <p>A {@code POST} to the collection rather than a feature save naming a parent: the anchor does
+   * not exist until this call, so nothing can reference it beforehand.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PostMapping("/checklists/{id}/composites")
+  ResponseEntity<FeatureSaveResponse> createComposite(
+      @PathVariable long id, @RequestBody CompositeCreateRequest request);
+
+  /**
+   * Re-point an existing composite at a new set of members, and update its own class and source.
+   *
+   * <p>Separate from {@link #createComposite} because the two differ in more than the anchor: this
+   * one can take a feature from another composite, has members to release, and does not require a
+   * class or source.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PutMapping("/checklists/{id}/composites/{anchorId}")
+  ResponseEntity<FeatureSaveResponse> updateComposite(
+      @PathVariable long id,
+      @PathVariable long anchorId,
+      @RequestBody CompositeUpdateRequest request);
+
+  /**
+   * Dissolve a composite: the anchor row goes, its members are released, and any named in the
+   * request are deleted.
+   *
+   * <p>A {@code POST} action rather than {@code DELETE} on the composite: the operation carries a
+   * body (which members to delete) and has to stay atomic — one gesture removes 1 + N rows, and
+   * splitting it would leave a half-ungrouped composite behind on a failure.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PostMapping("/checklists/{id}/composites/{anchorId}/ungroup")
+  ResponseEntity<FeatureSaveResponse> ungroupComposite(
+      @PathVariable long id,
+      @PathVariable long anchorId,
+      @RequestBody CompositeUngroupRequest request);
+
+  /**
+   * Add one standalone feature to a checklist — the editor's Save on a new feature.
+   *
+   * <p>The path carries {@code /new} because {@code POST /checklists/{id}/features} is already the
+   * whole-section save, which cannot be moved: cached frontend bundles still call it, and it is the
+   * fallback every per-feature write uses when the checklist is an offline copy.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PostMapping("/checklists/{id}/features/new")
+  ResponseEntity<FeatureSaveResponse> createFeature(
+      @PathVariable long id, @RequestBody FeatureSaveRequest request);
+
+  /**
+   * Save one feature's own fields — the feature editor's Save.
+   *
+   * <p>Replaces resending every feature to change one. Relationships are left to their own
+   * endpoints: see {@link FeatureSaveRequest} for what this deliberately does not touch.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PutMapping("/checklists/{id}/features/{featureId}")
+  ResponseEntity<FeatureSaveResponse> saveFeature(
+      @PathVariable long id,
+      @PathVariable long featureId,
+      @RequestBody FeatureSaveRequest request);
+
+  /**
+   * Replace the set of features one feature is associated with.
+   *
+   * <p>Its own endpoint because associating is its own gesture in the UI, with its own dialog and
+   * its own save — and because it is not a single-feature write: an association names two features,
+   * so the server writes and removes <b>both</b> directions. That symmetry used to be the client's
+   * job (it put each label in the other feature's list and posted the whole array), which held only
+   * while every feature was in the payload.
+   *
+   * <p>Returns the features the write touched — the subject and every partner gained or lost — so
+   * the caller does not have to re-read the whole checklist to refresh two rows.
+   */
+  @PreAuthorize("@chrAuth.canEditChecklist(#id)")
+  @PutMapping("/checklists/{id}/features/{featureId}/associations")
+  ResponseEntity<FeatureSaveResponse> saveFeatureAssociations(
+      @PathVariable long id,
+      @PathVariable long featureId,
+      @RequestBody AssociationsRequest request);
 
   @PreAuthorize("@chrAuth.canEditChecklist(#id)")
   @PostMapping("/checklists/{id}/submit")

@@ -24,7 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * 20 × 10s) would fail it partway through and restart the pod mid-run. A {@code @Scheduled} method
  * runs on a scheduler thread after refresh, so startup, readiness and traffic are untouched.
  *
- * <p><b>Why it is not an HTTP endpoint.</b> The API requires a Cognito access token on every
+ * <p><b>Why it is not an HTTP endpoint.</b> The API requires a BC Gov SSO access token on every
  * request ({@code anyRequest().authenticated()}), and those are only obtainable through an
  * interactive IDIR login in a browser — FAM's pool has no machine client. Driving a migration from
  * a hand-copied, short-lived token is a poor way to run a production cutover, and an endpoint open

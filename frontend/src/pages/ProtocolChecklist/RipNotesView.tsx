@@ -8,6 +8,8 @@ import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
 import { apiErrorMessage } from '@/utils/apiError';
 import { byteLength, overLimitError } from '@/utils/textLimits';
+import FormLock from '@/components/core/FormLock';
+import ActionButton from '@/components/core/ActionButton';
 
 /**
  * Byte limit of `<checklist>.note_description`. 2000 is what the legacy app enforced before the
@@ -150,59 +152,60 @@ const RipNotesView: FC<Props> = ({ protocol, checklistId, canEdit, submitted }) 
 
   return (
     <div className="rip-form">
-      <div className="protocol-checklist__section-actions">
-        {!editing && showEditControls && (
-          <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
-            <span className="protocol-checklist__edit-label">
-              <Edit /> Edit
-            </span>
-          </Button>
-        )}
-        {editing && (
-          <>
-            <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
-              Cancel
+      <FormLock busy={busy}>
+        <div className="protocol-checklist__section-actions">
+          {!editing && showEditControls && (
+            <Button kind="tertiary" size="lg" disabled={busy} onClick={() => void beginEdit()}>
+              <span className="protocol-checklist__edit-label">
+                Edit <Edit />
+              </span>
             </Button>
-            <Button
-              size="lg"
-              disabled={busy || Boolean(limitError)}
-              onClick={() => void handleSave()}
-            >
-              Save
-            </Button>
-          </>
-        )}
-      </div>
-
-      {editing ? (
-        // Same counter treatment as the CHR text fields (see utils/textLimits.ts): count bytes,
-        // never truncate, and let the count sit bottom-right under the box.
-        <div className="frep-field">
-          <TextArea
-            id="rip-note"
-            labelText="Notes"
-            rows={10}
-            value={note}
-            invalid={Boolean(limitError) || (showErrors && blankError)}
-            invalidText={limitError || 'Enter a note before saving.'}
-            onChange={(e) =>
-              setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
-            }
-          />
-          <div className="frep-field__footer">
-            <span
-              className={
-                limitError ? 'frep-field__counter frep-field__counter--over' : 'frep-field__counter'
-              }
-              aria-live="polite"
-            >
-              {byteLength(note)} / {NOTE_LIMIT}
-            </span>
-          </div>
+          )}
+          {editing && (
+            <>
+              <Button kind="ghost" size="lg" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+              <ActionButton
+                busy={busy}
+                disabled={Boolean(limitError)}
+                onClick={() => void handleSave()}
+              />
+            </>
+          )}
         </div>
-      ) : (
-        readOnlyNote
-      )}
+
+        {editing ? (
+          // Same counter treatment as the CHR text fields (see utils/textLimits.ts): count bytes,
+          // never truncate, and let the count sit bottom-right under the box.
+          <div className="frep-field">
+            <TextArea
+              autoComplete="off"
+              id="rip-note"
+              labelText="Notes"
+              rows={10}
+              value={note}
+              invalid={Boolean(limitError) || (showErrors && blankError)}
+              invalidText={limitError || 'Enter a note before saving.'}
+              onChange={(e) =>
+                setData((prev) => ({ ...(prev ?? { checklistId }), noteDescription: e.target.value }))
+              }
+            />
+            <div className="frep-field__footer">
+              <span
+                className={
+                  limitError ? 'frep-field__counter frep-field__counter--over' : 'frep-field__counter'
+                }
+                aria-live="polite"
+              >
+                {byteLength(note)} / {NOTE_LIMIT}
+              </span>
+            </div>
+          </div>
+        ) : (
+          readOnlyNote
+        )}
+      </FormLock>
     </div>
   );
 };

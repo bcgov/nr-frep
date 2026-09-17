@@ -8,7 +8,14 @@ import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AssociationsRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.CheckList;
+import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeCreateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUngroupRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.CompositeUpdateRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveRequest;
+import ca.bc.gov.nrs.frep.struct.v1.frep.FeatureSaveResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Contact;
 import ca.bc.gov.nrs.frep.struct.v1.frep.Feature;
 import ca.bc.gov.nrs.frep.struct.v1.frep.OtherPlannedManagementStrategy;
@@ -19,14 +26,17 @@ import ca.bc.gov.nrs.frep.mapper.CheckListMapper;
 import ca.bc.gov.nrs.frep.util.ChrDateUtils;
 import ca.bc.gov.nrs.frep.util.ChrStringUtils;
 import ca.bc.gov.nrs.frep.validation.ChrSubmitValidationService;
+import ca.bc.gov.nrs.frep.configuration.AttachmentType;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
 import ca.bc.gov.nrs.frep.configuration.ObjectStorageProperties;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import ca.bc.gov.nrs.frep.service.v1.VirusScanner;
 import ca.bc.gov.nrs.frep.entity.ChrChecklist;
 import ca.bc.gov.nrs.frep.repository.v1.ChrChecklistRepository;
 import ca.bc.gov.nrs.frep.security.LoggedUserHelper;
-import ca.bc.gov.nrs.frep.service.v1.frep.FamUserDirectoryService;
+import ca.bc.gov.nrs.frep.service.v1.frep.UserDirectoryService;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -42,20 +52,25 @@ public class ChrChecklistService {
 
   private static final Logger log = LoggerFactory.getLogger(ChrChecklistService.class);
 
-  // CHR photos are image-only. The derived code is stored in CHR_CHECKLIST_ATTACHMENT.MIME_TYPE_CODE
-  // (VARCHAR2(3), NOT NULL, FK to MIME_TYPE_CODE), so a non-image (or an image type whose code isn't a
-  // valid 3-char code, e.g. WEBP/TIFF) would fail on save with ORA-12899 / ORA-02291. Guard new photos
-  // up front. Mirrors deriveMimeType's output (jpeg->jpg) against the image codes in MIME_TYPE_CODE.
-  // TIF is deliberately absent. It fell through every net: browsers can't decode TIFF, so the
-  // client-side downscale in Photos.tsx silently kept the full-resolution original, no thumbnail
-  // could ever render, and it is excluded from server-side normalization — leaving a photo stored at
-  // full size that never displays. TIF remains valid for Biodiversity *attachments*, where scanned
-  // maps have a real fidelity argument; it has none for a site photo.
-  private static final Set<String> ALLOWED_IMAGE_CODES = Set.of("JPG", "PNG", "GIF", "BMP");
+  // CHR photos accept exactly the same file types as Biodiversity attachments — one
+  // ATTACHMENT_ALLOWED_TYPES variable, no per-protocol subset — and AttachmentTypes IS THE ONLY
+  // THING ENFORCING IT. The database used to back the rule up: CHR_CHECKLIST_ATTACHMENT.MIME_TYPE_CODE
+  // was VARCHAR2(3) with a FK to the shared MIME_TYPE_CODE table, so anything without a valid 3-char
+  // code failed on save with ORA-12899 / ORA-02291. That safety net is gone — the FK is dropped and
+  // the column is VARCHAR2(10) — so an unguarded write would now simply succeed. It stays safe
+  // because addPhoto is the only path that creates a CHR_CHECKLIST_ATTACHMENT row and
+  // validateNewPhoto always runs first; checklist saves, including the offline check-in,
+  // deliberately never touch photos. Keep it that way.
+  //
+  // Types that no browser renders (TIFF above all) are accepted like any other: the tab shows a type
+  // placeholder instead of a thumbnail and skips the client-side downscale, exactly as the
+  // Biodiversity attachments tab has always done for them. Uploading is not the same question as
+  // previewing.
 
   /** Hard cap on photo rows returned per call; matches SearchService / OpeningTargetService. */
   private static final int MAX_PAGE_SIZE = 100;
 
+  private final AttachmentTypes attachmentTypes;
   private final ChrChecklistPersistenceService persistenceService;
   private final ChrChecklistRepository checklistRepository;
   private final ChrSubmitValidationService submitValidationService;
@@ -63,18 +78,20 @@ public class ChrChecklistService {
   private final ObjectStorageProperties objectStorageProperties;
   private final LoggedUserHelper loggedUserHelper;
   private final VirusScanner virusScanner;
-  private final FamUserDirectoryService famUserDirectoryService;
+  private final UserDirectoryService userDirectoryService;
 
   public ChrChecklistService(
+      AttachmentTypes attachmentTypes,
       ChrChecklistPersistenceService persistenceService,
       ChrChecklistRepository checklistRepository,
       ChrSubmitValidationService submitValidationService,
       ObjectStorageService objectStorageService,
       ObjectStorageProperties objectStorageProperties,
       LoggedUserHelper loggedUserHelper,
-      FamUserDirectoryService famUserDirectoryService,
+      UserDirectoryService userDirectoryService,
       VirusScanner virusScanner
   ) {
+    this.attachmentTypes = attachmentTypes;
     this.persistenceService = persistenceService;
     this.checklistRepository = checklistRepository;
     this.submitValidationService = submitValidationService;
@@ -82,7 +99,7 @@ public class ChrChecklistService {
     this.objectStorageProperties = objectStorageProperties;
     this.loggedUserHelper = loggedUserHelper;
     this.virusScanner = virusScanner;
-    this.famUserDirectoryService = famUserDirectoryService;
+    this.userDirectoryService = userDirectoryService;
   }
 
   public CheckList getChecklist(long checklistId) {
@@ -159,9 +176,14 @@ public class ChrChecklistService {
     byte[] content = readBytes(file);
     // Scan before anything is persisted — a hit throws VirusDetectedException (→ 422).
     virusScanner.scanOrThrow(content, file.getOriginalFilename());
+    // The extension, not file.getContentType(): MIME_TYPE_CODE is VARCHAR2(10) and holds the short
+    // code (PDF), so passing the media type stored "APPLICATION/PDF" — 15 characters — and every
+    // non-image upload died on the insert. It is also the value validateNewPhoto just checked, so
+    // what is validated and what is stored are now one value. The object's Content-Type is derived
+    // from the code by the persistence layer, deliberately not taken from the browser's claim.
     persistenceService.addPhoto(
         checklistId, file.getOriginalFilename(), description.trim(), fileDate, featureId,
-        file.getContentType(), content, loggedUserHelper.getLoggedUserId());
+        extensionOf(file.getOriginalFilename()), content, loggedUserHelper.getLoggedUserId());
     log.info("Added attachment :: {} ({} bytes) to CHR checklist :: {} by user :: {}",
         file.getOriginalFilename(), content.length, checklistId,
         loggedUserHelper.getLoggedUserId());
@@ -204,15 +226,24 @@ public class ChrChecklistService {
     if (ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
       UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
       if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
+        // AccessForbiddenException (403), not InvalidParameterException (400): the request is
+        // well-formed, the caller just holds the wrong checkout. "attachments" rather than
+        // "photos" — this surface takes PDFs and spreadsheets now, and every other message in
+        // this class was already renamed to match.
         throw new AccessForbiddenException(
-            "This checklist is checked out on another device, so its photos can't be changed here.");
+            "This checklist is checked out on another device, so its attachments can't be changed here.");
       }
       return;
     }
     throw new AccessForbiddenException(
         "The checklist status is currently "
             + ChrConstants.frepChecklistStatusDescriptions().getOrDefault(status, status)
-            + ", so its photos can't be changed.");
+            + ", so its attachments can't be changed.");
+  }
+
+  /** Uppercased extension of {@code fileName}, or "" when it has none. */
+  private static String extensionOf(String fileName) {
+    return AttachmentType.extensionOf(fileName);
   }
 
   private void validateNewPhoto(MultipartFile file, String description) {
@@ -221,12 +252,17 @@ public class ChrChecklistService {
           "The selected file is empty. Choose a file with content and try again.");
     }
     if (!ChrStringUtils.hasAValue(description)) {
-      throw new InvalidParameterException("A description is required for every photo.");
+      throw new InvalidParameterException("A description is required for every attachment.");
     }
-    String mimeType = deriveMimeType(file.getContentType()).toUpperCase();
-    if (!ALLOWED_IMAGE_CODES.contains(mimeType)) {
+    // Check the file's own extension, not the browser's content-type claim: file.type is empty for
+    // some drag sources and for formats the OS has no mapping for, which silently refused perfectly
+    // good photos. The extension is also what is stored as MIME_TYPE_CODE, so this validates the
+    // value that actually has to be legal — and it matches how Biodiversity attachments are checked.
+    String extension = extensionOf(file.getOriginalFilename());
+    if (!attachmentTypes.isAllowed(extension)) {
       throw new InvalidParameterException(
-          "Only image files (JPG, PNG, GIF, BMP) can be uploaded as photos.");
+          "Unsupported file type" + (extension.isEmpty() ? "" : " ." + extension.toLowerCase())
+              + ". Allowed types: " + attachmentTypes.display() + ".");
     }
   }
 
@@ -234,7 +270,7 @@ public class ChrChecklistService {
     try {
       return file.getBytes();
     } catch (IOException ex) {
-      throw new InvalidParameterException("Could not read the uploaded photo.");
+      throw new InvalidParameterException("Could not read the uploaded file.");
     }
   }
 
@@ -245,6 +281,234 @@ public class ChrChecklistService {
    * the relevant section is validated, so e.g. saving Opening info is not blocked by a photo that
    * is missing its description.
    */
+  /**
+   * Create a composite over two or more features.
+   *
+   * <p>Validates the anchor and any newly created members the same way the features section does —
+   * they are ordinary features, and the dialog can describe them in place.
+   */
+  @Transactional
+  public FeatureSaveResponse createComposite(long checklistId, CompositeCreateRequest request) {
+    if (request == null || request.anchor() == null) {
+      throw new InvalidParameterException("A composite needs an anchor feature.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    CheckList carrier = new CheckList();
+    List<Feature> toValidate = new ArrayList<>();
+    toValidate.add(request.anchor());
+    if (request.newMembers() != null) {
+      toValidate.addAll(request.newMembers());
+    }
+    carrier.setFeatures(toValidate);
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.createComposite(
+          checklistId,
+          request.anchor(),
+          request.memberIds(),
+          request.newMembers(),
+          loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the composite after creating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Dissolve a composite, releasing its members and deleting the ones the caller names. */
+  @Transactional
+  public FeatureSaveResponse ungroupComposite(
+      long checklistId, long anchorId, CompositeUngroupRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("An ungroup request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    List<Feature> survivors;
+    try {
+      survivors = persistenceService.ungroupComposite(
+          checklistId, anchorId, request.deleteMemberIds(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the features after ungrouping.", ex);
+    }
+    log.info("Ungrouped composite :: {} on CHR checklist :: {} by user :: {}", anchorId,
+        checklistId, loggedUserHelper.getLoggedUserId());
+    return new FeatureSaveResponse(
+        survivors, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Re-point an existing composite at a new set of members. */
+  @Transactional
+  public FeatureSaveResponse updateComposite(
+      long checklistId, long anchorId, CompositeUpdateRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("A composite update request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    if (request.newMembers() != null && !request.newMembers().isEmpty()) {
+      CheckList carrier = new CheckList();
+      carrier.setFeatures(new ArrayList<>(request.newMembers()));
+      validateFeatures(carrier);
+    }
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.updateComposite(
+          checklistId,
+          anchorId,
+          request.featureDescriptionCode(),
+          request.featureInfoSourceCode(),
+          request.memberIds(),
+          request.newMembers(),
+          loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the composite after updating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /** Add one standalone feature to a checklist. Same gate and validation as an edit. */
+  @Transactional
+  public FeatureSaveResponse createFeature(long checklistId, FeatureSaveRequest request) {
+    if (request == null || request.feature() == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    CheckList carrier = new CheckList();
+    carrier.setFeatures(new ArrayList<>(List.of(request.feature())));
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.createStandaloneFeature(
+          checklistId, request.feature(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the feature after creating it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Save one feature's own fields.
+   *
+   * <p>Runs the same validation the features section runs — {@code validateFeatures} is already
+   * per-feature, so it ports unchanged — plus the {@code ACT} status and revision-token gate.
+   */
+  @Transactional
+  public FeatureSaveResponse saveFeature(
+      long checklistId, long featureId, FeatureSaveRequest request) {
+    if (request == null || request.feature() == null) {
+      throw new InvalidParameterException("A feature is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+
+    // The section validator walks a CheckList's features; one feature is that list with one entry.
+    CheckList carrier = new CheckList();
+    carrier.setFeatures(new ArrayList<>(List.of(request.feature())));
+    validateFeatures(carrier);
+
+    List<Feature> saved;
+    try {
+      saved = persistenceService.saveFeature(
+          checklistId, featureId, request.feature(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new FrepApiRuntimeException("Could not read back the feature after saving it.", ex);
+    }
+    return new FeatureSaveResponse(
+        saved, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Replace one feature's associations, both directions.
+   *
+   * <p>Same gate as a section save — {@code ACT} plus a matching revision token — since an
+   * association is stored state on two features, not a leaf resource.
+   */
+  @Transactional
+  public FeatureSaveResponse saveFeatureAssociations(
+      long checklistId, long featureId, AssociationsRequest request) {
+    if (request == null) {
+      throw new InvalidParameterException("An associations request body is required.");
+    }
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(request.revisionCount(), checklistId);
+    List<Feature> touched;
+    try {
+      touched = persistenceService.saveFeatureAssociations(
+          checklistId, featureId, request.featureIds(), loggedUserHelper.getLoggedUserId());
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      // CheckListMapper.toFeature is declared `throws Exception` (legacy signature); anything it
+      // raises is a mapping failure, not something the caller can act on.
+      throw new FrepApiRuntimeException(
+          "Could not read back the features after saving associations.", ex);
+    }
+    return new FeatureSaveResponse(
+        touched, Long.toString(checklistRepository.getRevisionCount(checklistId)));
+  }
+
+  /**
+   * Remove one feature from a checklist.
+   *
+   * <p>Runs the same gate as a section save — the checklist must be {@code ACT} and the caller's
+   * revision token must match — because a delete is as destructive as any edit and shares the
+   * checklist's optimistic lock. Photos deliberately skip both (they are leaf resources that do not
+   * advance the token); a feature is not a leaf, since removing one detaches composite members and
+   * drops association links on other features.
+   */
+  @Transactional
+  public void deleteFeature(long checklistId, long featureId, String revisionCount) {
+    String status = checklistRepository.getChecklistStatus(checklistId);
+    if (!ChrConstants.FrepChecklistStatusCode.ACT.equals(status)) {
+      throw new InvalidParameterException(ChrConstants.RestMessages.ERROR_CHANGE_STATUS);
+    }
+    assertRevisionCount(revisionCount, checklistId);
+    persistenceService.deleteFeature(checklistId, featureId, loggedUserHelper.getLoggedUserId());
+    log.info("Deleted feature :: {} from CHR checklist :: {} by user :: {}", featureId, checklistId,
+        loggedUserHelper.getLoggedUserId());
+  }
+
   private CheckList saveSection(
       CheckList checklist,
       java.util.function.BiConsumer<CheckList, String> persist,
@@ -389,7 +653,7 @@ public class ChrChecklistService {
       // Biodiversity evaluator field. The raw userid stays in assessedBy for the save round-trip and
       // the "Assign it to me" comparison; assessedByName is display-only.
       if (ChrStringUtils.hasAValue(checkList.getAssessedBy())) {
-        checkList.setAssessedByName(famUserDirectoryService.resolveName(checkList.getAssessedBy())
+        checkList.setAssessedByName(userDirectoryService.resolveName(checkList.getAssessedBy())
             .orElse(checkList.getAssessedBy()));
       }
       // Photo *metadata* rides along (the mapper fills it); the bytes do not. Every photo is fetched
@@ -411,14 +675,17 @@ public class ChrChecklistService {
         .filter(p -> String.valueOf(photoId).equals(p.getId()))
         .findFirst()
         .orElseThrow(() -> new EntityNotFoundException(
-            "Photo " + photoId + " was not found on checklist " + checklistId + "."));
+            "Attachment " + photoId + " was not found on checklist " + checklistId + "."));
     String mimeType = deriveMimeType(picture.getMimeTypeCode());
     String key = checklistId + "-" + photoId + "." + mimeType;
     byte[] bytes = objectStorageService.getObjectBytes(key);
     if (bytes == null || bytes.length == 0) {
-      throw new EntityNotFoundException("Photo " + photoId + " has no stored content.");
+      throw new EntityNotFoundException("Attachment " + photoId + " has no stored content.");
     }
-    return new PhotoContent(picture.getFileName(), "image/" + mimeType, bytes);
+    // AttachmentType, not "image/" + ext: a photo may now be any allowed type, and "image/pdf" is
+    // not a media type. The object KEY still comes from the extension above — unchanged.
+    return new PhotoContent(
+        picture.getFileName(), AttachmentType.mediaTypeFor(mimeType), bytes);
   }
 
   /** A photo's stored bytes, served as a binary download rather than embedded base64. */
@@ -541,6 +808,13 @@ public class ChrChecklistService {
     }
   }
 
+
+  private void assertRevisionCount(String revisionCount, long checklistId) {
+    CheckList carrier = new CheckList();
+    carrier.setChecklistID(Long.toString(checklistId));
+    carrier.setRevisionCount(revisionCount);
+    assertRevisionCount(carrier, checklistId);
+  }
 
   private void assertRevisionCount(CheckList checklist, long checklistId) {
     long revisionCount = checklistRepository.getRevisionCount(checklistId);

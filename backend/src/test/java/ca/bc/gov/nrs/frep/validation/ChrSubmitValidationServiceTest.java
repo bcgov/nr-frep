@@ -190,4 +190,59 @@ class ChrSubmitValidationServiceTest {
 
     assertTrue(hasError(service.validateBeforeSubmit(checklist), "otherPlanningStrategy"));
   }
+
+  @Test
+  void q3AnsweredYesRequiresAQ2Cause() {
+    // Q3 stores an answer code, not an indicator — testing it as a boolean left this unreachable.
+    CheckList checklist = validChecklist();
+    checklist.getFeatures().get(0)
+        .setQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse("Y");
+
+    assertTrue(hasError(service.validateBeforeSubmit(checklist), "q2MostLikelyCause"));
+  }
+
+  @Test
+  void q3AnsweredNoOrDontKnowRequiresNothing() {
+    for (String answer : new String[] {"N", "D", "", null}) {
+      CheckList checklist = validChecklist();
+      checklist.getFeatures().get(0)
+          .setQ3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse(answer);
+
+      assertFalse(
+          hasError(service.validateBeforeSubmit(checklist), "q2MostLikelyCause"),
+          "Q3 = " + answer + " should not oblige a Q2 cause");
+    }
+  }
+
+  @Test
+  void noManagementContradictsAnIndicatorStrategy() {
+    CheckList checklist = validChecklist();
+    Feature feature = checklist.getFeatures().get(0);
+    feature.setNoManagement("true");
+    feature.setLeftStanding("true");
+
+    assertTrue(hasError(service.validateBeforeSubmit(checklist), "noManagement"));
+  }
+
+  @Test
+  void noManagementContradictsAnOtherActivityDescription() {
+    // otherActivities carries the description, never "true" — presence is what "selected" means for
+    // it, so this contradiction has to be caught by text rather than by the indicator test.
+    CheckList checklist = validChecklist();
+    Feature feature = checklist.getFeatures().get(0);
+    feature.setNoManagement("true");
+    feature.setOtherActivities("Fenced");
+
+    assertTrue(hasError(service.validateBeforeSubmit(checklist), "noManagement"));
+  }
+
+  @Test
+  void noManagementIsFineWhenTheOtherActivityBoxIsBlank() {
+    CheckList checklist = validChecklist();
+    Feature feature = checklist.getFeatures().get(0);
+    feature.setNoManagement("true");
+    feature.setOtherActivities("   ");
+
+    assertFalse(hasError(service.validateBeforeSubmit(checklist), "noManagement"));
+  }
 }

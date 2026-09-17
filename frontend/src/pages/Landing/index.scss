@@ -52,6 +52,10 @@
         .login-btn {
           width: 20rem;
           max-width: 100%;
+          // The width is fixed at 20rem, so the contents have to be told where to sit.
+          // `space-between` holds the label at the left edge and the icon at the right, which is
+          // what these full-width buttons want; elsewhere in the app buttons size to their content
+          // and the icon simply follows the label.
           justify-content: space-between;
         }
       }

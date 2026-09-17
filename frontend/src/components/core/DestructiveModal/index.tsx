@@ -1,5 +1,6 @@
 import { Button } from '@carbon/react';
 
+import ActionButton from '@/components/core/ActionButton';
 import { Modal } from '@/components/Modal';
 
 import type { FC, ReactNode } from 'react';
@@ -43,6 +44,8 @@ export type DestructiveModalProps = {
    * @default false
    */
   loading?: boolean;
+  /** Label while the action runs. */
+  confirmingButtonText?: string;
   /**
    * Size of the modal
    * @default "sm"
@@ -82,6 +85,7 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
   onConfirm,
   onCancel,
   loading = false,
+  confirmingButtonText = 'Deleting…',
   size = 'sm',
 }) => {
   const warningId = 'destructive-modal-warning';
@@ -92,7 +96,6 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
       modalHeading={title}
       passiveModal
       size={size}
-      className="add-contact-modal"
       aria-label={title}
       preventCloseOnClickOutside={loading}
       onRequestClose={onCancel}
@@ -107,13 +110,19 @@ export const DestructiveModal: FC<DestructiveModalProps> = ({
           {message}
         </p>
       </div>
-      <div className="add-contact-modal__actions destructive-modal__actions">
-        <Button kind="secondary" size="md" onClick={onCancel} disabled={loading}>
+      <div className="destructive-modal__actions">
+        <Button kind="tertiary" size="md" onClick={onCancel} disabled={loading}>
           {cancelButtonText}
         </Button>
-        <Button kind="danger" size="md" onClick={onConfirm} disabled={loading}>
+        <ActionButton
+          kind="danger"
+          size="md"
+          busy={loading}
+          busyLabel={confirmingButtonText}
+          onClick={onConfirm}
+        >
           {confirmButtonText}
-        </Button>
+        </ActionButton>
       </div>
     </Modal>
   );

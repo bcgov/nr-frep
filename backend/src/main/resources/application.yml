@@ -3,7 +3,11 @@ server:
   servlet:
     context-path: /
   error:
-    include-message: always
+    # never (the Spring default) — this governs the fallback /error path for anything the
+    # @ControllerAdvice does not handle. `always` put raw exception text in those bodies, which is
+    # the same leak ApiError.debugMessage had. Handled errors still carry a deliberate, written
+    # message; unhandled ones say nothing and the detail goes to the log.
+    include-message: never
   # Use the SERVER_PORT placeholder so application-local.yml's SERVER_PORT
   # value (and the OpenShift env var) can override the default. Local dev
   # needs 8080 because Vite's dev server claims 3000.
@@ -56,6 +60,27 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # Pin the decimal separator for every pooled connection.
+      #
+      # The legacy FREP_2xx packages declare every parameter VARCHAR2 and then hand the numeric ones
+      # to setters that take a NUMBER — e.g. FREP_210_BIO_OPENING.SAVE's p_frep_wtp_override goes to
+      # frep_biodiversity_checklist.set_frep_wtp_override(p_value IN NUMBER). That implicit
+      # VARCHAR2 -> NUMBER conversion runs under the *session's* NLS_NUMERIC_CHARACTERS, which the
+      # thin driver derives from the JVM's default locale unless it is set here. Where that decimal
+      # separator is not ".", every scalar decimal the app sends fails with
+      # "ORA-06502: PL/SQL: numeric or value error: character to number conversion error" while whole
+      # numbers save cleanly — confirmed against the Opening's FREP gross area override and the
+      # plot's fixed area radius. Stratum size, % windthrown, full count area and the rest of the
+      # scalar decimals ride the same path.
+      #
+      # Not the same path as the plot sub-tables: their numbers are VARRAY object attributes, parsed
+      # to BigDecimal in Java (AbstractFrepRepository#numberAttribute) and bound as real NUMBERs, so
+      # DBH and height were never affected. Reads are unaffected either way — numberString goes
+      # through BigDecimal#toPlainString.
+      #
+      # The value is decimal separator then group separator, so "." and "," — the ANSI default, and
+      # what every caller here already assumes.
+      connection-init-sql: "ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'"
       data-source-properties:
         javax.net.ssl.trustStoreType: JKS
         javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}
@@ -69,8 +94,13 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AWS_COGNITO_ISSUER_URI}
-          jwk-set-uri: ${AWS_COGNITO_ISSUER_URI}/.well-known/jwks.json
+          # BC Gov SSO (Keycloak) standard realm, e.g.
+          # https://test.loginproxy.gov.bc.ca/auth/realms/standard
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+          # Keycloak publishes its keys at /protocol/openid-connect/certs — NOT the
+          # /.well-known/jwks.json path Cognito used. Pointing at the latter 404s, which surfaces as
+          # a blanket 401 on every request rather than as a configuration error.
+          jwk-set-uri: ${KEYCLOAK_ISSUER_URI}/protocol/openid-connect/certs
   mvc:
     problemdetails:
       enabled: true
@@ -96,14 +126,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,info,prometheus"
+        # health + prometheus only: the probes and the Prometheus scrape. `info` was exposed but
+        # nothing reads it — the `info.app.*` properties below are consumed by
+        # FrepMetricConfiguration through @Value, not through the endpoint.
+        include: "health,prometheus"
   endpoint:
     metrics:
       enabled: false
     health:
-      show-details: always
+      # The liveness/readiness probes only check the status code (openshift.deploy.yml), so the
+      # component and datasource detail was published to no one who needed it.
+      show-details: never
 
-# Application metadata (consumed by FrepMetricConfiguration + Actuator /info endpoint)
+# Application metadata. Read by FrepMetricConfiguration through @Value — not by the Actuator
+# /info endpoint, which is no longer exposed. These keys must stay or startup fails.
 info:
   app:
     name: ${spring.application.name}
@@ -112,6 +148,14 @@ info:
 
 frep:
   package-name: FREP
+  attachments:
+    # Which file types may be attached to a Biodiversity checklist. REQUIRED — there is no in-code
+    # default; a blank value makes AttachmentTypes throw at startup rather than quietly accepting
+    # nothing. Adding a format is an edit to the GitHub variable + a redeploy;
+    # there is no database change, because FREP no longer validates the type against
+    # THE.MIME_TYPE_CODE. Entries are extensions only ("PDF,PNG,WEBP"); the media type each
+    # downloads as comes from the AttachmentType enum.
+    allowed-types: ${ATTACHMENT_ALLOWED_TYPES:}
   codelist-package-name: FREP_CODE_LISTS
   # BC Gov DataBC public WFS, proxied for the in-app Leaflet map (opening polygon GeoJSON by
   # OPENING_ID). Public endpoint — overridable per environment but the default is production-correct.
@@ -185,46 +229,31 @@ ca:
   bc:
     gov:
       nrs:
-        self-uri: http://localhost:3000
-        identity-lookup:
-          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
-          default-page-size: 10
+        keycloak:
+          # The CSS integration's client id. Validated as the token's `azp` — the standard realm is
+          # shared across BC Gov applications, so issuer + signature alone do not prove a token was
+          # minted for FREP. Differs per environment, hence configuration rather than a constant.
+          client-id: ${KEYCLOAK_CLIENT_ID}
+        # nr-user-lookup-api — the shared BC Gov IDIR directory. Replaces the FAM
+        # identity-lookup integration: FAM still administers the FREP roles, it is just no longer
+        # the directory. Calls authenticate with FREP's OWN client_credentials service account, not
+        # the caller's token, because that is what nr-user-lookup-api validates.
+        #
+        # Set all of token-url / client-id / client-secret, or none — a partial trio fails fast at
+        # startup. Unset means an unauthenticated client and an empty directory, which is how PR
+        # previews run.
+        user-lookup:
+          base-url: ${USER_LOOKUP_BASE_URL:}
+          token-url: ${USER_LOOKUP_TOKEN_URL:}
+          client-id: ${USER_LOOKUP_CLIENT_ID:}
+          client-secret: ${USER_LOOKUP_CLIENT_SECRET:}
+          # Optional — the scopes are DEFAULT client scopes on the service account, so normally
+          # left blank.
+          scope: ${USER_LOOKUP_SCOPE:}
           connect-timeout: 15s
           read-timeout: 30s
-        cognito:
-          userinfo-uri: ${COGNITO_USERINFO_URI}
-        frontend:
-          url: http://localhost:3000
-          cors:
-            headers:
-              - x-requested-with
-              - X-REQUESTED-WITH
-              - authorization
-              - Authorization
-              - Content-Type
-              - content-type
-              - credential
-              - CREDENTIAL
-              - X-XSRF-TOKEN
-              - access-control-allow-origin
-              - Access-Control-Allow-Origin
-              - DNT
-              - Keep-Alive,
-              - User-Agent,
-              - X-Requested-With,
-              - If-Modified-Since,
-              - Cache-Control,
-              - Content-Range,
-              - Range
-              - Location
-              - location
-            methods:
-              - OPTIONS
-              - GET
-              - POST
-              - PUT
-              - DELETE
-            age: 5m
+        user-directory:
+          default-page-size: 25
 
 # Logging — Spring Boot default stack (SLF4j + Logback).
 #

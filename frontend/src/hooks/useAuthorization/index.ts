@@ -10,15 +10,10 @@ import { useAuth } from '@/context/auth/useAuth';
  * Role semantics mirror legacy WebADE ({@code FrepUser} / {@code RestAction}).
  */
 export type AuthorizationInfo = {
-  /** `true` when the user holds the `FREP_ADMIN` Cognito group. */
+  /** `true` when the user holds the `FREP_ADMINISTRATOR` role. */
   isSysAdmin: boolean;
-  /** `true` when the user holds the `FREP_EDITOR` Cognito group. */
+  /** `true` when the user holds the `FREP_EDITOR` role. */
   isUpdate: boolean;
-  /**
-   * `true` when the user is view-only: has `FREP_VIEW_ONLY` without
-   * `FREP_ADMIN` or `FREP_EDITOR` (legacy {@code isViewOnlyUser}).
-   */
-  isViewOnly: boolean;
   /** `true` when the user has at least one recognized FREP role. */
   hasAnyRole: boolean;
   /** `true` when the user can perform write operations (sys-admin or update). */
@@ -29,7 +24,7 @@ export type AuthorizationInfo = {
   canDelete: boolean;
   /** `true` for admin-only actions (legacy {@code ACTIVATECHECKLIST} parity). */
   canPerformSysAdminActions: boolean;
-  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT_*`). */
+  /** The 3-letter district codes the user may access CHR for (from `FREP_CHR_EDITOR_DISTRICT-*`). */
   chrDistricts: string[];
   /** `true` when the user may access CHR for any district (sys-admin, or holds ≥1 district role). */
   canAnyChr: boolean;
@@ -39,8 +34,9 @@ export type AuthorizationInfo = {
    * `true` when the user may edit a site's resources (FREP110 Site Details) — editors *or* any
    * per-district CHR editor. Broader than {@link canEdit}: site records are shared across protocols,
    * so a CHR district editor maintaining their districts' checklists can edit the sites those
-   * checklists hang off. Mirrors `LoggedUserHelper.canEditSite()`. Creating a targeted site
-   * (FREP200) still requires {@link canCreate}.
+   * checklists hang off. Mirrors `LoggedUserHelper.canEditSite()`. The Add Target Site flow
+   * (FREP200) is on this same check end to end, so a CHR district editor may add one — do NOT gate
+   * that button on {@link canCreate}, which would hide it from the role the backend admits.
    */
   canEditSite: boolean;
   /** Checks if the user holds a specific role. */
@@ -51,7 +47,7 @@ export type AuthorizationInfo = {
 
 /**
  * Hook that provides role-based authorization helpers derived from the
- * authenticated user's Cognito groups.
+ * authenticated user's roles.
  *
  * @example
  * ```tsx
@@ -70,11 +66,8 @@ export const useAuthorization = (): AuthorizationInfo => {
 
   return useMemo<AuthorizationInfo>(() => {
     const roles = user?.roles ?? [];
-    const isSysAdmin = roles.includes('FREP_ADMIN');
+    const isSysAdmin = roles.includes('FREP_ADMINISTRATOR');
     const isUpdate = roles.includes('FREP_EDITOR');
-    const hasViewOnlyRole = roles.includes('FREP_VIEW_ONLY');
-    const isViewOnly = hasViewOnlyRole && !isSysAdmin && !isUpdate;
-
     // Per-district CHR access: the FREP_CHR_EDITOR privilege value is the list of district codes.
     const chrDistricts = user?.privileges?.FREP_CHR_EDITOR ?? [];
     const canAnyChr = isSysAdmin || chrDistricts.length > 0;
@@ -82,8 +75,9 @@ export const useAuthorization = (): AuthorizationInfo => {
       isSysAdmin || (!!orgUnitCode && chrDistricts.includes(orgUnitCode.toUpperCase()));
 
     // A CHR-district-only user holds no base role, so include CHR access here — otherwise they'd be
-    // treated as having no role and routed away from the app.
-    const hasAnyRole = isSysAdmin || isUpdate || hasViewOnlyRole || canAnyChr;
+    // treated as having no role and routed away from the app. FREP_VIEW_ONLY used to count here
+    // too; it has been retired, so holding only that group no longer admits anyone.
+    const hasAnyRole = isSysAdmin || isUpdate || canAnyChr;
 
     const canEdit = isSysAdmin || isUpdate;
     const canCreate = canEdit;
@@ -96,7 +90,6 @@ export const useAuthorization = (): AuthorizationInfo => {
     return {
       isSysAdmin,
       isUpdate,
-      isViewOnly,
       hasAnyRole,
       canEdit,
       canCreate,

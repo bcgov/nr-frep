@@ -50,16 +50,26 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import ca.bc.gov.nrs.frep.configuration.AttachmentTypes;
+import ca.bc.gov.nrs.frep.struct.v1.frep.AttachmentContent;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.DisplayName;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class ProtocolChecklistServiceTest {
@@ -77,7 +87,7 @@ class ProtocolChecklistServiceTest {
   private LoggedUserHelper loggedUserHelper;
 
   @Mock
-  private FamUserDirectoryService famUserDirectoryService;
+  private UserDirectoryService userDirectoryService;
 
   private static final java.util.UUID CHECKOUT_TOKEN =
       java.util.UUID.fromString("11111111-2222-3333-4444-555555555555");
@@ -89,6 +99,14 @@ class ProtocolChecklistServiceTest {
   // (PR 3a) — so any test that returns a non-empty attachment page needs this wired.
   @Mock
   private ca.bc.gov.nrs.frep.service.v1.ObjectStorageService objectStorage;
+
+  // A real instance rather than a @Mock: the allow-list behaviour these tests exercise IS this
+  // bean's behaviour. There is no in-code default, so the value ATTACHMENT_ALLOWED_TYPES is expected
+  // to carry is spelled out here. @Spy so @InjectMocks picks it up.
+  @Spy
+  private AttachmentTypes attachmentTypes = new AttachmentTypes(
+      "BMP,CSV,DOC,DOCX,GIF,HTM,IFM,JPG,JPK,MDB,MDE,MP4,OBD,PDF,PNG,PPS,PPT,PPTX,RPT,RTF,TIF,"
+          + "TIFF,TXT,WAV,WEBP,XLD,XLS,XLSX,XML,ZIP");
 
   @InjectMocks
   private ProtocolChecklistService service;
@@ -914,6 +932,50 @@ class ProtocolChecklistServiceTest {
         "2", List.of());
   }
 
+  /**
+   * The constrained total only ever *guarded* the two cross-field rules below it, so a value outside
+   * 0-100 — or not a number at all — skipped every check and went to the proc.
+   * {@code CALC_CONSTRAINED_TOTAL} is NUMBER(3), so "500" stored as nonsense and "abc" failed as a
+   * conversion error.
+   */
+  @Test
+  void saveBioStratumRejectsAConstrainedTotalOutsideItsRange() {
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("500")));
+    assertThrows(InvalidPayloadException.class,
+        () -> service.saveBioStratum(stratumWithConstrainedTotal("abc")));
+  }
+
+  @Test
+  void saveBioStratumAcceptsAConstrainedTotalInRange() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioStratum ok = stratumWithConstrainedTotal("0");
+    when(writeRepository.saveBioStratum(ok, "u")).thenReturn(ok);
+
+    service.saveBioStratum(ok);
+
+    verify(writeRepository).saveBioStratum(ok, "u");
+  }
+
+  /** A valid stratum carrying one constrained total. */
+  private static BioStratum stratumWithConstrainedTotal(String total) {
+    BioStratum base = stratum("A1", "CC", "Y", "3", "2.5", "HNR", "CWH", "ds", null);
+    return new BioStratum(
+        base.stratumId(), base.checklistId(), base.strataTypeCode(), base.stratumNumber(),
+        base.summaryDate(), base.assessorName(), base.plotCount(), base.size(),
+        base.consistentMapInd(), base.estimatedSize(),
+        null, null, null, null, null, null,
+        base.harvestAreaCode(),
+        null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null,
+        null, null,
+        base.bgcZoneCode(), base.bgcSubzoneCode(),
+        null, null, null, null, null, null, null, total,
+        base.revisionCount(), List.of());
+  }
+
   @Test
   void saveBioStratumRejectsMissingRequiredFields() {
     BioStratum bad = stratum(null, null, null, null, null, null, null, null, null);
@@ -993,7 +1055,7 @@ class ProtocolChecklistServiceTest {
   void listBioPlotsResolvesTheAssessorDisplayNameButKeepsTheUserid() {
     when(writeRepository.listBioPlots("900"))
         .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
-    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.of("Jane Doe (jdoe)"));
+    when(userDirectoryService.resolveName("jdoe")).thenReturn(Optional.of("Jane Doe (jdoe)"));
 
     BioPlotRow row = service.listBioPlots("900").get(0);
 
@@ -1005,7 +1067,7 @@ class ProtocolChecklistServiceTest {
   void listBioPlotsFallsBackToTheUseridWhenFamHasNoName() {
     when(writeRepository.listBioPlots("900"))
         .thenReturn(List.of(new BioPlotRow("500", "1", "jdoe", null, "2")));
-    when(famUserDirectoryService.resolveName("jdoe")).thenReturn(Optional.empty());
+    when(userDirectoryService.resolveName("jdoe")).thenReturn(Optional.empty());
 
     assertEquals("jdoe", service.listBioPlots("900").get(0).assessorDisplayName());
   }
@@ -1024,6 +1086,36 @@ class ProtocolChecklistServiceTest {
       String treeIndicator, List<BioStandRow> standTable) {
     return new BioPlot("P1", "S1", "1", assessorName, "N", null, null, null, treeIndicator, baf,
         null, null, "N", firstLeg, secondLeg, null, "1", standTable, List.of(), null);
+  }
+
+  /**
+   * {@code BIODIVERSITY_PLOT.UTM_ZONE} is NUMBER(2) and had no rule at all: the picker only offers
+   * 7-11, but the API is open to any client and the offline check-in path reaches the same code, so
+   * a non-numeric zone went to Oracle and came back as "A database error occurred" naming nothing.
+   */
+  @Test
+  void saveBioPlotRejectsAZoneTheColumnCannotHold() {
+    BioPlot bad = plotWithZone("abc");
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(bad));
+    assertThrows(InvalidPayloadException.class, () -> service.saveBioPlot(plotWithZone("100")));
+  }
+
+  @Test
+  void saveBioPlotAcceptsAZoneOutsideThePickerButInsideTheColumn() {
+    // Bounded by the column, not by the five BC zones: a legacy row on another zone still re-saves.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("u");
+    BioPlot ok = plotWithZone("12");
+    when(writeRepository.saveBioPlot(ok, "u")).thenReturn(ok);
+
+    service.saveBioPlot(ok);
+
+    verify(writeRepository).saveBioPlot(ok, "u");
+  }
+
+  /** A valid plot carrying one UTM zone, with a signal recorded. */
+  private static BioPlot plotWithZone(String zone) {
+    return new BioPlot("P1", "S1", "1", "IDIR\\JDOE", "Y", zone, "123456", "1234567", "N", "5",
+        null, null, "N", "120", "240", null, "1", List.of(), List.of(), null);
   }
 
   @Test
@@ -1139,6 +1231,31 @@ class ProtocolChecklistServiceTest {
     verifyNoInteractions(virusScanner);
   }
 
+  // The modern Office formats and the four-letter image spellings. These are the only allowed
+  // extensions longer than three characters, and MIME_TYPE_CODE is VARCHAR2(3 BYTE) — the write
+  // path maps them down (EXTENSION_MIME_CODE), so accepting them here must stay paired with that.
+  @ParameterizedTest
+  @ValueSource(strings = {"report.docx", "data.xlsx", "deck.pptx", "scan.tiff", "photo.webp"})
+  void acceptsTheFourCharacterExtensions(String fileName) {
+    assertDoesNotThrow(
+        () -> service.saveAttachment("bio", "1", upload(fileName, new byte[] {1, 2, 3}), "desc"));
+  }
+
+  @Test
+  void listsTheNewTypesInTheRejectionMessageSoTheUserCanSeeThemAllowed() {
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+
+    String reason = String.valueOf(ex.getReason());
+    // The display string is maintained separately from the enforcing Set; if they drift, the error
+    // tells the user a type is unsupported while the validator happily accepts it.
+    assertTrue(reason.contains("DOCX"), reason);
+    assertTrue(reason.contains("XLSX"), reason);
+    assertTrue(reason.contains("PPTX"), reason);
+    assertTrue(reason.contains("TIFF"), reason);
+    assertTrue(reason.contains("WEBP"), reason);
+  }
+
   @Test
   void scansTheUploadedBytesBeforePersistingThem() {
     byte[] content = {1, 2, 3, 4};
@@ -1149,9 +1266,29 @@ class ProtocolChecklistServiceTest {
     InOrder order = inOrder(virusScanner, writeRepository);
     order.verify(virusScanner).scanOrThrow(content, "notes.pdf");
     // SLR, not the {protocol} segment: the type is resolved from the record (@BeforeEach stub).
+    // The description arrives TRIMMED: a multipart part never passes through Jackson, so this
+    // service trims it itself (GlobalConfiguration's deserializer covers the JSON bodies). The
+    // column is VARCHAR2(2000 BYTE) and trailing whitespace spends that budget.
     order.verify(writeRepository).saveAttachment(
-        eq("1"), eq("SLR"), eq("notes.pdf"), eq(" spaced desc "), eq("application/pdf"),
+        eq("1"), eq("SLR"), eq("notes.pdf"), eq("spaced desc"), eq("application/pdf"),
         eq(content), eq("IDIR\\SOMEONE"));
+  }
+
+  @Test
+  void storesOurMediaTypeRatherThanTheOneTheBrowserClaimed() {
+    // The value handed to the repository is what object storage records as the object's
+    // Content-Type. The browser's claim varies by OS/browser for the same format and is blank for
+    // the legacy MoF types, so it must not be what we persist — .webp here is deliberately uploaded
+    // as a generic binary, which is exactly what some browsers send.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\SOMEONE");
+    byte[] content = {1, 2};
+
+    service.saveAttachment("bio", "1",
+        new MockMultipartFile("file", "map.webp", "application/octet-stream", content), "desc");
+
+    verify(writeRepository).saveAttachment(
+        eq("1"), eq("SLR"), eq("map.webp"), eq("desc"), eq("image/webp"), eq(content),
+        eq("IDIR\\SOMEONE"));
   }
 
   @Test
@@ -1161,7 +1298,6 @@ class ProtocolChecklistServiceTest {
     MultipartFile file = mock(MultipartFile.class);
     when(file.isEmpty()).thenReturn(false);
     when(file.getOriginalFilename()).thenReturn("notes.pdf");
-    when(file.getContentType()).thenReturn("application/pdf");
     when(file.getBytes()).thenReturn(new byte[] {9, 9});
 
     assertDoesNotThrow(() -> service.saveAttachment("bio", "1", file, "desc", null));
@@ -1226,5 +1362,74 @@ class ProtocolChecklistServiceTest {
     // A negative size means "not found in object storage" and must surface as null, not "-1".
     assertEquals(null, page.attachments().get(1).fileSize());
     assertEquals(2, page.totalCount());
+  }
+
+  // --- Media types (the extension -> MIME map that replaced MIME_TYPE_CODE.DESCRIPTION) ---
+
+  @Test
+  void resolvesTheMediaTypeFromTheExtensionRatherThanTheDatabase() {
+    // The proc's out-param is NULL for anything the shared code table never had (WEBP is the
+    // motivating case: it is previewable, so a null used to yield data:WEBP;base64,...).
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("map.webp", null, new byte[] {1}));
+
+    AttachmentContent content = service.getAttachmentContent("bio", "1", "9");
+
+    assertEquals("image/webp", content.mimeType());
+  }
+
+  @Test
+  void prefersTheMappedMediaTypeOverAStaleStoredValue() {
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("report.pdf", "text/plain", new byte[] {1}));
+
+    assertEquals("application/pdf", service.getAttachmentContent("bio", "1", "9").mimeType());
+  }
+
+  @Test
+  void fallsBackForAnExtensionThatIsNotMapped() {
+    // Rows predating the map (or a file stored without an extension) must still download, just
+    // without a specific type — never null, which is what the client cannot handle.
+    when(writeRepository.getAttachmentContent("1", "SLR", "9"))
+        .thenReturn(new AttachmentContent("legacy", null, new byte[] {1}));
+    assertEquals("application/octet-stream",
+        service.getAttachmentContent("bio", "1", "9").mimeType());
+
+    when(writeRepository.getAttachmentContent("1", "SLR", "8"))
+        .thenReturn(new AttachmentContent("legacy.odd", "application/x-odd", new byte[] {1}));
+    assertEquals("application/x-odd",
+        service.getAttachmentContent("bio", "1", "8").mimeType());
+  }
+
+  @Nested
+  @DisplayName("getBioPlot id validation")
+  class GetBioPlotIdValidation {
+
+    /**
+     * BIODIVERSITY_PLOT_ID is a NUMBER. Binding a blank or non-numeric string fails inside Oracle as
+     * "Invalid Input Number", which reached the evaluator as "A database error occurred… contact the
+     * FREP help desk" and was logged as a system fault naming nothing.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "bio", "107a", "undefined"})
+    @DisplayName("rejects a non-numeric plot id as a 400 that quotes it")
+    void rejectsNonNumericPlotId(String plotId) {
+      ResponseStatusException thrown =
+          assertThrows(ResponseStatusException.class, () -> service.getBioPlot(plotId));
+
+      assertThat(thrown.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(thrown.getReason()).contains(plotId);
+      // Never reaches the driver, so no "Database error" and no 500.
+      verifyNoInteractions(writeRepository);
+    }
+
+    @Test
+    @DisplayName("still reads a numeric plot id")
+    void acceptsNumericPlotId() {
+      when(writeRepository.getBioPlot("107")).thenReturn(null);
+
+      assertThrows(ResponseStatusException.class, () -> service.getBioPlot("107"));
+      verify(writeRepository).getBioPlot("107");
+    }
   }
 }

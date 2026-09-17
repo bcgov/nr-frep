@@ -1,7 +1,6 @@
 package ca.bc.gov.nrs.frep.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -10,7 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Unit tests for the protocol/district capability helpers. Drives {@link LoggedUserHelper} through a
- * real {@link SecurityContextHolder} populated with the raw Cognito-group authority strings.
+ * real {@link SecurityContextHolder} populated with the raw role strings the token carries.
  */
 class LoggedUserHelperTest {
 
@@ -23,13 +22,13 @@ class LoggedUserHelperTest {
     TestingAuthenticationToken auth = new TestingAuthenticationToken("user", "creds", authorities);
     auth.setAuthenticated(true);
     SecurityContextHolder.getContext().setAuthentication(auth);
-    return new LoggedUserHelper(mock(CognitoUserInfoService.class));
+    return new LoggedUserHelper();
   }
 
   @Test
   void parsesDistrictCodesFromChrRoles() {
     LoggedUserHelper helper =
-        withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK", "FREP_CHR_EDITOR_DISTRICT_DCC");
+        withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK", "FREP_CHR_EDITOR_DISTRICT-DCC");
 
     assertThat(helper.chrDistrictCodes()).containsExactlyInAnyOrder("DCK", "DCC");
     assertThat(helper.canAnyChr()).isTrue();
@@ -51,7 +50,7 @@ class LoggedUserHelperTest {
 
   @Test
   void adminSeesBioAndEveryChrDistrict() {
-    LoggedUserHelper helper = withAuthorities("FREP_ADMIN");
+    LoggedUserHelper helper = withAuthorities("FREP_ADMINISTRATOR");
 
     assertThat(helper.canEdit()).isTrue();
     assertThat(helper.canAnyChr()).isTrue();
@@ -67,27 +66,32 @@ class LoggedUserHelperTest {
     // ChrChecklistAuthorizer.canEditChecklist passes exactly that null, so an admin was authorized
     // to edit a checklist that does not exist and the request then died on the status read as a
     // 500 rather than an honest 403.
-    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canChr(null)).isFalse();
-    assertThat(withAuthorities("FREP_ADMIN").canChr(null)).isFalse();
-    assertThat(withAuthorities("FREP_ADMIN").canChr("   ")).isFalse();
+    //
+    // Merge note: the role NAMES here are main's (FREP_ADMINISTRATOR, and the DISTRICT- hyphen);
+    // the BEHAVIOUR is this branch's, and it is what the merged LoggedUserHelper.canChr does — the
+    // null/blank guard sits above the isSysAdmin() bypass.
+    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK").canChr(null)).isFalse();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr(null)).isFalse();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr("   ")).isFalse();
     // A real district is of course still open to an admin — the bypass itself is unchanged.
-    assertThat(withAuthorities("FREP_ADMIN").canChr("DCK")).isTrue();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr("DCK")).isTrue();
   }
 
   @Test
   void siteEditingIsOpenToEditorsAndChrDistrictEditorsAlike() {
     // Site records are shared across protocols, so canEditSite is deliberately wider than canEdit.
     assertThat(withAuthorities("FREP_EDITOR").canEditSite()).isTrue();
-    assertThat(withAuthorities("FREP_ADMIN").canEditSite()).isTrue();
-    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canEditSite()).isTrue();
+    assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK").canEditSite()).isTrue();
     // ...but it is still a role check: view-only and no-role users cannot edit.
-    assertThat(withAuthorities("FREP_VIEW_ONLY").canEditSite()).isFalse();
+    // No global FREP role and no CHR district — the roleless case, now that FREP_VIEW_ONLY is gone.
+    assertThat(withAuthorities("SOME_OTHER_APP_ROLE").canEditSite()).isFalse();
     assertThat(withAuthorities().canEditSite()).isFalse();
   }
 
   @Test
   void chrDistrictEditorGainsSiteEditingWithoutGainingBiodiversityWrite() {
-    LoggedUserHelper helper = withAuthorities("FREP_CHR_EDITOR_DISTRICT_DCK");
+    LoggedUserHelper helper = withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK");
 
     assertThat(helper.canEditSite()).isTrue();
     assertThat(helper.canEdit()).isFalse();

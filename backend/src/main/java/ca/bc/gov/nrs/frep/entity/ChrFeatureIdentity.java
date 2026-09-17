@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.Date;
 import java.util.HashSet;
@@ -41,15 +42,27 @@ public class ChrFeatureIdentity implements java.io.Serializable {
 	private Date updateTimestamp;
 	@Column(name = "REVISION_COUNT")
 	private long revisionCount;
-	@OneToMany(targetEntity = ChrAssociatedFeatureXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrAssociatedFeatureXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "FROM_CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrAssociatedFeatureXrefsForFromChrFeatureId = new HashSet(0);
-	@OneToMany(targetEntity = ChrAssociatedFeatureXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrAssociatedFeatureXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "TO_CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrAssociatedFeatureXrefsForToChrFeatureId = new HashSet(0);
 	@OneToOne(mappedBy = "chrFeatureIdentity", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
 	private ChrFeatureDetail chrFeatureDetail;
-	@OneToMany(targetEntity = ChrFeatureInfoSourceXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatureInfoSourceXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatureInfoSourceXrefs = new HashSet(0);
 

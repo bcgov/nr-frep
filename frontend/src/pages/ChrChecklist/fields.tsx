@@ -14,6 +14,7 @@ import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
 import type { FC, ReactNode } from 'react';
 
+import { NO_AUTOFILL } from '@/utils/autofill';
 import { byteLength, overLimitError } from '@/utils/textLimits';
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
@@ -39,33 +40,47 @@ export const TextField: FC<{
   value: string | undefined;
   onChange: (next: string) => void;
   disabled?: boolean;
+  /** Value is fixed and cannot be typed into — kept legible and focusable, unlike `disabled`. */
+  readOnly?: boolean;
   placeholder?: string;
   helperText?: string;
   invalid?: boolean;
   invalidText?: string;
   maxLength?: number;
+  /** Called when the field is left, for rules that can only be judged on a finished value. */
+  onBlur?: () => void;
+  /** Placement only. Carbon puts this on the `.cds--form-item` wrapper — the grid item itself, so
+   *  the field stays a direct child of the grid and keeps its reserved label height. */
+  className?: string;
 }> = ({
   id,
   labelText,
   value,
   onChange,
   disabled,
+  readOnly,
   placeholder,
   helperText,
   invalid,
   invalidText,
   maxLength,
+  onBlur,
+  className,
 }) => (
   <TextInput
+    autoComplete="off"
+    className={className}
     id={id}
     labelText={labelText}
     value={value ?? ''}
     disabled={disabled}
+    readOnly={readOnly}
     placeholder={placeholder}
     helperText={helperText}
     invalid={invalid}
     invalidText={invalidText}
     maxLength={maxLength}
+    onBlur={onBlur}
     onChange={(e) => onChange(e.target.value)}
   />
 );
@@ -112,6 +127,7 @@ export const DateField: FC<{
     }}
   >
     <DatePickerInput
+      {...NO_AUTOFILL}
       id={id}
       labelText={labelText}
       placeholder={placeholder}
@@ -138,6 +154,12 @@ export const TextAreaField: FC<{
    * how an evaluator loses a paragraph without noticing. Blocking Save is the caller's job.
    */
   limit?: number;
+  /**
+   * How `limit` is measured. Defaults to UTF-8 bytes, which is what a JSON body delivers. Pass
+   * {@link multipartByteLength} for a field submitted as a multipart form part — that encoding
+   * rewrites every lone LF as CRLF, so its value reaches the column a byte longer per line break.
+   */
+  measure?: (v: string | undefined) => number;
   invalid?: boolean;
   invalidText?: string;
 }> = ({
@@ -149,13 +171,15 @@ export const TextAreaField: FC<{
   rows = 3,
   maxLength,
   limit,
+  measure = byteLength,
   invalid,
   invalidText,
 }) => {
-  const used = limit === undefined ? 0 : byteLength(value);
+  const used = limit === undefined ? 0 : measure(value);
   const over = limit !== undefined && used > limit;
   const field = (
     <TextArea
+      autoComplete="off"
       id={id}
       labelText={labelText}
       value={value ?? ''}
@@ -163,7 +187,7 @@ export const TextAreaField: FC<{
       disabled={disabled}
       maxLength={maxLength}
       invalid={invalid || over}
-      invalidText={over ? overLimitError(value, limit) : invalidText}
+      invalidText={over ? overLimitError(value, limit, measure) : invalidText}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -188,6 +212,9 @@ export const CodeSelect: FC<{
   includeBlank?: boolean;
   invalid?: boolean;
   invalidText?: string;
+  /** Keep the label for screen readers but take it out of the layout — for a select in a table
+   *  cell, where the column header already names the field. */
+  hideLabel?: boolean;
 }> = ({
   id,
   labelText,
@@ -198,17 +225,22 @@ export const CodeSelect: FC<{
   includeBlank,
   invalid,
   invalidText,
+  hideLabel,
 }) => (
   <Select
+    autoComplete="off"
     id={id}
     labelText={labelText}
+    hideLabel={hideLabel}
     value={value ?? ''}
     disabled={disabled}
     invalid={invalid}
     invalidText={invalidText}
     onChange={(e) => onChange(e.target.value)}
   >
-    {includeBlank && <SelectItem value="" text="—" />}
+    {/* A form select invites a choice by name. In a table cell (`hideLabel`) the column header
+        already names the field and there is no width to spare, so the dash stays. */}
+    {includeBlank && <SelectItem value="" text={hideLabel ? '—' : 'Choose an option'} />}
     {options.map((opt) => (
       <SelectItem key={`${id}-${opt.code}`} value={opt.code} text={opt.label} />
     ))}

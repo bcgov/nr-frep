@@ -31,7 +31,7 @@ route set is active for a given auth state).
 | `/chr/offline` | CHR offline list (IndexedDB) | — | any |
 | `/search/checklists` | Checklist Search | ✓ | any |
 | `/reports` | Reports | ✓ | any |
-| `/admin/master-list` | Master List Admin | ✓ | **`FREP_ADMIN`** |
+| `/admin/master-list` | Master List Admin | ✓ | **`FREP_ADMINISTRATOR`** |
 | `/unauthorized` | Role error | — | — |
 | `*` | Not Found | — | — |
 
@@ -43,7 +43,7 @@ The sidebar is built from routes flagged as menu entries, then filtered by role 
 ```mermaid
 flowchart TD
     landing["/ — Landing (public)"]
-    login{{"IDIR login<br/>(Cognito / FAM)"}}
+    login{{"IDIR login<br/>(BC Gov SSO)"}}
     dash["/dashboard"]
 
     landing --> login --> dash
@@ -53,7 +53,7 @@ flowchart TD
         as["/accepted-sites"]
         cs["/search/checklists"]
         rep["/reports"]
-        adm["/admin/master-list<br/>(FREP_ADMIN)"]
+        adm["/admin/master-list<br/>(FREP_ADMINISTRATOR)"]
     end
 
     dash --> rl

@@ -174,10 +174,60 @@ public class ConfigurationService {
         .toList();
   }
 
-  /** Resource-value status options for the biodiversity data-extract report filter. */
+  /**
+   * CHR feature-class options for the feature and composite-feature "Feature class" dropdowns.
+   *
+   * <p>Cached like the rest: these are code tables, unchanged between releases, and every feature
+   * editor opened would otherwise re-read them.
+   */
+  @Cacheable("chrFeatureClassCodes")
+  public List<CodeOptionResponse> getChrFeatureClassCodes() {
+    return toOptions(codeListRepository.getChrFeatureClassCode());
+  }
+
+  /** CHR information-source options for the feature and composite-feature dropdowns. */
+  @Cacheable("chrFeatureInfoSourceCodes")
+  public List<CodeOptionResponse> getChrFeatureInfoSourceCodes() {
+    return toOptions(codeListRepository.getChrFeatureInfoSourceCode());
+  }
+
+  /** CHR reserve-type options for the location and management-strategy reserve dropdowns. */
+  @Cacheable("chrReserveTypeCodes")
+  public List<CodeOptionResponse> getChrReserveTypeCodes() {
+    return toOptions(codeListRepository.getChrReserveTypeCode());
+  }
+
+  /**
+   * CHR rating options for the feature and block-summary "Rating" dropdowns.
+   *
+   * <p>Distinct from {@link #getSiteEvaluationCodes()}, which serves SLR from a different table.
+   */
+  @Cacheable("chrSiteEvaluationCodes")
+  public List<CodeOptionResponse> getChrSiteEvaluationCodes() {
+    return toOptions(codeListRepository.getChrSiteEvaluationCode());
+  }
+
+  /** CHR participant-role options for the contacts "Role" dropdown. */
+  @Cacheable("chrParticipantRoleCodes")
+  public List<CodeOptionResponse> getChrParticipantRoleCodes() {
+    return toOptions(codeListRepository.getChrParticipantRoleCode());
+  }
+
+  /** Shared mapping for the CHR code lists — cursor rows to options, dropping any without a code. */
+  private static List<CodeOptionResponse> toOptions(List<Map<String, Object>> rows) {
+    return rows.stream()
+        .map(ConfigurationService::toCodeOption)
+        .filter(o -> o.code() != null)
+        .toList();
+  }
+
+  /**
+   * Resource-value status options. Pass the code to exclude, or {@code null}/blank for every
+   * status — the data-extract report filter hides {@code REJ}, Site Details offers all of them.
+   */
   @Cacheable("resourceValueStatusCodes")
-  public List<CodeOptionResponse> getResourceValueStatusCodes() {
-    return codeListRepository.getResourceValueStatusCode().stream()
+  public List<CodeOptionResponse> getResourceValueStatusCodes(String excludeStatusCode) {
+    return codeListRepository.getResourceValueStatusCode(excludeStatusCode).stream()
         .map(ConfigurationService::toCodeOption)
         .filter(o -> o.code() != null)
         .toList();

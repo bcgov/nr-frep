@@ -104,12 +104,6 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
     return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
   }
 
-  /** Upstream FAM identity service failed/unreachable — not caller-correctable, so 502. */
-  @ExceptionHandler(FamServiceException.class)
-  protected ResponseEntity<Object> handleFamService(FamServiceException ex) {
-    log.error("FAM service unavailable: {}", ex.getMessage(), ex);
-    return buildResponseEntity(new ApiError(BAD_GATEWAY, ex.getMessage(), ex));
-  }
 
   /** Concurrent-export limit reached (ExportSlotLimiter) — transient backpressure, so 429. */
   @ExceptionHandler(TooManyExportsException.class)
@@ -151,22 +145,39 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    * message key (e.g. {@code frep.evaluatorinfo.delete.evaluator:1,NAR1}) that the legacy Struts app
    * resolved before display. When {@link LegacyProcMessages} recognises every key, the rule is
    * reported as a 409 in plain English — no help-desk suffix, because there is nothing wrong for the
-   * help desk to fix and the evaluator can resolve it themselves. Anything unrecognised keeps the
-   * previous behaviour: raw proc text at 500, with the suffix.
+   * help desk to fix and the evaluator can resolve it themselves. Anything unrecognised is a 500
+   * with a generic message; the raw text goes to the log and to {@code debugMessage}, never to the
+   * screen.
    */
   @ExceptionHandler(StoredProcedureException.class)
   protected ResponseEntity<Object> handleStoredProcedure(StoredProcedureException ex) {
+    // Overflow first, for the same reason as the generic handlers — but by a different route. The
+    // legacy packages wrap their inserts in `EXCEPTION WHEN OTHERS`, which swallows the Oracle error
+    // and returns it as `p_error_message` text, so an ORA-12899 never surfaces as a SQLException and
+    // never reaches those handlers. SQLERRM is embedded in that text, so ColumnOverflow still
+    // recognises it. Without this, every over-long value written through a proc — a description, a
+    // file name, an attachment type — reported as a 500 with raw Oracle text rather than a 400
+    // naming the field.
+    return overflowResponse(ex).orElseGet(() -> resolveStoredProcedureRule(ex));
+  }
+
+  private ResponseEntity<Object> resolveStoredProcedureRule(StoredProcedureException ex) {
     return LegacyProcMessages.resolve(ex.getOracleErrorMessage())
         .map(message -> {
           log.warn("Stored procedure rule: {} -> {}", ex.getMessage(), message);
           return buildResponseEntity(new ApiError(CONFLICT, message, ex));
         })
         .orElseGet(() -> {
+          // The raw p_error_message is logged, not shown. It is internal vocabulary — proc names,
+          // message keys, Oracle codes — that tells the evaluator nothing they can act on and leaks
+          // schema detail into the UI. Support keeps every bit of it: this log line carries the full
+          // string and the stack, and ApiError.debugMessage still holds it in the response for
+          // anyone reading the network tab. Same policy as the data-access and catch-all handlers.
           log.error("Stored procedure error: {}", ex.getMessage(), ex);
-          String message = ex.getOracleErrorMessage() != null && !ex.getOracleErrorMessage().isBlank()
-              ? ex.getOracleErrorMessage() + " " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO
-              : "Unexpected system error. " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO;
-          return buildResponseEntity(new ApiError(INTERNAL_SERVER_ERROR, message, ex));
+          return buildResponseEntity(new ApiError(
+              INTERNAL_SERVER_ERROR,
+              "The request could not be completed. " + ChrConstants.RestMessages.SYS_ERROR_REPORT_TO,
+              ex));
         });
   }
 
@@ -181,7 +192,7 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    */
   @ExceptionHandler(TransactionSystemException.class)
   protected ResponseEntity<Object> handleTransactionSystem(TransactionSystemException ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Transaction could not be committed", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -194,11 +205,11 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
    * Any other data-access failure (e.g. ORA-00942 from a native query, a missing grant). The raw
    * Oracle message is logged but NOT returned — the client gets a generic message instead. The one
    * exception is a column overflow, which is reported as a field-length problem (see
-   * {@link #overflowResponse}).
+   * {@link #rejectResponse}).
    */
   @ExceptionHandler(DataAccessException.class)
   protected ResponseEntity<Object> handleDataAccess(DataAccessException ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Database error", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -210,7 +221,7 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
   /** Catch-all. Returns a generic message so internal detail never leaks to the UI. */
   @ExceptionHandler(Exception.class)
   protected ResponseEntity<Object> handleUnexpected(Exception ex) {
-    return overflowResponse(ex).orElseGet(() -> {
+    return rejectResponse(ex).orElseGet(() -> {
       log.error("Unexpected error", ex);
       return buildResponseEntity(new ApiError(
           INTERNAL_SERVER_ERROR,
@@ -221,13 +232,35 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
 
   /**
    * A 400 naming the over-long field, when the failure is an ORA-12899 anywhere in the chain.
-   * Applied at all three of the generic handlers above because the same overflow reaches them by
-   * different routes: commit-time flush (JPA), a translated JDBC failure, or an untranslated one.
+   * Applied at every handler that can see one, because the same overflow arrives by four different
+   * routes: a commit-time flush (JPA), a translated JDBC failure, an untranslated one, and — via
+   * {@link #handleStoredProcedure} — as proc text, where a legacy {@code EXCEPTION WHEN OTHERS}
+   * caught the error and returned {@code SQLERRM} in an out-parameter instead of letting it throw.
    * Only the derived field label and the two lengths are returned — never the raw Oracle text.
    */
   private Optional<ResponseEntity<Object>> overflowResponse(Exception ex) {
     return ColumnOverflow.describe(ex).map(message -> {
       log.warn("Column overflow rejected: {}", message, ex);
+      return buildResponseEntity(new ApiError(BAD_REQUEST, message, ex));
+    });
+  }
+
+  /**
+   * A 400 naming what the user has to change, when the failure is one the database can explain: an
+   * over-long value (ORA-12899) or a duplicate of something that has to be unique (ORA-00001).
+   *
+   * <p>Checked at all three generic handlers because the same failure arrives by different routes —
+   * commit-time flush, a translated JDBC failure, or an untranslated one. Without this a duplicate
+   * feature label surfaced as "Unexpected system error", which named neither the field nor the
+   * problem.
+   */
+  private Optional<ResponseEntity<Object>> rejectResponse(Exception ex) {
+    Optional<ResponseEntity<Object>> overflow = overflowResponse(ex);
+    if (overflow.isPresent()) {
+      return overflow;
+    }
+    return DuplicateRecord.describe(ex).map(message -> {
+      log.warn("Duplicate rejected: {}", message, ex);
       return buildResponseEntity(new ApiError(BAD_REQUEST, message, ex));
     });
   }

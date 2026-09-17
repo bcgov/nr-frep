@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * HTTP contract for the FREP700 Master List admin endpoints. Implemented by
  * {@link ca.bc.gov.nrs.frep.controller.v1.MasterListAdminApiController}. Every operation — including
- * the read — is {@code FREP_ADMIN} only ({@link FrepAuthorities#ADMIN}).
+ * the read — is {@code FREP_ADMINISTRATOR} only ({@link FrepAuthorities#ADMIN}).
  */
 @RequestMapping("/api/v1/admin/master-list")
 public interface MasterListAdminApiEndpoint {

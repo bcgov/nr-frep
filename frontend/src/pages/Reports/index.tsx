@@ -51,7 +51,8 @@ const ReportsPage: FC = () => {
     Promise.all([
       API.configuration.getOrgUnits(),
       API.configuration.getMasterListYears(),
-      API.configuration.getResourceValueStatusCodes(),
+      // REJ is not offered as a report filter, matching the legacy JCRS input control.
+      API.configuration.getResourceValueStatusCodes('REJ'),
       API.configuration.getChecklistStatusCodes(),
     ])
       .then(([orgs, years, statuses, checklistStatusCodes]) => {

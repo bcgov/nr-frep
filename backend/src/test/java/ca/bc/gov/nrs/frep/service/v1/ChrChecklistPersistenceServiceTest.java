@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import ca.bc.gov.nrs.frep.entity.ChrChecklistAttachment;
@@ -30,9 +31,12 @@ import ca.bc.gov.nrs.frep.entity.ChrFeatureAgeXref;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureDetail;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureIdentity;
 import ca.bc.gov.nrs.frep.entity.ChrFeatureTypeXref;
+import ca.bc.gov.nrs.frep.util.ChrStringUtils;
+import ca.bc.gov.nrs.frep.entity.FrepChecklistAnswerCode;
 import ca.bc.gov.nrs.frep.entity.FrepChecklistStatusCode;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValue;
 import ca.bc.gov.nrs.frep.entity.FrepResourceValueStatCode;
+import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ObjectStorageService;
 import jakarta.persistence.EntityManager;
@@ -49,6 +53,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Verifies the {@code saveFeatures} port against a mocked {@link EntityManager}: feature identity
@@ -84,6 +89,12 @@ class ChrChecklistPersistenceServiceTest {
     when(entityManager.find(ChrChecklist.class, 1001L)).thenReturn(checklist);
     lenient().when(entityManager.find(eq(FrepChecklistStatusCode.class), any()))
         .thenReturn(new FrepChecklistStatusCode());
+    // DAMAGE_IRREVERSIBLE_ANSWER_CD is NOT NULL: an unanswered Q3 falls back to the "N" code row,
+    // which the mapper then dereferences. The code table has it; the mock has to as well.
+    FrepChecklistAnswerCode answerCode = new FrepChecklistAnswerCode();
+    answerCode.setFrepChecklistAnswerCode("N");
+    lenient().when(entityManager.find(eq(FrepChecklistAnswerCode.class), any()))
+        .thenReturn(answerCode);
     // All other find(...) lookups (code tables, existing detail) resolve to null.
     lenient().when(entityManager.find(eq(ChrFeatureDetail.class), any())).thenReturn(null);
 
@@ -146,6 +157,75 @@ class ChrChecklistPersistenceServiceTest {
     assertTrue(persisted.stream().anyMatch(o -> o instanceof ChrFeatureTypeXref type
             && "BURIALSITE".equals(type.getId().getChrFeatureTypeCode())),
         "checked type BURIALSITE should create a type xref");
+  }
+
+  /**
+   * Regression for the save that answered with the JVM's own parse failure.
+   *
+   * <p>{@code NumberFormatException} is an {@link IllegalArgumentException}, which the REST exception
+   * handler answers as a bad request carrying the exception's text — so a percentage typed as "tset"
+   * reached the user as {@code For input string: "tset"}, naming neither the field nor the feature.
+   * The feature editor blocks this before the save now, but the offline check-in path reaches the
+   * same code with no editor in front of it.
+   */
+  @Test
+  void aNonNumericPercentageIsRefusedByNameRatherThanAsAParseFailure() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setTrailLength("tset")));
+
+    assertTrue(ex.getMessage().contains("Estimated trail damage (%) for feature 1"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("tset"), ex.getMessage());
+  }
+
+  /**
+   * A number too wide for its column, told apart from a malformed one. {@code EST_WINDTHROW_PERCENT}
+   * is {@code NUMBER(3)}: five digits parse as a Short only to fail at insert with ORA-01438, and
+   * "must be a whole number" would be the wrong thing to tell someone who typed a number.
+   */
+  @Test
+  void aPercentageWiderThanItsColumnIsRefusedBeforeTheInsert() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setEstwindthrow("40000")));
+
+    assertTrue(ex.getMessage().contains("must be from 0 to 999"), ex.getMessage());
+  }
+
+  /** Same for the decimal side: past the precision of {@code AREA_HECTARES}, ORA-01438 at insert. */
+  @Test
+  void anAreaWiderThanItsColumnIsRefusedBeforeTheInsert() {
+    InvalidParameterException ex = assertThrows(InvalidParameterException.class,
+        () -> saveWith(f -> f.setAreaofFeature("12345678.5")));
+
+    assertTrue(ex.getMessage().contains("Area (ha) for feature 1"), ex.getMessage());
+  }
+
+  /** Decimals within the column's scale are ordinary values, not errors. */
+  @Test
+  void anAreaWithinItsColumnIsStored() {
+    saveWith(f -> f.setAreaofFeature("2.5"));
+
+    ChrFeatureDetail detail = persisted.stream()
+        .filter(ChrFeatureDetail.class::isInstance)
+        .map(ChrFeatureDetail.class::cast)
+        .findFirst()
+        .orElseThrow();
+    assertEquals(new BigDecimal("2.5"), detail.getAreaHectares());
+  }
+
+  /** One feature, saved through the section port, with whatever the caller sets on it. */
+  private void saveWith(java.util.function.Consumer<Feature> setUp) {
+    Feature feature = new Feature();
+    feature.setFeatureLabel("1");
+    feature.setCompositeFeatureInd("false");
+    setUp.accept(feature);
+
+    CheckList resource = new CheckList();
+    resource.setChecklistID("1001");
+    resource.setStatus("ACT");
+    resource.setEvaluationDate("2026-05-01");
+    resource.setFeatures(new ArrayList<>(List.of(feature)));
+
+    service.saveChecklist(resource, "IDIR\\tester");
   }
 
   /**
@@ -496,6 +576,27 @@ class ChrChecklistPersistenceServiceTest {
   }
 
   @Test
+  void addPhotoStoresACodeThatFitsTheColumnAndKeysTheObjectByIt() {
+    // MIME_TYPE_CODE is VARCHAR2(10). The caller now passes the extension code, so this is what the
+    // column receives; the object's key and Content-Type are both derived from that same code, so a
+    // PDF is stored as a PDF rather than being keyed .application/pdf or labelled octet-stream.
+    ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> contentType = ArgumentCaptor.forClass(String.class);
+
+    service.addPhoto(1001L, "permit.pdf", "A permit", null, null, "PDF",
+        new byte[] {1, 2, 3}, "IDIR\\tester");
+
+    ChrChecklistAttachment stored = (ChrChecklistAttachment)
+        checklist.getChrChecklistAttachments().iterator().next();
+    assertEquals("PDF", stored.getMimeTypeCode());
+    assertTrue(stored.getMimeTypeCode().length() <= 10,
+        "MIME_TYPE_CODE is VARCHAR2(10); " + stored.getMimeTypeCode() + " would not fit");
+    verify(objectStorage).putObject(key.capture(), contentType.capture(), any());
+    assertTrue(key.getValue().endsWith(".pdf"), key.getValue());
+    assertEquals("application/pdf", contentType.getValue());
+  }
+
+  @Test
   void addPhotoRecordsTheFeatureItDocuments() {
     featureOnTheChecklist(5001L, "3");
 
@@ -583,5 +684,579 @@ class ChrChecklistPersistenceServiceTest {
     List<Picture> photos = service.getPhotoMetadata(1001L);
 
     assertEquals(List.of("12", "11", "10"), photos.stream().map(Picture::getId).toList());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // deleteFeature(checklistId, featureId, userId) — the online delete endpoint's port.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Puts one feature on the fixture checklist and returns it. */
+  @SuppressWarnings("unchecked")
+  private ChrFeatureIdentity givenStoredFeature(long featureId) {
+    ChrFeatureIdentity identity = new ChrFeatureIdentity();
+    identity.setChrFeatureId(featureId);
+    identity.setFeatureLabel("1");
+    checklist.getChrFeatureIdentities().add(identity);
+    return identity;
+  }
+
+  @Test
+  void deleteFeatureRemovesTheRowAndDropsItFromTheChecklist() {
+    ChrFeatureIdentity identity = givenStoredFeature(7001L);
+
+    service.deleteFeature(1001L, 7001L, "TESTUSER");
+
+    verify(entityManager).remove(identity);
+    assertFalse(checklist.getChrFeatureIdentities().contains(identity),
+        "a removed entity left in the eager set fails the flush");
+  }
+
+  @Test
+  void deleteFeatureRefusesAFeatureBelongingToAnotherChecklist() {
+    ChrFeatureIdentity mine = givenStoredFeature(7001L);
+
+    // 9999 exists somewhere, just not on this checklist: scoped through the checklist's own set, so
+    // it is a not-found here rather than a licence to delete someone else's row.
+    EntityNotFoundException thrown = assertThrows(EntityNotFoundException.class,
+        () -> service.deleteFeature(1001L, 9999L, "TESTUSER"));
+
+    assertTrue(thrown.getMessage().contains("9999"));
+    verify(entityManager, never()).remove(any());
+    assertTrue(checklist.getChrFeatureIdentities().contains(mine));
+  }
+
+  @Test
+  void deleteFeatureReleasesAnOfflineCheckoutAndStampsTheChecklist() {
+    checklist.setDeviceCheckoutGuid(new byte[] {1, 2, 3});
+    givenStoredFeature(7001L);
+
+    service.deleteFeature(1001L, 7001L, "TESTUSER");
+
+    assertNull(checklist.getDeviceCheckoutGuid(),
+        "an online delete releases the checkout, exactly as a section save does");
+    assertEquals("TESTUSER", checklist.getUpdateUserid());
+    // The cascade flushes repeatedly as it clears each child table; the stamp just has to land.
+    verify(entityManager, atLeastOnce()).flush();
+  }
+
+  @Test
+  void deleteFeatureReportsAMissingChecklistRatherThanNullPointing() {
+    when(entityManager.find(ChrChecklist.class, 4242L)).thenReturn(null);
+
+    assertThrows(EntityNotFoundException.class,
+        () -> service.deleteFeature(4242L, 7001L, "TESTUSER"));
+  }
+  // ---------------------------------------------------------------------------------------------
+  // saveFeatureAssociations — the associations endpoint's port. An association names two features,
+  // so the server writes and removes both directions; nothing else maintains that invariant once a
+  // write addresses one feature at a time.
+  // ---------------------------------------------------------------------------------------------
+
+  /** A feature complete enough for CheckListMapper.toFeature to read back without null-pointing. */
+  @SuppressWarnings("unchecked")
+  private ChrFeatureIdentity givenMappableFeature(long featureId, String label) {
+    ChrFeatureIdentity identity = new ChrFeatureIdentity();
+    identity.setChrFeatureId(featureId);
+    identity.setFeatureLabel(label);
+    identity.setCompositeFeatureInd("N");
+    ChrFeatureDetail detail = new ChrFeatureDetail();
+    // DAMAGE_IRREVERSIBLE_ANSWER_CD is NOT NULL, and the mapper dereferences it unguarded.
+    FrepChecklistAnswerCode answer = new FrepChecklistAnswerCode();
+    answer.setFrepChecklistAnswerCode("N");
+    detail.setDamageIrreversibleAnswerCd(answer);
+    identity.setChrFeatureDetail(detail);
+    checklist.getChrFeatureIdentities().add(identity);
+    return identity;
+  }
+
+  @Test
+  void savingAnAssociationWritesBothDirections() throws Exception {
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+
+    service.saveFeatureAssociations(1001L, 7001L, List.of("7002"), "TESTUSER");
+
+    List<ChrAssociatedFeatureXrefId> written = persisted.stream()
+        .filter(ChrAssociatedFeatureXref.class::isInstance)
+        .map(entity -> ((ChrAssociatedFeatureXref) entity).getId())
+        .toList();
+    assertEquals(2, written.size(), "an association is a pair, not a row");
+    assertTrue(written.stream().anyMatch(
+        id -> id.getFromChrFeatureId() == 7001L && id.getToChrFeatureId() == 7002L));
+    assertTrue(written.stream().anyMatch(
+        id -> id.getFromChrFeatureId() == 7002L && id.getToChrFeatureId() == 7001L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void droppingAnAssociationRemovesBothDirections() throws Exception {
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+    ChrAssociatedFeatureXref forward = new ChrAssociatedFeatureXref();
+    forward.setId(new ChrAssociatedFeatureXrefId(7001L, 7002L));
+    ChrAssociatedFeatureXref reverse = new ChrAssociatedFeatureXref();
+    reverse.setId(new ChrAssociatedFeatureXrefId(7002L, 7001L));
+    TypedQuery<Object> existing = mock(TypedQuery.class);
+    when(entityManager.createQuery(contains("ChrAssociatedFeatureXref"), any(Class.class)))
+        .thenReturn(existing);
+    when(existing.setParameter(anyString(), any())).thenReturn(existing);
+    when(existing.getResultList()).thenReturn(List.of(forward, reverse));
+
+    // An empty list clears the feature's associations.
+    service.saveFeatureAssociations(1001L, 7001L, List.of(), "TESTUSER");
+
+    verify(entityManager).remove(forward);
+    verify(entityManager).remove(reverse);
+    assertTrue(persisted.stream().noneMatch(ChrAssociatedFeatureXref.class::isInstance));
+  }
+
+  @Test
+  void savingAnAssociationRefusesToLinkAFeatureToItself() {
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.saveFeatureAssociations(1001L, 7001L, List.of("7001"), "TESTUSER"));
+  }
+
+  @Test
+  void savingAnAssociationRefusesATargetOnAnotherChecklist() {
+    givenMappableFeature(7001L, "1");
+
+    // 9999 is not on this checklist: PROD holds no cross-checklist xref and this is what keeps it
+    // that way.
+    assertThrows(EntityNotFoundException.class,
+        () -> service.saveFeatureAssociations(1001L, 7001L, List.of("9999"), "TESTUSER"));
+    assertTrue(persisted.stream().noneMatch(ChrAssociatedFeatureXref.class::isInstance));
+  }
+
+  @Test
+  void savingAnAssociationRefusesASubjectOnAnotherChecklist() {
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(EntityNotFoundException.class,
+        () -> service.saveFeatureAssociations(1001L, 9999L, List.of("7001"), "TESTUSER"));
+  }
+
+  @Test
+  void savingAnAssociationReleasesAnOfflineCheckout() throws Exception {
+    checklist.setDeviceCheckoutGuid(new byte[] {1, 2, 3});
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+
+    service.saveFeatureAssociations(1001L, 7001L, List.of("7002"), "TESTUSER");
+
+    assertNull(checklist.getDeviceCheckoutGuid());
+  }
+
+  @Test
+  void savingAnAssociationReturnsBothFeaturesSoNeitherIsLeftStale() throws Exception {
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+
+    List<Feature> touched =
+        service.saveFeatureAssociations(1001L, 7001L, List.of("7002"), "TESTUSER");
+
+    // The partner's stored state moved too — returning only the subject would leave the client
+    // showing a stale copy of the other row.
+    assertEquals(2, touched.size());
+    assertTrue(touched.stream().anyMatch(f -> "7001".equals(f.getId())));
+    assertTrue(touched.stream().anyMatch(f -> "7002".equals(f.getId())));
+  }
+  // ---------------------------------------------------------------------------------------------
+  // saveFeature — the editor's Save. Writes the feature's own fields and its nine child
+  // collections, and deliberately leaves its relationships to their own endpoints.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  void savingAFeatureRewritesItsOwnFieldsAndChildCollections() throws Exception {
+    ChrFeatureIdentity stored = givenMappableFeature(7001L, "1");
+    stored.setComments("before");
+
+    Feature edited = new Feature();
+    edited.setId("7001");
+    edited.setFeatureLabel("1");
+    edited.setFeatureComment("after");
+    edited.setPre1846("true");
+
+    service.saveFeature(1001L, 7001L, edited, "TESTUSER");
+
+    assertEquals("after", stored.getComments());
+    assertEquals("TESTUSER", stored.getUpdateUserid());
+    assertTrue(persisted.stream().anyMatch(ChrFeatureAgeXref.class::isInstance),
+        "the age xref is one of the nine child collections the editor owns");
+  }
+
+  @Test
+  void savingAFeatureLeavesItsCompositeMembershipAlone() throws Exception {
+    ChrFeatureIdentity stored = givenMappableFeature(7001L, "1");
+    // Grouped under another feature, by the composite dialog.
+    stored.setCompositeChrFeatureIdentity(7002L);
+    stored.setCompositeFeatureInd("N");
+
+    Feature edited = new Feature();
+    edited.setId("7001");
+    edited.setFeatureLabel("1");
+    // A stale or absent compositeFeature on the payload must not silently un-group the feature —
+    // that is exactly how renaming an anchor used to orphan its members.
+    edited.setCompositeFeature(null);
+
+    service.saveFeature(1001L, 7001L, edited, "TESTUSER");
+
+    assertEquals(7002L, stored.getCompositeChrFeatureIdentity());
+  }
+
+  @Test
+  void savingAFeatureLeavesItsAssociationsAlone() throws Exception {
+    givenMappableFeature(7001L, "1");
+    Feature edited = new Feature();
+    edited.setId("7001");
+    edited.setFeatureLabel("1");
+
+    service.saveFeature(1001L, 7001L, edited, "TESTUSER");
+
+    // Associations are a two-feature write with their own endpoint; this one must not touch them.
+    assertTrue(persisted.stream().noneMatch(ChrAssociatedFeatureXref.class::isInstance));
+  }
+
+  @Test
+  void savingAFeatureRefusesOneOnAnotherChecklist() {
+    givenMappableFeature(7001L, "1");
+    Feature edited = new Feature();
+    edited.setId("9999");
+
+    assertThrows(EntityNotFoundException.class,
+        () -> service.saveFeature(1001L, 9999L, edited, "TESTUSER"));
+  }
+
+  @Test
+  void savingAFeatureReleasesAnOfflineCheckoutAndReturnsTheSavedRow() throws Exception {
+    checklist.setDeviceCheckoutGuid(new byte[] {9});
+    givenMappableFeature(7001L, "1");
+    Feature edited = new Feature();
+    edited.setId("7001");
+    edited.setFeatureLabel("1");
+
+    List<Feature> saved = service.saveFeature(1001L, 7001L, edited, "TESTUSER");
+
+    assertNull(checklist.getDeviceCheckoutGuid());
+    assertEquals(1, saved.size(), "an editor save touches exactly one feature");
+    assertEquals("7001", saved.get(0).getId());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // createComposite — the only write where a reference target has no id until the call happens.
+  // ---------------------------------------------------------------------------------------------
+
+  private Feature anchorPayload() {
+    Feature anchor = new Feature();
+    anchor.setFeatureLabel("11");
+    anchor.setFeatureDescriptionCode("CP");
+    anchor.setFeatureInfoSourceCode("SP");
+    return anchor;
+  }
+
+  @Test
+  void creatingACompositeInsertsTheAnchorAndPointsMembersAtIt() throws Exception {
+    ChrFeatureIdentity one = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity two = givenMappableFeature(7002L, "2");
+
+    service.createComposite(
+        1001L, anchorPayload(), List.of("7001", "7002"), List.of(), "TESTUSER");
+
+    ChrFeatureIdentity anchor = persisted.stream()
+        .filter(ChrFeatureIdentity.class::isInstance)
+        .map(ChrFeatureIdentity.class::cast)
+        .filter(identity -> "Y".equals(identity.getCompositeFeatureInd()))
+        .findFirst()
+        .orElseThrow();
+    assertEquals("11", anchor.getFeatureLabel());
+    // Membership lives on the child row, pointing up at the anchor.
+    assertEquals(anchor.getChrFeatureId(), one.getCompositeChrFeatureIdentity());
+    assertEquals(anchor.getChrFeatureId(), two.getCompositeChrFeatureIdentity());
+  }
+
+  @Test
+  void creatingACompositeAlsoInsertsTheFeaturesTypedIntoTheDialog() throws Exception {
+    givenMappableFeature(7001L, "1");
+    Feature typedIn = new Feature();
+    typedIn.setFeatureLabel("12");
+
+    service.createComposite(1001L, anchorPayload(), List.of("7001"), List.of(typedIn), "TESTUSER");
+
+    // The dialog is one gesture, so its new features are created in the same call rather than
+    // needing a prior round trip that could half-fail.
+    assertTrue(ChrStringUtils.hasAValue(typedIn.getId()));
+  }
+
+  @Test
+  void creatingACompositeRefusesFewerThanTwoMembers() {
+    givenMappableFeature(7001L, "1");
+
+    // An empty or single-member composite is a state the UI cannot produce and cannot render.
+    assertThrows(InvalidParameterException.class,
+        () -> service.createComposite(1001L, anchorPayload(), List.of("7001"), List.of(),
+            "TESTUSER"));
+  }
+
+  @Test
+  void creatingACompositeWillNotTakeAFeatureFromAnotherComposite() {
+    ChrFeatureIdentity one = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity two = givenMappableFeature(7002L, "2");
+    two.setCompositeChrFeatureIdentity(6000L);
+
+    // Creating a group offers only unattached features, so it cannot quietly empty an existing one.
+    assertThrows(InvalidParameterException.class,
+        () -> service.createComposite(1001L, anchorPayload(), List.of("7001", "7002"), List.of(),
+            "TESTUSER"));
+    assertNull(one.getCompositeChrFeatureIdentity());
+  }
+
+  @Test
+  void creatingACompositeRefusesAMemberOnAnotherChecklist() {
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(EntityNotFoundException.class,
+        () -> service.createComposite(1001L, anchorPayload(), List.of("7001", "9999"), List.of(),
+            "TESTUSER"));
+  }
+
+  @Test
+  void creatingACompositeReturnsTheAnchorAndEveryMember() throws Exception {
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+
+    List<Feature> touched = service.createComposite(
+        1001L, anchorPayload(), List.of("7001", "7002"), List.of(), "TESTUSER");
+
+    // Anchor plus both members: every row the gesture moved.
+    assertEquals(3, touched.size());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // updateComposite — take, release and create. The asymmetry with createComposite is the point:
+  // this one may move a feature across from another group, and has members to let go of.
+  // ---------------------------------------------------------------------------------------------
+
+  private ChrFeatureIdentity givenAnchor(long featureId, String label) {
+    ChrFeatureIdentity anchor = givenMappableFeature(featureId, label);
+    anchor.setCompositeFeatureInd("Y");
+    return anchor;
+  }
+
+  @Test
+  void updatingACompositeReleasesTheMembersItNoLongerNames() throws Exception {
+    ChrFeatureIdentity anchor = givenAnchor(7100L, "11");
+    ChrFeatureIdentity kept = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity dropped = givenMappableFeature(7002L, "2");
+    ChrFeatureIdentity added = givenMappableFeature(7003L, "3");
+    kept.setCompositeChrFeatureIdentity(7100L);
+    dropped.setCompositeChrFeatureIdentity(7100L);
+
+    service.updateComposite(
+        1001L, 7100L, "CP", "SP", List.of("7001", "7003"), List.of(), "TESTUSER");
+
+    assertEquals(7100L, kept.getCompositeChrFeatureIdentity());
+    assertEquals(7100L, added.getCompositeChrFeatureIdentity());
+    assertNull(dropped.getCompositeChrFeatureIdentity(), "dropped members stand on their own again");
+  }
+
+  @Test
+  void updatingACompositeTakesAMemberFromAnotherComposite() throws Exception {
+    givenAnchor(7100L, "11");
+    ChrFeatureIdentity otherAnchor = givenAnchor(7200L, "12");
+    ChrFeatureIdentity moving = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity stayput = givenMappableFeature(7002L, "2");
+    moving.setCompositeChrFeatureIdentity(7200L);
+    stayput.setCompositeChrFeatureIdentity(7200L);
+    ChrFeatureIdentity own = givenMappableFeature(7003L, "3");
+    own.setCompositeChrFeatureIdentity(7100L);
+
+    service.updateComposite(
+        1001L, 7100L, "CP", "SP", List.of("7001", "7003"), List.of(), "TESTUSER");
+
+    // Moving one across is the point of the members dialog...
+    assertEquals(7100L, moving.getCompositeChrFeatureIdentity());
+    // ...but a release never reaches beyond this anchor's own members.
+    assertEquals(7200L, stayput.getCompositeChrFeatureIdentity());
+    assertEquals("Y", otherAnchor.getCompositeFeatureInd());
+  }
+
+  @Test
+  void updatingACompositeRefusesAFeatureThatIsNotAComposite() {
+    givenMappableFeature(7001L, "1");
+    givenMappableFeature(7002L, "2");
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.updateComposite(1001L, 7001L, "CP", "SP", List.of("7002"), List.of(),
+            "TESTUSER"));
+  }
+
+  @Test
+  void updatingACompositeRefusesToMakeItAMemberOfItself() {
+    givenAnchor(7100L, "11");
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.updateComposite(1001L, 7100L, "CP", "SP", List.of("7100", "7001"), List.of(),
+            "TESTUSER"));
+  }
+
+  @Test
+  void updatingACompositeRefusesFewerThanTwoMembers() {
+    givenAnchor(7100L, "11");
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.updateComposite(1001L, 7100L, "CP", "SP", List.of("7001"), List.of(),
+            "TESTUSER"));
+  }
+
+  @Test
+  void updatingACompositeReturnsTheAnchorEveryMemberAndEveryRelease() throws Exception {
+    givenAnchor(7100L, "11");
+    ChrFeatureIdentity kept = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity dropped = givenMappableFeature(7002L, "2");
+    givenMappableFeature(7003L, "3");
+    kept.setCompositeChrFeatureIdentity(7100L);
+    dropped.setCompositeChrFeatureIdentity(7100L);
+
+    List<Feature> touched = service.updateComposite(
+        1001L, 7100L, "CP", "SP", List.of("7001", "7003"), List.of(), "TESTUSER");
+
+    // Anchor, the two it now holds, and the one it let go — a client patching by id needs all four.
+    assertEquals(4, touched.size());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // ungroupComposite — the anchor goes either way; the keep/delete choice is only about members
+  // that were never assessed in their own right.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  void ungroupingDeletesTheAnchorAndKeepsTheMembersByDefault() throws Exception {
+    ChrFeatureIdentity anchor = givenAnchor(7100L, "11");
+    ChrFeatureIdentity one = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity two = givenMappableFeature(7002L, "2");
+    one.setCompositeChrFeatureIdentity(7100L);
+    two.setCompositeChrFeatureIdentity(7100L);
+
+    service.ungroupComposite(1001L, 7100L, List.of(), "TESTUSER");
+
+    // Dissolved, not emptied: an anchor with no members is a state the UI cannot render.
+    verify(entityManager).remove(anchor);
+    assertFalse(checklist.getChrFeatureIdentities().contains(anchor));
+    verify(entityManager, never()).remove(one);
+    verify(entityManager, never()).remove(two);
+  }
+
+  @Test
+  void ungroupingDeletesOnlyTheMembersItIsToldTo() throws Exception {
+    givenAnchor(7100L, "11");
+    ChrFeatureIdentity kept = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity undescribed = givenMappableFeature(7002L, "2");
+    kept.setCompositeChrFeatureIdentity(7100L);
+    undescribed.setCompositeChrFeatureIdentity(7100L);
+
+    service.ungroupComposite(1001L, 7100L, List.of("7002"), "TESTUSER");
+
+    verify(entityManager).remove(undescribed);
+    verify(entityManager, never()).remove(kept);
+  }
+
+  @Test
+  void ungroupingRefusesToDeleteAFeatureThatIsNotOneOfItsMembers() {
+    givenAnchor(7100L, "11");
+    ChrFeatureIdentity member = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity bystander = givenMappableFeature(7002L, "2");
+    member.setCompositeChrFeatureIdentity(7100L);
+
+    // The client decides which members are undescribed; it does not get to name arbitrary features
+    // for deletion under cover of an ungroup.
+    assertThrows(InvalidParameterException.class,
+        () -> service.ungroupComposite(1001L, 7100L, List.of("7002"), "TESTUSER"));
+    verify(entityManager, never()).remove(bystander);
+  }
+
+  @Test
+  void ungroupingRefusesAFeatureThatIsNotAComposite() {
+    givenMappableFeature(7001L, "1");
+
+    assertThrows(InvalidParameterException.class,
+        () -> service.ungroupComposite(1001L, 7001L, List.of(), "TESTUSER"));
+  }
+
+  @Test
+  void ungroupingReleasesTheSurvivorsAndReturnsThem() throws Exception {
+    givenAnchor(7100L, "11");
+    ChrFeatureIdentity one = givenMappableFeature(7001L, "1");
+    ChrFeatureIdentity two = givenMappableFeature(7002L, "2");
+    one.setCompositeChrFeatureIdentity(7100L);
+    two.setCompositeChrFeatureIdentity(7100L);
+
+    List<Feature> survivors = service.ungroupComposite(1001L, 7100L, List.of("7002"), "TESTUSER");
+
+    // Only the member that stayed: the anchor and the deleted member no longer exist, and the
+    // caller asked for both so it can drop them itself.
+    assertEquals(1, survivors.size());
+    assertEquals("7001", survivors.get(0).getId());
+  }
+  // ---------------------------------------------------------------------------------------------
+  // createStandaloneFeature — the editor's Save on a feature the server has never seen. Without it
+  // the editor fell back to the whole-document save, so building a checklist stayed quadratic.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  void creatingAFeatureInsertsItAndHandsBackItsId() throws Exception {
+    Feature added = new Feature();
+    added.setFeatureLabel("4");
+    added.setFeatureDescriptionCode("CMT");
+    added.setPre1846("true");
+
+    List<Feature> saved = service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    assertTrue(ChrStringUtils.hasAValue(added.getId()), "the client needs the assigned id");
+    assertEquals(1, saved.size(), "creating one feature touches one feature");
+    assertTrue(persisted.stream().anyMatch(ChrFeatureAgeXref.class::isInstance),
+        "its child collections are written too, not just the identity row");
+  }
+
+  @Test
+  void creatingAFeatureLeavesTheOthersAlone() throws Exception {
+    ChrFeatureIdentity untouched = givenMappableFeature(7001L, "1");
+    untouched.setComments("as it was");
+
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    // The whole point: adding the tenth feature must not rewrite the other nine.
+    assertEquals("as it was", untouched.getComments());
+    assertNull(untouched.getUpdateUserid());
+  }
+
+  @Test
+  void creatingAFeatureNeverGroupsIt() throws Exception {
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+    // A stale flag on the payload must not make a composite by accident — grouping belongs to the
+    // composite endpoints, and the editor cannot express it.
+    added.setCompositeFeatureInd("true");
+
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    ChrFeatureIdentity created = persisted.stream()
+        .filter(ChrFeatureIdentity.class::isInstance)
+        .map(ChrFeatureIdentity.class::cast)
+        .findFirst()
+        .orElseThrow();
+    assertEquals("N", created.getCompositeFeatureInd());
+    assertNull(created.getCompositeChrFeatureIdentity());
+  }
+
+  @Test
+  void creatingAFeatureReleasesAnOfflineCheckout() throws Exception {
+    checklist.setDeviceCheckoutGuid(new byte[] {7});
+    Feature added = new Feature();
+    added.setFeatureLabel("2");
+
+    service.createStandaloneFeature(1001L, added, "TESTUSER");
+
+    assertNull(checklist.getDeviceCheckoutGuid());
   }
 }

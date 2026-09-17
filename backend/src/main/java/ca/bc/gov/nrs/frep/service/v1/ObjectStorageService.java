@@ -28,6 +28,28 @@ public class ObjectStorageService {
     this.properties = properties;
   }
 
+  /** Flat {@code slr/} namespace for Biodiversity attachments — see {@link #bioObjectKey}. */
+  private static final String BIO_OBJECT_PREFIX = "slr/";
+
+  /**
+   * The object key for a Biodiversity attachment. <b>The single definition</b> — the download, the
+   * upload, the delete and the one-time BLOB migration all resolve their key through here.
+   *
+   * <p>It lives on the storage service rather than in any one caller because the four paths must
+   * agree exactly and are spread across three classes in two layers. When they each held their own
+   * {@code "slr/" + id} literal, a divergence would have been invisible in the worst possible way:
+   * the download falls back to the Oracle BLOB when the object is absent, so a migration writing to
+   * a key the download never reads would still serve the right bytes from the BLOB — correct
+   * downloads, a passing gate, and every migrated object orphaned. The symptom would only appear
+   * once the fallback is removed (Phase 4b), long after the evidence was gone.
+   *
+   * <p>{@code trim()} because the id reaches the key as a string on some paths and a trailing space
+   * would silently write to a key nothing ever reads.
+   */
+  public static String bioObjectKey(String attachmentId) {
+    return BIO_OBJECT_PREFIX + attachmentId.trim();
+  }
+
 
   public byte[] getObjectBytes(String key) {
     try (S3Client client = client()) {
@@ -35,6 +57,33 @@ public class ObjectStorageService {
     }
   }
 
+  /**
+   * The object's bytes, or {@code null} when the key does not exist.
+   *
+   * <p>Replaces an {@code objectExists} HEAD followed by a GET: one round trip instead of two, and
+   * — more importantly — only a genuine {@code NoSuchKey} is treated as "not there". The HEAD it
+   * replaces caught every exception, so a transient storage failure looked identical to a
+   * not-yet-migrated attachment and silently served the empty Oracle BLOB in its place, handing the
+   * user a 0-byte file. Anything that is not NoSuchKey now propagates.
+   */
+  public byte[] getObjectBytesIfPresent(String key) {
+    try (S3Client client = client()) {
+      return client.getObjectAsBytes(builder -> builder.bucket(properties.bucket()).key(key))
+          .asByteArray();
+    } catch (NoSuchKeyException ex) {
+      return null;
+    }
+  }
+
+  /**
+   * Whether {@code key} is present, without transferring it.
+   *
+   * <p>Kept alongside {@link #getObjectBytesIfPresent}, which serves the download path: there a
+   * check followed by a GET was two round trips for one file, so the two were folded into one call.
+   * The migration asks a different question — "has this one been done already?" over thousands of
+   * rows — and answering it by downloading each object would move the whole corpus to decide it did
+   * not need to.
+   */
   public boolean objectExists(String key) {
     try (S3Client client = client()) {
       client.headObject(builder -> builder.bucket(properties.bucket()).key(key));

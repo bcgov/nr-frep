@@ -1,6 +1,7 @@
 package ca.bc.gov.nrs.frep.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.util.Date;
@@ -100,25 +101,53 @@ public class ChrFeatureDetail implements java.io.Serializable {
 	private Date updateTimestamp;
 	@Column(name = "REVISION_COUNT")
 	private long revisionCount;
-	@OneToMany(targetEntity = ChrMgmtStrategyUsed.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrMgmtStrategyUsed.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrMgmtStrategyUseds = new HashSet(0);
-	@OneToMany(targetEntity = ChrMgmtStrategyPlanned.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrMgmtStrategyPlanned.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrMgmtStrategyPlanneds = new HashSet(0);
-	@OneToMany(targetEntity = ChrFeatureAgeXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatureAgeXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatureAgeXrefs = new HashSet(0);
-	@OneToMany(targetEntity = ChrFeatureLocationDetail.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatureLocationDetail.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatureLocationDetails = new HashSet(0);
-	@OneToMany(targetEntity = ChrFeatureTypeXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatureTypeXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatureTypeXrefs = new HashSet(0);
-	@OneToMany(targetEntity = ChrFeatWindthrTreatXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatWindthrTreatXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatWindthrTreatXrefs = new HashSet(0);
-	@OneToMany(targetEntity = ChrFeatureDamageAgentXref.class, fetch = FetchType.EAGER)
+	// Inert while CheckListMapper walks feature-by-feature (no sibling collections are
+	// registered when one is initialised); effective as soon as the details are loaded up
+	// front. Kept so that fix does not also have to remember this.
+	@BatchSize(size = 25)
+	@OneToMany(targetEntity = ChrFeatureDamageAgentXref.class, fetch = FetchType.LAZY)
 	@JoinColumn(name = "CHR_FEATURE_ID", insertable = false, updatable = false)
 	private Set chrFeatureDamageAgentXrefs = new HashSet(0);
 

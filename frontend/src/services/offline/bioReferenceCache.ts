@@ -16,8 +16,15 @@ import type { BecRow, CodeOption } from '@/types/configuration';
  * separate sync path to maintain.
  */
 
-/** The four code lists the Bio plot views read (`BioPlotsView.tsx:226-229`). */
-const CODE_LISTS = ['species', 'wildlifeTreeDecay', 'cwdDecay', 'strataTypes'] as const;
+/**
+ * The four code lists the Bio plot views read (`BioPlotsView.tsx:226-229`).
+ *
+ * A type, not a `const` array: it is only ever read in a type position, so the runtime value was
+ * dead weight — `@typescript-eslint/no-unused-vars` flags exactly that ("assigned a value but only
+ * used as a type"). `refresh` below calls a different client method per list, so there is nothing
+ * to iterate it for.
+ */
+type CodeListKey = 'species' | 'wildlifeTreeDecay' | 'cwdDecay' | 'strataTypes';
 
 /**
  * The BEC catalogue.
@@ -61,7 +68,7 @@ export const bioReferenceCache = {
   },
 
   /** A cached code list, or undefined when it has never been pulled. */
-  async codeList(key: (typeof CODE_LISTS)[number]): Promise<CodeOption[] | undefined> {
+  async codeList(key: CodeListKey): Promise<CodeOption[] | undefined> {
     const row = await bioDb.bioReference.get(key);
     return row?.rows as CodeOption[] | undefined;
   },
@@ -94,7 +101,7 @@ export const filterBec = (
   criteria: Partial<Record<string, string>>,
 ): BecRow[] => {
   const matches = (value: string | undefined, needle: string | undefined): boolean => {
-    if (!needle || !needle.trim()) return true;
+    if (!needle?.trim()) return true;
     return (value ?? '').toUpperCase().includes(needle.trim().toUpperCase());
   };
   return rows.filter(

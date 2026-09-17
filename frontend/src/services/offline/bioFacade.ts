@@ -96,8 +96,9 @@ const upsertStratum = (
   stratum: BioStratum,
   plots?: BioPlot[],
 ): BioSnapshot => {
-  const existing = snapshot.strata.find((e) => e.stratum.stratumId === stratum.stratumId);
-  const strata = existing
+  // .some, not .find: the match is only ever read as a boolean, and .some stops at the first hit.
+  const exists = snapshot.strata.some((e) => e.stratum.stratumId === stratum.stratumId);
+  const strata = exists
     ? snapshot.strata.map((e) =>
         e.stratum.stratumId === stratum.stratumId ? { stratum, plots: plots ?? e.plots } : e)
     : [...snapshot.strata, { stratum, plots: plots ?? [] }];
@@ -378,7 +379,15 @@ const toBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const result = String(reader.result);
+      // Narrow rather than String(): reader.result is `string | ArrayBuffer | null`, and String()
+      // on the ArrayBuffer branch yields "[object ArrayBuffer]" — a base64 payload that decodes to
+      // garbage and would be stored as the attachment. readAsDataURL always gives a string, so the
+      // other branches are a real failure and are reported as one.
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Could not read the file as a data URL'));
+        return;
+      }
+      const result = reader.result;
       resolve(result.slice(result.indexOf(',') + 1));
     };
     reader.onerror = () => reject(reader.error ?? new Error('Could not read the file'));

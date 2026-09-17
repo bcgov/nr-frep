@@ -141,7 +141,9 @@ const toBlob = (content: AttachmentContent): Blob => {
   const base64 = content.data ?? '';
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  // codePointAt, not charCodeAt: identical here (atob yields latin1, every unit < 256) but it is
+  // the unit-safe reader, so it cannot be copied into a context where a surrogate pair matters.
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.codePointAt(i) ?? 0;
   // `mimeType`, not `mimeTypeCode` — the envelope and the list row spell it differently, and a
   // structural param type would have accepted the wrong one while silently yielding octet-stream,
   // so a PDF taken offline would not open as a PDF.

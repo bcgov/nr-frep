@@ -93,6 +93,9 @@ test.describe('SLR offline round trip', () => {
 
   test('take offline, edit with no connectivity, then check in', async ({ page }) => {
     const checklistId = await openAnActiveSlrChecklist(page);
+    // Not an ignored test — a data-availability guard. The PR-preview slot this runs against may
+    // hold no ACT SLR checklist, and there is nothing to take offline if so. Sonar reads any
+    // `test.skip` as a disabled test; this one is evaluated per run and skips only on that fact.
     test.skip(!checklistId, 'This slot has no ACT Stand Level Retention checklist to take offline.');
 
     let checkedOut = false;
@@ -194,6 +197,9 @@ test.describe('SLR checked-out checklist', () => {
     // The reads-first/checkout-last guarantee, which is the reason the snapshot GET does not claim
     // the checkout. Killing the network mid-download must cost nothing on either side.
     const checklistId = await openAnActiveSlrChecklist(page);
+    // Not an ignored test — a data-availability guard. The PR-preview slot this runs against may
+    // hold no ACT SLR checklist, and there is nothing to take offline if so. Sonar reads any
+    // `test.skip` as a disabled test; this one is evaluated per run and skips only on that fact.
     test.skip(!checklistId, 'This slot has no ACT Stand Level Retention checklist to take offline.');
 
     await page.getByRole('button', { name: 'Take offline' }).click();

@@ -109,6 +109,14 @@ objects:
           initContainers:
             - name: seed-srv
               image: ${REGISTRY}:${IMAGE_TAG}
+              # IMAGE_TAG is the PR number (or "test"/"prod") — a MUTABLE tag. Re-applying this
+              # template after a rebuild produces a byte-identical pod spec, so Kubernetes creates no
+              # new ReplicaSet and never restarts; without Always the default for a non-:latest tag
+              # is IfNotPresent, so even a restarted pod reuses the layer cached on the node. The
+              # result is a frontend serving a build from several commits ago while the backend —
+              # which has always set this — moves on. Both containers need it: this one copies the
+              # built assets into the writable volume the app is actually served from.
+              imagePullPolicy: Always
               command:
                 - sh
                 - -c
@@ -134,6 +142,8 @@ objects:
           containers:
             - name: ${NAME}-frontend
               image: ${REGISTRY}:${IMAGE_TAG}
+              # See seed-srv above — mutable tag, so the pull must not be skipped.
+              imagePullPolicy: Always
               ports:
                 - name: http
                   containerPort: 3000

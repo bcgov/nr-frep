@@ -225,8 +225,11 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isSideMenu: true,
-    // Same gate as the SLR checklist pages themselves.
-    roles: ['FREP_ADMIN', 'FREP_EDITOR'],
+    // Same gate as the SLR checklist pages themselves. FREP_ADMINISTRATOR, not the old
+    // FREP_ADMIN: this route was written on the branch before main renamed the role, and the
+    // merge took both sides cleanly — leaving a literal that matches nothing, so ProtectedRoute
+    // would have sent every admin to /unauthorized.
+    roles: ['FREP_ADMINISTRATOR', 'FREP_EDITOR'],
   },
   {
     path: '/chr/offline',

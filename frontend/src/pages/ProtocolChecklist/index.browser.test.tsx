@@ -295,8 +295,8 @@ describe('ProtocolChecklistPage when checked out', () => {
     renderPage();
 
     await screen.findByText('Read only');
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Unsubmit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unsubmit checklist' })).toBeNull();
   });
 
   it('shows Reactivate only to a sys admin', async () => {
@@ -325,7 +325,7 @@ describe('ProtocolChecklistPage when checked out', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: 'Unsubmit' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Unsubmit checklist' })).toBeTruthy();
   });
 });
 
@@ -366,7 +366,7 @@ describe('ProtocolChecklistPage offline actions', () => {
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Take offline' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
   });
 
   it('checks the local copy in', async () => {

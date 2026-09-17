@@ -1238,13 +1238,15 @@ class ProtocolChecklistServiceTest {
   @ValueSource(strings = {"report.docx", "data.xlsx", "deck.pptx", "scan.tiff", "photo.webp"})
   void acceptsTheFourCharacterExtensions(String fileName) {
     assertDoesNotThrow(
-        () -> service.saveAttachment("bio", "1", upload(fileName, new byte[] {1, 2, 3}), "desc"));
+        () -> service.saveAttachment(
+            "bio", "1", upload(fileName, new byte[] {1, 2, 3}), "desc", null));
   }
 
   @Test
   void listsTheNewTypesInTheRejectionMessageSoTheUserCanSeeThemAllowed() {
     ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-        () -> service.saveAttachment("bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc"));
+        () -> service.saveAttachment(
+            "bio", "1", upload("evil.exe", new byte[] {1, 2, 3}), "desc", null));
 
     String reason = String.valueOf(ex.getReason());
     // The display string is maintained separately from the enforcing Set; if they drift, the error
@@ -1284,7 +1286,8 @@ class ProtocolChecklistServiceTest {
     byte[] content = {1, 2};
 
     service.saveAttachment("bio", "1",
-        new MockMultipartFile("file", "map.webp", "application/octet-stream", content), "desc");
+        new MockMultipartFile("file", "map.webp", "application/octet-stream", content), "desc",
+        null);
 
     verify(writeRepository).saveAttachment(
         eq("1"), eq("SLR"), eq("map.webp"), eq("desc"), eq("image/webp"), eq(content),

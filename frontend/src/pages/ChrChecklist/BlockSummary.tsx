@@ -349,6 +349,10 @@ const BlockSummary: FC<{
               id="chr-rating-rationale"
               labelText="Rating rationale"
               value={draft.ratingRationale}
+              // 4000 chars — the largest free-text column in CHR — was landing in the 3-row default,
+              // so the widest field had the shortest box and evaluators scrolled a sliver of their
+              // own paragraph. 10 matches Notes and Feature comments, the other long-form fields.
+              rows={10}
               limit={BLOCK_TEXT_LIMITS.ratingRationale}
               invalid={Boolean(fieldErrors.ratingRationale)}
               invalidText={fieldErrors.ratingRationale}

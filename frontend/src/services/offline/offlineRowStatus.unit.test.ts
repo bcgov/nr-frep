@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bioRowStatus, type BioRowInputs } from '@/services/offline/bioOfflineStatus';
+import { bioRowStatus, type BioRowInputs } from '@/services/offline/offlineRowStatus';
 
 const inputs = (over: Partial<BioRowInputs> = {}): BioRowInputs => ({
   syncState: 'CLEAN',

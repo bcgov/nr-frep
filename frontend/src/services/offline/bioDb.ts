@@ -57,6 +57,19 @@ export type OfflineBioChecklist = {
   tombstones: BioTombstone[];
   /** Set when the sync stopped and needs the user — shown on the offline list, not just the page. */
   conflictReason?: string;
+  /**
+   * The opening's numeric id, for the offline list's Opening ID column.
+   *
+   * **Not the opening number** — the SLR page shows both, and they are different values: the number
+   * is the map-sheet style label ("93A 023 0.0 111"), the id is the RESULTS key ("86496"). CHR's
+   * list column is the id, so this is too.
+   *
+   * Captured from the checklist header at take-offline time rather than read off the snapshot: the
+   * snapshot's `opening` holds the Opening tab's *editable* fields, and neither value is among
+   * them. Display metadata only — never posted back. Optional, so a copy written by an earlier
+   * build reads back undefined and shows the same "—" it did before.
+   */
+  openingId?: string;
   updatedAt: number;
 };
 

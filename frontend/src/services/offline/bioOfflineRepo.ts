@@ -69,6 +69,7 @@ export const bioOfflineRepo = {
     snapshot: BioSnapshot,
     deviceCheckoutGuid?: string,
     appBuildId?: string,
+    openingId?: string,
   ): Promise<OfflineBioChecklist> {
     const record: OfflineBioChecklist = {
       checklistId: snapshot.checklistId,
@@ -77,6 +78,7 @@ export const bioOfflineRepo = {
       schemaVersion: snapshot.schemaVersion ?? BIO_SNAPSHOT_SCHEMA_VERSION,
       appBuildId,
       deviceCheckoutGuid,
+      openingId,
       tombstones: [],
       updatedAt: Date.now(),
     };

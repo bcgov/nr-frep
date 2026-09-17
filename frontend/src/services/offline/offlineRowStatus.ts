@@ -79,3 +79,30 @@ export const bioRowStatus = ({
   }
   return { label: 'Synced', tag: 'green' };
 };
+
+export type ChrRowInputs = {
+  /** True when there are local edits not yet uploaded. CHR's check-in is two calls, so one flag says it all. */
+  dirty: boolean;
+  /** Undefined while the server probe is still in flight. */
+  verdict?: StalenessVerdict;
+};
+
+/**
+ * The Status cell for one offline CHR copy.
+ *
+ * Same ranking as {@link bioRowStatus} minus the states CHR cannot reach: there is no attachment
+ * queue to reject files from and no multi-step sync to be halfway through, so it collapses to
+ * staleness → unverified → dirty. Kept beside its SLR sibling because the unified offline list
+ * renders both through one `OfflineRowStatus`, and the two must stay legible as a pair.
+ */
+export const chrRowStatus = ({ dirty, verdict }: ChrRowInputs): OfflineRowStatus => {
+  if (verdict && isStale(verdict)) {
+    return {
+      label: 'Out of date',
+      tag: 'red',
+      detail: "This copy can't be checked in because the checklist changed on the server.",
+    };
+  }
+  if (verdict === 'UNVERIFIED') return { label: 'Unverified', tag: 'cool-gray' };
+  return dirty ? { label: 'Unsynced changes', tag: 'magenta' } : { label: 'Synced', tag: 'green' };
+};

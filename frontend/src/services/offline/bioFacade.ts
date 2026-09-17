@@ -362,9 +362,12 @@ export const withBioOffline = (client: Client): Client => {
     async submit(protocol: string, checklistId: string): Promise<void> {
       const record = await bioOfflineRepo.load(checklistId);
       if (record) {
-        // CHR parity: submit is online-only. SLR's submit validation lives in the proc, so a queued
-        // offline submit could be rejected days later by rules the device never had. The UI hides
-        // the action; this is the backstop.
+        // Reached only if a submit somehow skips the check-in. The page's Submit checks the copy in
+        // first (ProtocolChecklist handleSubmit), which removes this record — so by the time submit
+        // is delegated, `load` finds nothing and the call goes to the server. This is the backstop
+        // for the order being wrong, not a refusal to submit offline work: submit validation lives
+        // in the proc, so a submit queued on a device could be rejected days later by rules the
+        // device never had, and the server has to hold an ACT checklist to submit at all.
         throw new Error('Check this checklist in before submitting it.');
       }
       return client.submit(protocol as never, checklistId);

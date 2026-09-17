@@ -248,10 +248,41 @@ const ProtocolChecklistPage: FC = () => {
         return;
       }
 
+      // Submit requires the server status to be ACT, but a copy held on this device leaves it RDO.
+      // So check in first (attachments, then the graph — which flips RDO → ACT and clears the local
+      // record), then submit the now-active checklist. This is CHR's order and CHR's reasoning: the
+      // pre-flight above runs against the local copy, so a checklist that will fail validation is
+      // turned away *before* the irreversible check-in; and once checked in the local copy cannot
+      // upload a second time, so a submit the proc then refuses leaves us cleanly on the online ACT
+      // checklist, where the evaluator can fix it and resubmit.
+      if (offlineRecord) {
+        setOfflineBusy('Checking in…');
+        try {
+          await runCheckIn();
+        } finally {
+          // Runs on the failure path too: check-in removes the local record only on success, so the
+          // page must re-read either way to show what actually survived.
+          await refreshOfflineState();
+          setOfflineBusy(null);
+        }
+      }
+
       await API.protocolChecklist.submit(backendCode, id);
       display({ kind: 'success', title: 'Checklist submitted', timeout: 5000 });
       setReloadKey((k) => k + 1);
     } catch (err) {
+      // A blocked check-in is not a failed submit — the submit was never attempted and the local
+      // copy is still on the device. Saying "Submit failed" would send the evaluator looking for a
+      // validation problem that isn't there.
+      if (err instanceof CheckInBlockedError) {
+        display({
+          kind: 'error',
+          title: 'Check in stopped — nothing was submitted',
+          subtitle: err.message,
+          timeout: 9000,
+        });
+        return;
+      }
       const validation = extractValidationErrors(err);
       if (validation) {
         setValidationErrors(validation);
@@ -333,6 +364,10 @@ const ProtocolChecklistPage: FC = () => {
     setOfflineBusy('Preparing…');
     try {
       await takeBioChecklistOffline(id, {
+        // The header's "Opening ID" (the RESULTS key, e.g. 86496) — NOT `checklist.openingNumber`,
+        // which is the map-sheet label ("93A 023 0.0 111"). The page renders both, a row apart; the
+        // offline list's column is the id, matching CHR. See TakeOfflineOptions.openingId.
+        openingId: headerExtras['Opening ID'],
         onProgress: (progress) => {
           if (progress.phase === 'attachments' && progress.total) {
             setOfflineBusy(`Downloading files (${progress.done ?? 0} of ${progress.total})…`);
@@ -370,19 +405,30 @@ const ProtocolChecklistPage: FC = () => {
     }
   };
 
+  /**
+   * Upload the local copy: attachments first, then the graph.
+   *
+   * Extracted from the Check in button because Submit runs it too — an offline copy has to be
+   * checked in before it can be submitted. Reports progress through `offlineBusy` and leaves the
+   * caller to refresh state and say what happened, since the two callers report it differently.
+   */
+  const runCheckIn = async () => {
+    await checkInBioChecklist(id, {
+      onProgress: (progress) => {
+        if (progress.phase === 'attachments' && progress.total) {
+          setOfflineBusy(`Uploading files (${progress.done ?? 0} of ${progress.total})…`);
+        } else if (progress.phase === 'graph') {
+          setOfflineBusy('Saving to the server…');
+        }
+      },
+    });
+  };
+
   /** Check the local copy back in: attachments first, then the graph. */
   const handleCheckIn = async () => {
     setOfflineBusy('Checking in…');
     try {
-      await checkInBioChecklist(id, {
-        onProgress: (progress) => {
-          if (progress.phase === 'attachments' && progress.total) {
-            setOfflineBusy(`Uploading files (${progress.done ?? 0} of ${progress.total})…`);
-          } else if (progress.phase === 'graph') {
-            setOfflineBusy('Saving to the server…');
-          }
-        },
-      });
+      await runCheckIn();
       await refreshOfflineState();
       display({ kind: 'success', title: 'Checked in', timeout: 5000 });
       setReloadKey((k) => k + 1);
@@ -476,8 +522,31 @@ const ProtocolChecklistPage: FC = () => {
    * nothing here: that device has to check in first, and a sys admin can still reactivate a stranded
    * checkout from the read-only banner below.
    */
+  /**
+   * `!checkedOut || !!offlineRecord` — checked out to SOMEONE ELSE hides the actions; checked out to
+   * THIS device does not.
+   *
+   * `getChecklist` is not facaded, so once take-offline claims the checkout the page sees the
+   * server's `RDO`. A bare `!checkedOut` therefore withdrew every action from the holder the moment
+   * the checkout landed: after a reload there was no Check in button, and the copy could not be
+   * synced or released from the page at all. CHR draws the line the same way — an offline copy is
+   * editable, someone else's checkout is not.
+   */
   const actionsReady =
-    !loading && !notFound && !hasError && !!checklist && canEdit && !isLegacySlb && !checkedOut;
+    !loading && !notFound && !hasError && !!checklist && canEdit && !isLegacySlb
+    && (!checkedOut || !!offlineRecord);
+
+  /**
+   * Reactivate: admin recovery for a checklist stranded on **someone else's** device.
+   *
+   * `!offlineRecord` is the important half — it is never offered on a copy this device holds, where
+   * the right action is Check in. Without that a sys admin holding their own copy was shown a button
+   * whose whole purpose is to discard unsynced work, next to the one that saves it. CHR gates it the
+   * same way (`!isOfflineCopy && online && canPerformSysAdminActions && status === READ_ONLY_OFFLINE`).
+   */
+  const canReactivate =
+    !loading && !notFound && !hasError && !!checklist
+    && checkedOut && !offlineRecord && online && canPerformSysAdminActions;
 
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">
@@ -500,8 +569,33 @@ const ProtocolChecklistPage: FC = () => {
             {/* Status reads beside the heading rather than as a cell of the tombstone grid: it
                 governs what the whole page allows, so it belongs where the eye lands first. */}
             {checklist && (
-              <Tag type={statusTagType(checklist.statusCode)} size="sm">
-                {statusLabel(checklist.statusCode, checklist.statusLabel)}
+              <Tag
+                type={statusTagType(offlineRecord ? 'RDO' : checklist.statusCode)}
+                size="sm"
+              >
+                {/* Two corrections to the raw code, both for CHR parity:
+                    1. An offline copy is served from the local snapshot, taken while the checklist
+                       was still ACT — so `checklist.statusCode` reads "Active" even though the
+                       server now holds it RDO. Label the server's truth.
+                    2. RDO reads "Checked out", not the shared map's "Read-only". That map serves the
+                       search and accepted-sites tables, where the generic word is right; on a
+                       checklist page the specific one says *why* the page is read-only, which is
+                       what CHR's own map does (`READ_ONLY_OFFLINE: 'Checked out'`). */}
+                {offlineRecord || checklist.statusCode === 'RDO'
+                  ? 'Checked out'
+                  : statusLabel(checklist.statusCode, checklist.statusLabel)}
+              </Tag>
+            )}
+            {/* An offline copy is your editable local copy (always RDO on the server), so it is
+                flagged separately from the status above — CHR parity. */}
+            {offlineRecord && (
+              <Tag type="teal" size="sm">
+                Offline copy
+              </Tag>
+            )}
+            {!online && (
+              <Tag type="red" size="sm">
+                No network connection
               </Tag>
             )}
             {/* `actionsReady` rather than main's inline condition: it is that same gate plus
@@ -509,13 +603,28 @@ const ProtocolChecklistPage: FC = () => {
                 permission check is lost by using it. */}
             {actionsReady && (
               <div className="protocol-checklist__actions">
-                {/* While a local copy exists it is the authoritative one, so it replaces the other
-                    actions entirely — offering Take offline or Submit alongside it would invite a
-                    second download over the top of unsynced field work. */}
+                {/* While a local copy exists it is the authoritative one, so Take offline is not
+                    offered alongside it — a second download over the top of unsynced field work.
+                    Submit is, and checks in on the way through (see handleSubmit): CHR offers both
+                    on an offline copy, and withholding Submit here meant an evaluator who had
+                    finished in the field had to check in and then find the checklist again. */}
                 {offlineRecord ? (
-                  <Button onClick={() => void handleCheckIn()} disabled={!!offlineBusy || !online}>
-                    {offlineBusy ?? 'Check in'}
-                  </Button>
+                  <>
+                    {/* Submit needs the server — and so does the check-in it runs first — so it is
+                        offered only while online, as CHR gates its offline-copy Submit. */}
+                    {online && (
+                      <Button onClick={() => void handleSubmit()} disabled={busy || !!offlineBusy}>
+                        Submit checklist
+                      </Button>
+                    )}
+                    <Button
+                      kind="tertiary"
+                      onClick={() => void handleCheckIn()}
+                      disabled={!!offlineBusy || !online || busy}
+                    >
+                      {offlineBusy ?? 'Check in'}
+                    </Button>
+                  </>
                 ) : (
                   <>
                     {submitted ? (
@@ -540,6 +649,13 @@ const ProtocolChecklistPage: FC = () => {
                     )}
                   </>
                 )}
+              </div>
+            )}
+            {canReactivate && (
+              <div className="protocol-checklist__actions">
+                <Button kind="tertiary" onClick={() => void handleActivate()} disabled={busy}>
+                  Reactivate
+                </Button>
               </div>
             )}
           </div>
@@ -580,16 +696,15 @@ const ProtocolChecklistPage: FC = () => {
         <>
           {/* A copy held on this device. Shown above everything else because while it exists it is
               the authoritative one — the rest of this page is its local state. */}
-          {offlineRecord && (
+          {/* No "Saved on this device" banner: the teal "Offline copy" chip beside the heading already
+              says it, and CHR carries no such banner. Only the rejected-files case gets one, because
+              it needs a decision rather than an announcement. */}
+          {offlineRecord && rejectedFiles.length > 0 && (
             <Column sm={4} md={8} lg={16}>
               <InlineNotification
-                kind="info"
-                title="Saved on this device"
-                subtitle={
-                  rejectedFiles.length > 0
-                    ? 'Some files were refused by the server. Review them below, then check in again.'
-                    : 'You can edit this checklist without a connection. Check it in when you are back online.'
-                }
+                kind="warning"
+                title="Some files were refused"
+                subtitle="The server refused these files. Review them below, then check in again."
                 hideCloseButton
                 lowContrast
               />
@@ -616,7 +731,11 @@ const ProtocolChecklistPage: FC = () => {
             </Column>
           )}
 
-          {(submitted || isLegacySlb || checkedOut) && (
+          {/* `!offlineRecord` throughout: when the copy is THIS device's, RDO is not a read-only
+              state — it is the normal state of holding one, and the page is fully editable. Without
+              this the holder was told their own checklist was read-only, and a sys-admin holder was
+              offered Reactivate on their own work. CHR draws the same line with `!isOfflineCopy`. */}
+          {!offlineRecord && (submitted || isLegacySlb || checkedOut) && (
             <Column sm={4} md={8} lg={16}>
               <InlineNotification
                 kind="info"
@@ -625,13 +744,6 @@ const ProtocolChecklistPage: FC = () => {
                 hideCloseButton
                 lowContrast
               />
-              {checkedOut && canPerformSysAdminActions && (
-                <div className="protocol-checklist__actions">
-                  <Button kind="tertiary" onClick={() => void handleActivate()} disabled={busy}>
-                    Reactivate
-                  </Button>
-                </div>
-              )}
             </Column>
           )}
 

@@ -24,7 +24,7 @@ import { expectNoGlobalError, gotoProtected, waitForSettled } from './utils';
  * failed run must not strand a checkout on a slot everyone shares.
  */
 
-const OFFLINE_LIST = '/protocol-checklists/offline';
+const OFFLINE_LIST = '/offline';
 
 /** Cut the browser off from the network, the way a device in the field is. */
 const goOffline = async (page: Page): Promise<void> => {

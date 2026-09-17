@@ -13,7 +13,7 @@ route set is active for a given auth state).
 | **Not logged in** | `/` (Landing), `/auth/callback`, `*` (Not Found) — or the **offline set** when the device is offline |
 | **Logged in, no FREP role** | `/unauthorized` only |
 | **Logged in, has a FREP role** | The full **protected** app (below) |
-| **Offline** | Dashboard + CHR routes only (`/dashboard`, `/protocol-checklists/chr/:id`, `/chr/offline`) |
+| **Offline** | Dashboard + the offline-capable routes (`/dashboard`, `/offline`, `/protocol-checklists/chr/:id`, `/protocol-checklists/slr/:id`) |
 
 ## Routes
 
@@ -28,7 +28,7 @@ route set is active for a given auth state).
 | `/site-detail/:id` | Site Detail | — | any |
 | `/protocol-checklists/slr/:id` | Biodiversity (SLB/SLR) checklist | — | any |
 | `/protocol-checklists/chr/:id` | CHR checklist | — | any |
-| `/chr/offline` | CHR offline list (IndexedDB) | — | any |
+| `/offline` | Offline checklists — CHR + SLR copies held in IndexedDB | ✓ | any |
 | `/search/checklists` | Checklist Search | ✓ | any |
 | `/reports` | Reports | ✓ | any |
 | `/admin/master-list` | Master List Admin | ✓ | **`FREP_ADMINISTRATOR`** |
@@ -67,7 +67,7 @@ flowchart TD
     sd["/site-detail/:id"]
     bio["/protocol-checklists/slr/:id<br/>Biodiversity"]
     chr["/protocol-checklists/chr/:id<br/>CHR"]
-    chroff["/chr/offline"]
+    off["/offline<br/>Offline checklists"]
 
     rl --> sd
     as --> ats
@@ -76,7 +76,8 @@ flowchart TD
     ats --> sdnew --> sd
     cs --> bio
     cs --> chr
-    chr -.->|offline| chroff
+    chr -.->|offline| off
+    bio -.->|offline| off
 
     classDef admin fill:#fdf2f2,stroke:#c00,color:#900;
     class adm admin;

@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ProtocolChecklistPage from './index';
 
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import API from '@/services/APIs';
-import { checkInBioChecklist } from '@/services/offline/bioCheckIn';
+import { CheckInBlockedError, checkInBioChecklist } from '@/services/offline/bioCheckIn';
 import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 import { takeBioChecklistOffline } from '@/services/offline/bioTakeOffline';
 
@@ -48,7 +49,7 @@ vi.mock('@/context/confirm/useConfirm', () => ({
   useConfirm: () => vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
+vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: vi.fn(() => true) }));
 
 vi.mock('@/services/offline/bioOfflineRepo', () => ({
   bioOfflineRepo: {
@@ -78,6 +79,8 @@ const { display } = vi.hoisted(() => ({ display: vi.fn() }));
 vi.mock('@/context/notification/useNotification', () => ({
   useNotification: () => ({ display }),
 }));
+
+const onlineMock = useOnlineStatus as unknown as ReturnType<typeof vi.fn>;
 
 const repo = bioOfflineRepo as unknown as {
   load: ReturnType<typeof vi.fn>;
@@ -347,6 +350,31 @@ describe('ProtocolChecklistPage offline actions', () => {
     expect(takeBioChecklistOffline).toHaveBeenCalledWith('9001', expect.anything());
   });
 
+  it('stores the numeric Opening ID with the copy, not the opening number', async () => {
+    // The two are different fields the page renders a row apart: `openingNumber` is the map-sheet
+    // label ("93A 023 0.0 111"), the header extra "Opening ID" is the RESULTS key ("86496"). The
+    // offline list's column is the id — passing the number put the wrong value in every SLR row.
+    api.getChecklist.mockResolvedValue({
+      ...activeChecklist,
+      openingNumber: '93A 023 0.0 111',
+      sections: [
+        {
+          id: 'opening',
+          title: 'Opening info',
+          fields: [{ label: 'Opening ID', value: '86496' }],
+        },
+      ],
+    });
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Take offline' }));
+
+    expect(takeBioChecklistOffline).toHaveBeenCalledWith(
+      '9001',
+      expect.objectContaining({ openingId: '86496' }),
+    );
+  });
+
   it('does not offer Take offline for a submitted checklist', async () => {
     // Nothing to take, and the server would refuse the checkout.
     api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'SUB' });
@@ -357,16 +385,120 @@ describe('ProtocolChecklistPage offline actions', () => {
     expect(screen.queryByRole('button', { name: 'Take offline' })).toBeNull();
   });
 
-  it('swaps Take offline for Check in once a copy is held', async () => {
-    // While a local copy exists it is the authoritative one — offering both would invite a second
-    // download over the top of unsynced field work.
+  it('labels a checked-out checklist "Checked out", not "Read-only"', async () => {
+    // The shared STATUS_LABELS map says "Read-only" for the search and accepted-sites tables; on a
+    // checklist page CHR says "Checked out", which says *why* the page is read-only.
+    api.getChecklist.mockResolvedValue({
+      ...activeChecklist,
+      statusCode: 'RDO',
+      statusLabel: 'Read-only',
+    });
+    repo.load.mockResolvedValue(null);
+
+    renderPage();
+
+    expect(await screen.findByText('Checked out')).toBeTruthy();
+    expect(screen.queryByText('Read-only')).toBeNull();
+  });
+
+  it('labels a copy held on this device "Checked out" too', async () => {
+    // The local snapshot was taken while the checklist was still ACT, so its statusCode lies; the
+    // server holds it RDO. CHR labels the server's truth.
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'ACT' });
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
+
+    renderPage();
+
+    expect(await screen.findByText('Checked out')).toBeTruthy();
+    expect(screen.queryByText('Active')).toBeNull();
+  });
+
+  it('swaps Take offline for Check in once a copy is held, and keeps Submit', async () => {
+    // Take offline goes: while a local copy exists it is the authoritative one, and offering a
+    // second download over the top of unsynced field work is a trap. Submit stays — CHR offers it
+    // on an offline copy and checks in on the way through, and withholding it here made an
+    // evaluator who had finished in the field check in and then find the checklist again.
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
 
     renderPage();
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Submit checklist' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Take offline' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
+  });
+
+  // ── Offline markers, reported from BA4 ──────────────────────────────
+  //
+  // Holding a copy showed an "Active" chip, no "Offline copy" chip, a redundant "Saved on this
+  // device" banner, a "Read only" banner about your own editable copy, and — for a sys admin — a
+  // Reactivate button, whose whole purpose is discarding someone else's stranded work. CHR had all
+  // of this right already; these pin SLR to the same contract.
+
+  it('flags a held copy with its own chip', async () => {
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Check in' });
+
+    expect(screen.getByText('Offline copy')).toBeTruthy();
+  });
+
+  it('shows the server status, not the snapshot the copy was taken from', async () => {
+    // The facade serves the local snapshot, captured while the checklist was still ACT, so the raw
+    // statusCode reads "Active" even though the server now holds it RDO.
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Check in' });
+
+    expect(screen.queryByText('Active')).toBeNull();
+  });
+
+  it('drops the redundant "Saved on this device" banner', async () => {
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Check in' });
+
+    expect(screen.queryByText('Saved on this device')).toBeNull();
+  });
+
+  it('does not call your own editable copy read only', async () => {
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Check in' });
+
+    expect(screen.queryByText('Read only')).toBeNull();
+  });
+
+  it('never offers Reactivate on a copy this device holds', async () => {
+    // Reactivate discards unsynced work. Beside Check in, which saves it, that is a trap.
+    //
+    // The server MUST be RDO here, which is the real shape once take-offline has claimed the
+    // checkout: `getChecklist` is not facaded, so it returns the server's view. With an ACT fixture
+    // this assertion passes whatever the gate says, because `checkedOut` is false either way.
+    authMock.canPerformSysAdminActions = true;
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'RDO' });
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Check in' });
+
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).toBeNull();
+    authMock.canPerformSysAdminActions = false;
+  });
+
+  it('still offers Reactivate to an admin when the copy is on SOMEONE ELSE\'s device', async () => {
+    // The other half of the same gate — RDO with no local copy is exactly what Reactivate is for.
+    authMock.canPerformSysAdminActions = true;
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'RDO' });
+    repo.load.mockResolvedValue(undefined);
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Reactivate' })).toBeTruthy();
+    authMock.canPerformSysAdminActions = false;
   });
 
   it('checks the local copy in', async () => {
@@ -376,6 +508,60 @@ describe('ProtocolChecklistPage offline actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Check in' }));
 
     expect(checkInBioChecklist).toHaveBeenCalledWith('9001', expect.anything());
+  });
+
+  it('checks the local copy in before submitting it', async () => {
+    // Submit needs the server status to be ACT; a copy held here leaves it RDO. CHR's order: check
+    // in first (which flips RDO → ACT and clears the local record), then submit.
+    readyChecklist();
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
+    const order: string[] = [];
+    (checkInBioChecklist as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push('checkIn');
+    });
+    api.submit.mockImplementation(async () => {
+      order.push('submit');
+    });
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
+
+    await vi.waitFor(() => expect(order).toEqual(['checkIn', 'submit']));
+  });
+
+  it('does not submit when the check-in is blocked', async () => {
+    // A refused file or a reclaimed checkout stops the check-in. Submitting anyway would ask the
+    // proc about a checklist the server still holds RDO, and the local work would still be here —
+    // so the page says what actually happened instead of reporting a failed submit.
+    readyChecklist();
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CONFLICT' });
+    (checkInBioChecklist as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new CheckInBlockedError('A file was refused by the server.'),
+    );
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit checklist' }));
+
+    await vi.waitFor(() =>
+      expect(display).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Check in stopped — nothing was submitted' }),
+      ),
+    );
+    // Asserted so the case cannot pass by the pre-flight having blocked before check-in was reached.
+    expect(checkInBioChecklist).toHaveBeenCalledWith('9001', expect.anything());
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+
+  it('withholds Submit on an offline copy while there is no network', async () => {
+    // Both halves need the server — the check-in uploads, and the proc decides the submit.
+    onlineMock.mockReturnValue(false);
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
+
+    renderPage();
+
+    await screen.findByRole('button', { name: 'Check in' });
+    expect(screen.queryByRole('button', { name: 'Submit checklist' })).toBeNull();
+    onlineMock.mockReturnValue(true);
   });
 
   it('lists each refused file with its reason and a discard action', async () => {

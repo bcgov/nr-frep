@@ -30,6 +30,15 @@ export type TakeOfflineProgress = {
 export type TakeOfflineOptions = {
   onProgress?: (progress: TakeOfflineProgress) => void;
   /**
+   * The opening's numeric id, stored alongside the copy for the offline list's Opening ID column.
+   * **Not the opening number** — the page shows both and they differ (see OfflineBioChecklist).
+   *
+   * Passed in by the page, which already read the checklist header: the snapshot carries only the
+   * Opening tab's editable fields, so deriving it here would mean a second header read on every
+   * take-offline.
+   */
+  openingId?: string;
+  /**
    * Called when the download looks too large for the device. Return true to continue anyway.
    * Defaults to refusing, so a caller that forgets to handle it fails safe.
    */
@@ -82,7 +91,7 @@ export const takeBioChecklistOffline = async (
   }
   inFlight.add(checklistId);
   try {
-    const { onProgress } = options;
+    const { onProgress, openingId } = options;
 
     // 1. The graph, while still ACT. No checkout is claimed by this read.
     onProgress?.({ phase: 'snapshot' });
@@ -126,7 +135,12 @@ export const takeBioChecklistOffline = async (
     onProgress?.({ phase: 'checkout' });
     const checkout = await API.protocolChecklist.takeOffline(checklistId);
 
-    return await bioOfflineRepo.store(snapshot, checkout.deviceCheckoutGuid ?? undefined);
+    return await bioOfflineRepo.store(
+      snapshot,
+      checkout.deviceCheckoutGuid ?? undefined,
+      undefined,
+      openingId,
+    );
   } finally {
     inFlight.delete(checklistId);
   }

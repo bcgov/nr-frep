@@ -2,6 +2,7 @@ import type { CheckList, Picture } from '@/types/chrChecklist';
 
 import API from '@/services/APIs';
 import { chrDb, type OfflineChecklist } from '@/services/offline/chrDb';
+import { mintTmpId } from '@/services/offline/tmpId';
 import { pictureToFile } from '@/utils/pictureFile';
 
 /**
@@ -61,12 +62,30 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
+/**
+ * Send the photos this device holds, marking each one the moment it lands.
+ *
+ * **The marking is the point.** `addPhoto` returns 204 with no id, so nothing about a sent photo
+ * distinguishes it from an unsent one — and the loop skips only `picture.id || !picture.code`. A
+ * flush that failed part-way (one photo refused by the virus scanner, say) therefore left the copy
+ * on the device with every already-sent photo still looking unsent, and the next Sync uploaded them
+ * again. One duplicate per photo per retry, silently, on the server. SLR's queue solved this with a
+ * per-op `syncedAt` marker; this is the same idea written into the local record.
+ *
+ * The marker is a local `tmp:` id. It never reaches the server — `upload` strips `pictures` from the
+ * document payload — and it makes the existing skip guard do the right thing on a retry.
+ */
 const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promise<void> => {
   // The checklist is still RDO at this point — the RDO → ACT flip happens in the document save
   // below — so every photo call must present the checkout token to prove it owns the checkout.
   const guid = record.deviceCheckoutGuid;
   for (const photoId of record.deletedPhotoIds ?? []) {
     await API.chrChecklist.deletePhoto(checklistId, photoId, guid);
+    await chrDb.chrChecklists.update(checklistId, {
+      deletedPhotoIds: ((await chrDb.chrChecklists.get(checklistId))?.deletedPhotoIds ?? []).filter(
+        (id) => id !== photoId,
+      ),
+    });
   }
 
   const pictures = record.checkList.pictures ?? [];
@@ -82,6 +101,10 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
       guid,
       picture.featureId,
     );
+    // Marked before the next photo starts, for the same reason SLR marks its queue ops there: if the
+    // next one throws, what already landed has to be recorded, or the retry re-sends it.
+    picture.id = mintTmpId();
+    await chrDb.chrChecklists.update(checklistId, { checkList: record.checkList });
   }
 };
 

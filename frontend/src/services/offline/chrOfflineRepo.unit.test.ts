@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Picture } from '@/types/chrChecklist';
+
 import API from '@/services/APIs';
 import { chrDb } from '@/services/offline/chrDb';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
@@ -22,6 +24,7 @@ vi.mock('@/services/offline/chrDb', () => ({
     chrChecklists: {
       get: vi.fn(),
       put: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
   },
@@ -30,6 +33,7 @@ vi.mock('@/services/offline/chrDb', () => ({
 const table = chrDb.chrChecklists as unknown as {
   get: ReturnType<typeof vi.fn>;
   put: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
 };
 const api = API.chrChecklist as unknown as {
@@ -111,6 +115,44 @@ describe('chrOfflineRepo', () => {
   // anything captured or removed offline has to be flushed through the photo endpoints at check-in
   // or it never reaches the server at all.
   describe('check-in photo flush', () => {
+    it('does not re-send a photo that already landed when a later one is refused', async () => {
+      // `addPhoto` returns 204 with no id, so nothing about a sent photo distinguishes it from an
+      // unsent one — and the flush skips only `id || !code`. A refused photo (virus, oversize) left
+      // the copy on the device with the already-sent ones still looking unsent, so the next Sync
+      // uploaded them again: one duplicate per photo per retry, silently, on the server.
+      const good: Picture = newPhoto('landed');
+      const bad: Picture = newPhoto('refused');
+      const checkList = { checklistID: '1', pictures: [good, bad] };
+      table.get.mockResolvedValue({
+        checklistId: '1',
+        checkList,
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      });
+      api.addPhoto
+        .mockImplementationOnce(() => Promise.resolve())
+        .mockImplementationOnce(() =>
+          Promise.reject(Object.assign(new Error('virus'), { status: 422 })),
+        );
+
+      await expect(chrOfflineRepo.upload('1')).rejects.toThrow();
+
+      // The one that landed is marked, so the retry's `id || !code` guard skips it.
+      expect(good.id).toBeTruthy();
+      expect(bad.id).toBeUndefined();
+      // And it was written to the record BEFORE the next photo was attempted, not left in memory.
+      expect(table.update).toHaveBeenCalledWith('1', { checkList });
+
+      // The retry: only the refused photo is attempted again.
+      api.addPhoto.mockReset();
+      api.addPhoto.mockRejectedValue(Object.assign(new Error('virus'), { status: 422 }));
+      await expect(chrOfflineRepo.upload('1')).rejects.toThrow();
+
+      expect(api.addPhoto).toHaveBeenCalledTimes(1);
+      expect(api.addPhoto.mock.calls[0][2]).toBe('refused');
+    });
+
     it('uploads photos captured offline before saving the document', async () => {
       const order: string[] = [];
       api.addPhoto.mockImplementation(() => {

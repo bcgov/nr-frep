@@ -44,6 +44,7 @@ import {
   stalenessBanner,
   type StalenessVerdict,
 } from '@/services/offline/staleness';
+import { isTmpId } from '@/services/offline/tmpId';
 import {
   CHR_STATUS,
   type CheckList,
@@ -540,11 +541,7 @@ const ChrChecklistPage: FC = () => {
    * told about rows that are gone.
    */
   const ungroupCompositeGroup = useCallback(
-    async (
-      anchorId: string,
-      deleteMemberIds: string[],
-      applied: Feature[],
-    ): Promise<boolean> => {
+    async (anchorId: string, deleteMemberIds: string[], applied: Feature[]): Promise<boolean> => {
       if (!checkList) return false;
       if (isOfflineCopy) {
         return saveFeatures(applied);
@@ -902,7 +899,15 @@ const ChrChecklistPage: FC = () => {
             ...checkList,
             pictures: (checkList.pictures ?? []).filter((p) => p !== picture),
           };
-          await chrOfflineRepo.saveLocal(merged, picture.id ? [picture.id] : []);
+          // `!isTmpId`: a photo carrying a local marker was uploaded during a part-completed flush,
+          // so it exists on the server but this device never learned its real id. Queueing the
+          // marker for deletion would send a 404 and abort the next sync. The photo stays on the
+          // server until the copy is re-pulled — an orphan, which is the lesser problem: before the
+          // marker existed, that same photo was re-uploaded on every retry instead.
+          await chrOfflineRepo.saveLocal(
+            merged,
+            picture.id && !isTmpId(picture.id) ? [picture.id] : [],
+          );
           setCheckList(merged);
           display({ kind: 'success', title: 'Removed offline', timeout: 4000 });
           return true;
@@ -1084,8 +1089,18 @@ const ChrChecklistPage: FC = () => {
         timeout: 5000,
       });
     } catch (err) {
+      // The title used to assert an optimistic-lock cause for EVERY failure. When the server refused
+      // a photo — a virus hit, an oversize file — it told the user the checklist had changed and to
+      // "re-pull and retry", advice that fails again every time, while the real reason sat in the
+      // subtitle contradicting it. A 4xx carrying a message is the server stating its reason: lead
+      // with that, as SLR does.
+      const status = (err as { status?: number })?.status;
+      const serverSaidWhy =
+        status !== undefined && status >= 400 && status < 500 && status !== 409 && status !== 412;
       reportError(
-        'Upload failed — the checklist may have changed on the server; re-pull and retry',
+        serverSaidWhy
+          ? 'Sync stopped — the server refused part of this upload'
+          : 'Upload failed — the checklist may have changed on the server; re-pull and retry',
         err,
       );
     } finally {

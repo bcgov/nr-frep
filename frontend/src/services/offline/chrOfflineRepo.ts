@@ -62,6 +62,28 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
+/** A 4xx other than timeout/throttle is the server's verdict, not a blip — the same test SLR uses. */
+const isPermanentRejection = (err: unknown): boolean => {
+  const status = (err as { status?: number })?.status;
+  if (status === undefined) return false; // network error — retryable
+  if (status === 408 || status === 429) return false; // timeout / throttled — retryable
+  return status >= 400 && status < 500;
+};
+
+const errorMessage = (err: unknown): string => {
+  const body = (err as { body?: { message?: string } })?.body;
+  if (body?.message) return body.message;
+  return err instanceof Error ? err.message : 'Unknown error';
+};
+
+/** Raised when the flush parked at least one photo, so the document save must not run. */
+export class PhotosRefusedError extends Error {
+  constructor(readonly count: number) {
+    super(`${count} file(s) were refused by the server. Review them, then sync again.`);
+    this.name = 'PhotosRefusedError';
+  }
+}
+
 /**
  * Send the photos this device holds, marking each one the moment it lands.
  *
@@ -79,6 +101,7 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
   // The checklist is still RDO at this point — the RDO → ACT flip happens in the document save
   // below — so every photo call must present the checkout token to prove it owns the checkout.
   const guid = record.deviceCheckoutGuid;
+  const rejected: Record<string, string> = { ...(record.rejectedPhotos ?? {}) };
   for (const photoId of record.deletedPhotoIds ?? []) {
     await API.chrChecklist.deletePhoto(checklistId, photoId, guid);
     await chrDb.chrChecklists.update(checklistId, {
@@ -93,18 +116,37 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
     if (picture.id || !picture.code) continue; // already on the server, or nothing to send
     const file = pictureToFile(picture);
     if (!file) continue;
-    await API.chrChecklist.addPhoto(
-      checklistId,
-      file,
-      picture.description ?? '',
-      picture.date,
-      guid,
-      picture.featureId,
-    );
+    try {
+      await API.chrChecklist.addPhoto(
+        checklistId,
+        file,
+        picture.description ?? '',
+        picture.date,
+        guid,
+        picture.featureId,
+      );
+    } catch (err) {
+      // A permanent refusal (virus, oversize, bad type) is PARKED and the flush carries on, so one
+      // bad photo no longer costs the rest of the sync. `upload` stops before the document save
+      // while any are parked — the user has to decide about each. A transient failure rethrows and
+      // leaves everything queued, exactly as before.
+      if (!isPermanentRejection(err)) throw err;
+      picture.id = mintTmpId();
+      rejected[picture.id] = errorMessage(err);
+      await chrDb.chrChecklists.update(checklistId, {
+        checkList: record.checkList,
+        rejectedPhotos: rejected,
+      });
+      continue;
+    }
     // Marked before the next photo starts, for the same reason SLR marks its queue ops there: if the
     // next one throws, what already landed has to be recorded, or the retry re-sends it.
     picture.id = mintTmpId();
     await chrDb.chrChecklists.update(checklistId, { checkList: record.checkList });
+  }
+
+  if (Object.keys(rejected).length > 0) {
+    throw new PhotosRefusedError(Object.keys(rejected).length);
   }
 };
 
@@ -211,6 +253,23 @@ export const chrOfflineRepo = {
       updatedAt: Date.now(),
     });
     return saved;
+  },
+
+  /** Drop a refused photo and its parked reason together. Local only — it never reached the server. */
+  async discardRefusedPhoto(checklistId: string, markerId: string): Promise<void> {
+    const record = await chrDb.chrChecklists.get(checklistId);
+    if (!record) return;
+    const rejectedPhotos = { ...(record.rejectedPhotos ?? {}) };
+    delete rejectedPhotos[markerId];
+    await chrDb.chrChecklists.put({
+      ...record,
+      checkList: {
+        ...record.checkList,
+        pictures: (record.checkList.pictures ?? []).filter((p) => p.id !== markerId),
+      },
+      rejectedPhotos,
+      updatedAt: Date.now(),
+    });
   },
 
   remove(checklistId: string): Promise<void> {

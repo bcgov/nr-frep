@@ -41,7 +41,10 @@ vi.mock('@/services/offline/chrOfflineRepo', () => ({
     upload: vi.fn(),
     takeOffline: vi.fn(),
     remove: vi.fn(),
+    discardRefusedPhoto: vi.fn(),
   },
+  // The page branches on this to tell a parked refusal from a genuine upload failure.
+  PhotosRefusedError: class extends Error {},
 }));
 
 vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));

@@ -1,4 +1,4 @@
-import { ArrowLeft, WarningFilled } from '@carbon/icons-react';
+import { ArrowLeft } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ExternalLink } from '@/components/core/ExternalLink';
+import RefusedFiles from '@/components/RefusedFiles';
 
 import BioOpeningView from './BioOpeningView';
 import BioPlotsView from './BioPlotsView';
@@ -735,45 +736,18 @@ const ProtocolChecklistPage: FC = () => {
               it needs a decision rather than an announcement. */}
           {offlineRecord && rejectedFiles.length > 0 && (
             <Column sm={4} md={8} lg={16}>
-              {/* Not an InlineNotification.
-                  Carbon's alert components REFUSE interactive children — mounting a button inside
-                  one logs "component should have no interactive child nodes" and the click does
-                  nothing. Each refused file needs its own Discard, so the banner is built here in
-                  Carbon's warning language instead of fighting a component that is documented not to
-                  take it. One block: heading, sentence, then the files as bullets.
-
-                  Named per file rather than "3 files failed": the user has to decide about each one,
-                  and the bytes may be field evidence that cannot be re-collected. */}
-              <section
-                className="protocol-checklist__refused"
-                aria-labelledby="refused-files-title"
-              >
-                <WarningFilled size={20} className="protocol-checklist__refused-icon" />
-                <div>
-                  <p className="protocol-checklist__refused-lead">
-                    <strong id="refused-files-title">Some files were refused</strong> The server
-                    refused these files. Review them, then sync again.
-                  </p>
-                  <ul className="protocol-checklist__rejected">
-                    {rejectedFiles.map((op) => (
-                      <li key={op.id} className="protocol-checklist__rejected-row">
-                        <strong>{op.fileName ?? 'File'}</strong>
-                        <span className="protocol-checklist__rejected-reason">
-                          {op.rejectedReason ?? 'refused'}
-                        </span>
-                        <Button
-                          kind="danger--tertiary"
-                          size="sm"
-                          onClick={() => void handleDiscardRejected(op)}
-                          disabled={!!offlineBusy}
-                        >
-                          Discard
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </section>
+              <RefusedFiles
+                files={rejectedFiles.map((op) => ({
+                  key: String(op.id),
+                  fileName: op.fileName,
+                  reason: op.rejectedReason,
+                }))}
+                onDiscard={(file) => {
+                  const op = rejectedFiles.find((candidate) => String(candidate.id) === file.key);
+                  if (op) void handleDiscardRejected(op);
+                }}
+                busy={!!offlineBusy}
+              />
             </Column>
           )}
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded — a browser spec loads none by default.
 import '@/styles/index.scss';
-import './protocolChecklist.scss';
+import '@/components/RefusedFiles/refusedFiles.scss';
 
 /**
  * The refused-files panel.
@@ -17,16 +17,16 @@ import './protocolChecklist.scss';
  */
 const Panel = ({ fileName }: { fileName: string }) => (
   <div style={{ inlineSize: '420px' }} data-testid="tab">
-    <section className="protocol-checklist__refused" data-testid="panel">
-      <svg className="protocol-checklist__refused-icon" width="20" height="20" />
+    <section className="offline-refused" data-testid="panel">
+      <svg className="offline-refused__icon" width="20" height="20" />
       <div>
-        <p className="protocol-checklist__refused-lead">
+        <p className="offline-refused__lead">
           <strong>Some files were refused</strong> The server refused these files.
         </p>
-        <ul className="protocol-checklist__rejected" data-testid="list">
-          <li className="protocol-checklist__rejected-row" data-testid="row">
+        <ul className="offline-refused__list" data-testid="list">
+          <li className="offline-refused__row" data-testid="row">
             <strong>{fileName}</strong>
-            <span className="protocol-checklist__rejected-reason">
+            <span className="offline-refused__reason">
               Upload rejected: a virus was detected (Eicar-Test-Signature).
             </span>
             <button type="button" className="cds--btn">

@@ -190,6 +190,47 @@ describe('withBioOffline', () => {
       expect(record?.snapshot.strata[0].stratum.stratumNumber).toBe('A1-edited');
     });
 
+    it('edits a stratum created offline instead of duplicating it', async () => {
+      // The gap between the two cases above: an id that exists but is tmp:. `isTmpId` is true for a
+      // MISSING id and for an already-minted one, so editing minted a second id, upsertStratum
+      // matched nothing and appended — leaving the pre-edit row in place and the edit beside it.
+      const created = await api.saveBioStratum('9001', { stratumNumber: 'A2' });
+
+      const edited = await api.saveBioStratum('9001', {
+        ...created,
+        stratumNumber: 'A2-edited',
+      });
+
+      expect(edited.stratumId).toBe(created.stratumId);
+      const record = await bioOfflineRepo.load('9001');
+      expect(record?.snapshot.strata).toHaveLength(2); // the seeded one + this one, not three
+      const mine = record?.snapshot.strata.find(
+        (e) => e.stratum.stratumId === created.stratumId);
+      expect(mine?.stratum.stratumNumber).toBe('A2-edited');
+    });
+
+    it('survives repeated edits of an offline-created stratum', async () => {
+      // Every save re-minted, so the row count grew by one each time it was opened and saved.
+      const created = await api.saveBioStratum('9001', { stratumNumber: 'A2' });
+      await api.saveBioStratum('9001', { ...created, stratumNumber: 'v2' });
+      await api.saveBioStratum('9001', { ...created, stratumNumber: 'v3' });
+
+      const record = await bioOfflineRepo.load('9001');
+      expect(record?.snapshot.strata).toHaveLength(2);
+    });
+
+    it('edits a plot created offline instead of duplicating it', async () => {
+      const created = await api.saveBioPlot('5001', { plotNumber: 'P2' });
+
+      const edited = await api.saveBioPlot('5001', { ...created, plotNumber: 'P2-edited' });
+
+      expect(edited.plotId).toBe(created.plotId);
+      const record = await bioOfflineRepo.load('9001');
+      expect(record?.snapshot.strata[0].plots).toHaveLength(2);
+      const mine = record?.snapshot.strata[0].plots.find((p) => p.plotId === created.plotId);
+      expect(mine?.plotNumber).toBe('P2-edited');
+    });
+
     it('adds a plot under its stratum and keeps the others', async () => {
       const saved = await api.saveBioPlot('5001', { plotNumber: 'P2' });
 

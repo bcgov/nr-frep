@@ -96,22 +96,48 @@ export const bioReferenceCache = {
  * Reimplemented rather than approximated — a picker that matched differently offline than online
  * would have field staff selecting codes they then can't reproduce at their desk.
  */
+/**
+ * Search-criteria name → the `BecRow` field it filters on.
+ *
+ * **The criteria names are the wire contract, not the row's field names.** The picker builds
+ * `{zone, subzone, variant, phase, siteSeries, siteSeriesPhase, seral}` and the backend declares
+ * exactly those `@RequestParam`s (`ConfigurationApiEndpoint#searchBec`), mapping them to columns on
+ * its own side. The row shape is the *response*, and it uses different names.
+ *
+ * This filter used to read the criteria object with the ROW's names — `criteria.bgcZoneCode`,
+ * `criteria.becSiteSeriesCd` and so on. None of those keys is ever present, so every needle read as
+ * `undefined`, the empty-needle short-circuit returned `true`, and the offline search returned the
+ * ENTIRE catalogue no matter what was typed. Only `seral` worked, being the one name spelled the
+ * same on both sides — which is why it looked like a search that ignored its inputs rather than one
+ * that was plainly broken.
+ */
+export const BEC_CRITERIA_FIELD: Record<string, keyof BecRow> = {
+  zone: 'bgcZoneCode',
+  subzone: 'bgcSubzoneCode',
+  variant: 'bgcVariant',
+  phase: 'bgcPhase',
+  siteSeries: 'becSiteSeriesCd',
+  siteSeriesPhase: 'siteSeriesPhaseCd',
+  seral: 'seral',
+};
+
+/**
+ * Filter the cached BEC catalogue the way the server would.
+ *
+ * Mirrors `FREP_52_BGC_SEARCH`: every criterion is an `UPPER(col) LIKE '%x%'` contains-match and a
+ * blank one matches everything. A picker that matched differently offline would have field staff
+ * selecting codes they cannot reproduce at their desk.
+ */
 export const filterBec = (
   rows: BecRow[],
   criteria: Partial<Record<string, string>>,
 ): BecRow[] => {
-  const matches = (value: string | undefined, needle: string | undefined): boolean => {
-    if (!needle?.trim()) return true;
-    return (value ?? '').toUpperCase().includes(needle.trim().toUpperCase());
-  };
-  return rows.filter(
-    (row) =>
-      matches(row.bgcZoneCode, criteria.bgcZoneCode)
-      && matches(row.bgcSubzoneCode, criteria.bgcSubzoneCode)
-      && matches(row.bgcVariant, criteria.bgcVariant)
-      && matches(row.bgcPhase, criteria.bgcPhase)
-      && matches(row.becSiteSeriesCd, criteria.becSiteSeriesCd)
-      && matches(row.siteSeriesPhaseCd, criteria.siteSeriesPhaseCd)
-      && matches(row.seral, criteria.seral),
-  );
+  const needles = Object.entries(BEC_CRITERIA_FIELD)
+    .map(([key, field]) => [field, criteria[key]?.trim()] as const)
+    .filter(([, needle]) => !!needle)
+    .map(([field, needle]) => [field, (needle as string).toUpperCase()] as const);
+
+  if (needles.length === 0) return rows;
+  return rows.filter((row) =>
+    needles.every(([field, needle]) => (row[field] ?? '').toUpperCase().includes(needle)));
 };

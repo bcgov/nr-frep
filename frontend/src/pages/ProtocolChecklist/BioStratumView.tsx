@@ -358,6 +358,12 @@ const BEC_KEYS = [
 ] as const;
 
 // BEC search modal criteria fields.
+/**
+ * The BEC search fields. These keys are the wire contract: the backend declares one `@RequestParam`
+ * per key, `BEC_SEARCH_MAX` caps them, and `BEC_CRITERIA_FIELD` maps them to row fields for the
+ * offline search. All three key sets are held together by tests — they diverged once and the
+ * offline search silently returned the whole catalogue.
+ */
 const BEC_CRITERIA: FieldDef[] = [
   { key: 'zone', label: 'BGC zone' },
   { key: 'subzone', label: 'Subzone' },

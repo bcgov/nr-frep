@@ -168,9 +168,15 @@ export const withBioOffline = (client: Client): Client => {
       if (!record) return client.saveBioStratum(checklistId, stratum);
       // A new stratum gets a local id so the view has a stable key before Oracle assigns the real
       // one at check-in. The orchestrator clears anything tmp: and remaps its plots.
-      const saved: BioStratum = isTmpId(stratum.stratumId)
-        ? { ...stratum, stratumId: mintTmpId(), checklistId }
-        : { ...stratum, checklistId };
+      //
+      // Minted only when there is NO id — not when `isTmpId` says so. `isTmpId` is true for a
+      // missing id *and* for one already minted here, so editing an offline-created stratum minted a
+      // second id, `upsertStratum` matched nothing, and the edit was appended as a duplicate while
+      // the original row kept the pre-edit values. A brand-new stratum arrives with no `stratumId`
+      // at all (BioStratumView seeds it with only `checklistId`), so this is the exact test.
+      const saved: BioStratum = stratum.stratumId
+        ? { ...stratum, checklistId }
+        : { ...stratum, stratumId: mintTmpId(), checklistId };
       await bioOfflineRepo.saveLocal(checklistId, upsertStratum(record.snapshot, saved));
       return saved;
     },
@@ -218,9 +224,10 @@ export const withBioOffline = (client: Client): Client => {
     async saveBioPlot(stratumId: string, plot: BioPlot): Promise<BioPlot> {
       const record = await recordForStratum(stratumId);
       if (!record) return client.saveBioPlot(stratumId, plot);
-      const saved: BioPlot = isTmpId(plot.plotId)
-        ? { ...plot, plotId: mintTmpId(), stratumId }
-        : { ...plot, stratumId };
+      // Same rule as saveBioStratum above, and the same bug: re-minting on edit duplicated the plot.
+      const saved: BioPlot = plot.plotId
+        ? { ...plot, stratumId }
+        : { ...plot, plotId: mintTmpId(), stratumId };
       const entry = record.snapshot.strata.find((e) => e.stratum.stratumId === stratumId);
       const plots = entry?.plots.some((p) => p.plotId === saved.plotId)
         ? entry.plots.map((p) => (p.plotId === saved.plotId ? saved : p))

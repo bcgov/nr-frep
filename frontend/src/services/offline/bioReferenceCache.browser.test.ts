@@ -149,7 +149,7 @@ describe('bioReferenceCache', () => {
       (client.searchBec as ReturnType<typeof vi.fn>).mockClear();
       setOnline(false);
 
-      const rows = await api.searchBec({ bgcZoneCode: 'idf' });
+      const rows = await api.searchBec({ zone: 'idf' });
 
       expect(rows).toHaveLength(1);
       expect(rows[0].bgcZoneCode).toBe('IDF');
@@ -162,6 +162,12 @@ describe('filterBec', () => {
   // Reimplements FREP_52_BGC_SEARCH's semantics: every criterion is an UPPER(col) LIKE '%x%'
   // contains-match, and a blank one matches everything. A picker that matched differently offline
   // would have field staff selecting codes they can't reproduce at their desk.
+  //
+  // The criteria keys below are the SEARCH names (zone, subzone, siteSeries …), which is what the
+  // picker sends and what the backend declares as @RequestParams — NOT the BecRow field names the
+  // `bec()` fixtures use. These cases originally passed row-field names, a shape the app never
+  // produces, so they passed against a filter that was matching nothing and returning the whole
+  // catalogue. The parity case in becSearchParity.unit.test.ts now pins the key set.
   const rows = [
     bec(),
     bec({ bgcZoneCode: 'IDF', bgcSubzoneCode: 'dk', becSiteSeriesCd: '03', seral: 'MS' }),
@@ -172,20 +178,20 @@ describe('filterBec', () => {
   });
 
   it('treats a blank criterion as no filter', () => {
-    expect(filterBec(rows, { bgcZoneCode: '   ' })).toHaveLength(2);
+    expect(filterBec(rows, { zone: '   ' })).toHaveLength(2);
   });
 
   it('is case-insensitive', () => {
-    expect(filterBec(rows, { bgcZoneCode: 'sbs' })).toHaveLength(1);
+    expect(filterBec(rows, { zone: 'sbs' })).toHaveLength(1);
   });
 
   it('matches on a substring, not just a prefix', () => {
-    expect(filterBec(rows, { bgcZoneCode: 'DF' })).toHaveLength(1);
+    expect(filterBec(rows, { zone: 'DF' })).toHaveLength(1);
   });
 
   it('ands multiple criteria together', () => {
-    expect(filterBec(rows, { bgcZoneCode: 'IDF', seral: 'MS' })).toHaveLength(1);
-    expect(filterBec(rows, { bgcZoneCode: 'IDF', seral: 'ZZ' })).toHaveLength(0);
+    expect(filterBec(rows, { zone: 'IDF', seral: 'MS' })).toHaveLength(1);
+    expect(filterBec(rows, { zone: 'IDF', seral: 'ZZ' })).toHaveLength(0);
   });
 
   it('matches a row whose column is empty only when the criterion is blank', () => {

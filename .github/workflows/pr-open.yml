@@ -58,7 +58,19 @@ jobs:
       - uses: bcgov/action-builder-ghcr@de3d575cf158e16f5dc2789630f6d587483b911c # v4.4.0
         with:
           package: ${{ matrix.package }}
-          tags: ${{ github.event.number }}
+          # Two tags, per bcgov/quickstart-openshift (this repo's upstream template). The PR-number
+          # tag is MUTABLE — reused on every push — and is what merge.yml deploys and promotes. The
+          # head-SHA tag is IMMUTABLE and is what the PR preview deploys, so each push changes the
+          # image reference in the pod spec and forces a rollout.
+          #
+          # nr-frep had only the PR-number tag and deployed that. The spec was then byte-identical
+          # between builds, `oc apply` found nothing to change, no ReplicaSet was created and the
+          # running pods kept whatever image they first pulled — a green workflow, a correct image in
+          # the registry, and DEV serving code two commits old. `imagePullPolicy: Always` does not
+          # cover it: that governs what a *starting* pod pulls, and nothing ever started.
+          tags: |
+            ${{ github.event.number }}
+            ${{ github.event.pull_request.head.sha }}
           tag_fallback: latest
           triggers: ('${{ matrix.package }}/', '.github/workflows/')
 
@@ -95,6 +107,9 @@ jobs:
     with:
       environment: dev
       target: ${{ github.event.number }}
+      # The immutable tag — see the builds job above. Without this the input defaults to the PR
+      # number and the preview silently stops rolling out after its first deploy.
+      tag: ${{ github.event.pull_request.head.sha }}
       slot: ${{ needs.vars.outputs.slot }}
       triggers: ('backend/', 'frontend/', '.github/workflows/')
 

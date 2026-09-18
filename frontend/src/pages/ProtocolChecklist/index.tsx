@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@carbon/icons-react';
+import { ArrowLeft, WarningFilled } from '@carbon/icons-react';
 import {
   Button,
   Column,
@@ -31,9 +31,8 @@ import { groupOutstanding } from './tabStatus';
 import TabStatusIcon from './TabStatusIcon';
 import { useTabStatuses } from './useTabStatuses';
 
-import type { BioAttachmentOp, OfflineBioChecklist } from '@/services/offline/bioDb';
-
 import type { OutstandingGroup } from './tabStatus';
+import type { BioAttachmentOp, OfflineBioChecklist } from '@/services/offline/bioDb';
 import type { ProtocolChecklist, ProtocolType } from '@/types/protocolChecklist';
 
 import { useAuth } from '@/context/auth/useAuth';
@@ -558,8 +557,12 @@ const ProtocolChecklistPage: FC = () => {
    * editable, someone else's checkout is not.
    */
   const actionsReady =
-    !loading && !notFound && !hasError && !!checklist && !isLegacySlb
-    && (holdsOfflineCopy || (canEdit && !checkedOut));
+    !loading &&
+    !notFound &&
+    !hasError &&
+    !!checklist &&
+    !isLegacySlb &&
+    (holdsOfflineCopy || (canEdit && !checkedOut));
 
   /**
    * Reactivate: admin recovery for a checklist stranded on **someone else's** device.
@@ -570,8 +573,14 @@ const ProtocolChecklistPage: FC = () => {
    * same way (`!isOfflineCopy && online && canPerformSysAdminActions && status === READ_ONLY_OFFLINE`).
    */
   const canReactivate =
-    !loading && !notFound && !hasError && !!checklist
-    && checkedOut && !holdsOfflineCopy && online && canPerformSysAdminActions;
+    !loading &&
+    !notFound &&
+    !hasError &&
+    !!checklist &&
+    checkedOut &&
+    !holdsOfflineCopy &&
+    online &&
+    canPerformSysAdminActions;
 
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">
@@ -594,10 +603,7 @@ const ProtocolChecklistPage: FC = () => {
             {/* Status reads beside the heading rather than as a cell of the tombstone grid: it
                 governs what the whole page allows, so it belongs where the eye lands first. */}
             {checklist && (
-              <Tag
-                type={statusTagType(offlineRecord ? 'RDO' : checklist.statusCode)}
-                size="sm"
-              >
+              <Tag type={statusTagType(offlineRecord ? 'RDO' : checklist.statusCode)} size="sm">
                 {/* Two corrections to the raw code, both for CHR parity:
                     1. An offline copy is served from the local snapshot, taken while the checklist
                        was still ACT — so `checklist.statusCode` reads "Active" even though the
@@ -729,37 +735,45 @@ const ProtocolChecklistPage: FC = () => {
               it needs a decision rather than an announcement. */}
           {offlineRecord && rejectedFiles.length > 0 && (
             <Column sm={4} md={8} lg={16}>
-              <InlineNotification
-                kind="warning"
-                title="Some files were refused"
-                subtitle="The server refused these files. Review them below, then sync again."
-                hideCloseButton
-                lowContrast
-              />
-              {/* Named per file rather than "3 files failed": the user has to decide about each one,
-                  and the bytes may be field evidence that cannot be re-collected.
-                  The inner `rejectedFiles.length > 0` guard that used to sit here was dead — the
-                  block only renders when that is already true. */}
-              <ul className="protocol-checklist__rejected">
-                {rejectedFiles.map((op) => (
-                  <li key={op.id} className="protocol-checklist__rejected-row">
-                    <span className="protocol-checklist__rejected-file">
-                      <strong>{op.fileName ?? 'File'}</strong>
-                      <span className="protocol-checklist__rejected-reason">
-                        {op.rejectedReason ?? 'refused'}
-                      </span>
-                    </span>
-                    <Button
-                      kind="danger--tertiary"
-                      size="sm"
-                      onClick={() => void handleDiscardRejected(op)}
-                      disabled={!!offlineBusy}
-                    >
-                      Discard
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+              {/* Not an InlineNotification.
+                  Carbon's alert components REFUSE interactive children — mounting a button inside
+                  one logs "component should have no interactive child nodes" and the click does
+                  nothing. Each refused file needs its own Discard, so the banner is built here in
+                  Carbon's warning language instead of fighting a component that is documented not to
+                  take it. One block: heading, sentence, then the files as bullets.
+
+                  Named per file rather than "3 files failed": the user has to decide about each one,
+                  and the bytes may be field evidence that cannot be re-collected. */}
+              <section
+                className="protocol-checklist__refused"
+                aria-labelledby="refused-files-title"
+              >
+                <WarningFilled size={20} className="protocol-checklist__refused-icon" />
+                <div>
+                  <p className="protocol-checklist__refused-lead">
+                    <strong id="refused-files-title">Some files were refused</strong> The server
+                    refused these files. Review them, then sync again.
+                  </p>
+                  <ul className="protocol-checklist__rejected">
+                    {rejectedFiles.map((op) => (
+                      <li key={op.id} className="protocol-checklist__rejected-row">
+                        <strong>{op.fileName ?? 'File'}</strong>
+                        <span className="protocol-checklist__rejected-reason">
+                          {op.rejectedReason ?? 'refused'}
+                        </span>
+                        <Button
+                          kind="danger--tertiary"
+                          size="sm"
+                          onClick={() => void handleDiscardRejected(op)}
+                          disabled={!!offlineBusy}
+                        >
+                          Discard
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
             </Column>
           )}
 

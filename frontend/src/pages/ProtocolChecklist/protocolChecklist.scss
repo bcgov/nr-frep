@@ -819,47 +819,66 @@
  * own borders and row rules with the content, however far it scrolls.
  */
 /**
- * Files the server refused, listed under their warning banner.
+ * Files the server refused, as bullets INSIDE their warning notification.
  *
- * It had no styles at all — a bare `<ul>`, so it rendered with browser defaults: bullets, its own
- * indent, and no relationship to the notification above it. It read as stray text dropped on the
- * page, with the Discard button floating mid-sentence. This is a decision the user has to make about
- * bytes that exist nowhere else, so it has to look like part of the warning, not like debris.
+ * Carbon's `subtitle` takes a node, so the list lives in the banner rather than beside it. Rendered
+ * as a sibling — even tinted to match — it read as a second banner stacked under the first, which is
+ * two announcements for one situation. It had no styles at all before that, which is what made it
+ * look like stray text.
  *
- * Squared off against the banner (which has its own left accent) and given the same warning tint, so
- * the two read as one block.
+ * No surface of its own here: the notification provides it.
  */
+/**
+ * The refused-files panel.
+ *
+ * Deliberately NOT a Carbon `InlineNotification`: that component refuses interactive children (it
+ * logs "component should have no interactive child nodes" and the nested control stops working),
+ * and every refused file needs its own Discard. So this mirrors Carbon's warning notification —
+ * low-contrast fill, full-height left accent, squared corners to match the app's own override — as
+ * a single block that can host them.
+ */
+.protocol-checklist__refused {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--#{vars.$bcgov-prefix}-notification-background-warning, #fcf4d6);
+  border: 1px solid
+    color-mix(in srgb, var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b) 40%, transparent);
+  border-inline-start: 0.25rem solid var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b);
+}
+
+.protocol-checklist__refused-icon {
+  flex: none;
+  margin-block-start: 0.125rem;
+  fill: var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b);
+}
+
+.protocol-checklist__refused-lead {
+  margin: 0;
+}
+
 .protocol-checklist__rejected {
-  list-style: none;
-  margin: 0 0 1.5rem;
-  padding: 0;
-  border: 1px solid var(--cds-support-warning, #f1c21b);
-  border-top: 0;
-  background: var(--cds-notification-background-warning, #fcf4d6);
+  list-style: disc;
+  margin: 0.5rem 0 0;
+  // Indents the bullets under the sentence above them.
+  padding-inline-start: 1.25rem;
 }
 
 .protocol-checklist__rejected-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  // Wraps rather than forcing the row open: a long file name plus a reason plus a button does not
-  // fit a tablet, and this sits inside the same tab as the attachments grid.
-  flex-wrap: wrap;
-  padding: 0.5rem 1rem;
-  border-top: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
-
-  &:first-child {
-    border-top: 0;
-  }
-}
-
-.protocol-checklist__rejected-file {
-  // Takes the free space so Discard sits at the right edge, and shrinks before the button does.
-  flex: 1 1 16rem;
-  min-inline-size: 0;
-  // A refused upload is often named by the device, with no break opportunity anywhere.
+  // A refused upload is often device-named, with no break opportunity anywhere.
   overflow-wrap: anywhere;
+
+  & + & {
+    margin-block-start: 0.25rem;
+  }
+
+  .#{vars.$bcgov-prefix}--btn {
+    // Flows after the reason rather than being pinned right: inside a bullet, a right-aligned
+    // button detaches from the text it acts on.
+    margin-inline-start: 0.5rem;
+    vertical-align: baseline;
+  }
 }
 
 .protocol-checklist__rejected-reason {

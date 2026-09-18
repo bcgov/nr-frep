@@ -647,6 +647,6 @@ describe('ProtocolChecklistPage offline actions', () => {
     expect(screen.getByText(/Virus detected/)).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: DISCARD_BUTTON }));
-    expect(repo.discardAttachmentOp).toHaveBeenCalledWith(1);
+    await vi.waitFor(() => expect(repo.discardAttachmentOp).toHaveBeenCalledWith(1));
   });
 });

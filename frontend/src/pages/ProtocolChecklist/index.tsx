@@ -732,30 +732,34 @@ const ProtocolChecklistPage: FC = () => {
               <InlineNotification
                 kind="warning"
                 title="Some files were refused"
-                subtitle="The server refused these files. Review them below, then check in again."
+                subtitle="The server refused these files. Review them below, then sync again."
                 hideCloseButton
                 lowContrast
               />
               {/* Named per file rather than "3 files failed": the user has to decide about each one,
-                  and the bytes may be field evidence that cannot be re-collected. */}
-              {rejectedFiles.length > 0 && (
-                <ul className="protocol-checklist__rejected">
-                  {rejectedFiles.map((op) => (
-                    <li key={op.id}>
+                  and the bytes may be field evidence that cannot be re-collected.
+                  The inner `rejectedFiles.length > 0` guard that used to sit here was dead — the
+                  block only renders when that is already true. */}
+              <ul className="protocol-checklist__rejected">
+                {rejectedFiles.map((op) => (
+                  <li key={op.id} className="protocol-checklist__rejected-row">
+                    <span className="protocol-checklist__rejected-file">
                       <strong>{op.fileName ?? 'File'}</strong>
-                      {` — ${op.rejectedReason ?? 'refused'} `}
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() => void handleDiscardRejected(op)}
-                        disabled={!!offlineBusy}
-                      >
-                        Discard
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                      <span className="protocol-checklist__rejected-reason">
+                        {op.rejectedReason ?? 'refused'}
+                      </span>
+                    </span>
+                    <Button
+                      kind="danger--tertiary"
+                      size="sm"
+                      onClick={() => void handleDiscardRejected(op)}
+                      disabled={!!offlineBusy}
+                    >
+                      Discard
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             </Column>
           )}
 

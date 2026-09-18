@@ -173,6 +173,10 @@ const renderPage = () =>
 
 const REMOVE_OR_SYNC = /Sync changes/;
 
+// Carbon prepends a visually-hidden "danger" span to danger--tertiary buttons, so the accessible
+// name is "danger Discard". Match the visible label.
+const DISCARD_BUTTON = /Discard/;
+
 describe('ProtocolChecklistPage submit', () => {
   afterEach(() => vi.clearAllMocks());
 
@@ -642,7 +646,7 @@ describe('ProtocolChecklistPage offline actions', () => {
     expect(await screen.findByText('virus.pdf')).toBeTruthy();
     expect(screen.getByText(/Virus detected/)).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await userEvent.click(screen.getByRole('button', { name: DISCARD_BUTTON }));
     expect(repo.discardAttachmentOp).toHaveBeenCalledWith(1);
   });
 });

@@ -134,10 +134,10 @@ export const checkInBioChecklist = async (
     await bioOfflineRepo.setSyncState(
       checklistId,
       'CONFLICT',
-      `${rejected.length} file(s) were refused by the server. Review them, then check in again.`,
+      `${rejected.length} file(s) were refused by the server. Review them, then sync again.`,
     );
     throw new CheckInBlockedError(
-      'Some files could not be uploaded. Review them before checking in.',
+      'Some files could not be uploaded. Review them, then sync again.',
       rejected,
     );
   }

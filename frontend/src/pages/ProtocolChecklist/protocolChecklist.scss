@@ -818,6 +818,59 @@
  * reads as a broken table rather than a scrollable one. Scrolling inside this box keeps the table's
  * own borders and row rules with the content, however far it scrolls.
  */
+/**
+ * Files the server refused, listed under their warning banner.
+ *
+ * It had no styles at all — a bare `<ul>`, so it rendered with browser defaults: bullets, its own
+ * indent, and no relationship to the notification above it. It read as stray text dropped on the
+ * page, with the Discard button floating mid-sentence. This is a decision the user has to make about
+ * bytes that exist nowhere else, so it has to look like part of the warning, not like debris.
+ *
+ * Squared off against the banner (which has its own left accent) and given the same warning tint, so
+ * the two read as one block.
+ */
+.protocol-checklist__rejected {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border: 1px solid var(--cds-support-warning, #f1c21b);
+  border-top: 0;
+  background: var(--cds-notification-background-warning, #fcf4d6);
+}
+
+.protocol-checklist__rejected-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  // Wraps rather than forcing the row open: a long file name plus a reason plus a button does not
+  // fit a tablet, and this sits inside the same tab as the attachments grid.
+  flex-wrap: wrap;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--#{vars.$bcgov-prefix}-border-subtle-01);
+
+  &:first-child {
+    border-top: 0;
+  }
+}
+
+.protocol-checklist__rejected-file {
+  // Takes the free space so Discard sits at the right edge, and shrinks before the button does.
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+  // A refused upload is often named by the device, with no break opportunity anywhere.
+  overflow-wrap: anywhere;
+}
+
+.protocol-checklist__rejected-reason {
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+
+  &::before {
+    // In CSS rather than the JSX string, so the separator is not part of the accessible name.
+    content: " — ";
+  }
+}
+
 .rip-table-scroll {
   overflow-x: auto;
   // Takes over the table's own bottom margin so spacing is unchanged.

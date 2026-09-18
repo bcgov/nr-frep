@@ -1,8 +1,8 @@
-import API from '@/services/APIs';
-import { BIO_SNAPSHOT_SCHEMA_VERSION, bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
-
 import type { BioAttachmentOp, OfflineBioChecklist } from '@/services/offline/bioDb';
 import type { BioSnapshotUpload } from '@/types/protocolChecklist';
+
+import { protocolChecklistDirect } from '@/services/APIs';
+import { BIO_SNAPSHOT_SCHEMA_VERSION, bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 
 /**
  * Check an offline SLR copy back in.
@@ -66,19 +66,25 @@ const errorMessage = (err: unknown): string => {
 };
 
 /** Send one queued op, marking it landed before the next one starts. */
-const flushOne = async (
-  record: OfflineBioChecklist,
-  op: BioAttachmentOp,
-): Promise<void> => {
+const flushOne = async (record: OfflineBioChecklist, op: BioAttachmentOp): Promise<void> => {
   const guid = record.deviceCheckoutGuid;
   if (op.kind === 'ADD') {
     if (!op.blob) return; // nothing to send; treat as landed so the queue can drain
     const file = new File([op.blob], op.fileName ?? 'attachment', { type: op.blob.type });
-    await API.protocolChecklist.uploadAttachment(
-      'bio', record.checklistId, file, op.description, guid);
+    await protocolChecklistDirect.uploadAttachment(
+      'bio',
+      record.checklistId,
+      file,
+      op.description,
+      guid,
+    );
   } else if (op.attachmentId) {
-    await API.protocolChecklist.deleteAttachment(
-      'bio', record.checklistId, op.attachmentId, guid);
+    await protocolChecklistDirect.deleteAttachment(
+      'bio',
+      record.checklistId,
+      op.attachmentId,
+      guid,
+    );
   }
   // Marked *before* the next op starts. The upload returns 204 with no id, so a resumed flush can
   // only tell what already went by this marker — without it a retry re-posts everything it had sent.
@@ -114,7 +120,9 @@ export const checkInBioChecklist = async (
       // the same loop resumes cleanly once the connection is back.
       await bioOfflineRepo.setSyncState(checklistId, 'CONFLICT', errorMessage(err));
       throw new CheckInBlockedError(
-        `Could not upload ${op.fileName ?? 'a file'}: ${errorMessage(err)}`, rejected);
+        `Could not upload ${op.fileName ?? 'a file'}: ${errorMessage(err)}`,
+        rejected,
+      );
     }
     done += 1;
     options.onProgress?.({ phase: 'attachments', done, total: pending.length });
@@ -124,10 +132,14 @@ export const checkInBioChecklist = async (
     // Stop before the graph. Letting it through would release the checkout and drop the local copy
     // while those bytes are still only on this device — the user must decide to discard them first.
     await bioOfflineRepo.setSyncState(
-      checklistId, 'CONFLICT',
-      `${rejected.length} file(s) were refused by the server. Review them, then check in again.`);
+      checklistId,
+      'CONFLICT',
+      `${rejected.length} file(s) were refused by the server. Review them, then check in again.`,
+    );
     throw new CheckInBlockedError(
-      'Some files could not be uploaded. Review them before checking in.', rejected);
+      'Some files could not be uploaded. Review them before checking in.',
+      rejected,
+    );
   }
 
   // ── 2. Post the graph ──────────────────────────────────────────────
@@ -147,7 +159,7 @@ export const checkInBioChecklist = async (
   };
 
   try {
-    await API.protocolChecklist.uploadSnapshot(checklistId, upload);
+    await protocolChecklistDirect.uploadSnapshot(checklistId, upload);
   } catch (err) {
     await bioOfflineRepo.setSyncState(checklistId, 'CONFLICT', errorMessage(err));
     throw new CheckInBlockedError(errorMessage(err));
@@ -174,5 +186,6 @@ export const checkInBioChecklist = async (
 export const resumableCheckIns = async (): Promise<OfflineBioChecklist[]> => {
   const records = await bioOfflineRepo.listOffline();
   return records.filter(
-    (record) => record.syncState === 'FLUSHING_ATTACHMENTS' || record.syncState === 'SYNCING_GRAPH');
+    (record) => record.syncState === 'FLUSHING_ATTACHMENTS' || record.syncState === 'SYNCING_GRAPH',
+  );
 };

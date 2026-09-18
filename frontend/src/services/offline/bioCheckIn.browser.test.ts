@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import API from '@/services/APIs';
+import { protocolChecklistDirect } from '@/services/APIs';
 import { bioDb } from '@/services/offline/bioDb';
 import {
   checkInBioChecklist,
@@ -11,17 +11,21 @@ import { bioOfflineRepo } from '@/services/offline/bioOfflineRepo';
 
 import type { BioSnapshot } from '@/types/protocolChecklist';
 
+// The UNFACADED client, which is what a check-in must use. This file used to mock `default`'s
+// `protocolChecklist` — the facaded one — and assert against that, so it could never see the defect
+// it was meant to cover: in production the facade routes a write back into the local copy whenever
+// one exists, which is always true mid-check-in. The flush re-queued every attachment op instead of
+// sending it, and the mock made that look correct.
 vi.mock('@/services/APIs', () => ({
-  default: {
-    protocolChecklist: {
-      uploadAttachment: vi.fn(),
-      deleteAttachment: vi.fn(),
-      uploadSnapshot: vi.fn(),
-    },
+  default: { protocolChecklist: {} },
+  protocolChecklistDirect: {
+    uploadAttachment: vi.fn(),
+    deleteAttachment: vi.fn(),
+    uploadSnapshot: vi.fn(),
   },
 }));
 
-const api = API.protocolChecklist as unknown as {
+const api = protocolChecklistDirect as unknown as {
   uploadAttachment: ReturnType<typeof vi.fn>;
   deleteAttachment: ReturnType<typeof vi.fn>;
   uploadSnapshot: ReturnType<typeof vi.fn>;
@@ -80,6 +84,22 @@ describe('checkInBioChecklist', () => {
     expect(api.uploadAttachment).toHaveBeenCalledWith(
       'bio', '9001', expect.any(File), 'a map', 'guid-1');
     expect(api.deleteAttachment).toHaveBeenCalledWith('bio', '9001', '77', 'guid-1');
+  });
+
+  it('drains the attachment queue rather than re-queueing it', async () => {
+    // An end-state assertion, deliberately: the "was it called" checks above cannot tell a real send
+    // from a call that went back into the offline facade and queued the op again. That is what
+    // happened in production — the flush routed through `API.protocolChecklist`, which re-queues
+    // whenever a local copy exists, and a copy always exists mid-check-in. The op was then marked
+    // synced, so an attachment deleted offline stayed on the server and one added never arrived,
+    // while a fresh pending op was left behind. A drained queue is the only proof it really left.
+    await givenCheckedOut();
+    await bioOfflineRepo.queueAttachmentAdd('9001', new Blob(['x']), 'map.pdf', 'a map');
+    await bioOfflineRepo.queueAttachmentDelete('9001', '77');
+
+    await checkInBioChecklist('9001');
+
+    expect(await bioOfflineRepo.pendingAttachmentOps('9001')).toHaveLength(0);
   });
 
   it('posts the graph with the tombstones and schema version', async () => {

@@ -47,6 +47,21 @@ BackendApiConfig.TOKEN = async () => {
   }
 };
 
+/**
+ * The SLR client WITHOUT the offline facade.
+ *
+ * For the check-in, and only the check-in. The facade routes a write to the local copy whenever one
+ * exists — which is exactly the situation during a check-in, since the copy is removed only at the
+ * very end. So the flush handed its queued attachment ops back to the facade, which dutifully
+ * queued them again and returned; the op was then marked synced, nothing reached the server, and a
+ * fresh pending op was left behind. A file deleted offline stayed on the server, and one added
+ * offline never arrived.
+ *
+ * The check-in is the one caller that means "talk to the server", never "serve this from the
+ * device". Everything else should keep using the facaded `API.protocolChecklist`.
+ */
+export const protocolChecklistDirect = new ProtocolChecklistService(BackendApiConfig);
+
 const serviceConstructors = {
   user: new UserService(BackendApiConfig),
   acceptedSites: new AcceptedSitesService(BackendApiConfig),
@@ -58,7 +73,7 @@ const serviceConstructors = {
   // Wrapped so the Bio views work unchanged whether or not the checklist is checked out to this
   // device: reads and writes are served from the local copy when one exists, and pass straight
   // through to the real client otherwise.
-  protocolChecklist: withBioOffline(new ProtocolChecklistService(BackendApiConfig)),
+  protocolChecklist: withBioOffline(protocolChecklistDirect),
   chrChecklist: new ChrChecklistService(BackendApiConfig),
   search: new SearchService(BackendApiConfig),
   masterListAdmin: new MasterListAdminService(BackendApiConfig),

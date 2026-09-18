@@ -59,9 +59,22 @@ class LoggedUserHelperTest {
   }
 
   @Test
-  void canChrHandlesNullDistrict() {
+  void canChrRefusesAnAbsentDistrictEvenForAnAdmin() {
+    // Changed 2026-08-10. This used to assert `canChr(null)` was TRUE for an admin ("admin passes
+    // regardless"). An absent district does not mean "every district" — it means the caller could
+    // not resolve one, most often because the checklist id it started from has no matching row.
+    // ChrChecklistAuthorizer.canEditChecklist passes exactly that null, so an admin was authorized
+    // to edit a checklist that does not exist and the request then died on the status read as a
+    // 500 rather than an honest 403.
+    //
+    // Merge note: the role NAMES here are main's (FREP_ADMINISTRATOR, and the DISTRICT- hyphen);
+    // the BEHAVIOUR is this branch's, and it is what the merged LoggedUserHelper.canChr does — the
+    // null/blank guard sits above the isSysAdmin() bypass.
     assertThat(withAuthorities("FREP_CHR_EDITOR_DISTRICT-DCK").canChr(null)).isFalse();
-    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr(null)).isTrue(); // admin passes regardless
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr(null)).isFalse();
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr("   ")).isFalse();
+    // A real district is of course still open to an admin — the bypass itself is unchanged.
+    assertThat(withAuthorities("FREP_ADMINISTRATOR").canChr("DCK")).isTrue();
   }
 
   @Test

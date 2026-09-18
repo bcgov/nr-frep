@@ -4,6 +4,7 @@ import ca.bc.gov.nrs.frep.ChrConstants;
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.EntityNotFoundException;
 import ca.bc.gov.nrs.frep.exception.FrepApiRuntimeException;
+import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.service.v1.ChrChecklistPersistenceService;
 import ca.bc.gov.nrs.frep.struct.v1.frep.AcceptedSite;
@@ -225,12 +226,16 @@ public class ChrChecklistService {
     if (ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
       UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
       if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
-        throw new InvalidParameterException(
+        // AccessForbiddenException (403), not InvalidParameterException (400): the request is
+        // well-formed, the caller just holds the wrong checkout. "attachments" rather than
+        // "photos" — this surface takes PDFs and spreadsheets now, and every other message in
+        // this class was already renamed to match.
+        throw new AccessForbiddenException(
             "This checklist is checked out on another device, so its attachments can't be changed here.");
       }
       return;
     }
-    throw new InvalidParameterException(
+    throw new AccessForbiddenException(
         "The checklist status is currently "
             + ChrConstants.frepChecklistStatusDescriptions().getOrDefault(status, status)
             + ", so its attachments can't be changed.");
@@ -560,7 +565,7 @@ public class ChrChecklistService {
   }
 
   @Transactional
-  public CheckList activateChecklist(long checklistId) {
+  public void activateChecklist(long checklistId) {
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
       throw new InvalidParameterException(
@@ -569,7 +574,6 @@ public class ChrChecklistService {
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     log.info("Activated CHR checklist :: {} by user :: {}", checklistId,
         loggedUserHelper.getLoggedUserId());
-    return getChecklist(checklistId);
   }
 
   /**
@@ -580,10 +584,10 @@ public class ChrChecklistService {
    * fallback for that case).
    */
   @Transactional
-  public CheckList releaseCheckout(long checklistId, String deviceCheckoutGuid) {
+  public void releaseCheckout(long checklistId, String deviceCheckoutGuid) {
     String status = checklistRepository.getChecklistStatus(checklistId);
     if (!ChrConstants.FrepChecklistStatusCode.RDO.equals(status)) {
-      return getChecklist(checklistId);
+      return;
     }
     UUID serverGuid = checklistRepository.getDeviceCheckoutGuid(checklistId);
     if (serverGuid == null || !serverGuid.toString().equals(deviceCheckoutGuid)) {
@@ -593,7 +597,6 @@ public class ChrChecklistService {
     persistenceService.activateChecklist(checklistId, loggedUserHelper.getLoggedUserId());
     log.info("Released offline checkout of CHR checklist :: {} by user :: {}", checklistId,
         loggedUserHelper.getLoggedUserId());
-    return getChecklist(checklistId);
   }
 
   @Transactional

@@ -19,6 +19,13 @@ export type OfflineChecklist = {
    * DELETE per photo. Without this list an offline deletion would simply never reach the server.
    */
   deletedPhotoIds?: string[];
+  /**
+   * Photos the server refused, keyed by the local `tmp:` marker on the picture → the reason.
+   *
+   * Parked, never dropped: those bytes may be field evidence that cannot be re-collected, so
+   * discarding is the user's decision. Mirrors the SLR attachment queue's `rejectedReason`.
+   */
+  rejectedPhotos?: Record<string, string>;
   updatedAt: number;
 };
 

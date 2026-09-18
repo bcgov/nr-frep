@@ -88,7 +88,7 @@ const SCREENS: ScreenTile[] = [
 const OFFLINE_SCREEN: ScreenTile = {
   title: 'Offline Checklist',
   description: 'Open the CHR checklists saved on this device for offline editing.',
-  to: '/chr/offline',
+  to: '/offline',
   Icon: CloudOffline,
 };
 

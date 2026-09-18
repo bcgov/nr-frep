@@ -11,6 +11,7 @@ import type { AttachmentRow } from '@/types/protocolChecklist';
 import { useConfirm } from '@/context/confirm/useConfirm';
 import { useNotification } from '@/context/notification/useNotification';
 import API from '@/services/APIs';
+import { isTmpId } from '@/services/offline/tmpId';
 import { apiErrorMessage } from '@/utils/apiError';
 import {
   ALLOWED_ATTACHMENT_ACCEPT,
@@ -193,11 +194,15 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
         r.checklistAttachmentId &&
         isImage(r) &&
         !thumbs[r.checklistAttachmentId] &&
-        // Size comes from object storage (the DB column is derived from an empty BLOB and always
-        // reads 0). Unknown size is treated as too large — better a placeholder than an unbounded
-        // download.
-        Number(r.fileSize) > 0 &&
-        Number(r.fileSize) <= MAX_THUMBNAIL_BYTES,
+        // The size cap guards a NETWORK download — there is no thumbnail endpoint, so a thumbnail
+        // means pulling the whole file. A file captured on this device has already been pulled:
+        // its bytes are in the attachment queue and `getAttachmentContent` reads them from
+        // IndexedDB without touching the network. Applying the cap to those meant a phone photo —
+        // routinely 3–5 MB against a 2 MB cap — showed a placeholder and, since the preview opens
+        // from the thumbnail, could not be previewed either. On the one device holding the only
+        // copy of that image.
+        (isTmpId(r.checklistAttachmentId) ||
+          (Number(r.fileSize) > 0 && Number(r.fileSize) <= MAX_THUMBNAIL_BYTES)),
     );
     if (pending.length === 0) return;
     void Promise.all(
@@ -488,77 +493,79 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
       )}
 
       {rows.length > 0 && (
-        <table className="rip-field-grid">
-          <thead>
-            <tr>
-              <th scope="col">Preview</th>
-              <th scope="col">File</th>
-              <th scope="col">Description</th>
-              <th scope="col">Type</th>
-              <th scope="col">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => {
-              const thumb = row.checklistAttachmentId
-                ? thumbs[row.checklistAttachmentId]
-                : undefined;
-              return (
-                <tr key={`att-${row.checklistAttachmentId ?? index}`}>
-                  <td>
-                    {thumb ? (
-                      <button
-                        type="button"
-                        className="image-thumb-button"
-                        onClick={() =>
-                          setPreview({
-                            src: thumb,
-                            alt: row.description || row.fileName || `Attachment ${index + 1}`,
-                          })
-                        }
-                      >
-                        <img
-                          className="rip-attach__thumb image-thumb--clickable"
-                          src={thumb}
-                          alt={row.description || row.fileName || `Attachment ${index + 1}`}
-                        />
-                      </button>
-                    ) : (
-                      <span className="rip-attach__thumb rip-attach__thumb--placeholder">
-                        {isImage(row) ? '…' : row.mimeTypeCode || 'File'}
-                      </span>
-                    )}
-                  </td>
-                  <td>{row.fileName || '—'}</td>
-                  <td>{row.description || '—'}</td>
-                  <td>{row.mimeTypeCode || '—'}</td>
-                  <td className="table-actions">
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      renderIcon={Download}
-                      disabled={busy}
-                      onClick={() => void handleDownload(row)}
-                    >
-                      Download
-                    </Button>
-                    {canManage && (
+        <div className="rip-table-scroll">
+          <table className="rip-field-grid rip-field-grid--files">
+            <thead>
+              <tr>
+                <th scope="col">Preview</th>
+                <th scope="col">File</th>
+                <th scope="col">Description</th>
+                <th scope="col">Type</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => {
+                const thumb = row.checklistAttachmentId
+                  ? thumbs[row.checklistAttachmentId]
+                  : undefined;
+                return (
+                  <tr key={`att-${row.checklistAttachmentId ?? index}`}>
+                    <td>
+                      {thumb ? (
+                        <button
+                          type="button"
+                          className="image-thumb-button"
+                          onClick={() =>
+                            setPreview({
+                              src: thumb,
+                              alt: row.description || row.fileName || `Attachment ${index + 1}`,
+                            })
+                          }
+                        >
+                          <img
+                            className="rip-attach__thumb image-thumb--clickable"
+                            src={thumb}
+                            alt={row.description || row.fileName || `Attachment ${index + 1}`}
+                          />
+                        </button>
+                      ) : (
+                        <span className="rip-attach__thumb rip-attach__thumb--placeholder">
+                          {isImage(row) ? '…' : row.mimeTypeCode || 'File'}
+                        </span>
+                      )}
+                    </td>
+                    <td>{row.fileName || '—'}</td>
+                    <td>{row.description || '—'}</td>
+                    <td>{row.mimeTypeCode || '—'}</td>
+                    <td className="table-actions">
                       <Button
-                        kind="danger--ghost"
+                        kind="ghost"
                         size="sm"
-                        renderIcon={TrashCan}
+                        renderIcon={Download}
                         disabled={busy}
-                        onClick={() => void handleDelete(row)}
+                        onClick={() => void handleDownload(row)}
                       >
-                        Delete
+                        Download
                       </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      {canManage && (
+                        <Button
+                          kind="danger--ghost"
+                          size="sm"
+                          renderIcon={TrashCan}
+                          disabled={busy}
+                          onClick={() => void handleDelete(row)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/*

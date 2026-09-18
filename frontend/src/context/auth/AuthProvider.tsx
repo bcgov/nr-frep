@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       //
       // Clearing the user alone left the screen untouched, so signing out looked like a dead
       // control: the offline route set still serves the page you were most likely on when you
-      // pressed it (/protocol-checklists/chr/:id, /chr/offline, /dashboard), so its catch-all never
+      // pressed it (/protocol-checklists/chr/:id, /offline, /dashboard), so its catch-all never
       // fires and nothing moves. The "signed out on this device" notice lives on the landing page,
       // so it was never seen either.
       //

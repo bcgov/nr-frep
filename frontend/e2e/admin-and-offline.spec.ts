@@ -1,9 +1,9 @@
 import { expect, test } from './fixtures';
 import { expectNoGlobalError, gotoProtected } from './utils';
 
-test.describe('CHR offline checklists', () => {
+test.describe('Offline checklists', () => {
   test('renders the offline checklists page', async ({ page }) => {
-    await gotoProtected(page, '/chr/offline');
+    await gotoProtected(page, '/offline');
 
     await expect(page.getByRole('heading', { name: 'Offline checklists', level: 1 })).toBeVisible();
     await expectNoGlobalError(page);

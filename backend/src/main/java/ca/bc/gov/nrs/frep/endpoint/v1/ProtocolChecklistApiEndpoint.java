@@ -7,6 +7,11 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
@@ -53,6 +58,73 @@ public interface ProtocolChecklistApiEndpoint {
   ResponseEntity<Void> unsubmit(
       @PathVariable String protocolType,
       @PathVariable String checklistId);
+
+  /**
+   * The whole SLR graph in one response, for taking a checklist offline: opening, notes, every
+   * stratum with its plots, and metadata for every attachment (never bytes).
+   *
+   * <p>Read-only — it does <em>not</em> claim the checkout. Call {@code POST .../offline} afterwards,
+   * so a failed or abandoned download costs nothing.
+   */
+  @PreAuthorize(FrepAuthorities.FREP_EDIT)
+  @GetMapping("/protocol-checklists/bio/{checklistId}/snapshot")
+  ResponseEntity<BioSnapshot> getSnapshot(@PathVariable String checklistId);
+
+  /**
+   * Check a device's edited graph back in: one transaction, then RDO → ACT.
+   *
+   * <p>Attachments are <b>not</b> in this payload — they are flushed through their own multipart
+   * calls first, while the checklist is still checked out. Do this last, so a failed attachment
+   * aborts the check-in with the local copy intact rather than after the graph has been accepted.
+   */
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  @PostMapping("/protocol-checklists/bio/{checklistId}/snapshot")
+  ResponseEntity<BioCheckout> uploadSnapshot(
+      @PathVariable String checklistId,
+      @RequestBody BioSnapshotUpload upload);
+
+  // ── Offline checkout (SLR only) ──────────────────────────────────────
+
+  /**
+   * Whether the calling device still holds this checklist's checkout, so an offline copy can be
+   * flagged as superseded before the user attempts a check-in.
+   *
+   * <p>The device sends its own token and gets back a boolean — the server's token is never
+   * returned, because it is the credential the write guards accept.
+   */
+  @PreAuthorize(FrepAuthorities.FREP_EDIT)
+  @GetMapping("/protocol-checklists/bio/{checklistId}/checkout")
+  ResponseEntity<BioCheckoutState> getCheckoutState(
+      @PathVariable String checklistId,
+      @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
+
+
+  /**
+   * Check this SLR checklist out to a field device (ACT → RDO) and return the token the device must
+   * present for every write while it holds the checkout.
+   */
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  @PostMapping("/protocol-checklists/bio/{checklistId}/offline")
+  ResponseEntity<BioCheckout> takeOffline(@PathVariable String checklistId);
+
+  /**
+   * Release this device's own checkout (RDO → ACT). Editor-callable, but succeeds only when the
+   * supplied token matches the server's — so it can never release another device's checkout. The
+   * token rides in the body rather than the URL so it isn't logged. Admin activate is the fallback.
+   */
+  @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
+  @PostMapping("/protocol-checklists/bio/{checklistId}/release")
+  ResponseEntity<BioCheckout> releaseCheckout(
+      @PathVariable String checklistId,
+      @RequestBody ReleaseCheckoutRequest body);
+
+  /**
+   * Admin recovery for a checkout stranded on a lost or wiped device (RDO → ACT, no token). Clears
+   * the token, so whatever is still on that device can never be uploaded afterwards.
+   */
+  @PreAuthorize(FrepAuthorities.ADMIN)
+  @PostMapping("/protocol-checklists/bio/{checklistId}/activate")
+  ResponseEntity<BioCheckout> activate(@PathVariable String checklistId);
 
   @PreAuthorize(FrepAuthorities.FREP_EDIT)
   @GetMapping("/protocol-checklists/bio/{checklistId}/opening")
@@ -162,7 +234,10 @@ public interface ProtocolChecklistApiEndpoint {
       @PathVariable String protocol,
       @PathVariable String checklistId,
       @RequestParam("file") MultipartFile file,
-      @RequestParam(name = "description", required = false) String description);
+      @RequestParam(name = "description", required = false) String description,
+      // Multipart form field on the upload, query param on the delete — same shape as CHR's photo
+      // endpoints. Optional: the online path is ACT and sends nothing.
+      @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
 
   /** Delete an attachment. {@code 204 No Content}; the client re-fetches its page. */
   @PreAuthorize(FrepAuthorities.CONTENT_EDIT)
@@ -170,5 +245,6 @@ public interface ProtocolChecklistApiEndpoint {
   ResponseEntity<Void> deleteAttachment(
       @PathVariable String protocol,
       @PathVariable String checklistId,
-      @PathVariable String attachmentId);
+      @PathVariable String attachmentId,
+      @RequestParam(name = "deviceCheckoutGuid", required = false) String deviceCheckoutGuid);
 }

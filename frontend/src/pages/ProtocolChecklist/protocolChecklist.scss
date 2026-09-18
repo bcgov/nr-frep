@@ -809,6 +809,66 @@
    Download — rather than relying on a bare glyph, so three ghost buttons in a row stay tellable
    apart and the destructive one says so. Defined here because ChrChecklist imports this stylesheet
    too, keeping one definition for both protocols. */
+/**
+ * Horizontal scroll for a wide table, CONTAINED.
+ *
+ * Without this the overflow escaped to the page. The Action cell was clipped at the container edge
+ * — the Download button cut in half — and scrolling right ran past the tab panel's background onto
+ * the bare page, so the rest of the buttons sat on white with the row borders stopping short. That
+ * reads as a broken table rather than a scrollable one. Scrolling inside this box keeps the table's
+ * own borders and row rules with the content, however far it scrolls.
+ */
+/**
+ * Files the server refused, as bullets INSIDE their warning notification.
+ *
+ * Carbon's `subtitle` takes a node, so the list lives in the banner rather than beside it. Rendered
+ * as a sibling — even tinted to match — it read as a second banner stacked under the first, which is
+ * two announcements for one situation. It had no styles at all before that, which is what made it
+ * look like stray text.
+ *
+ * No surface of its own here: the notification provides it.
+ */
+.rip-table-scroll {
+  overflow-x: auto;
+  // Takes over the table's own bottom margin so spacing is unchanged.
+  margin-bottom: 1.5rem;
+
+  > .rip-field-grid {
+    margin-bottom: 0;
+  }
+}
+
+/**
+ * The attachment and photo grids (SLR Attachments, CHR Photos — both use `.rip-field-grid`).
+ *
+ * These are the only instances whose cells hold arbitrary user text: a file name and a description,
+ * neither of which has a guaranteed break opportunity. A long unbroken filename cannot wrap at all
+ * by default, and `.table-actions` pinned its two labelled buttons to a single line, so the row had
+ * a minimum width the tab could not satisfy and the table pushed past it.
+ *
+ * Wrapping both means it fits at ordinary widths; `.rip-table-scroll` is the backstop when it still
+ * cannot. Scoped to a modifier rather than applied to every `.rip-field-grid`, because the CHR
+ * features and composite tables deliberately keep their Action column on one line.
+ */
+.rip-field-grid--files {
+  td:not(.table-actions),
+  th {
+    // `anywhere` rather than `break-word`: it also lets the cell's MIN-CONTENT width shrink, which
+    // is what stops a long filename dictating the column width in the first place.
+    overflow-wrap: anywhere;
+  }
+
+  .table-actions {
+    // Was `nowrap` (inherited from .table-actions), which made this column as wide as both buttons
+    // side by side no matter how little room was left. Stacking is the better trade at that point.
+    white-space: normal;
+
+    .#{vars.$bcgov-prefix}--btn {
+      margin-block: 0.125rem;
+    }
+  }
+}
+
 .table-actions {
   // Left, so the buttons line up under the "Action" header. The attachments cell previously used
   // `rip-grid__choice`, which centres — correct for its checkbox cells, wrong for a labelled action

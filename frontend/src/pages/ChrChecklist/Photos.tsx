@@ -231,7 +231,8 @@ const Photos: FC<{
     // Over-length is reported by the field's own counter; just don't start an upload that the
     // database would reject at the end of it.
     // multipartByteLength, not byteLength: this description is sent as a form part.
-    if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description, multipartByteLength)) return;
+    if (overLimitError(description, ATTACHMENT_TEXT_LIMITS.description, multipartByteLength))
+      return;
     setDescriptionInvalid(false);
     // Photos are image-only. The database used to enforce this as well (a 3-char MIME_TYPE_CODE with
     // a FK to the shared code table, so a non-image failed on save); that FK is gone, so the app is
@@ -419,77 +420,83 @@ const Photos: FC<{
           renders a heavier header band (dark bold text on a solid grey fill), so the two tabs read
           as different components when they are the same thing. */}
       {pictures.length > 0 && (
-        <table className="rip-field-grid">
-          <thead>
-            <tr>
-              <th scope="col">Preview</th>
-              <th scope="col">Description</th>
-              <th scope="col">Date</th>
-              <th scope="col">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pictures.map((picture, index) => {
-              const src = resolveSrc(picture);
-              return (
-                <tr key={picture.id ?? `photo-${index}`}>
-                  <td>
-                    {src ? (
-                      <button
-                        type="button"
-                        className="image-thumb-button"
-                        onClick={() =>
-                          setPreview({
-                            src,
-                            alt:
-                              picture.description || picture.fileName || `Attachment ${index + 1}`,
-                          })
-                        }
-                      >
-                        <img
-                          className="chr-checklist__thumb image-thumb--clickable"
-                          src={src}
-                          alt={picture.description || picture.fileName || `Attachment ${index + 1}`}
-                        />
-                      </button>
-                    ) : (
-                      <span
-                        className="chr-checklist__thumb chr-checklist__thumb--placeholder"
-                        title={picture.fileName || undefined}
-                      >
-                        {picture.fileName || 'Saved file'}
-                      </span>
-                    )}
-                  </td>
-                  <td>{picture.description || '—'}</td>
-                  <td>{formatShortDate(picture.date) || '—'}</td>
-                  <td className="table-actions">
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      renderIcon={Download}
-                      disabled={busy}
-                      onClick={() => download(picture)}
-                    >
-                      Download
-                    </Button>
-                    {!readOnly && (
+        <div className="rip-table-scroll">
+          <table className="rip-field-grid rip-field-grid--files">
+            <thead>
+              <tr>
+                <th scope="col">Preview</th>
+                <th scope="col">Description</th>
+                <th scope="col">Date</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pictures.map((picture, index) => {
+                const src = resolveSrc(picture);
+                return (
+                  <tr key={picture.id ?? `photo-${index}`}>
+                    <td>
+                      {src ? (
+                        <button
+                          type="button"
+                          className="image-thumb-button"
+                          onClick={() =>
+                            setPreview({
+                              src,
+                              alt:
+                                picture.description ||
+                                picture.fileName ||
+                                `Attachment ${index + 1}`,
+                            })
+                          }
+                        >
+                          <img
+                            className="chr-checklist__thumb image-thumb--clickable"
+                            src={src}
+                            alt={
+                              picture.description || picture.fileName || `Attachment ${index + 1}`
+                            }
+                          />
+                        </button>
+                      ) : (
+                        <span
+                          className="chr-checklist__thumb chr-checklist__thumb--placeholder"
+                          title={picture.fileName || undefined}
+                        >
+                          {picture.fileName || 'Saved file'}
+                        </span>
+                      )}
+                    </td>
+                    <td>{picture.description || '—'}</td>
+                    <td>{formatShortDate(picture.date) || '—'}</td>
+                    <td className="table-actions">
                       <Button
-                        kind="danger--ghost"
+                        kind="ghost"
                         size="sm"
-                        renderIcon={TrashCan}
+                        renderIcon={Download}
                         disabled={busy}
-                        onClick={() => void removeAt(index)}
+                        onClick={() => download(picture)}
                       >
-                        Delete
+                        Download
                       </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      {!readOnly && (
+                        <Button
+                          kind="danger--ghost"
+                          size="sm"
+                          renderIcon={TrashCan}
+                          disabled={busy}
+                          onClick={() => void removeAt(index)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/*

@@ -1,0 +1,64 @@
+@use "../../styles/variables" as vars;
+
+/**
+ * The refused-files panel.
+ *
+ * Deliberately NOT a Carbon `InlineNotification`: that component refuses interactive children (it
+ * logs "component should have no interactive child nodes" and the nested control stops working),
+ * and every refused file needs its own Discard. So this mirrors Carbon's warning notification —
+ * low-contrast fill, full-height left accent, squared corners to match the app's own override — as
+ * a single block that can host them.
+ */
+.offline-refused {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--#{vars.$bcgov-prefix}-notification-background-warning, #fcf4d6);
+  border: 1px solid
+    color-mix(in srgb, var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b) 40%, transparent);
+  border-inline-start: 0.25rem solid var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b);
+}
+
+.offline-refused__icon {
+  flex: none;
+  margin-block-start: 0.125rem;
+  fill: var(--#{vars.$bcgov-prefix}-support-warning, #f1c21b);
+}
+
+.offline-refused__lead {
+  margin: 0;
+}
+
+.offline-refused__list {
+  list-style: disc;
+  margin: 0.5rem 0 0;
+  // Indents the bullets under the sentence above them.
+  padding-inline-start: 1.25rem;
+}
+
+.offline-refused__row {
+  // A refused upload is often device-named, with no break opportunity anywhere.
+  overflow-wrap: anywhere;
+
+  & + & {
+    margin-block-start: 0.25rem;
+  }
+
+  .#{vars.$bcgov-prefix}--btn {
+    // Flows after the reason rather than being pinned right: inside a bullet, a right-aligned
+    // button detaches from the text it acts on.
+    margin-inline-start: 0.5rem;
+    vertical-align: baseline;
+  }
+}
+
+.offline-refused__reason {
+  color: var(--#{vars.$bcgov-prefix}-text-secondary);
+
+  &::before {
+    // In CSS rather than the JSX string, so the separator is not part of the accessible name.
+    content: " — ";
+  }
+}
+

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Picture } from '@/types/chrChecklist';
+
 import API from '@/services/APIs';
 import { chrDb } from '@/services/offline/chrDb';
-import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import { chrOfflineRepo, PhotosRefusedError } from '@/services/offline/chrOfflineRepo';
 
 vi.mock('@/services/APIs', () => ({
   default: {
@@ -22,6 +24,7 @@ vi.mock('@/services/offline/chrDb', () => ({
     chrChecklists: {
       get: vi.fn(),
       put: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
   },
@@ -30,6 +33,7 @@ vi.mock('@/services/offline/chrDb', () => ({
 const table = chrDb.chrChecklists as unknown as {
   get: ReturnType<typeof vi.fn>;
   put: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
 };
 const api = API.chrChecklist as unknown as {
@@ -111,6 +115,104 @@ describe('chrOfflineRepo', () => {
   // anything captured or removed offline has to be flushed through the photo endpoints at check-in
   // or it never reaches the server at all.
   describe('check-in photo flush', () => {
+    it('parks a refused photo with its reason and keeps uploading the rest', async () => {
+      // CHR used to abort at the first refusal, recording nothing: no list, no reason, no Discard —
+      // just a toast. SLR parks each one and stops before the graph. Same rule here, so the panel
+      // has something to render and the good photos still land.
+      const bad: Picture = newPhoto('refused');
+      const good: Picture = newPhoto('landed');
+      const checkList = { checklistID: '1', pictures: [bad, good] };
+      table.get.mockResolvedValue({
+        checklistId: '1',
+        checkList,
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      });
+      api.addPhoto
+        .mockImplementationOnce(() =>
+          Promise.reject(
+            Object.assign(new Error('nope'), {
+              status: 422,
+              body: { message: 'Upload rejected: a virus was detected (Eicar-Test-Signature).' },
+            }),
+          ),
+        )
+        .mockImplementationOnce(() => Promise.resolve());
+
+      await expect(chrOfflineRepo.upload('1')).rejects.toBeInstanceOf(PhotosRefusedError);
+
+      // The good one still went, rather than being blocked by its neighbour.
+      expect(api.addPhoto).toHaveBeenCalledTimes(2);
+      // The refusal is parked against the picture, with the server's reason.
+      const parked = table.update.mock.calls
+        .map(([, patch]) => patch.rejectedPhotos)
+        .filter(Boolean)
+        .at(-1) as Record<string, string>;
+      expect(Object.values(parked)[0]).toContain('virus was detected');
+      expect(parked[bad.id as string]).toBeTruthy();
+      // And the document was never saved — the sync stops until the user decides.
+      expect(api.save).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a transient failure instead of parking it', async () => {
+      // A network drop is not the server's verdict. Parking it would ask the user to discard a file
+      // that is probably fine.
+      table.get.mockResolvedValue({
+        checklistId: '1',
+        checkList: { checklistID: '1', pictures: [newPhoto('a photo')] },
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      });
+      api.addPhoto.mockRejectedValue(new Error('network'));
+
+      await expect(chrOfflineRepo.upload('1')).rejects.not.toBeInstanceOf(PhotosRefusedError);
+    });
+
+    it('does not re-send a photo that already landed when a later one is refused', async () => {
+      // `addPhoto` returns 204 with no id, so nothing about a sent photo distinguishes it from an
+      // unsent one — and the flush skips only `id || !code`. A refused photo (virus, oversize) left
+      // the copy on the device with the already-sent ones still looking unsent, so the next Sync
+      // uploaded them again: one duplicate per photo per retry, silently, on the server.
+      const good: Picture = newPhoto('landed');
+      const bad: Picture = newPhoto('refused');
+      const checkList = { checklistID: '1', pictures: [good, bad] };
+      // Stateful, so the retry sees what the first attempt recorded — a plain vi.fn() would hand the
+      // retry a pristine record and the test would pass for the wrong reason.
+      const stored: Record<string, unknown> = {
+        checklistId: '1',
+        checkList,
+        dirty: true,
+        deviceCheckoutGuid: 'guid',
+        revisionCount: '2',
+      };
+      table.get.mockImplementation(() => Promise.resolve(stored));
+      table.update.mockImplementation((_id: string, patch: Record<string, unknown>) => {
+        Object.assign(stored, patch);
+        return Promise.resolve(1);
+      });
+      api.addPhoto
+        .mockImplementationOnce(() => Promise.resolve())
+        .mockImplementationOnce(() =>
+          Promise.reject(Object.assign(new Error('virus'), { status: 422 })),
+        );
+
+      await expect(chrOfflineRepo.upload('1')).rejects.toThrow();
+
+      // The one that landed is marked, so the retry's `id || !code` guard skips it.
+      expect(good.id).toBeTruthy();
+      // It was written to the record BEFORE the next photo was attempted, not left in memory.
+      expect(table.update).toHaveBeenCalledWith('1', { checkList });
+
+      // The retry re-sends NOTHING: the landed photo is marked, and the refused one is parked. That
+      // is the whole point — before the markers, both went up again, duplicating the first.
+      api.addPhoto.mockReset();
+      await expect(chrOfflineRepo.upload('1')).rejects.toBeInstanceOf(PhotosRefusedError);
+
+      expect(api.addPhoto).not.toHaveBeenCalled();
+    });
+
     it('uploads photos captured offline before saving the document', async () => {
       const order: string[] = [];
       api.addPhoto.mockImplementation(() => {

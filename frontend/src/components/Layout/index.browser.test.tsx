@@ -13,7 +13,7 @@ import Layout from './index';
 import APIs from '@/services/APIs';
 
 vi.mock('@/routes/routePaths', () => ({
-  getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/chr/offline' }],
+  getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/offline' }],
   getMenuEntries: () => [
     {
       id: 'Dashboard',

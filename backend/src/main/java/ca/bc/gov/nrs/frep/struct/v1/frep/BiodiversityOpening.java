@@ -53,6 +53,25 @@ public record BiodiversityOpening(
     );
   }
 
+  /**
+   * Returns a copy carrying the given status.
+   *
+   * For the check-in, which must save the device's field edits WITHOUT writing the device's idea of
+   * the status. {@code frep_210_bio_opening.SAVE} sets the status from its parameter, and an offline
+   * snapshot is read <em>before</em> the checkout is claimed, so it carries {@code ACT} — saving it
+   * back flipped the row out of {@code RDO} at step 1 and the release at step 5 then reported
+   * "this checklist isn't checked out". Status is server state; a device never owns it.
+   */
+  public BiodiversityOpening withStatus(String newStatusCode) {
+    return new BiodiversityOpening(
+        checklistId, resourceValueId, newStatusCode, frepWtpOverride, locationDescription,
+        patchReservesOnBlock, patchReservesSampled, innovativePracticeInd, innovativePracticesComment,
+        invasivePlantIndicator, invasivePlantComment, frepSiteEvaluationCode, evaluatorOpinionComment,
+        evaluationDate, revisionCount, grossArea, netArea, harvestDate,
+        teamLeadNameId, teamLeadName, teamLeadRevisionCount
+    );
+  }
+
   /** Returns a copy with the read-only RESULTS reference fields populated. */
   public BiodiversityOpening withResultsRefs(String newGrossArea, String newNetArea,
       String newHarvestDate) {

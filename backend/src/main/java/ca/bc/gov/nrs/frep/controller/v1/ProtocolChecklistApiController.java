@@ -7,6 +7,11 @@ import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlot;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioPlotRow;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratum;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BioStratumRow;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckout;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioCheckoutState;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshot;
+import ca.bc.gov.nrs.frep.struct.v1.frep.BioSnapshotUpload;
+import ca.bc.gov.nrs.frep.struct.v1.frep.ReleaseCheckoutRequest;
 import ca.bc.gov.nrs.frep.struct.v1.frep.BiodiversityOpening;
 import ca.bc.gov.nrs.frep.struct.v1.frep.ProtocolChecklistResponse;
 import ca.bc.gov.nrs.frep.struct.v1.frep.RiparianNotes;
@@ -60,6 +65,39 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
   public ResponseEntity<Void> unsubmit(String protocolType, String checklistId) {
     protocolChecklistService.unsubmit(protocolType, checklistId);
     return ResponseEntity.ok().build();
+  }
+
+  @Override
+  public ResponseEntity<BioSnapshot> getSnapshot(String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.getSnapshot(checklistId));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckout> uploadSnapshot(String checklistId, BioSnapshotUpload upload) {
+    return ResponseEntity.ok(protocolChecklistService.uploadSnapshot(checklistId, upload));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckoutState> getCheckoutState(
+      String checklistId, String deviceCheckoutGuid) {
+    return ResponseEntity.ok(
+        protocolChecklistService.getCheckoutState(checklistId, deviceCheckoutGuid));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckout> takeOffline(String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.takeOffline(checklistId));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckout> releaseCheckout(String checklistId, ReleaseCheckoutRequest body) {
+    return ResponseEntity.ok(protocolChecklistService.releaseCheckout(
+        checklistId, body == null ? null : body.deviceCheckoutGuid()));
+  }
+
+  @Override
+  public ResponseEntity<BioCheckout> activate(String checklistId) {
+    return ResponseEntity.ok(protocolChecklistService.activate(checklistId));
   }
 
   @Override
@@ -155,15 +193,18 @@ public class ProtocolChecklistApiController implements ProtocolChecklistApiEndpo
 
   @Override
   public ResponseEntity<Void> uploadAttachment(
-      String protocol, String checklistId, MultipartFile file, String description) {
-    protocolChecklistService.saveAttachment(protocol, checklistId, file, description);
+      String protocol, String checklistId, MultipartFile file, String description,
+      String deviceCheckoutGuid) {
+    protocolChecklistService.saveAttachment(
+        protocol, checklistId, file, description, deviceCheckoutGuid);
     return ResponseEntity.noContent().build();
   }
 
   @Override
   public ResponseEntity<Void> deleteAttachment(
-      String protocol, String checklistId, String attachmentId) {
-    protocolChecklistService.deleteAttachment(protocol, checklistId, attachmentId);
+      String protocol, String checklistId, String attachmentId, String deviceCheckoutGuid) {
+    protocolChecklistService.deleteAttachment(
+        protocol, checklistId, attachmentId, deviceCheckoutGuid);
     return ResponseEntity.noContent().build();
   }
 }

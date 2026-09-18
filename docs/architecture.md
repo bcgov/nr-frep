@@ -73,7 +73,8 @@ Routes are declared in `src/routes/routePaths.tsx` and selected by auth state in
 | Add Target Site | `/add-target-site`, `/site-detail/new` | Opening search → create a targeted site |
 | Site Detail | `/site-detail/:id` | View/edit a single site's resources |
 | Biodiversity checklist | `/protocol-checklists/slr/:id` | Biodiversity (SLB/SLR) checklist editor |
-| CHR checklist | `/protocol-checklists/chr/:id`, `/chr/offline` | CHR editor + offline (IndexedDB) list |
+| CHR checklist | `/protocol-checklists/chr/:id` | CHR checklist editor |
+| Offline checklists | `/offline` | One list of every device-local (IndexedDB) copy, CHR and SLR |
 | Checklist Search | `/search/checklists` | Cross-protocol checklist search |
 | Reports | `/reports` | Jasper/CSV report generation |
 | Admin | `/admin/master-list` | Generate the master list (role-gated `FREP_ADMINISTRATOR`) |

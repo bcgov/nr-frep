@@ -35,12 +35,12 @@ import AddTargetSitePage from '@/pages/AddTargetSite';
 import AuthCallbackPage from '@/pages/AuthCallback';
 import ChecklistSearchPage from '@/pages/ChecklistSearch';
 import ChrChecklistPage from '@/pages/ChrChecklist';
-import ChrOfflineListPage from '@/pages/ChrChecklist/OfflineList';
 import DashboardPage from '@/pages/Dashboard';
 import GlobalErrorPage from '@/pages/GlobalError';
 import LandingPage from '@/pages/Landing';
 import MasterListAdminPage from '@/pages/MasterListAdmin';
 import NotFoundPage from '@/pages/NotFound';
+import OfflineListPage from '@/pages/OfflineList';
 import ProtocolChecklistPage from '@/pages/ProtocolChecklist';
 import RandomListPage from '@/pages/RandomList';
 import ReportsPage from '@/pages/Reports';
@@ -215,15 +215,33 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     roles: ['FREP_ADMINISTRATOR', 'FREP_CHR_EDITOR'],
   },
   {
-    path: '/chr/offline',
+    // One list for every protocol that can be taken offline. It reads the device's own IndexedDB
+    // stores, so it carries no role gate: a user can only see copies they were already allowed to
+    // take offline, and each row links to a detail page that is role-gated in its own right. A gate
+    // here would instead lock people out of copies already sitting on their device.
+    path: '/offline',
     id: 'Offline Checklists',
     icon: CloudOffline,
     element: (
       <Layout>
-        <ChrOfflineListPage />
+        <OfflineListPage />
       </Layout>
     ),
     isSideMenu: true,
+  },
+  {
+    // Superseded by /offline. Kept as redirects: both are bookmarkable, and the PWA shell caches
+    // whatever path the user last had open.
+    path: '/chr/offline',
+    id: 'ChrOfflineRedirect',
+    element: <Navigate to="/offline" replace />,
+    isSideMenu: false,
+  },
+  {
+    path: '/protocol-checklists/offline',
+    id: 'BioOfflineRedirect',
+    element: <Navigate to="/offline" replace />,
+    isSideMenu: false,
   },
   {
     path: '/search/checklists',
@@ -295,11 +313,23 @@ export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES;
 
 /**
  * Offline route set — served to unauthenticated users while the device is offline. The landing
- * page becomes the FREP IMS (which shows only the Offline Checklist option when logged out),
- * plus the CHR routes that work without a network connection (device-local IndexedDB checklists).
- * These carry no role restriction, so they render as-is (Layout-wrapped).
+ * page becomes the FREP IMS (which shows only the Offline Checklist option when logged out), plus
+ * the routes that work without a network connection: the unified offline list and the CHR and SLR
+ * checklist pages it links to (all device-local IndexedDB). The two superseded list paths stay in
+ * the set so a cached bookmark still redirects rather than falling through to the catch-all.
  */
-const OFFLINE_PATHS = new Set(['/chr/offline', '/protocol-checklists/chr/:id']);
+export const OFFLINE_PATHS = new Set([
+  '/offline',
+  '/chr/offline',
+  '/protocol-checklists/chr/:id',
+  '/protocol-checklists/offline',
+  // Must match a PROTECTED_ROUTES `path` EXACTLY — this is a string-set filter, not a matcher. It
+  // held '/protocol-checklists/:protocolType/:checklistId', the generic route from before the SLR
+  // rename split it, so no route matched: offline, an SLR checklist fell through to the catch-all
+  // and bounced to the landing page while CHR (whose path did match) worked. offlineRoutes.unit.test
+  // now fails if any entry here names a route that does not exist.
+  '/protocol-checklists/slr/:id',
+]);
 export const getOfflineRoutes = (): RouteDescription[] => [
   {
     path: '/',

@@ -25,7 +25,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }));
 
 vi.mock('@/routes/routePaths', () => ({
-  getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/chr/offline' }],
+  getOfflineMenuEntries: () => [{ id: 'Offline Checklists', path: '/offline' }],
   getMenuEntries: () => [
     {
       id: 'Dashboard',

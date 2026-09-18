@@ -18,6 +18,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { ExternalLink } from '@/components/core/ExternalLink';
 import FormLock from '@/components/core/FormLock';
+import RefusedFiles from '@/components/RefusedFiles';
 import BlockSummary from '@/pages/ChrChecklist/BlockSummary';
 import Contacts from '@/pages/ChrChecklist/Contacts';
 import FeatureList from '@/pages/ChrChecklist/FeatureList';
@@ -37,13 +38,14 @@ import { calculateMrvaRatingCode } from '@/pages/ChrChecklist/codeLists';
 import { chrTabStatuses, type ChrTabKey } from '@/pages/ChrChecklist/tabStatus';
 import { groupOutstanding } from '@/pages/ProtocolChecklist/tabStatus';
 import API from '@/services/APIs';
-import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import { chrOfflineRepo, PhotosRefusedError } from '@/services/offline/chrOfflineRepo';
 import {
   classifyStaleness,
   isStale,
   stalenessBanner,
   type StalenessVerdict,
-} from '@/services/offline/chrStaleness';
+} from '@/services/offline/staleness';
+import { isTmpId } from '@/services/offline/tmpId';
 import {
   CHR_STATUS,
   type CheckList,
@@ -56,6 +58,7 @@ import { apiErrorMessage } from '@/utils/apiError';
 import { statusTagType } from '@/utils/checklistStatus';
 import { formatShortDate } from '@/utils/date';
 import { pictureToFile } from '@/utils/pictureFile';
+import { READ_ONLY_CHECKED_OUT, READ_ONLY_SUBMITTED } from '@/utils/readOnlyReason';
 import { silvaOpeningUrl } from '@/utils/silva';
 
 // Reuse the Biodiversity checklist form primitives (rip-form / rip-form__group / rip-form__grid /
@@ -125,12 +128,8 @@ const errorKey = (e: ValidationError): string =>
 
 // The "Read only" banner copy, by why the checklist is locked.
 const readOnlyReason = (status: CheckList['status']): string => {
-  if (status === CHR_STATUS.READ_ONLY_OFFLINE) {
-    return 'This checklist is checked out offline, so the online copy is read-only. Upload it from the device that holds it (which reactivates it), or have it reactivated, to edit online.';
-  }
-  if (status === CHR_STATUS.SUBMITTED) {
-    return 'This checklist has been submitted and is read-only. Unsubmit it to make changes.';
-  }
+  if (status === CHR_STATUS.READ_ONLY_OFFLINE) return READ_ONLY_CHECKED_OUT;
+  if (status === CHR_STATUS.SUBMITTED) return READ_ONLY_SUBMITTED;
   return 'This checklist is not active, so it is read-only.';
 };
 
@@ -198,6 +197,9 @@ const ChrChecklistPage: FC = () => {
   const [photoPageSize, setPhotoPageSize] = useState(10);
   const [photoTotal, setPhotoTotal] = useState(0);
   // Server-vs-local reconcile for an offline copy: verdict + the server's last-updater audit.
+  // Photos the server refused during a sync, parked on the local copy until the user decides.
+  const [refusedPhotos, setRefusedPhotos] = useState<Record<string, string>>({});
+
   const [offlineStaleness, setOfflineStaleness] = useState<{
     verdict: StalenessVerdict;
     updateUserid?: string;
@@ -258,6 +260,8 @@ const ChrChecklistPage: FC = () => {
         if (record) {
           setCheckList(record.checkList);
           setIsOfflineCopy(true);
+          // Parked refusals survive a reload — the decision is still outstanding.
+          setRefusedPhotos(record.rejectedPhotos ?? {});
           return undefined;
         }
         return loadFromApi();
@@ -543,11 +547,7 @@ const ChrChecklistPage: FC = () => {
    * told about rows that are gone.
    */
   const ungroupCompositeGroup = useCallback(
-    async (
-      anchorId: string,
-      deleteMemberIds: string[],
-      applied: Feature[],
-    ): Promise<boolean> => {
+    async (anchorId: string, deleteMemberIds: string[], applied: Feature[]): Promise<boolean> => {
       if (!checkList) return false;
       if (isOfflineCopy) {
         return saveFeatures(applied);
@@ -905,7 +905,15 @@ const ChrChecklistPage: FC = () => {
             ...checkList,
             pictures: (checkList.pictures ?? []).filter((p) => p !== picture),
           };
-          await chrOfflineRepo.saveLocal(merged, picture.id ? [picture.id] : []);
+          // `!isTmpId`: a photo carrying a local marker was uploaded during a part-completed flush,
+          // so it exists on the server but this device never learned its real id. Queueing the
+          // marker for deletion would send a 404 and abort the next sync. The photo stays on the
+          // server until the copy is re-pulled — an orphan, which is the lesser problem: before the
+          // marker existed, that same photo was re-uploaded on every retry instead.
+          await chrOfflineRepo.saveLocal(
+            merged,
+            picture.id && !isTmpId(picture.id) ? [picture.id] : [],
+          );
           setCheckList(merged);
           display({ kind: 'success', title: 'Removed offline', timeout: 4000 });
           return true;
@@ -1019,8 +1027,11 @@ const ChrChecklistPage: FC = () => {
   const handleReactivate = async () => {
     setBusy(true);
     try {
-      const saved = await API.chrChecklist.activate(id);
-      // Carry the photo page over — see the note in handleSubmit.
+      // Activate returns 204; re-read rather than having a status flip hand back the whole aggregate.
+      await API.chrChecklist.activate(id);
+      const saved = await API.chrChecklist.getChecklist(id);
+      // Carry the photo page over — see the note in handleSubmit. Needed on the re-read too: the
+      // checklist GET no longer embeds photos, so replacing state wholesale would blank the tab.
       setCheckList((prev) => ({ ...saved, pictures: prev?.pictures ?? [] }));
       display({ kind: 'success', title: 'Checklist reactivated', timeout: 4000 });
     } catch (err) {
@@ -1062,6 +1073,39 @@ const ChrChecklistPage: FC = () => {
     }
   };
 
+  /**
+   * Drop a photo the server refused, so the sync is no longer blocked by it.
+   *
+   * Removes the picture and its parked reason together — the bytes are only on this device, so this
+   * is the deletion the confirm warns about. No server call: it never landed.
+   */
+  const handleDiscardRefusedPhoto = async (markerId: string) => {
+    if (!checkList) return;
+    const picture = (checkList.pictures ?? []).find((candidate) => candidate.id === markerId);
+    if (
+      !(await confirm({
+        title: 'Discard this file?',
+        message:
+          `"${picture?.fileName ?? picture?.description ?? 'This file'}" was refused by the server ` +
+          'and has never been uploaded. Discarding it deletes it from this device permanently.',
+        confirmButtonText: 'Discard',
+      }))
+    ) {
+      return;
+    }
+    const merged = {
+      ...checkList,
+      pictures: (checkList.pictures ?? []).filter((candidate) => candidate.id !== markerId),
+    };
+    await chrOfflineRepo.discardRefusedPhoto(id, markerId);
+    setCheckList(merged);
+    setRefusedPhotos((prev) => {
+      const next = { ...prev };
+      delete next[markerId];
+      return next;
+    });
+  };
+
   const handleUpload = async () => {
     if (!checkList) return;
     setBusy(true);
@@ -1084,8 +1128,34 @@ const ChrChecklistPage: FC = () => {
         timeout: 5000,
       });
     } catch (err) {
+      // The title used to assert an optimistic-lock cause for EVERY failure. When the server refused
+      // a photo — a virus hit, an oversize file — it told the user the checklist had changed and to
+      // "re-pull and retry", advice that fails again every time, while the real reason sat in the
+      // subtitle contradicting it. A 4xx carrying a message is the server stating its reason: lead
+      // with that, as SLR does.
+      if (err instanceof PhotosRefusedError) {
+        // Parked, not lost. Surface them so the user can review and discard — the panel renders
+        // from this state, so it appears without a reload.
+        const record = await chrOfflineRepo.load(id);
+        if (record) {
+          setCheckList(record.checkList);
+          setRefusedPhotos(record.rejectedPhotos ?? {});
+        }
+        display({
+          kind: 'warning',
+          title: 'Sync stopped',
+          subtitle: err.message,
+          timeout: 9000,
+        });
+        return;
+      }
+      const status = (err as { status?: number })?.status;
+      const serverSaidWhy =
+        status !== undefined && status >= 400 && status < 500 && status !== 409 && status !== 412;
       reportError(
-        'Upload failed — the checklist may have changed on the server; re-pull and retry',
+        serverSaidWhy
+          ? 'Sync stopped — the server refused part of this upload'
+          : 'Upload failed — the checklist may have changed on the server; re-pull and retry',
         err,
       );
     } finally {
@@ -1265,6 +1335,25 @@ const ChrChecklistPage: FC = () => {
           </div>
         </div>
       </Column>
+
+      {/* Same panel and same rule as SLR: a refused file is parked, never dropped — those bytes may
+          be field evidence that cannot be re-collected — and the sync stays blocked until the user
+          decides about each one. */}
+      {isOfflineCopy && Object.keys(refusedPhotos).length > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <RefusedFiles
+            files={(checkList.pictures ?? [])
+              .filter((picture) => picture.id && refusedPhotos[picture.id])
+              .map((picture) => ({
+                key: picture.id as string,
+                fileName: picture.fileName ?? picture.description,
+                reason: refusedPhotos[picture.id as string],
+              }))}
+            onDiscard={(file) => void handleDiscardRefusedPhoto(file.key)}
+            busy={busy}
+          />
+        </Column>
+      )}
 
       {isOfflineCopy &&
         offlineStaleness &&

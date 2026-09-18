@@ -6,10 +6,15 @@ import AppRoutes from '@/routes/AppRoutes';
 import { useAuth } from '@/context/auth/useAuth';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { prefetchChrCodeLists } from '@/pages/ChrChecklist/useChrCodeLists';
+import { useResumeCheckIn } from '@/services/offline/useResumeCheckIn';
 
 const App: FC = () => {
   const { isLoggedIn } = useAuth();
   const online = useOnlineStatus();
+
+  // Finish any SLR check-in cut short by the IDIR re-login redirect, which takes the page with it
+  // mid-flush. Needs a session, so it waits for login.
+  useResumeCheckIn(isLoggedIn);
 
   /**
    * Put the CHR code lists on disk as soon as there is a session to fetch them with.

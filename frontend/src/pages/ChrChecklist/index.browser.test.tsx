@@ -8,6 +8,7 @@ import ChrChecklistPage from './index';
 import * as useAuthorizationModule from '@/hooks/useAuthorization';
 import API from '@/services/APIs';
 import { chrOfflineRepo } from '@/services/offline/chrOfflineRepo';
+import { READ_ONLY_CHECKED_OUT } from '@/utils/readOnlyReason';
 
 // The checklist's dropdowns read their options from the code tables.
 vi.mock('@/services/APIs', async () => ({
@@ -40,7 +41,10 @@ vi.mock('@/services/offline/chrOfflineRepo', () => ({
     upload: vi.fn(),
     takeOffline: vi.fn(),
     remove: vi.fn(),
+    discardRefusedPhoto: vi.fn(),
   },
+  // The page branches on this to tell a parked refusal from a genuine upload failure.
+  PhotosRefusedError: class extends Error {},
 }));
 
 vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
@@ -499,17 +503,26 @@ describe('ChrChecklistPage', () => {
       canChr: () => true,
     });
     repo.load.mockResolvedValue(undefined);
-    api.getChecklist.mockResolvedValue({ ...sampleChecklist, status: 'RDO' });
-    api.activate.mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    // RDO on load; ACT once reactivated. Activate itself resolves to void (204) — the page re-reads.
+    api.getChecklist
+      .mockResolvedValueOnce({ ...sampleChecklist, status: 'RDO' })
+      .mockResolvedValue({ ...sampleChecklist, status: 'ACT' });
+    api.activate.mockResolvedValue(undefined);
 
     renderPage();
 
     expect(await screen.findByText('1001-Cultural Heritage')).toBeTruthy();
     // Checked-out server copy is read-only and shows the recovery banner; tabs are not editable.
     expect(screen.getByText('Read only')).toBeTruthy();
+    // Same sentence the SLR page shows for the same state — both read it from @/utils/readOnlyReason.
+    expect(screen.getByText(READ_ONLY_CHECKED_OUT)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reactivate' }));
     expect(api.activate).toHaveBeenCalledWith('1001');
+    // The page must re-read rather than use the (now empty) activate response — otherwise it would
+    // render undefined and the banner would never clear.
+    await waitFor(() => expect(api.getChecklist).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Read only')).toBeNull());
   });
 });

@@ -101,7 +101,7 @@ const flushPhotos = async (checklistId: string, record: OfflineChecklist): Promi
   // The checklist is still RDO at this point — the RDO → ACT flip happens in the document save
   // below — so every photo call must present the checkout token to prove it owns the checkout.
   const guid = record.deviceCheckoutGuid;
-  const rejected: Record<string, string> = { ...(record.rejectedPhotos ?? {}) };
+  const rejected: Record<string, string> = { ...record.rejectedPhotos };
   for (const photoId of record.deletedPhotoIds ?? []) {
     await API.chrChecklist.deletePhoto(checklistId, photoId, guid);
     await chrDb.chrChecklists.update(checklistId, {
@@ -259,7 +259,7 @@ export const chrOfflineRepo = {
   async discardRefusedPhoto(checklistId: string, markerId: string): Promise<void> {
     const record = await chrDb.chrChecklists.get(checklistId);
     if (!record) return;
-    const rejectedPhotos = { ...(record.rejectedPhotos ?? {}) };
+    const rejectedPhotos = { ...record.rejectedPhotos };
     delete rejectedPhotos[markerId];
     await chrDb.chrChecklists.put({
       ...record,

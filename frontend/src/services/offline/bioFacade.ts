@@ -394,7 +394,7 @@ export const withBioOffline = (client: Client): Client => {
   // pointing at the real instance.
   return new Proxy(client, {
     get(target, prop, receiver) {
-      if (Object.prototype.hasOwnProperty.call(facade, prop)) {
+      if (Object.hasOwn(facade, prop)) {
         return (facade as Record<PropertyKey, unknown>)[prop];
       }
       const value = Reflect.get(target, prop, receiver);

@@ -94,7 +94,7 @@ export const withBioReferenceCache = (client: ConfigurationService): Configurati
   // real instance — keeps both the prototype chain and `this`.
   return new Proxy(client, {
     get(target, prop, receiver) {
-      if (Object.prototype.hasOwnProperty.call(facade, prop)) {
+      if (Object.hasOwn(facade, prop)) {
         return (facade as Record<PropertyKey, unknown>)[prop];
       }
       const value = Reflect.get(target, prop, receiver);

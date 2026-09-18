@@ -503,42 +503,27 @@ describe('ProtocolChecklistPage offline actions', () => {
   // Reactivate button, whose whole purpose is discarding someone else's stranded work. CHR had all
   // of this right already; these pin SLR to the same contract.
 
-  it('flags a held copy with its own chip', async () => {
-    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
-
-    renderPage();
-    await screen.findByRole('button', { name: 'Sync changes' });
-
-    expect(screen.getByText('Offline copy')).toBeTruthy();
-  });
-
-  it('shows the server status, not the snapshot the copy was taken from', async () => {
+  // One situation — a copy held on this device — and the markers its header must get right. Same
+  // setup every time, so it is a table: what differs is only the text and whether it should be
+  // there. The Reactivate case below is NOT in the table; it needs a different fixture.
+  it.each([
+    ['flags a held copy with its own chip', 'Offline copy', true],
     // The facade serves the local snapshot, captured while the checklist was still ACT, so the raw
     // statusCode reads "Active" even though the server now holds it RDO.
+    ['shows the server status, not the snapshot the copy was taken from', 'Active', false],
+    ['drops the redundant "Saved on this device" banner', 'Saved on this device', false],
+    ['does not call your own editable copy read only', 'Read only', false],
+  ])('%s', async (_case, text, expected) => {
     repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
 
     renderPage();
     await screen.findByRole('button', { name: 'Sync changes' });
 
-    expect(screen.queryByText('Active')).toBeNull();
-  });
-
-  it('drops the redundant "Saved on this device" banner', async () => {
-    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
-
-    renderPage();
-    await screen.findByRole('button', { name: 'Sync changes' });
-
-    expect(screen.queryByText('Saved on this device')).toBeNull();
-  });
-
-  it('does not call your own editable copy read only', async () => {
-    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
-
-    renderPage();
-    await screen.findByRole('button', { name: 'Sync changes' });
-
-    expect(screen.queryByText('Read only')).toBeNull();
+    if (expected) {
+      expect(screen.getByText(text)).toBeTruthy();
+    } else {
+      expect(screen.queryByText(text)).toBeNull();
+    }
   });
 
   it('never offers Reactivate on a copy this device holds', async () => {

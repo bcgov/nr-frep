@@ -512,7 +512,31 @@ const ProtocolChecklistPage: FC = () => {
    * every save 403'd (once BE-1 added the status guard) or, before that, silently raced the device.
    */
   const checkedOut = checklist?.statusCode === 'RDO';
-  const editable = canEdit && !isLegacySlb && !submitted && !checkedOut;
+
+  /**
+   * This device holds the copy — which makes it the authoritative one, and makes this page its
+   * editor.
+   *
+   * Both gates below branch on it, because a held copy fails the online checks for two independent
+   * reasons and neither means "read-only":
+   *
+   * 1. `checkedOut` is always true. `getChecklist` is not facaded, so the page reads the server's
+   *    `RDO` — the state take-offline *put it in*. For everyone else that is a lock; for the holder
+   *    it is the normal state of holding a copy.
+   * 2. `canEdit` is false once the session lapses. It comes from `user.roles`, and offline there is
+   *    no session to refresh, so the roles are empty. The role check is not available exactly when
+   *    the copy is most needed.
+   *
+   * Together these made a held copy read-only: no Edit on any tab, online or off, which is the whole
+   * feature. Authorisation is not lost by trusting the holder — the checkout token is evidence this
+   * user was permitted to take it, and the backend re-checks permission when the copy is synced.
+   * CHR draws exactly this line: `readOnly = isOfflineCopy ? status === SUBMITTED : …`.
+   */
+  const holdsOfflineCopy = !!offlineRecord;
+
+  const editable = holdsOfflineCopy
+    ? !isLegacySlb && !submitted
+    : canEdit && !isLegacySlb && !submitted && !checkedOut;
 
   /**
    * Whether the checklist-level actions (Submit / Unsubmit / Take offline / Check in) can be offered
@@ -534,8 +558,8 @@ const ProtocolChecklistPage: FC = () => {
    * editable, someone else's checkout is not.
    */
   const actionsReady =
-    !loading && !notFound && !hasError && !!checklist && canEdit && !isLegacySlb
-    && (!checkedOut || !!offlineRecord);
+    !loading && !notFound && !hasError && !!checklist && !isLegacySlb
+    && (holdsOfflineCopy || (canEdit && !checkedOut));
 
   /**
    * Reactivate: admin recovery for a checklist stranded on **someone else's** device.
@@ -547,7 +571,7 @@ const ProtocolChecklistPage: FC = () => {
    */
   const canReactivate =
     !loading && !notFound && !hasError && !!checklist
-    && checkedOut && !offlineRecord && online && canPerformSysAdminActions;
+    && checkedOut && !holdsOfflineCopy && online && canPerformSysAdminActions;
 
   return (
     <Grid fullWidth className="default-grid protocol-checklist-grid">

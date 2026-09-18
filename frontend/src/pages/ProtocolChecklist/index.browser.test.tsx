@@ -171,6 +171,8 @@ const renderPage = () =>
     </MemoryRouter>,
   );
 
+const REMOVE_OR_SYNC = /Sync changes/;
+
 describe('ProtocolChecklistPage submit', () => {
   afterEach(() => vi.clearAllMocks());
 
@@ -414,6 +416,66 @@ describe('ProtocolChecklistPage offline actions', () => {
 
     expect(await screen.findByText('Checked out')).toBeTruthy();
     expect(screen.queryByText('Active')).toBeNull();
+  });
+
+  // ── A copy held on this device stays editable (reported from BB2) ──────
+  //
+  // `editable` failed for TWO independent reasons on a held copy, so each is pinned separately —
+  // fixing one alone still left the page read-only, which is how this survived the first pass.
+
+  it('keeps the tabs editable while this device holds the copy, even though the server says RDO', async () => {
+    // Cause 1: getChecklist is not facaded, so the page reads the server's RDO — the state that
+    // take-offline put it in. That is a lock for everyone else and the normal state for the holder.
+    readyChecklist();
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'RDO' });
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
+  });
+
+  it('keeps the tabs editable when the session has lapsed offline', async () => {
+    // Cause 2: canEdit reads user.roles, and offline there is no session to refresh, so it is false.
+    // The role check is unavailable exactly when the copy matters most. The checkout token is the
+    // evidence of permission, and the backend re-checks it at sync.
+    readyChecklist();
+    authMock.canEdit = false;
+    onlineMock.mockReturnValue(false);
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'RDO' });
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'DIRTY' });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
+    authMock.canEdit = true;
+    onlineMock.mockReturnValue(true);
+  });
+
+  it('still refuses to edit a checklist checked out to SOMEONE ELSE', async () => {
+    // The guard that must survive the fix: no local copy, server says RDO — read-only, as before.
+    readyChecklist();
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'RDO' });
+    repo.load.mockResolvedValue(null);
+
+    renderPage();
+
+    await screen.findByText('Read only');
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+  });
+
+  it('still refuses to edit a submitted copy held on this device', async () => {
+    // CHR parity: submitted is the one status that makes a held copy read-only.
+    readyChecklist();
+    api.getChecklist.mockResolvedValue({ ...activeChecklist, statusCode: 'SUB' });
+    repo.load.mockResolvedValue({ checklistId: '9001', syncState: 'CLEAN' });
+
+    renderPage();
+
+    // Wait on something that definitely renders, so the assertion is not just racing an empty page.
+    // Anchor on an action a held copy always offers, so this is not racing an empty page.
+    expect(await screen.findByRole('button', { name: REMOVE_OR_SYNC })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
   it('swaps Take offline for Sync changes once a copy is held, and keeps Submit', async () => {

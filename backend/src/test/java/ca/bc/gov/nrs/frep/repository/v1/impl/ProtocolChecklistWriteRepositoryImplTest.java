@@ -108,10 +108,17 @@ class ProtocolChecklistWriteRepositoryImplTest {
   }
 
   @Test
-  void saveBiodiversityOpeningWiresSeventeenParamsAndEchoesIdentity() throws Exception {
+  void saveBiodiversityOpeningWiresSeventeenParamsAndReturnsTheLiveRevision() throws Exception {
     when(cs.getString(16)).thenReturn(null); // no error
     when(cs.getString(1)).thenReturn("1001"); // checklist id echoed
-    when(cs.getString(14)).thenReturn("6"); // revision incremented
+    // The proc echoes back the token we SENT, not the incremented one. This test used to stub it as
+    // "6" and assert that, which is how the hand-off bug reached production: the Notes save runs on
+    // this returned token and was refused `record.modified2` on every SLR check-in. The deployed
+    // FREP_210 SAVE is not the body in nr-mof-db (17 params vs 16), so its write-back cannot be
+    // verified from source — the repository re-reads the row instead. Stubbed as the STALE value so
+    // this fails if anyone goes back to trusting the echo.
+    when(cs.getString(14)).thenReturn("5");
+    when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any())).thenReturn("6");
 
     BiodiversityOpening in = new BiodiversityOpening(
         "1001", "500", "ACT", "N", "loc", "Y", "N", "Y", "innov", "N", "inv", "W", "opinion",
@@ -127,6 +134,7 @@ class ProtocolChecklistWriteRepositoryImplTest {
     verify(cs).registerOutParameter(16, Types.VARCHAR); // error message
     verify(cs).setString(17, "2024-08-12"); // evaluation date (optional trailing param)
     assertEquals("1001", out.checklistId());
+    // The live row's token, not the proc's echo.
     assertEquals("6", out.revisionCount());
   }
 

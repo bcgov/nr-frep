@@ -205,6 +205,27 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void checkInSavesTheServersStatusNotTheDevicesStaleOne() {
+    // `frep_210_bio_opening.SAVE` WRITES the status it is given, and the snapshot's opening was read
+    // before the checkout was claimed — reads first, so an abandoned download costs nothing — so it
+    // still says ACT. Saving that back flipped the row out of RDO at step 1, and the release at
+    // step 5 then refused with "this checklist isn't checked out, so there is nothing to release or
+    // activate". The device edits field data; the status is the server's.
+    givenCheckedOutToThisDevice();
+    when(writeRepository.saveBiodiversityOpening(any(), any()))
+        .thenReturn(opening(null, "loc", "N", null, "N", null, null).withIdentity("9001", "4"));
+    when(writeRepository.activate(eq("9001"), any())).thenReturn("");
+
+    // The payload's opening carries ACT — see the `opening(...)` fixture.
+    service.uploadSnapshot("9001", anUpload(List.of(), List.of()));
+
+    ArgumentCaptor<BiodiversityOpening> saved = ArgumentCaptor.forClass(BiodiversityOpening.class);
+    verify(writeRepository).saveBiodiversityOpening(saved.capture(), any());
+    assertEquals(ChrConstants.FrepChecklistStatusCode.RDO, saved.getValue().statusCode(),
+        "the opening must be saved with the server's RDO, never the snapshot's stale ACT");
+  }
+
+  @Test
   void checkInAssignsRealIdsAndRepointsPlotsAtThem() {
     givenCheckedOutToThisDevice();
     when(writeRepository.saveBiodiversityOpening(any(), any()))

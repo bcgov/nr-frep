@@ -32,6 +32,8 @@ import ca.bc.gov.nrs.frep.exception.AccessForbiddenException;
 import ca.bc.gov.nrs.frep.exception.ConflictFoundException;
 import ca.bc.gov.nrs.frep.exception.InvalidParameterException;
 import ca.bc.gov.nrs.frep.exception.InvalidPayloadException;
+import ca.bc.gov.nrs.frep.exception.LegacyProcMessages;
+import ca.bc.gov.nrs.frep.exception.StoredProcedureException;
 import ca.bc.gov.nrs.frep.exception.errors.ApiError;
 import java.io.IOException;
 import java.sql.SQLException;
@@ -1162,16 +1164,24 @@ public class ProtocolChecklistService {
     String userId = loggedUserHelper.getLoggedUserId();
 
     // 1. Opening, and carry its new token forward — see the class note above.
+    //
+    // The status is taken from the SERVER, not from the payload. `frep_210_bio_opening.SAVE` writes
+    // whatever status it is given, and the snapshot's opening was read before the checkout was
+    // claimed (reads first, so an abandoned download costs nothing), so it still says `ACT`. Saving
+    // that back flipped the row out of `RDO` here at step 1, and the release at step 5 then refused
+    // with "this checklist isn't checked out". A device edits field data; it never owns the status.
+    BiodiversityOpening openingToSave =
+        upload.opening().withStatus(checklistRepository.getBioChecklistStatus(checklistId));
     BiodiversityOpening savedOpening =
-        writeRepository.saveBiodiversityOpening(upload.opening(), userId);
+        step("the Opening tab", () -> writeRepository.saveBiodiversityOpening(openingToSave, userId));
 
     // 2. Notes, on the token the opening just produced rather than the device's.
     if (upload.notes() != null) {
-      writeRepository.saveNotes(
+      step("the Notes tab", () -> writeRepository.saveNotes(
           new RiparianNotes(checklistId, upload.notes().noteDescription(),
               savedOpening.revisionCount()),
           checklistRepository.resolveResourceType(checklistId),
-          userId);
+          userId));
     }
 
     // 3. Strata, then their plots. A stratum created offline gets its real id here, and its plots
@@ -1180,14 +1190,17 @@ public class ProtocolChecklistService {
       BioStratum toSave = isTemporaryId(entry.stratum().stratumId())
           ? entry.stratum().withIdentity(null, null)
           : entry.stratum();
-      BioStratum savedStratum =
-          writeRepository.saveBioStratum(toSave.withChecklist(checklistId), userId);
+      BioStratum savedStratum = step(
+          "stratum " + describe(entry.stratum().stratumNumber(), entry.stratum().stratumId()),
+          () -> writeRepository.saveBioStratum(toSave.withChecklist(checklistId), userId));
 
       for (BioPlot plot : nullSafe(entry.plots())) {
         BioPlot plotToSave = isTemporaryId(plot.plotId())
             ? plot.withIdentity(null, savedStratum.stratumId(), null)
             : plot.withStratum(savedStratum.stratumId());
-        writeRepository.saveBioPlot(plotToSave, userId);
+        step("plot " + describe(plot.plotNumber(), plot.plotId())
+            + " in stratum " + describe(entry.stratum().stratumNumber(), entry.stratum().stratumId()),
+            () -> writeRepository.saveBioPlot(plotToSave, userId));
       }
     }
 
@@ -1197,6 +1210,43 @@ public class ProtocolChecklistService {
     // 5. Only now release the checkout.
     assertActivated(checklistId);
     return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.ACT, null);
+  }
+
+
+  /**
+   * Run one phase of a check-in, naming it if the proc refuses.
+   *
+   * A check-in writes the opening, the notes, every stratum and every plot in one transaction, and
+   * the legacy optimistic-lock failure (`record.modified2`) carries NO parameter — the user was told
+   * only "Someone else changed this data", with nothing to say which of a dozen rows was stale or
+   * what to do about it. Naming the phase turns that into an actionable report, and is the
+   * difference between reproducing a sync failure in minutes and in an afternoon.
+   *
+   * Only the message is added; the transaction still rolls the whole check-in back, so the device
+   * keeps its copy and its token and can retry once the conflict is resolved.
+   */
+  private <T> T step(String phase, java.util.function.Supplier<T> action) {
+    try {
+      return action.get();
+    } catch (StoredProcedureException ex) {
+      String detail = LegacyProcMessages.resolve(ex.getOracleErrorMessage())
+          .orElse(ex.getOracleErrorMessage());
+      throw new ConflictFoundException(detail + " (check-in stopped while saving "
+          + phase + "; nothing was saved)");
+    }
+  }
+
+  /** A row's user-facing number, falling back to its id when it has none yet. */
+  private static String describe(String number, String id) {
+    return StringUtils.isNotBlank(number) ? number : String.valueOf(id);
+  }
+
+  /** Void-returning overload of {@link #step(String, java.util.function.Supplier)}. */
+  private void step(String phase, Runnable action) {
+    step(phase, () -> {
+      action.run();
+      return null;
+    });
   }
 
   /**

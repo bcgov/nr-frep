@@ -1,11 +1,11 @@
+import type { BioSnapshot, BioTombstone } from '@/types/protocolChecklist';
+
 import {
   bioDb,
   type BioAttachmentOp,
   type BioSyncState,
   type OfflineBioChecklist,
 } from '@/services/offline/bioDb';
-
-import type { BioSnapshot, BioTombstone } from '@/types/protocolChecklist';
 
 /**
  * Local-first persistence for SLR checklists.
@@ -23,18 +23,11 @@ import type { BioSnapshot, BioTombstone } from '@/types/protocolChecklist';
 export const BIO_SNAPSHOT_SCHEMA_VERSION = '1';
 
 /** Local ids for rows created offline. Oracle assigns the real ones at check-in. */
-export const TMP_ID_PREFIX = 'tmp:';
+// Re-exported so existing importers are unchanged; defined in ./tmpId so a view can depend on the
+// id convention without pulling in this repository (and without every test that mocks it breaking).
+export { TMP_ID_PREFIX, isTmpId, mintTmpId } from './tmpId';
 
-let tmpCounter = 0;
-
-/** Mint a local id for a row created offline, so views have a stable key before the server sees it. */
-export const mintTmpId = (): string => {
-  tmpCounter += 1;
-  return `${TMP_ID_PREFIX}${Date.now()}-${tmpCounter}`;
-};
-
-/** Whether an id was minted here rather than by Oracle. Mirrors the server's own check. */
-export const isTmpId = (id?: string): boolean => !id || id.startsWith(TMP_ID_PREFIX);
+import { isTmpId } from './tmpId';
 
 /** Union of tombstones, so an earlier save's deletions survive a later one. */
 const mergeTombstones = (

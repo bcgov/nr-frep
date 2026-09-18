@@ -227,14 +227,18 @@ describe('OfflineListPage', () => {
     expect(await screen.findByText('1 file rejected')).toBeTruthy();
   });
 
-  it('shows Unverified for every copy when offline, and probes neither server', async () => {
+  it('probes neither server when offline, and does not bury local work under "Unverified"', async () => {
+    // Offline every row is unverified, so it cannot be the headline: it would say the same thing on
+    // every row and hide which copies hold unsynced work. A clean copy has nothing else to say and
+    // still reads Unverified; a dirty one leads with its local state and carries the caveat.
     onlineStatus.mockReturnValue(false);
-    chrRepo.listOffline.mockResolvedValue([aChrRecord()]);
-    bioRepo.listOffline.mockResolvedValue([aBioRecord()]);
+    chrRepo.listOffline.mockResolvedValue([aChrRecord({ dirty: false })]);
+    bioRepo.listOffline.mockResolvedValue([aBioRecord({ syncState: 'DIRTY' })]);
 
     renderPage();
 
-    await waitFor(() => expect(screen.getAllByText('Unverified')).toHaveLength(2));
+    expect(await screen.findByText('Unsynced changes')).toBeTruthy();
+    expect(await screen.findByText('Unverified')).toBeTruthy();
     expect(chrApi.getChecklist).not.toHaveBeenCalled();
     expect(bioApi.getCheckoutState).not.toHaveBeenCalled();
   });

@@ -36,6 +36,9 @@ export type BioRowInputs = {
  * CHR needs only dirty/clean here; SLR's check-in is a drainable queue plus a graph POST, so a row
  * can be legitimately mid-sync and the list has to say which part.
  */
+/** Shown as the row's caveat when the server could not be reached to check staleness. */
+const UNVERIFIED_OFFLINE = 'Not checked against the server — this device is offline.';
+
 export const bioRowStatus = ({
   syncState,
   verdict,
@@ -60,9 +63,6 @@ export const bioRowStatus = ({
   if (syncState === 'CONFLICT') {
     return { label: 'Needs attention', tag: 'red', detail: conflictReason };
   }
-  if (verdict === 'UNVERIFIED') {
-    return { label: 'Unverified', tag: 'cool-gray' };
-  }
   if (syncState === 'FLUSHING_ATTACHMENTS') {
     return {
       label: pendingAttachments > 0 ? `Uploading files (${pendingAttachments} left)` : 'Uploading files',
@@ -75,8 +75,20 @@ export const bioRowStatus = ({
   if (syncState === 'DIRTY' || pendingAttachments > 0) {
     // Pending attachments count as unsynced even on a CLEAN copy: a file captured offline is a local
     // change whether or not any field was edited, and its bytes are held nowhere else.
-    return { label: 'Unsynced changes', tag: 'magenta' };
+    //
+    // Ranked ABOVE `UNVERIFIED`. Offline, every row is unverified, so leading with it turned the
+    // whole column into one repeated word and buried the one thing the device does know for
+    // certain: which copies hold work that has not reached the server. That is the actionable fact
+    // in the field, where this list is actually read. Unverified stays on the row as a caveat.
+    return {
+      label: 'Unsynced changes',
+      tag: 'magenta',
+      detail: verdict === 'UNVERIFIED' ? UNVERIFIED_OFFLINE : undefined,
+    };
   }
+  // Nothing local to report, so "Unverified" is the honest headline rather than a green "Synced"
+  // this device cannot actually stand behind.
+  if (verdict === 'UNVERIFIED') return { label: 'Unverified', tag: 'cool-gray' };
   return { label: 'Synced', tag: 'green' };
 };
 
@@ -103,6 +115,14 @@ export const chrRowStatus = ({ dirty, verdict }: ChrRowInputs): OfflineRowStatus
       detail: "This copy can't be checked in because the checklist changed on the server.",
     };
   }
+  // Same ranking as bioRowStatus: local work outranks "we could not check".
+  if (dirty) {
+    return {
+      label: 'Unsynced changes',
+      tag: 'magenta',
+      detail: verdict === 'UNVERIFIED' ? UNVERIFIED_OFFLINE : undefined,
+    };
+  }
   if (verdict === 'UNVERIFIED') return { label: 'Unverified', tag: 'cool-gray' };
-  return dirty ? { label: 'Unsynced changes', tag: 'magenta' } : { label: 'Synced', tag: 'green' };
+  return { label: 'Synced', tag: 'green' };
 };

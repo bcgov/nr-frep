@@ -247,7 +247,7 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
               + "but current DB revision_count=[{}] (mismatch/blank → record.modified2)",
           o.checklistId(), o.revisionCount(), dbRevision);
     }
-    return executeCall(
+    BiodiversityOpening saved = executeCall(
         callSql(BIO_OPENING_PACKAGE, "SAVE", 17),
         cs -> {
           setInOutString(cs, 1, o.checklistId());
@@ -273,6 +273,22 @@ public class ProtocolChecklistWriteRepositoryImpl extends AbstractFrepRepository
           return o.withIdentity(cs.getString(1), cs.getString(14));
         }
     );
+
+    // Re-read the token rather than trust the proc's IN OUT parameter.
+    //
+    // The Notes tab writes the SAME `biodiversity_checklist` row and shares its single
+    // `revision_count`, so a check-in saves the opening and then the notes on the token this call
+    // returns. That token was stale: every SLR check-in failed `record.modified2` from
+    // FREP_CHECKLIST_NOTES.SAVE — including one on a checklist with no edits at all, which is how
+    // we know it is the hand-off and not the user's data.
+    //
+    // Why not simply fix the proc's write-back: the deployed FREP_210 SAVE is NOT the body in
+    // nr-mof-db — it takes 17 parameters where that file declares 16 — so what it assigns to
+    // p_revision_count cannot be established from source, and a `record.modified2` gives no clue
+    // which side is wrong. One indexed SELECT on the row we just wrote is authoritative whatever
+    // the proc does, and it makes the returned opening safe for every caller: the online Opening
+    // tab reuses this token for its next save too, so a second consecutive save had the same flaw.
+    return saved.withIdentity(saved.checklistId(), currentBioRevisionCount(o.checklistId()));
   }
 
   // --- Biodiversity Stratum (FREP screen 211) ---

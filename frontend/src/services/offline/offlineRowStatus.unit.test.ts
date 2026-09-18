@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bioRowStatus, type BioRowInputs } from '@/services/offline/offlineRowStatus';
+import { bioRowStatus, chrRowStatus, type BioRowInputs } from '@/services/offline/offlineRowStatus';
 
 const inputs = (over: Partial<BioRowInputs> = {}): BioRowInputs => ({
   syncState: 'CLEAN',
@@ -43,9 +43,38 @@ describe('bioRowStatus', () => {
       .toMatchObject({ label: 'Out of date', tag: 'red' });
   });
 
-  it('shows an unverifiable copy as unverified rather than clean', () => {
+  it('shows an unverifiable copy with nothing local as unverified rather than clean', () => {
     expect(bioRowStatus(inputs({ verdict: 'UNVERIFIED' })))
       .toMatchObject({ label: 'Unverified', tag: 'cool-gray' });
+  });
+
+  it('reports unsynced work ahead of "we could not check"', () => {
+    // Offline EVERY row is unverified, so leading with it made the whole column read the same word
+    // and hid the copies holding work that has not reached the server — the fact that matters in
+    // the field, which is exactly where this list is read.
+    expect(bioRowStatus(inputs({ syncState: 'DIRTY', verdict: 'UNVERIFIED' }))).toMatchObject({
+      label: 'Unsynced changes',
+      tag: 'magenta',
+    });
+  });
+
+  it('keeps the unverified caveat on the row rather than dropping it', () => {
+    expect(bioRowStatus(inputs({ syncState: 'DIRTY', verdict: 'UNVERIFIED' })).detail)
+      .toContain('offline');
+  });
+
+  it('counts a queued file as unsynced work even on a clean, unverified copy', () => {
+    expect(
+      bioRowStatus(inputs({ verdict: 'UNVERIFIED', pendingAttachments: 1 })),
+    ).toMatchObject({ label: 'Unsynced changes' });
+  });
+
+  it('still lets staleness and rejected files outrank both', () => {
+    // The fix must not promote local state above the two states that make a copy un-checkinable.
+    expect(bioRowStatus(inputs({ syncState: 'DIRTY', verdict: 'RECLAIMED' })))
+      .toMatchObject({ label: 'Out of date' });
+    expect(bioRowStatus(inputs({ syncState: 'DIRTY', verdict: 'UNVERIFIED', rejectedAttachments: 1 })))
+      .toMatchObject({ label: '1 file rejected' });
   });
 
   it('ranks rejected files above staleness and above a conflict', () => {
@@ -65,5 +94,25 @@ describe('bioRowStatus', () => {
   it('ranks staleness above the local sync state', () => {
     // A superseded copy cannot be checked in at all, so "Unsynced changes" would be misleading.
     expect(bioRowStatus(inputs({ syncState: 'DIRTY', verdict: 'GONE' })).label).toBe('Out of date');
+  });
+});
+
+describe('chrRowStatus', () => {
+  it('reports unsynced work ahead of "we could not check", as SLR does', () => {
+    expect(chrRowStatus({ dirty: true, verdict: 'UNVERIFIED' })).toMatchObject({
+      label: 'Unsynced changes',
+      tag: 'magenta',
+    });
+    expect(chrRowStatus({ dirty: true, verdict: 'UNVERIFIED' }).detail).toContain('offline');
+  });
+
+  it('says unverified when there is nothing local to report', () => {
+    expect(chrRowStatus({ dirty: false, verdict: 'UNVERIFIED' }))
+      .toMatchObject({ label: 'Unverified' });
+  });
+
+  it('still puts staleness first', () => {
+    expect(chrRowStatus({ dirty: true, verdict: 'SUBMITTED_ELSEWHERE' }))
+      .toMatchObject({ label: 'Out of date' });
   });
 });

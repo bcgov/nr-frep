@@ -220,6 +220,11 @@ export default defineConfig(({ mode }) => {
           plugins: [react(), tsconfigPaths()],
           test: {
             name: 'node',
+            // Its own group, run before the browser project's: Vitest 4 refuses to run projects
+            // together when their worker limits differ, and the browser project caps its workers
+            // on CI (see below). Unit tests take about two seconds, so running them first costs
+            // little.
+            sequence: { groupOrder: 0 },
             setupFiles: [
               './src/config/tests/setup-env.ts',
               './src/config/tests/custom-matchers.ts',
@@ -259,6 +264,7 @@ export default defineConfig(({ mode }) => {
           },
           test: {
             name: 'browser',
+            sequence: { groupOrder: 1 },
             setupFiles: [
               './src/config/tests/setup-browser.ts',
               './src/config/tests/custom-matchers.ts',

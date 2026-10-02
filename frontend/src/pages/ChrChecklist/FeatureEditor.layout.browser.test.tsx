@@ -1,6 +1,6 @@
 import { render, waitFor } from '@testing-library/react';
 import { page } from '@vitest/browser/context';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded — a browser spec loads none by default, and
 // without them every measurement reports the unstyled layout. Kept in its own file for the same
@@ -560,5 +560,50 @@ describe('FeatureEditor — inline errors', () => {
     expect(error.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       next.getBoundingClientRect().top,
     );
+  });
+});
+
+describe('FeatureEditor — fields in the strategy table', () => {
+  // The rows are white on the grey tab panel, so a field in them must be grey: the panel's own white
+  // field token made the buffer-length and reserve-type fields white on white.
+  const bg = (el: Element) => getComputedStyle(el).backgroundColor;
+
+  afterEach(() => {
+    delete document.documentElement.dataset.carbonTheme;
+  });
+
+  it('gives the buffer and reserve fields the grey field colour', async () => {
+    await page.viewport(1250, 700);
+    // Carbon's colour tokens are defined only under the theme attribute ThemeProvider sets.
+    document.documentElement.dataset.carbonTheme = 'white';
+    render(
+      // The tab panel, which is what switches fields to white.
+      <div className="cds--tab-content">
+        <FeatureEditor
+          feature={
+            {
+              featureLabel: 'Feature 1',
+              managementStrategyFN: 'true',
+              retainBufferFN: 'true',
+              conserveinRotationalReserveFN: 'true',
+            } as Feature
+          }
+          onPatch={vi.fn()}
+          readOnly={false}
+        />
+      </div>,
+    );
+
+    const row = await waitFor(() => {
+      const input = document.getElementById('feat-bufferLengthFN');
+      expect(input).not.toBeNull();
+      return input!.closest('tr')!;
+    });
+    const buffer = document.getElementById('feat-bufferLengthFN')!;
+    const reserve = document.getElementById('feat-conserveRotationalReserveTypeFN')!;
+
+    expect(bg(row)).toBe('rgb(255, 255, 255)');
+    expect(bg(buffer)).toBe('rgb(244, 244, 244)');
+    expect(bg(reserve)).toBe('rgb(244, 244, 244)');
   });
 });

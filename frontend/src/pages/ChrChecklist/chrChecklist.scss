@@ -266,6 +266,11 @@
 
     tbody tr {
       background: var(--cds-layer-02, #ffffff);
+      /* White rows on the grey tab panel, so their fields take the grey token — the inverse of the
+         panel's own white fields (see _overrides.scss, .cds--tab-content / .cds--tile). Left as
+         they were, the buffer-length and reserve-type fields were white on white. */
+      --cds-field: var(--cds-field-01);
+      --cds-field-hover: var(--cds-field-hover-01);
     }
 
     /* The strategy table only. `__additional` carries this class too, and its three columns are a

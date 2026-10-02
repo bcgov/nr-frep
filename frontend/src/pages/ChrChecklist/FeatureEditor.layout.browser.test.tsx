@@ -664,3 +664,40 @@ describe('FeatureEditor — read-only (submitted)', () => {
     expect(document.querySelector('.feature-sections select')).not.toBeNull();
   });
 });
+
+describe('FeatureEditor — read-only follow-up alignment', () => {
+  // Editable, a ticked box's follow-ups are indented to its label text. Read-only there is no box,
+  // so the indent left them hanging right of the answer they belong to.
+  const valueLeft = (label: string) => {
+    const el = [...document.querySelectorAll('.protocol-checklist__label')].find(
+      (l) => l.textContent?.startsWith(label),
+    );
+    expect(el, label).toBeTruthy();
+    return Math.round(el!.parentElement!.getBoundingClientRect().left);
+  };
+
+  it('lines the follow-ups up with the answer that reveals them', async () => {
+    await page.viewport(1250, 900);
+    render(
+      <FeatureEditor
+        feature={
+          {
+            featureLabel: '1',
+            trailfeatures: 'true',
+            canthetrailstillbelocated: 'true',
+            windthrowManagement: 'true',
+            sitePermitIssued: 'true',
+            permit: 'P-1',
+          } as Feature
+        }
+        onPatch={vi.fn()}
+        readOnly
+      />,
+    );
+
+    await waitFor(() => valueLeft('Trail features applicable'));
+    expect(valueLeft('Trail still locatable')).toBe(valueLeft('Trail features applicable'));
+    expect(valueLeft('Area windfirm')).toBe(valueLeft('Windthrow management applicable'));
+    expect(valueLeft('Permit number')).toBe(valueLeft('AIA / site-alteration permit issued'));
+  });
+});

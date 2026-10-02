@@ -234,6 +234,12 @@
   &__planning-permit {
     margin: 0.25rem 0 0.5rem 1.75rem;
     max-width: 18rem;
+
+    /* Read-only there is no checkbox to indent to — every answer is a label over its value at the
+       left edge — so the indent would only leave this one hanging. */
+    &:has(> .protocol-checklist__field) {
+      margin-left: 0;
+    }
   }
 
   /* Left-aligned, unlike the right-aligned toolbars over the record tables: this button sits under
@@ -427,6 +433,12 @@
     align-items: start;
     gap: 0.5rem;
     margin-left: 1.75rem;
+
+    /* Read-only: no checkbox to indent to, so the follow-ups line up with the answer above them, as
+       every other read-only field does. See `__planning-permit`. */
+    &:has(> .protocol-checklist__field) {
+      margin-left: 0;
+    }
 
     /* Capped at the field wrapper, the box holding the input and Carbon's invalid icon — capping
        the bare input leaves the icon pinned to a full-width wrapper, far from its field. These are

@@ -498,9 +498,13 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
             <thead>
               <tr>
                 <th scope="col">Preview</th>
-                <th scope="col">File</th>
+                <th scope="col" className="rip-attach__file">
+                  File
+                </th>
                 <th scope="col">Description</th>
-                <th scope="col">Type</th>
+                <th scope="col" className="rip-files__short">
+                  Type
+                </th>
                 <th scope="col">Action</th>
               </tr>
             </thead>
@@ -535,9 +539,9 @@ const RipAttachmentsView: FC<Props> = ({ protocol, checklistId, canEdit, submitt
                         </span>
                       )}
                     </td>
-                    <td>{row.fileName || '—'}</td>
+                    <td className="rip-attach__file">{row.fileName || '—'}</td>
                     <td>{row.description || '—'}</td>
-                    <td>{row.mimeTypeCode || '—'}</td>
+                    <td className="rip-files__short">{row.mimeTypeCode || '—'}</td>
                     <td className="table-actions">
                       <Button
                         kind="ghost"

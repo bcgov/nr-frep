@@ -8,15 +8,16 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react';
-import { useState, type FC } from 'react';
+import { useState, type FC, type ReactNode } from 'react';
 
+import ActionButton from '@/components/core/ActionButton';
 import { CodeSelect, DateField, IndicatorCheckbox, TextField } from '@/pages/ChrChecklist/fields';
 
 import type { Contact } from '@/types/chrChecklist';
 
 import { useConfirm } from '@/context/confirm/useConfirm';
+import { ChrReadOnlyContext } from '@/pages/ChrChecklist/chrReadOnlyContext';
 import { labelFor, useContactRoleCodes } from '@/pages/ChrChecklist/useChrCodeLists';
-import ActionButton from '@/components/core/ActionButton';
 
 const fullName = (c: Contact) => `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
 
@@ -96,101 +97,107 @@ const Contacts: FC<{
     await onSave(contacts.filter((_, i) => i !== index));
   };
 
+  // A checkbox cell. Editable, the wrapper drops the label-less box level with the inputs beside it.
+  // Read-only it shows a label over "Yes"/"No" like its neighbours, so it goes straight into the
+  // grid and gets the grid's read-only cell sizing, which a wrapper would cut it off from.
+  const gridCheck = (checkbox: ReactNode) =>
+    readOnly ? checkbox : <div className="chr-checklist__grid-check">{checkbox}</div>;
+
   // Detail form (add / edit a single contact).
   if (form) {
     const { draft } = form;
     return (
-      <div className="rip-form">
-        <div className="protocol-checklist__section-actions">
-          {!readOnly && (
-            <ActionButton busy={busy} onClick={() => void save()} />
-          )}
-          <Button
-            kind="ghost"
-            size="lg"
-            disabled={busy}
-            onClick={() => {
-              setShowErrors(false);
-              setForm(null);
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-        <fieldset className="rip-form__group">
-          <legend>{form.index === null ? 'New contact' : 'Edit contact'}</legend>
-          {showErrors && isEmpty(draft) && (
-            <p className="chr-checklist__form-error">
-              Enter a name, role, or organization before saving the contact.
-            </p>
-          )}
-          <div className="rip-form__grid chr-checklist__contacts-grid">
-            <TextField
-              id="contact-first"
-              labelText="First name"
-              value={draft.firstName}
-              disabled={readOnly}
-              maxLength={40}
-              onChange={(v) => setField({ firstName: v })}
-            />
-            <TextField
-              id="contact-last"
-              labelText="Last name"
-              value={draft.lastName}
-              disabled={readOnly}
-              maxLength={40}
-              onChange={(v) => setField({ lastName: v })}
-            />
-            <CodeSelect
-              id="contact-role"
-              labelText="Role"
-              value={draft.roleCode}
-              options={roleCodes}
-              disabled={readOnly}
-              onChange={(v) => setField({ roleCode: v })}
-            />
-            {/* Organization starts the second row: the name fields and the role are who the contact
-                is, the rest is what has happened with them. */}
-            <TextField
-              id="contact-org"
-              className="chr-checklist__row-break"
-              labelText="Organization"
-              value={draft.organization}
-              disabled={readOnly}
-              maxLength={60}
-              onChange={(v) => setField({ organization: v })}
-            />
-            <div className="chr-checklist__grid-check">
-              <IndicatorCheckbox
-                id="contact-contacted"
-                labelText="Contacted"
-                value={draft.contactedInd}
-                disabled={readOnly}
-                onToggle={(v) => setField({ contactedInd: v })}
-              />
-            </div>
-            {/* Contacted date shows only once the contact has been contacted (legacy parity). */}
-            {draft.contactedInd === 'true' && (
-              <DateField
-                id="contact-date"
-                labelText="Contacted date"
-                value={draft.contactedDate}
-                disabled={readOnly}
-                onChange={(v) => setField({ contactedDate: v })}
-              />
-            )}
-            <div className="chr-checklist__grid-check">
-              <IndicatorCheckbox
-                id="contact-attending"
-                labelText="Attending on site"
-                value={draft.attendingOnSiteInd}
-                disabled={readOnly}
-                onToggle={(v) => setField({ attendingOnSiteInd: v })}
-              />
-            </div>
+      <ChrReadOnlyContext.Provider value={readOnly}>
+        <div className="rip-form">
+          <div className="protocol-checklist__section-actions">
+            {!readOnly && <ActionButton busy={busy} onClick={() => void save()} />}
+            <Button
+              kind="ghost"
+              size="lg"
+              disabled={busy}
+              onClick={() => {
+                setShowErrors(false);
+                setForm(null);
+              }}
+            >
+              Cancel
+            </Button>
           </div>
-        </fieldset>
-      </div>
+          <fieldset className="rip-form__group">
+            <legend>{form.index === null ? 'New contact' : 'Edit contact'}</legend>
+            {showErrors && isEmpty(draft) && (
+              <p className="chr-checklist__form-error">
+                Enter a name, role, or organization before saving the contact.
+              </p>
+            )}
+            <div className="rip-form__grid chr-checklist__contacts-grid">
+              <TextField
+                id="contact-first"
+                labelText="First name"
+                value={draft.firstName}
+                disabled={readOnly}
+                maxLength={40}
+                onChange={(v) => setField({ firstName: v })}
+              />
+              <TextField
+                id="contact-last"
+                labelText="Last name"
+                value={draft.lastName}
+                disabled={readOnly}
+                maxLength={40}
+                onChange={(v) => setField({ lastName: v })}
+              />
+              <CodeSelect
+                id="contact-role"
+                labelText="Role"
+                value={draft.roleCode}
+                options={roleCodes}
+                disabled={readOnly}
+                onChange={(v) => setField({ roleCode: v })}
+              />
+              {/* Organization starts the second row: the name fields and the role are who the contact
+                is, the rest is what has happened with them. */}
+              <TextField
+                id="contact-org"
+                className="chr-checklist__row-break"
+                labelText="Organization"
+                value={draft.organization}
+                disabled={readOnly}
+                maxLength={60}
+                onChange={(v) => setField({ organization: v })}
+              />
+              {gridCheck(
+                <IndicatorCheckbox
+                  id="contact-contacted"
+                  labelText="Contacted"
+                  value={draft.contactedInd}
+                  disabled={readOnly}
+                  onToggle={(v) => setField({ contactedInd: v })}
+                />,
+              )}
+              {/* Contacted date shows only once the contact has been contacted (legacy parity). */}
+              {draft.contactedInd === 'true' && (
+                <DateField
+                  id="contact-date"
+                  labelText="Contacted date"
+                  value={draft.contactedDate}
+                  disabled={readOnly}
+                  onChange={(v) => setField({ contactedDate: v })}
+                />
+              )}
+              {gridCheck(
+                <IndicatorCheckbox
+                  id="contact-attending"
+                  labelText="Attending on site"
+                  value={draft.attendingOnSiteInd}
+                  disabled={readOnly}
+                  onToggle={(v) => setField({ attendingOnSiteInd: v })}
+                />,
+              )}
+            </div>
+          </fieldset>
+        </div>
+      </ChrReadOnlyContext.Provider>
     );
   }
 

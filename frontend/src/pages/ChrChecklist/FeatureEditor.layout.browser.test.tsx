@@ -607,3 +607,60 @@ describe('FeatureEditor — fields in the strategy table', () => {
     expect(bg(reserve)).toBe('rgb(244, 244, 244)');
   });
 });
+
+describe('FeatureEditor — read-only (submitted)', () => {
+  // A submitted feature reads like SLR's read-only view: each answer as text under its label, not a
+  // greyed-out control that looks unavailable rather than answered.
+  const submitted = {
+    featureLabel: '1',
+    featureDescriptionCode: 'CT',
+    featureInfoSourceCode: 'SP',
+    featureDescription: 'Trail along the ridge',
+    chrRegisteredSite: 'false',
+    widthofFeature: '100',
+    lengthofFeature: '159',
+    post1846: 'true',
+    managementStrategySP: 'true',
+    retainBufferSP: 'true',
+    bufferLengthSP: '20',
+  } as Feature;
+
+  it('shows values as text, with no form controls', async () => {
+    await page.viewport(1250, 900);
+    render(<FeatureEditor feature={submitted} onPatch={vi.fn()} readOnly />);
+
+    await waitFor(() => expect(document.body.textContent).toContain('Cultural Trail'));
+    const form = document.querySelector('.feature-sections')!;
+    expect(form.querySelectorAll('input, select, textarea')).toHaveLength(0);
+
+    const text = form.textContent ?? '';
+    expect(text).toContain('Site Plan');
+    expect(text).toContain('Trail along the ridge');
+    expect(text).toContain('Metres (width × length)');
+    expect(text).toContain('Post-1846');
+    // The buffer length under its ticked strategy box.
+    expect(text).toContain('20');
+  });
+
+  it('shows a blank answer as a dash, like SLR', async () => {
+    render(<FeatureEditor feature={{ featureLabel: '2' } as Feature} onPatch={vi.fn()} readOnly />);
+
+    const description = await waitFor(() => {
+      const label = [...document.querySelectorAll('.protocol-checklist__label')].find(
+        (el) => el.textContent === 'Feature description',
+      );
+      expect(label).toBeTruthy();
+      return label!.parentElement!;
+    });
+    expect(description.querySelector('.protocol-checklist__value')?.textContent).toBe('—');
+  });
+
+  it('is still a form when editable', async () => {
+    render(<FeatureEditor feature={submitted} onPatch={vi.fn()} readOnly={false} />);
+
+    await waitFor(() =>
+      expect(document.querySelectorAll('.feature-sections input').length).toBeGreaterThan(0),
+    );
+    expect(document.querySelector('.feature-sections select')).not.toBeNull();
+  });
+});

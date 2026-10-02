@@ -5,6 +5,7 @@ import { useMemo, useState, type FC, type ReactNode } from 'react';
 import {
   CodeSelect,
   IndicatorCheckbox,
+  ReadOnlyValue,
   TextAreaField,
   TextField,
 } from '@/pages/ChrChecklist/fields';
@@ -14,6 +15,7 @@ import { requiredLabel } from '@/utils/requiredLabel';
 import type { Feature, Indicator, OtherPlannedManagementStrategy } from '@/types/chrChecklist';
 
 import { useSettledFields } from '@/hooks/useSettledFields';
+import { ChrReadOnlyContext } from '@/pages/ChrChecklist/chrReadOnlyContext';
 import {
   duplicateLabelError,
   featureErrors,
@@ -793,663 +795,732 @@ const FeatureEditor: FC<{
   ];
   const effectivenessColumns = dealColumns(effectivenessCells);
 
+  // What each radio group shows when read-only: the chosen option's own label.
+  const q3Value = str('q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse');
+  const chosenLabel = {
+    registeredSite:
+      ind('chrRegisteredSite') === 'true'
+        ? 'Yes'
+        : ind('chrRegisteredSite') === 'false'
+          ? 'No'
+          : '',
+    areaUnit:
+      areaUnit === 'metres'
+        ? 'Metres (width × length)'
+        : areaUnit === 'hectares'
+          ? 'Hectares (total area)'
+          : '',
+    age: AGE_OPTIONS.find((o) => o.field === selectedAge)?.label,
+    q3: q3Options.find((o) => o.code === q3Value)?.description ?? q3Value,
+    damageCauses: DAMAGE_CAUSE_ITEMS.filter((item) => on(item.id))
+      .map((item) => item.label)
+      .join(', '),
+  };
+
   return (
-    <div className="feature-sections">
-      {/* The feature's own name, so the form says which of a list of features is open — the tab
+    <ChrReadOnlyContext.Provider value={readOnly}>
+      <div className="feature-sections">
+        {/* The feature's own name, so the form says which of a list of features is open — the tab
           strip above it names the tab, not the record. */}
-      {title && <h2 className="feature-sections__title">{title}</h2>}
-      {/* Only while editable: a submitted feature is read-only, and the key belongs with fields that
+        {title && <h2 className="feature-sections__title">{title}</h2>}
+        {/* Only while editable: a submitted feature is read-only, and the key belongs with fields that
           can still be filled in. */}
-      {!readOnly && <RequiredLegend />}
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Description')}</h3>
-        {/* No legend of its own: the section heading above already says Description, and a fieldset
+        {!readOnly && <RequiredLegend />}
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Description')}</h3>
+          {/* No legend of its own: the section heading above already says Description, and a fieldset
             labelled "Feature description" directly beneath it named the same group twice. Kept as a
             plain group — the heading is what labels these fields now. */}
-        <div className="rip-form__group">
-          {/* All three on one row, each at the width its own content needs — a five-character label
+          <div className="rip-form__group">
+            {/* All three on one row, each at the width its own content needs — a five-character label
               beside two selects whose option text runs to fifty. See `__description-row`. */}
-          <div className="chr-checklist__description-row">
-            <div className="chr-checklist__short-field">
-              {/* System-assigned, never typed. The legacy app shows this as a read-only
+            <div className="chr-checklist__description-row">
+              <div className="chr-checklist__short-field">
+                {/* System-assigned, never typed. The legacy app shows this as a read-only
                   "Feature ID" (SummaryCulturalHeritages.vue) and CHR_FEATURE_IDENTITY's column
                   comment says it is "to be automatically set". Making it editable here caused
                   silent data loss: composite and association references travel as labels, and
                   nothing re-points them on rename, so a renamed feature orphans its members and
                   loses one direction of every association. */}
-              <TextField
-                id="feat-label"
-                labelText={requiredLabel('Feature label', true)}
-                value={str('featureLabel')}
-                maxLength={FEATURE_SINGLE_LINE_MAX.featureLabel}
+                <TextField
+                  id="feat-label"
+                  labelText={requiredLabel('Feature label', true)}
+                  value={str('featureLabel')}
+                  maxLength={FEATURE_SINGLE_LINE_MAX.featureLabel}
+                  disabled={readOnly}
+                  readOnly
+                  invalid={Boolean(err('featureLabel'))}
+                  invalidText={err('featureLabel')}
+                  onChange={(v) => onPatch({ featureLabel: v })}
+                />
+              </div>
+              <CodeSelect
+                id="feat-class"
+                // Owed only by an explicit non-composite, exactly as the submit rule asks for it: a
+                // composite is described through its members, and a feature whose composite box has
+                // never been touched is not asked either.
+                labelText={requiredLabel('Feature class', notComposite)}
+                value={str('featureDescriptionCode')}
+                options={featureClassCodes}
+                includeBlank
                 disabled={readOnly}
-                readOnly
-                invalid={Boolean(err('featureLabel'))}
-                invalidText={err('featureLabel')}
-                onChange={(v) => onPatch({ featureLabel: v })}
+                onChange={(v) => onPatch({ featureDescriptionCode: v })}
               />
-            </div>
-            <CodeSelect
-              id="feat-class"
-              // Owed only by an explicit non-composite, exactly as the submit rule asks for it: a
-              // composite is described through its members, and a feature whose composite box has
-              // never been touched is not asked either.
-              labelText={requiredLabel('Feature class', notComposite)}
-              value={str('featureDescriptionCode')}
-              options={featureClassCodes}
-              includeBlank
-              disabled={readOnly}
-              onChange={(v) => onPatch({ featureDescriptionCode: v })}
-            />
-            <CodeSelect
-              id="feat-source"
-              labelText={requiredLabel('Information source', notComposite)}
-              value={str('featureInfoSourceCode')}
-              options={informationSourceCodes}
-              includeBlank
-              disabled={readOnly}
-              onChange={(v) => onPatch({ featureInfoSourceCode: v })}
-            />
-            {/* Its own full-width row directly under label/class/source. The grid auto-flows, so
+              <CodeSelect
+                id="feat-source"
+                labelText={requiredLabel('Information source', notComposite)}
+                value={str('featureInfoSourceCode')}
+                options={informationSourceCodes}
+                includeBlank
+                disabled={readOnly}
+                onChange={(v) => onPatch({ featureInfoSourceCode: v })}
+              />
+              {/* Its own full-width row directly under label/class/source. The grid auto-flows, so
                 left at the end of the list this landed in whatever cell was free — wedged beside the
                 composite hint and the registered-site checkbox. */}
-          </div>
-          <div className="rip-form__grid rip-form__grid--wide">
-            <div className="chr-form__full-row">
-              <TextAreaField
-                id="feat-desc"
-                labelText="Feature description"
-                value={str('featureDescription')}
-                disabled={readOnly}
-                limit={FEATURE_TEXT_LIMITS.featureDescription}
-                invalid={Boolean(err('featureDescription'))}
-                invalidText={err('featureDescription')}
-                onChange={(v) => onPatch({ featureDescription: v })}
-              />
             </div>
-            {/* Asked as a question with an explicit No, not a lone tick: an unticked box says
+            <div className="rip-form__grid rip-form__grid--wide">
+              <div className="chr-form__full-row">
+                <TextAreaField
+                  id="feat-desc"
+                  labelText="Feature description"
+                  value={str('featureDescription')}
+                  disabled={readOnly}
+                  limit={FEATURE_TEXT_LIMITS.featureDescription}
+                  invalid={Boolean(err('featureDescription'))}
+                  invalidText={err('featureDescription')}
+                  onChange={(v) => onPatch({ featureDescription: v })}
+                />
+              </div>
+              {/* Asked as a question with an explicit No, not a lone tick: an unticked box says
                 nothing about whether the site is registered or the question was simply skipped.
                 The Borden number sits under the answer that reveals it, in the same cell — beside
                 it, the field read as a separate question rather than a follow-up to this one. */}
-            <div className="chr-checklist__question">
-              <RadioButtonGroup
-                legendText="Is this a registered archaeological site?"
-                name="feat-registered-site"
-                valueSelected={
-                  ind('chrRegisteredSite') === 'true'
-                    ? 'yes'
-                    : ind('chrRegisteredSite') === 'false'
-                      ? 'no'
-                      : ''
-                }
-                disabled={readOnly}
-                onChange={(v) => onPatch({ chrRegisteredSite: v === 'yes' ? 'true' : 'false' })}
-              >
-                <RadioButton labelText="Yes" value="yes" id="feat-registered-yes" />
-                <RadioButton labelText="No" value="no" id="feat-registered-no" />
-              </RadioButtonGroup>
-              {on('chrRegisteredSite') && (
-                <TextField
-                  id="feat-borden"
-                  labelText="Borden number"
-                  value={str('borden')}
-                  disabled={readOnly}
-                  maxLength={9}
-                  helperText="Format: AaBb-0000"
-                  invalid={Boolean(err('borden'))}
-                  invalidText={err('borden')}
-                  onBlur={() => markSettled('borden')}
-                  onChange={(v) => onPatch({ borden: v })}
-                />
-              )}
+              <div className="chr-checklist__question">
+                {readOnly ? (
+                  <ReadOnlyValue
+                    labelText="Is this a registered archaeological site?"
+                    value={chosenLabel.registeredSite}
+                  />
+                ) : (
+                  <RadioButtonGroup
+                    legendText="Is this a registered archaeological site?"
+                    name="feat-registered-site"
+                    valueSelected={
+                      ind('chrRegisteredSite') === 'true'
+                        ? 'yes'
+                        : ind('chrRegisteredSite') === 'false'
+                          ? 'no'
+                          : ''
+                    }
+                    disabled={readOnly}
+                    onChange={(v) => onPatch({ chrRegisteredSite: v === 'yes' ? 'true' : 'false' })}
+                  >
+                    <RadioButton labelText="Yes" value="yes" id="feat-registered-yes" />
+                    <RadioButton labelText="No" value="no" id="feat-registered-no" />
+                  </RadioButtonGroup>
+                )}
+                {on('chrRegisteredSite') && (
+                  <TextField
+                    id="feat-borden"
+                    labelText="Borden number"
+                    value={str('borden')}
+                    disabled={readOnly}
+                    maxLength={9}
+                    helperText="Format: AaBb-0000"
+                    invalid={Boolean(err('borden'))}
+                    invalidText={err('borden')}
+                    onBlur={() => markSettled('borden')}
+                    onChange={(v) => onPatch({ borden: v })}
+                  />
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <fieldset className="rip-form__group">
-          <legend>Size of area influenced</legend>
-          <RadioButtonGroup
-            legendText="Select how the area was measured"
-            name="feat-area-unit"
-            valueSelected={areaUnit}
-            disabled={readOnly}
-            onChange={(v) => switchUnit(v as 'metres' | 'hectares')}
-          >
-            {/* The units name what they ask for: metres wants two sides, hectares one total. */}
-            <RadioButton labelText="Metres (width × length)" value="metres" id="feat-area-metres" />
-            <RadioButton
-              labelText="Hectares (total area)"
-              value="hectares"
-              id="feat-area-hectares"
-            />
-          </RadioButtonGroup>
-          {areaUnit !== '' && (
-            <div className="rip-form__grid">
-              {areaUnit === 'metres' ? (
-                <>
-                  <TextField
-                    id="feat-width"
-                    labelText="Width (m)"
-                    value={str('widthofFeature')}
-                    disabled={readOnly}
-                    invalid={Boolean(err('widthofFeature'))}
-                    invalidText={err('widthofFeature')}
-                    onChange={(v) => onPatch({ widthofFeature: v })}
-                  />
-                  <TextField
-                    id="feat-length"
-                    labelText="Length (m)"
-                    value={str('lengthofFeature')}
-                    disabled={readOnly}
-                    invalid={Boolean(err('lengthofFeature'))}
-                    invalidText={err('lengthofFeature')}
-                    onChange={(v) => onPatch({ lengthofFeature: v })}
-                  />
-                </>
-              ) : (
-                <TextField
-                  id="feat-area"
-                  labelText="Area (ha)"
-                  value={str('areaofFeature')}
-                  disabled={readOnly}
-                  invalid={Boolean(err('areaofFeature'))}
-                  invalidText={err('areaofFeature')}
-                  onChange={(v) => onPatch({ areaofFeature: v })}
+          <fieldset className="rip-form__group">
+            <legend>Size of area influenced</legend>
+            {readOnly ? (
+              <ReadOnlyValue
+                labelText="Select how the area was measured"
+                value={chosenLabel.areaUnit}
+              />
+            ) : (
+              <RadioButtonGroup
+                legendText="Select how the area was measured"
+                name="feat-area-unit"
+                valueSelected={areaUnit}
+                disabled={readOnly}
+                onChange={(v) => switchUnit(v as 'metres' | 'hectares')}
+              >
+                {/* The units name what they ask for: metres wants two sides, hectares one total. */}
+                <RadioButton
+                  labelText="Metres (width × length)"
+                  value="metres"
+                  id="feat-area-metres"
                 />
-              )}
-            </div>
-          )}
-        </fieldset>
+                <RadioButton
+                  labelText="Hectares (total area)"
+                  value="hectares"
+                  id="feat-area-hectares"
+                />
+              </RadioButtonGroup>
+            )}
+            {areaUnit !== '' && (
+              <div className="rip-form__grid">
+                {areaUnit === 'metres' ? (
+                  <>
+                    <TextField
+                      id="feat-width"
+                      labelText="Width (m)"
+                      value={str('widthofFeature')}
+                      disabled={readOnly}
+                      invalid={Boolean(err('widthofFeature'))}
+                      invalidText={err('widthofFeature')}
+                      onChange={(v) => onPatch({ widthofFeature: v })}
+                    />
+                    <TextField
+                      id="feat-length"
+                      labelText="Length (m)"
+                      value={str('lengthofFeature')}
+                      disabled={readOnly}
+                      invalid={Boolean(err('lengthofFeature'))}
+                      invalidText={err('lengthofFeature')}
+                      onChange={(v) => onPatch({ lengthofFeature: v })}
+                    />
+                  </>
+                ) : (
+                  <TextField
+                    id="feat-area"
+                    labelText="Area (ha)"
+                    value={str('areaofFeature')}
+                    disabled={readOnly}
+                    invalid={Boolean(err('areaofFeature'))}
+                    invalidText={err('areaofFeature')}
+                    onChange={(v) => onPatch({ areaofFeature: v })}
+                  />
+                )}
+              </div>
+            )}
+          </fieldset>
 
-        <fieldset className="rip-form__group">
-          <legend>{requiredLabel('Type of feature(s)', true)}</legend>
-          {/* The mark goes on the legend because the requirement is on the group, not on any one
+          <fieldset className="rip-form__group">
+            <legend>{requiredLabel('Type of feature(s)', true)}</legend>
+            {/* The mark goes on the legend because the requirement is on the group, not on any one
               box — submit asks for "at least one type of feature", which no single checkbox can
               satisfy or fail on its own. The line says what "at least one" means here. */}
-          <p className="rip-form__hint">Select at least one.</p>
-          {/* Fixed columns, dealt in markup.
+            <p className="rip-form__hint">Select at least one.</p>
+            {/* Fixed columns, dealt in markup.
               CSS multi-column balances its content, so opening a field re-flowed items between
               columns and boxes jumped as they were ticked. Dealing the list here pins every box to
               a column; each column then stacks independently, so an opened field pushes only what
               is under it and nothing else moves. */}
+            <div className="chr-checklist__type-columns">
+              {typeColumns.map((column, index) => (
+                <div className="chr-checklist__type-column" key={`type-column-${index}`}>
+                  {column}
+                </div>
+              ))}
+            </div>
+          </fieldset>
+        </section>
+
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Location')}</h3>
+          {/* Location */}
           <div className="chr-checklist__type-columns">
-            {typeColumns.map((column, index) => (
-              <div className="chr-checklist__type-column" key={`type-column-${index}`}>
+            {locationColumns.map((column, index) => (
+              <div className="chr-checklist__type-column" key={`location-column-${index}`}>
                 {column}
               </div>
             ))}
           </div>
-        </fieldset>
-      </section>
+        </section>
 
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Location')}</h3>
-        {/* Location */}
-        <div className="chr-checklist__type-columns">
-          {locationColumns.map((column, index) => (
-            <div className="chr-checklist__type-column" key={`location-column-${index}`}>
-              {column}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="feature-section">
-        <h3 className="feature-section__title">Age</h3>
-        {/* Age is one answer, so it is asked as one: radios, not four checkboxes that disable each
+        <section className="feature-section">
+          <h3 className="feature-section__title">Age</h3>
+          {/* Age is one answer, so it is asked as one: radios, not four checkboxes that disable each
             other once one is ticked. Switching age used to mean unticking the old one first. */}
-        <RadioButtonGroup
-          legendText={requiredLabel('Select age for this feature', true)}
-          name="feat-age"
-          valueSelected={selectedAge ?? ''}
-          disabled={readOnly}
-          onChange={(v) => selectAge(v as string)}
-        >
-          {AGE_OPTIONS.map((o) => (
-            <RadioButton key={o.field} labelText={o.label} value={o.field} id={`feat-${o.field}`} />
-          ))}
-        </RadioButtonGroup>
-      </section>
-
-      <section className="feature-section">
-        <h3 className="feature-section__title">Planning</h3>
-        {/* The three sources of planning direction. Stacked rather than laid across a row: they are
-            a checklist to work down, and the permit number belongs under the box that asks for it. */}
-        <p className="rip-form__hint">Applies to this feature</p>
-        <div className="chr-checklist__planning-sources">
-          {sourceChk('managementStrategyFN', 'FN management recommendations provided', 'fn')}
-          {sourceChk('managementStrategySP', 'Site plan strategies noted', 'sp')}
-          {sourceChk('sitePermitIssued', 'AIA / site-alteration permit issued', 'aia')}
-          {showAIA && (
-            <div className="chr-checklist__planning-permit">
-              <TextField
-                id="feat-permit"
-                labelText={requiredLabel('Permit number', true)}
-                value={str('permit')}
-                maxLength={FEATURE_SINGLE_LINE_MAX.permit}
-                disabled={readOnly}
-                onChange={(v) => onPatch({ permit: v })}
-              />
-            </div>
+          {readOnly ? (
+            <ReadOnlyValue
+              labelText={requiredLabel('Select age for this feature', true)}
+              value={chosenLabel.age}
+            />
+          ) : (
+            <RadioButtonGroup
+              legendText={requiredLabel('Select age for this feature', true)}
+              name="feat-age"
+              valueSelected={selectedAge ?? ''}
+              disabled={readOnly}
+              onChange={(v) => selectAge(v as string)}
+            >
+              {AGE_OPTIONS.map((o) => (
+                <RadioButton
+                  key={o.field}
+                  labelText={o.label}
+                  value={o.field}
+                  id={`feat-${o.field}`}
+                />
+              ))}
+            </RadioButtonGroup>
           )}
-        </div>
-        {/* Nothing below until a source is named. The strategy table asks "who recommended this?",
+        </section>
+
+        <section className="feature-section">
+          <h3 className="feature-section__title">Planning</h3>
+          {/* The three sources of planning direction. Stacked rather than laid across a row: they are
+            a checklist to work down, and the permit number belongs under the box that asks for it. */}
+          <p className="rip-form__hint">Applies to this feature</p>
+          <div className="chr-checklist__planning-sources">
+            {sourceChk('managementStrategyFN', 'FN management recommendations provided', 'fn')}
+            {sourceChk('managementStrategySP', 'Site plan strategies noted', 'sp')}
+            {sourceChk('sitePermitIssued', 'AIA / site-alteration permit issued', 'aia')}
+            {showAIA && (
+              <div className="chr-checklist__planning-permit">
+                <TextField
+                  id="feat-permit"
+                  labelText={requiredLabel('Permit number', true)}
+                  value={str('permit')}
+                  maxLength={FEATURE_SINGLE_LINE_MAX.permit}
+                  disabled={readOnly}
+                  onChange={(v) => onPatch({ permit: v })}
+                />
+              </div>
+            )}
+          </div>
+          {/* Nothing below until a source is named. The strategy table asks "who recommended this?",
             which has no answer before one of the three boxes is ticked — and a grid of empty
             checkboxes with no column to put them in was the first thing the tab showed. */}
-        {recommendationsEnabled && (
-          <table className="chr-checklist__planning">
-            <thead>
-              <tr>
-                <th>Strategy</th>
-                {showFN && <th>FN</th>}
-                {showAIA && <th>AIA/SAP</th>}
-                {showSP && <th>Site plan</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {PLANNING_STRATEGIES.map((s) => {
-                const sub = PLANNING_SUB_FIELDS[s.label];
-                // The conditional field goes in the cell under the box that reveals it. Nothing is
-                // rendered until that box is ticked, so an untouched row is still three checkboxes.
-                const cell = (variant: 'fn' | 'aia' | 'sp', field: string) => (
-                  <td>
-                    {chk(field, '')}
-                    {sub && subField(variant, sub.variants[variant], sub.label, sub.kind)}
-                  </td>
-                );
-                return (
-                  <tr key={s.label}>
-                    <td>{s.label}</td>
-                    {showFN && cell('fn', s.fn)}
-                    {showAIA && cell('aia', s.aia)}
-                    {showSP && cell('sp', s.sp)}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {recommendationsEnabled && (
-          <fieldset className="rip-form__group">
-            <legend>Additional management strategies</legend>
-            <div className="bio-strata">
-              {/* Empty, the line says what belongs here; filled, it states the rule the rows have
-                  to satisfy. A lone "Add" button gave neither. */}
-              <p className="rip-form__hint">
-                {strategies.length === 0
-                  ? 'None added. Add any management strategy applied to this feature that is not listed above.'
-                  : 'Select at least one source for each strategy.'}
-              </p>
-              {strategies.length > 0 && (
-                <table className="chr-checklist__planning chr-checklist__additional">
-                  <thead>
-                    <tr>
-                      <th>{requiredLabel('Name', true)}</th>
-                      <th>{requiredLabel('Source', true)}</th>
-                      <th>Action</th>
+          {recommendationsEnabled && (
+            <table className="chr-checklist__planning">
+              <thead>
+                <tr>
+                  <th>Strategy</th>
+                  {showFN && <th>FN</th>}
+                  {showAIA && <th>AIA/SAP</th>}
+                  {showSP && <th>Site plan</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {PLANNING_STRATEGIES.map((s) => {
+                  const sub = PLANNING_SUB_FIELDS[s.label];
+                  // The conditional field goes in the cell under the box that reveals it. Nothing is
+                  // rendered until that box is ticked, so an untouched row is still three checkboxes.
+                  const cell = (variant: 'fn' | 'aia' | 'sp', field: string) => (
+                    <td>
+                      {chk(field, '')}
+                      {sub && subField(variant, sub.variants[variant], sub.label, sub.kind)}
+                    </td>
+                  );
+                  return (
+                    <tr key={s.label}>
+                      <td>{s.label}</td>
+                      {showFN && cell('fn', s.fn)}
+                      {showAIA && cell('aia', s.aia)}
+                      {showSP && cell('sp', s.sp)}
                     </tr>
-                  </thead>
-                  <tbody>
-                    {strategies.map((s, i) => (
-                      <tr key={strategyKeys[i]}>
-                        <td>
-                          <TextField
-                            id={`other-strat-${i}`}
-                            labelText="Name"
-                            value={s.otherStrategy}
-                            maxLength={FEATURE_SINGLE_LINE_MAX.otherStrategy}
-                            disabled={readOnly}
-                            onChange={(v) => patchStrategy(i, { otherStrategy: v })}
-                          />
-                        </td>
-                        {/* One cell, one checkbox per source in play — the sources are an attribute
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {recommendationsEnabled && (
+            <fieldset className="rip-form__group">
+              <legend>Additional management strategies</legend>
+              <div className="bio-strata">
+                {/* Empty, the line says what belongs here; filled, it states the rule the rows have
+                  to satisfy. A lone "Add" button gave neither. */}
+                <p className="rip-form__hint">
+                  {strategies.length === 0
+                    ? 'None added. Add any management strategy applied to this feature that is not listed above.'
+                    : 'Select at least one source for each strategy.'}
+                </p>
+                {strategies.length > 0 && (
+                  <table className="chr-checklist__planning chr-checklist__additional">
+                    <thead>
+                      <tr>
+                        <th>{requiredLabel('Name', true)}</th>
+                        <th>{requiredLabel('Source', true)}</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {strategies.map((s, i) => (
+                        <tr key={strategyKeys[i]}>
+                          <td>
+                            <TextField
+                              id={`other-strat-${i}`}
+                              labelText="Name"
+                              value={s.otherStrategy}
+                              maxLength={FEATURE_SINGLE_LINE_MAX.otherStrategy}
+                              disabled={readOnly}
+                              onChange={(v) => patchStrategy(i, { otherStrategy: v })}
+                            />
+                          </td>
+                          {/* One cell, one checkbox per source in play — the sources are an attribute
                             of the strategy, not three separate questions, and a column each left
                             two of them empty on most features. */}
-                        <td>
-                          {/* The flex row lives in a child, not the cell: a `display: flex` td stops
+                          <td>
+                            {/* The flex row lives in a child, not the cell: a `display: flex` td stops
                               stretching to the row's height, so centring inside it had only the
                               checkboxes' own 20px to work with and they sat above the input. */}
-                          <div className="chr-checklist__additional-sources">
-                            {SOURCE_COLUMNS.filter((c) => c.shown).map((c) => (
-                              <IndicatorCheckbox
-                                key={c.key}
-                                id={`other-strat-${c.key}-${i}`}
-                                labelText={c.label}
-                                value={s[c.ind]}
-                                disabled={readOnly}
-                                onToggle={(v) => patchStrategy(i, { [c.ind]: v })}
-                              />
-                            ))}
-                          </div>
-                        </td>
-                        <td className="table-actions">
-                          {!readOnly && (
-                            <Button
-                              kind="danger--ghost"
-                              size="sm"
-                              renderIcon={TrashCan}
-                              onClick={() => removeStrategy(i)}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {!readOnly && (
-                <div className="chr-checklist__planning-add">
-                  <Button
-                    kind="tertiary"
-                    size="lg"
-                    className="bio-strata__add"
-                    renderIcon={Add}
-                    onClick={addStrategy}
-                  >
-                    Add management strategy
-                  </Button>
-                </div>
-              )}
-            </div>
-          </fieldset>
-        )}
-      </section>
-
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Effectiveness')}</h3>
-        {/* Effectiveness — the same fixed columns as the type and location lists, so a strategy that
-            asks for a reserve type or a width keeps it in its own cell. */}
-        <div className="chr-checklist__type-columns">
-          {effectivenessColumns.map((column, index) => (
-            <div className="chr-checklist__type-column" key={`effectiveness-column-${index}`}>
-              {column}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="feature-section">
-        <h3 className="feature-section__title">Damage</h3>
-        {/* Damage — one column, in the order the questions are asked: the tick that opens the
-            section, the description it calls for, then Q2 and Q3 beneath it. Not two columns: the
-            description is a paragraph, and pairing it with Q1 left it sharing a row with a single
-            checkbox while Q2 and Q3 ran down beside empty space. */}
-        <div className="chr-checklist__field-stack chr-checklist__damage-stack">
-          {chk(
-            'q1Isthereevidenceofdamagetothesiteorfeature',
-            'Q1 — Evidence of damage to the site/feature',
-          )}
-          {on('q1Isthereevidenceofdamagetothesiteorfeature') && (
-            <>
-              <TextAreaField
-                id="feat-damage-desc"
-                labelText="Description of damage"
-                value={str('descriptionofdamage')}
-                disabled={readOnly}
-                limit={FEATURE_TEXT_LIMITS.descriptionofdamage}
-                invalid={Boolean(err('descriptionofdamage'))}
-                invalidText={err('descriptionofdamage')}
-                onChange={(v) => onPatch({ descriptionofdamage: v })}
-              />
-              <div className="chr-checklist__damage-cause">
-                <MultiSelect
-                  id="feat-q2-cause"
-                  titleText="Q2 — Most likely cause of damage"
-                  label="Choose one or more options"
-                  items={DAMAGE_CAUSE_ITEMS}
-                  itemToString={(item) => item?.label ?? ''}
-                  selectedItems={DAMAGE_CAUSE_ITEMS.filter((item) => on(item.id))}
-                  disabled={readOnly}
-                  onChange={({ selectedItems }) => {
-                    const chosen = new Set((selectedItems ?? []).map((item) => item.id));
-                    const patch = Object.fromEntries(
-                      DAMAGE_CAUSE_ITEMS.map((item) => [
-                        item.id,
-                        chosen.has(item.id) ? 'true' : 'false',
-                      ]),
-                    ) as Partial<Record<string, string>>;
-                    // Drop the description with the cause it belongs to, the way unticking any
-                    // other "Other" box does — otherwise it survives out of sight of the picker.
-                    if (!chosen.has(OTHER_DAMAGE_AGENT)) {
-                      patch[OTHER_DAMAGE_AGENT_DESCRIPTION] = '';
-                    }
-                    onPatch(patch);
-                  }}
-                />
-                {on(OTHER_DAMAGE_AGENT) && (
-                  <TextField
-                    id="feat-damage-other"
-                    labelText="Other cause description"
-                    value={str(OTHER_DAMAGE_AGENT_DESCRIPTION)}
-                    maxLength={FEATURE_SINGLE_LINE_MAX[OTHER_DAMAGE_AGENT_DESCRIPTION]}
-                    disabled={readOnly}
-                    onChange={(v) => onPatch({ [OTHER_DAMAGE_AGENT_DESCRIPTION]: v })}
-                  />
+                            <div className="chr-checklist__additional-sources">
+                              {SOURCE_COLUMNS.filter((c) => c.shown).map((c) => (
+                                <IndicatorCheckbox
+                                  key={c.key}
+                                  id={`other-strat-${c.key}-${i}`}
+                                  labelText={c.label}
+                                  value={s[c.ind]}
+                                  disabled={readOnly}
+                                  onToggle={(v) => patchStrategy(i, { [c.ind]: v })}
+                                />
+                              ))}
+                            </div>
+                          </td>
+                          <td className="table-actions">
+                            {!readOnly && (
+                              <Button
+                                kind="danger--ghost"
+                                size="sm"
+                                renderIcon={TrashCan}
+                                onClick={() => removeStrategy(i)}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
-              </div>
-              <RadioButtonGroup
-                legendText="Q3 — Irreversibly damaged or unsuitable for continued use?"
-                name="feat-q3"
-                valueSelected={
-                  str('q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse') ??
-                  ''
-                }
-                disabled={readOnly}
-                onChange={(v) =>
-                  onPatch({
-                    q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse:
-                      String(v),
-                  })
-                }
-              >
-                {q3Options.map((option) => (
-                  <RadioButton
-                    key={option.code}
-                    labelText={option.description}
-                    value={option.code}
-                    id={`feat-q3-${option.code}`}
-                  />
-                ))}
-              </RadioButtonGroup>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Windthrow')}</h3>
-        {/* Both windthrow and trail features are one question that opens a short form. Everything
-            the tick reveals is indented under it, so the follow-ups read as belonging to the answer
-            rather than as further questions of their own. */}
-        {chk('windthrowManagement', 'Windthrow management applicable')}
-        {on('windthrowManagement') && (
-          <div className="chr-checklist__reveal">
-            {chk('windthrow', 'Area windfirm')}
-            {!on('windthrow') && (
-              <TextField
-                id="feat-est-windthrow"
-                labelText="Estimated windthrow (%)"
-                value={str('estwindthrow')}
-                disabled={readOnly}
-                invalid={Boolean(err('estwindthrow'))}
-                invalidText={err('estwindthrow')}
-                onChange={(v) => onPatch({ estwindthrow: v })}
-              />
-            )}
-            <fieldset className="rip-form__group">
-              <legend>Treatment</legend>
-              {/* "None" is the answer that excludes the rest, not one more technique alongside
-                  them: ticking it clears whatever was recorded and holds the list closed, so the
-                  saved feature cannot say both "no treatment" and "pruning". Kept above a rule so
-                  the two read as a choice rather than as six equal boxes. */}
-              <IndicatorCheckbox
-                id="feat-windthrowTechniqueNone"
-                labelText="None"
-                value={ind(WINDTHROW_NONE)}
-                disabled={readOnly}
-                onToggle={(v) =>
-                  onPatch(
-                    v === 'true'
-                      ? { [WINDTHROW_NONE]: v, ...clearedWindthrowTechniques }
-                      : { [WINDTHROW_NONE]: v },
-                  )
-                }
-              />
-              <div className="chr-checklist__treatment-options">
-                {windthrowOthers.map((w) => chk(w.field, w.label, noTreatment))}
-                {chk('otherTechnique', 'Other technique', noTreatment)}
-                {on('otherTechnique') && (
-                  <TextField
-                    id="feat-windthrow-other"
-                    labelText={requiredLabel('Description', true)}
-                    value={str('ifotherpleasedescribe')}
-                    maxLength={FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribe}
-                    disabled={readOnly || noTreatment}
-                    onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
-                  />
+                {!readOnly && (
+                  <div className="chr-checklist__planning-add">
+                    <Button
+                      kind="tertiary"
+                      size="lg"
+                      className="bio-strata__add"
+                      renderIcon={Add}
+                      onClick={addStrategy}
+                    >
+                      Add management strategy
+                    </Button>
+                  </div>
                 )}
               </div>
             </fieldset>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
 
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Trail features')}</h3>
-        {chk('trailfeatures', 'Trail features applicable')}
-        {on('trailfeatures') && (
-          <div className="chr-checklist__reveal">
-            {chk('canthetrailstillbelocated', 'Trail still locatable')}
-            {chk('hasthetrailbeenmadelesspassble', 'Trail made less passable')}
-            {chk('isthereevidenceofdamage', 'Evidence of damage to trail area')}
-            {on('isthereevidenceofdamage') && (
-              <TextField
-                id="feat-trail-len"
-                labelText={requiredLabel('Estimated trail damage (%)', true)}
-                value={str('trailLength')}
-                disabled={readOnly}
-                invalid={Boolean(err('trailLength'))}
-                invalidText={err('trailLength')}
-                onChange={(v) => onPatch({ trailLength: v })}
-              />
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Effectiveness')}</h3>
+          {/* Effectiveness — the same fixed columns as the type and location lists, so a strategy that
+            asks for a reserve type or a width keeps it in its own cell. */}
+          <div className="chr-checklist__type-columns">
+            {effectivenessColumns.map((column, index) => (
+              <div className="chr-checklist__type-column" key={`effectiveness-column-${index}`}>
+                {column}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="feature-section">
+          <h3 className="feature-section__title">Damage</h3>
+          {/* Damage — one column, in the order the questions are asked: the tick that opens the
+            section, the description it calls for, then Q2 and Q3 beneath it. Not two columns: the
+            description is a paragraph, and pairing it with Q1 left it sharing a row with a single
+            checkbox while Q2 and Q3 ran down beside empty space. */}
+          <div className="chr-checklist__field-stack chr-checklist__damage-stack">
+            {chk(
+              'q1Isthereevidenceofdamagetothesiteorfeature',
+              'Q1 — Evidence of damage to the site/feature',
+            )}
+            {on('q1Isthereevidenceofdamagetothesiteorfeature') && (
+              <>
+                <TextAreaField
+                  id="feat-damage-desc"
+                  labelText="Description of damage"
+                  value={str('descriptionofdamage')}
+                  disabled={readOnly}
+                  limit={FEATURE_TEXT_LIMITS.descriptionofdamage}
+                  invalid={Boolean(err('descriptionofdamage'))}
+                  invalidText={err('descriptionofdamage')}
+                  onChange={(v) => onPatch({ descriptionofdamage: v })}
+                />
+                <div className="chr-checklist__damage-cause">
+                  {readOnly ? (
+                    <ReadOnlyValue
+                      labelText="Q2 — Most likely cause of damage"
+                      value={chosenLabel.damageCauses}
+                    />
+                  ) : (
+                    <MultiSelect
+                      id="feat-q2-cause"
+                      titleText="Q2 — Most likely cause of damage"
+                      label="Choose one or more options"
+                      items={DAMAGE_CAUSE_ITEMS}
+                      itemToString={(item) => item?.label ?? ''}
+                      selectedItems={DAMAGE_CAUSE_ITEMS.filter((item) => on(item.id))}
+                      disabled={readOnly}
+                      onChange={({ selectedItems }) => {
+                        const chosen = new Set((selectedItems ?? []).map((item) => item.id));
+                        const patch = Object.fromEntries(
+                          DAMAGE_CAUSE_ITEMS.map((item) => [
+                            item.id,
+                            chosen.has(item.id) ? 'true' : 'false',
+                          ]),
+                        ) as Partial<Record<string, string>>;
+                        // Drop the description with the cause it belongs to, the way unticking any
+                        // other "Other" box does — otherwise it survives out of sight of the picker.
+                        if (!chosen.has(OTHER_DAMAGE_AGENT)) {
+                          patch[OTHER_DAMAGE_AGENT_DESCRIPTION] = '';
+                        }
+                        onPatch(patch);
+                      }}
+                    />
+                  )}
+                  {on(OTHER_DAMAGE_AGENT) && (
+                    <TextField
+                      id="feat-damage-other"
+                      labelText="Other cause description"
+                      value={str(OTHER_DAMAGE_AGENT_DESCRIPTION)}
+                      maxLength={FEATURE_SINGLE_LINE_MAX[OTHER_DAMAGE_AGENT_DESCRIPTION]}
+                      disabled={readOnly}
+                      onChange={(v) => onPatch({ [OTHER_DAMAGE_AGENT_DESCRIPTION]: v })}
+                    />
+                  )}
+                </div>
+                {readOnly ? (
+                  <ReadOnlyValue
+                    labelText="Q3 — Irreversibly damaged or unsuitable for continued use?"
+                    value={chosenLabel.q3}
+                  />
+                ) : (
+                  <RadioButtonGroup
+                    legendText="Q3 — Irreversibly damaged or unsuitable for continued use?"
+                    name="feat-q3"
+                    valueSelected={
+                      str(
+                        'q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse',
+                      ) ?? ''
+                    }
+                    disabled={readOnly}
+                    onChange={(v) =>
+                      onPatch({
+                        q3Hasthesitebeenirreversiblydamagedorrenderedunsuitableforcontinueduse:
+                          String(v),
+                      })
+                    }
+                  >
+                    {q3Options.map((option) => (
+                      <RadioButton
+                        key={option.code}
+                        labelText={option.description}
+                        value={option.code}
+                        id={`feat-q3-${option.code}`}
+                      />
+                    ))}
+                  </RadioButtonGroup>
+                )}
+              </>
             )}
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="feature-section">
-        <h3 className="feature-section__title">{sectionTitle('Summary')}</h3>
-        {/* Summary — one column. Each question keeps its description directly beneath it, so the
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Windthrow')}</h3>
+          {/* Both windthrow and trail features are one question that opens a short form. Everything
+            the tick reveals is indented under it, so the follow-ups read as belonging to the answer
+            rather than as further questions of their own. */}
+          {chk('windthrowManagement', 'Windthrow management applicable')}
+          {on('windthrowManagement') && (
+            <div className="chr-checklist__reveal">
+              {chk('windthrow', 'Area windfirm')}
+              {!on('windthrow') && (
+                <TextField
+                  id="feat-est-windthrow"
+                  labelText="Estimated windthrow (%)"
+                  value={str('estwindthrow')}
+                  disabled={readOnly}
+                  invalid={Boolean(err('estwindthrow'))}
+                  invalidText={err('estwindthrow')}
+                  onChange={(v) => onPatch({ estwindthrow: v })}
+                />
+              )}
+              <fieldset className="rip-form__group">
+                <legend>Treatment</legend>
+                {/* "None" is the answer that excludes the rest, not one more technique alongside
+                  them: ticking it clears whatever was recorded and holds the list closed, so the
+                  saved feature cannot say both "no treatment" and "pruning". Kept above a rule so
+                  the two read as a choice rather than as six equal boxes. */}
+                <IndicatorCheckbox
+                  id="feat-windthrowTechniqueNone"
+                  labelText="None"
+                  value={ind(WINDTHROW_NONE)}
+                  disabled={readOnly}
+                  onToggle={(v) =>
+                    onPatch(
+                      v === 'true'
+                        ? { [WINDTHROW_NONE]: v, ...clearedWindthrowTechniques }
+                        : { [WINDTHROW_NONE]: v },
+                    )
+                  }
+                />
+                <div className="chr-checklist__treatment-options">
+                  {windthrowOthers.map((w) => chk(w.field, w.label, noTreatment))}
+                  {chk('otherTechnique', 'Other technique', noTreatment)}
+                  {on('otherTechnique') && (
+                    <TextField
+                      id="feat-windthrow-other"
+                      labelText={requiredLabel('Description', true)}
+                      value={str('ifotherpleasedescribe')}
+                      maxLength={FEATURE_SINGLE_LINE_MAX.ifotherpleasedescribe}
+                      disabled={readOnly || noTreatment}
+                      onChange={(v) => onPatch({ ifotherpleasedescribe: v })}
+                    />
+                  )}
+                </div>
+              </fieldset>
+            </div>
+          )}
+        </section>
+
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Trail features')}</h3>
+          {chk('trailfeatures', 'Trail features applicable')}
+          {on('trailfeatures') && (
+            <div className="chr-checklist__reveal">
+              {chk('canthetrailstillbelocated', 'Trail still locatable')}
+              {chk('hasthetrailbeenmadelesspassble', 'Trail made less passable')}
+              {chk('isthereevidenceofdamage', 'Evidence of damage to trail area')}
+              {on('isthereevidenceofdamage') && (
+                <TextField
+                  id="feat-trail-len"
+                  labelText={requiredLabel('Estimated trail damage (%)', true)}
+                  value={str('trailLength')}
+                  disabled={readOnly}
+                  invalid={Boolean(err('trailLength'))}
+                  invalidText={err('trailLength')}
+                  onChange={(v) => onPatch({ trailLength: v })}
+                />
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="feature-section">
+          <h3 className="feature-section__title">{sectionTitle('Summary')}</h3>
+          {/* Summary — one column. Each question keeps its description directly beneath it, so the
             answer reads as belonging to the box that asked for it rather than as the next field. */}
-        <div className="chr-checklist__summary">
-          <div className="chr-checklist__summary-question">
-            {chk(
-              'q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature',
-              'Q4 — Operational factors limited CHR management options?',
-            )}
-            {on('q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature') && (
+          <div className="chr-checklist__summary">
+            <div className="chr-checklist__summary-question">
+              {chk(
+                'q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature',
+                'Q4 — Operational factors limited CHR management options?',
+              )}
+              {on('q4WerethereoperationalfactorthatlimitedCHRmanagementoptionsforthisfeature') && (
+                <TextAreaField
+                  id="feat-q4-desc"
+                  labelText={requiredLabel('Q4 description', true)}
+                  value={str('q4Description')}
+                  disabled={readOnly}
+                  limit={FEATURE_TEXT_LIMITS.q4Description}
+                  invalid={Boolean(err('q4Description'))}
+                  invalidText={err('q4Description')}
+                  onChange={(v) => onPatch({ q4Description: v })}
+                />
+              )}
+            </div>
+            <div className="chr-checklist__summary-question">
+              {chk(
+                'q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective',
+                'Q5 — Strategies/practices particularly effective?',
+              )}
+              {on(
+                'q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective',
+              ) && (
+                <TextAreaField
+                  id="feat-q5-desc"
+                  labelText={requiredLabel('Q5 description', true)}
+                  value={str('q5Description')}
+                  disabled={readOnly}
+                  limit={FEATURE_TEXT_LIMITS.q5Description}
+                  invalid={Boolean(err('q5Description'))}
+                  invalidText={err('q5Description')}
+                  onChange={(v) => onPatch({ q5Description: v })}
+                />
+              )}
+            </div>
+            <div className="chr-checklist__summary-question">
+              {chk(
+                'q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature',
+                'Q6 — Strategies that could have reduced impact?',
+              )}
+              {on(
+                'q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature',
+              ) && (
+                <TextAreaField
+                  id="feat-q6-desc"
+                  labelText={requiredLabel('Q6 description', true)}
+                  value={str('q6Description')}
+                  disabled={readOnly}
+                  limit={FEATURE_TEXT_LIMITS.q6Description}
+                  invalid={Boolean(err('q6Description'))}
+                  invalidText={err('q6Description')}
+                  onChange={(v) => onPatch({ q6Description: v })}
+                />
+              )}
+            </div>
+            <div className="chr-checklist__summary-question">
+              <div className="chr-checklist__rating">
+                <CodeSelect
+                  id="feat-rating"
+                  labelText={requiredLabel('Feature rating', true)}
+                  value={str('featureRating')}
+                  options={ratingCodes}
+                  includeBlank
+                  disabled={readOnly}
+                  invalid={Boolean(err('featureRating'))}
+                  invalidText={err('featureRating')}
+                  onChange={(v) => onPatch({ featureRating: v })}
+                />
+              </div>
               <TextAreaField
-                id="feat-q4-desc"
-                labelText={requiredLabel('Q4 description', true)}
-                value={str('q4Description')}
+                id="feat-rating-rationale"
+                labelText="Feature rating rationale"
+                value={str('featureRatingRationale')}
                 disabled={readOnly}
-                limit={FEATURE_TEXT_LIMITS.q4Description}
-                invalid={Boolean(err('q4Description'))}
-                invalidText={err('q4Description')}
-                onChange={(v) => onPatch({ q4Description: v })}
-              />
-            )}
-          </div>
-          <div className="chr-checklist__summary-question">
-            {chk(
-              'q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective',
-              'Q5 — Strategies/practices particularly effective?',
-            )}
-            {on(
-              'q5Weretheremanagementstrategiesandorpracticesusedforthisfeaturethatwereparticularlyeffective',
-            ) && (
-              <TextAreaField
-                id="feat-q5-desc"
-                labelText={requiredLabel('Q5 description', true)}
-                value={str('q5Description')}
-                disabled={readOnly}
-                limit={FEATURE_TEXT_LIMITS.q5Description}
-                invalid={Boolean(err('q5Description'))}
-                invalidText={err('q5Description')}
-                onChange={(v) => onPatch({ q5Description: v })}
-              />
-            )}
-          </div>
-          <div className="chr-checklist__summary-question">
-            {chk(
-              'q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature',
-              'Q6 — Strategies that could have reduced impact?',
-            )}
-            {on(
-              'q6AretheremanagementstrategiesandorpracticesthatcouldhavebeenusedtoreducetheimpactonthisCHRfeature',
-            ) && (
-              <TextAreaField
-                id="feat-q6-desc"
-                labelText={requiredLabel('Q6 description', true)}
-                value={str('q6Description')}
-                disabled={readOnly}
-                limit={FEATURE_TEXT_LIMITS.q6Description}
-                invalid={Boolean(err('q6Description'))}
-                invalidText={err('q6Description')}
-                onChange={(v) => onPatch({ q6Description: v })}
-              />
-            )}
-          </div>
-          <div className="chr-checklist__summary-question">
-            <div className="chr-checklist__rating">
-              <CodeSelect
-                id="feat-rating"
-                labelText={requiredLabel('Feature rating', true)}
-                value={str('featureRating')}
-                options={ratingCodes}
-                includeBlank
-                disabled={readOnly}
-                invalid={Boolean(err('featureRating'))}
-                invalidText={err('featureRating')}
-                onChange={(v) => onPatch({ featureRating: v })}
+                limit={FEATURE_TEXT_LIMITS.featureRatingRationale}
+                invalid={Boolean(err('featureRatingRationale'))}
+                invalidText={err('featureRatingRationale')}
+                onChange={(v) => onPatch({ featureRatingRationale: v })}
               />
             </div>
-            <TextAreaField
-              id="feat-rating-rationale"
-              labelText="Feature rating rationale"
-              value={str('featureRatingRationale')}
-              disabled={readOnly}
-              limit={FEATURE_TEXT_LIMITS.featureRatingRationale}
-              invalid={Boolean(err('featureRatingRationale'))}
-              invalidText={err('featureRatingRationale')}
-              onChange={(v) => onPatch({ featureRatingRationale: v })}
-            />
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="feature-section">
-        <h3 className="feature-section__title">Comments</h3>
-        {/* Not in a `rip-form__grid`: that grid caps its tracks, which held the comments box ~70px
+        <section className="feature-section">
+          <h3 className="feature-section__title">Comments</h3>
+          {/* Not in a `rip-form__grid`: that grid caps its tracks, which held the comments box ~70px
             narrower than the rating rationale above it — the same kind of field, asked once more,
             at a different width. Full section width, matching the rationale. */}
-        <div className="chr-checklist__summary-question">
-          <TextAreaField
-            id="feat-comment"
-            labelText="Comments"
-            value={str('featureComment')}
-            rows={10}
-            disabled={readOnly}
-            limit={FEATURE_TEXT_LIMITS.featureComment}
-            invalid={Boolean(err('featureComment'))}
-            invalidText={err('featureComment')}
-            onChange={(v) => onPatch({ featureComment: v })}
-          />
-        </div>
-      </section>
-    </div>
+          <div className="chr-checklist__summary-question">
+            <TextAreaField
+              id="feat-comment"
+              labelText="Comments"
+              value={str('featureComment')}
+              rows={10}
+              disabled={readOnly}
+              limit={FEATURE_TEXT_LIMITS.featureComment}
+              invalid={Boolean(err('featureComment'))}
+              invalidText={err('featureComment')}
+              onChange={(v) => onPatch({ featureComment: v })}
+            />
+          </div>
+        </section>
+      </div>
+    </ChrReadOnlyContext.Provider>
   );
 };
 

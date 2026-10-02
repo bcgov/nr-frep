@@ -104,3 +104,53 @@ describe('Contacts — edit form layout', () => {
     expect(Math.round(attending.top + attending.height / 2)).toBe(centre('#contact-org'));
   });
 });
+
+describe('Contacts — read-only (submitted)', () => {
+  it('opens a contact as text under its labels, with no form controls', async () => {
+    render(
+      <ConfirmProvider>
+        <Contacts
+          contacts={[
+            {
+              firstName: 'Jane',
+              lastName: 'Doe',
+              organization: 'Example Nation',
+              contactedInd: 'true',
+              contactedDate: '2026-09-18',
+              attendingOnSiteInd: 'false',
+            },
+          ]}
+          onSave={vi.fn()}
+          readOnly
+          busy={false}
+        />
+      </ConfirmProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    const form = document.querySelector('.rip-form')!;
+    expect(form.querySelectorAll('input, select, textarea')).toHaveLength(0);
+    const text = form.textContent ?? '';
+    expect(text).toContain('Jane');
+    expect(text).toContain('Example Nation');
+    expect(text).toContain('Sep 18, 2026');
+    // Indicators read as an answer.
+    expect(text).toContain('Yes');
+    expect(text).toContain('No');
+    // Each answer sits level with its row, including the indicator cells: in edit mode those are
+    // pushed down to meet the inputs, which a read-only value (it has its own label) must not be.
+    const field = (name: string) =>
+      [...form.querySelectorAll('.protocol-checklist__label')].find(
+        (el) => el.textContent === name,
+      )!.parentElement!;
+    const top = (el: Element | null) => el!.getBoundingClientRect().top;
+    const label = (name: string) => top(field(name).querySelector('.protocol-checklist__label'));
+    const value = (name: string) => top(field(name).querySelector('.protocol-checklist__value'));
+    expect(label('Contacted')).toBe(label('Organization'));
+    expect(value('Contacted')).toBe(value('Organization'));
+    // Nothing to save on a submitted checklist; Cancel still leaves.
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+});

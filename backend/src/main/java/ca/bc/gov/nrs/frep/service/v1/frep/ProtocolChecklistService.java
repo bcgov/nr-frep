@@ -1323,20 +1323,46 @@ public class ProtocolChecklistService {
    *
    * <p>The token is minted here rather than accepted from the client: it is proof the server issued
    * this checkout, so a caller cannot pick its own value and claim someone else's.
+   *
+   * <p>Whoever takes a checklist offline becomes its evaluator when none is set — CHR's rule (see
+   * {@code ChrChecklistPersistenceService.updateChecklistOffline}). The evaluator can't be changed
+   * offline, and a plot can't be saved without one, so a checkout that left it blank would leave
+   * the device unable to save a plot. The claim shares the checkout's transaction, so it's never
+   * half-applied, and it writes only {@code biodiversity_evaluator_name}: the checklist row's
+   * {@code revision_count}, which the device copy's token depends on, is untouched.
+   *
+   * <p>The evaluator is returned in the response because the snapshot was read before this call
+   * (reads first, checkout last — see bioTakeOffline.ts) and so predates the claim.
    */
   @Transactional
   public BioCheckout takeOffline(String checklistId) {
     assertSlrOnly(checklistId);
+    String userId = loggedUserHelper.getLoggedUserId();
     UUID token = UUID.randomUUID();
-    String error = writeRepository.takeOffline(
-        checklistId, token, loggedUserHelper.getLoggedUserId());
+    String error = writeRepository.takeOffline(checklistId, token, userId);
     if (StringUtils.isNotBlank(error)) {
       // The proc refuses unless the row is ACT, so this is "already checked out, or submitted".
       throw new AccessForbiddenException(
           "This checklist can't be taken offline right now — it may already be checked out or "
               + "submitted. Refresh and try again.");
     }
-    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.RDO, token.toString());
+    BiodiversityOpening opening = claimEvaluatorIfUnset(checklistId, userId);
+    return new BioCheckout(checklistId, ChrConstants.FrepChecklistStatusCode.RDO, token.toString(),
+        opening == null ? null : opening.teamLeadNameId(),
+        opening == null ? null : opening.teamLeadName(),
+        opening == null ? null : opening.teamLeadRevisionCount());
+  }
+
+  /** Make the caller the evaluator if there is none, never replacing one; returns the result. */
+  private BiodiversityOpening claimEvaluatorIfUnset(String checklistId, String userId) {
+    BiodiversityOpening current = writeRepository.getBiodiversityOpening(checklistId);
+    if (current != null && StringUtils.isNotBlank(current.teamLeadNameId())) {
+      return withResolvedBioLead(current);
+    }
+    writeRepository.assignBiodiversityLead(checklistId,
+        checklistRepository.resolveResourceType(checklistId), userId, null, null, userId);
+    // Re-read for the new row's revision; the name is resolved through FAM as on every other read.
+    return withResolvedBioLead(writeRepository.getBiodiversityOpening(checklistId));
   }
 
   /**

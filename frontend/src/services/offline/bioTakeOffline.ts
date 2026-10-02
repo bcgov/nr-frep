@@ -135,8 +135,23 @@ export const takeBioChecklistOffline = async (
     onProgress?.({ phase: 'checkout' });
     const checkout = await API.protocolChecklist.takeOffline(checklistId);
 
+    // The checkout makes the caller the evaluator when none is set (CHR's rule), after the snapshot
+    // above was read. The evaluator can't be changed offline, so the copy is stored with the
+    // checkout's evaluator — otherwise new plots would have no "Evaluated by" and couldn't be saved.
+    const withEvaluator: BioSnapshot = checkout.evaluatorId
+      ? {
+          ...snapshot,
+          opening: {
+            ...snapshot.opening,
+            teamLeadNameId: checkout.evaluatorId,
+            teamLeadName: checkout.evaluatorName,
+            teamLeadRevisionCount: checkout.evaluatorRevisionCount,
+          },
+        }
+      : snapshot;
+
     return await bioOfflineRepo.store(
-      snapshot,
+      withEvaluator,
       checkout.deviceCheckoutGuid ?? undefined,
       undefined,
       openingId,

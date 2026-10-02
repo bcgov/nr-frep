@@ -64,6 +64,11 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /**
+   * Editing this device's offline copy. A plot's evaluator can't be changed offline (as in CHR), so
+   * "Assign it to me" is hidden; new plots take the checklist evaluator set at take-offline.
+   */
+  offline?: boolean;
   /** True when the Plots tab is the active tab — triggers a strata refetch (see the effect). */
   active?: boolean;
   /** Outstanding submit rules for this tab, grouped by plot (see OutstandingPanel). */
@@ -171,6 +176,7 @@ const BioPlotsView: FC<Props> = ({
   checklistId,
   canEdit,
   submitted,
+  offline = false,
   active,
   onSaved,
   outstanding = [],
@@ -702,7 +708,7 @@ const BioPlotsView: FC<Props> = ({
           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <span>{displayName || '—'}</span>
-          {me && !sameEvaluator(currentId, me) && (
+          {me && !offline && !sameEvaluator(currentId, me) && (
             <Button kind="ghost" size="sm" disabled={busy} onClick={assignToMe}>
               Assign it to me
             </Button>

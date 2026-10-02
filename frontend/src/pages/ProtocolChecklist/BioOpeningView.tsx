@@ -54,6 +54,11 @@ type Props = {
   checklistId: string;
   canEdit: boolean;
   submitted: boolean;
+  /**
+   * Editing this device's offline copy. The evaluator is set when the checklist is taken offline
+   * (as in CHR) and can't be changed until it's checked in, so "Assign it to me" is hidden.
+   */
+  offline?: boolean;
   /** Called after a save or delete lands, so the tab-completion dots re-derive. */
   onSaved?: () => void;
   /** `error` once a submit has been refused — see OutstandingPanel. */
@@ -69,7 +74,14 @@ const sameEvaluator = (a?: string, b?: string): boolean => {
   return norm(a) !== '' && norm(a) === norm(b);
 };
 
-const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, tone }) => {
+const BioOpeningView: FC<Props> = ({
+  checklistId,
+  canEdit,
+  submitted,
+  offline = false,
+  onSaved,
+  tone,
+}) => {
   const { display } = useNotification();
   const { user } = useAuth();
   const me = user?.providerUsername;
@@ -376,7 +388,7 @@ const BioOpeningView: FC<Props> = ({ checklistId, canEdit, submitted, onSaved, t
           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <span>{displayName || '—'}</span>
-          {me && !sameEvaluator(currentId, me) && (
+          {me && !offline && !sameEvaluator(currentId, me) && (
             <Button kind="ghost" size="sm" disabled={busy} onClick={assignToMe}>
               Assign it to me
             </Button>

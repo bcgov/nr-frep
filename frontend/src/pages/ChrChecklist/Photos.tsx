@@ -426,7 +426,9 @@ const Photos: FC<{
               <tr>
                 <th scope="col">Preview</th>
                 <th scope="col">Description</th>
-                <th scope="col">Date</th>
+                <th scope="col" className="rip-files__short">
+                  Date
+                </th>
                 <th scope="col">Action</th>
               </tr>
             </thead>
@@ -468,7 +470,7 @@ const Photos: FC<{
                       )}
                     </td>
                     <td>{picture.description || '—'}</td>
-                    <td>{formatShortDate(picture.date) || '—'}</td>
+                    <td className="rip-files__short">{formatShortDate(picture.date) || '—'}</td>
                     <td className="table-actions">
                       <Button
                         kind="ghost"

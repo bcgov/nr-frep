@@ -830,6 +830,9 @@
  */
 .rip-table-scroll {
   overflow-x: auto;
+  // A size container so column floors can be a share of the TAB (cqi) rather than the window: the
+  // tab is often much narrower than the viewport. A block taking its parent's width, so safe.
+  container-type: inline-size;
   // Takes over the table's own bottom margin so spacing is unchanged.
   margin-bottom: 1.5rem;
 
@@ -851,11 +854,25 @@
  * features and composite tables deliberately keep their Action column on one line.
  */
 .rip-field-grid--files {
-  td:not(.table-actions),
-  th {
+  td:not(.table-actions, .rip-files__short),
+  th:not(.rip-files__short) {
     // `anywhere` rather than `break-word`: it also lets the cell's MIN-CONTENT width shrink, which
     // is what stops a long filename dictating the column width in the first place.
     overflow-wrap: anywhere;
+  }
+
+  // Short values — SLR's Type code (JPG, DOCX), CHR's date (Sep 18, 2026). With `anywhere` their
+  // min-content width collapsed to one character, so a long description took the slack and the value
+  // stacked a few letters per line. Kept whole, the description is what gives way.
+  .rip-files__short {
+    white-space: nowrap;
+  }
+
+  // The same collapse squeezed the file name into a sliver ("alpine_t / undra_z / one.jpg"). A floor
+  // keeps typical names on one line; capped at a quarter of the tab so the table still fits a narrow
+  // one (cqi — see .rip-table-scroll).
+  .rip-attach__file {
+    min-inline-size: min(12rem, 25cqi);
   }
 
   .table-actions {

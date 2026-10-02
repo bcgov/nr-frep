@@ -103,6 +103,28 @@ describe('takeBioChecklistOffline', () => {
     expect((await bioOfflineRepo.load('9001'))?.snapshot.checklistId).toBe('9001');
   });
 
+  it('stores the evaluator the checkout set, which the snapshot predates', async () => {
+    // The checkout claims the evaluator for the caller when none is set (CHR's rule). It can't be
+    // changed offline, so without this the copy has no evaluator and new plots can't be saved.
+    api.takeOffline.mockResolvedValue({
+      statusCode: 'RDO',
+      deviceCheckoutGuid: 'guid-1',
+      evaluatorId: 'IDIR\\ME',
+      evaluatorName: 'Me (ME)',
+      evaluatorRevisionCount: '1',
+    });
+
+    await takeBioChecklistOffline('9001');
+
+    const opening = (await bioOfflineRepo.load('9001'))?.snapshot.opening;
+    expect(opening).toMatchObject({
+      checklistId: '9001',
+      teamLeadNameId: 'IDIR\\ME',
+      teamLeadName: 'Me (ME)',
+      teamLeadRevisionCount: '1',
+    });
+  });
+
   it('refreshes the reference cache, which the Bio views cannot work without', async () => {
     await takeBioChecklistOffline('9001');
 

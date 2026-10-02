@@ -335,6 +335,30 @@ describe('BioOpeningView', () => {
     expect(screen.queryByRole('button', { name: 'Assign it to me' })).toBeNull();
   });
 
+  it('does not let the evaluator be changed on an offline copy', async () => {
+    // As in CHR: the evaluator is set at take-offline and stays fixed until check-in.
+    api.getBiodiversityOpening.mockResolvedValue({
+      checklistId: '9001',
+      locationDescription: 'loc',
+      evaluationDate: '2024-06-01',
+      invasivePlantIndicator: 'N',
+      innovativePracticeInd: 'N',
+      frepSiteEvaluationCode: 'M',
+      teamLeadNameId: 'IDIR\\OTHER', // online this would offer a takeover
+      teamLeadName: 'Other Person',
+      revisionCount: '3',
+    });
+    config.getChecklistAnswers.mockResolvedValue([]);
+    config.getSiteEvaluationCodes.mockResolvedValue([{ code: 'M', description: 'Meets' }]);
+
+    render(<BioOpeningView checklistId="9001" canEdit submitted={false} offline />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByText('Other Person')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Assign it to me' })).toBeNull();
+  });
+
   it('hides the Edit control for a submitted checklist', async () => {
     api.getBiodiversityOpening.mockResolvedValue({ checklistId: '9001', revisionCount: '5' });
     config.getChecklistAnswers.mockResolvedValue([]);

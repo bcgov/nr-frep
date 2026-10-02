@@ -69,3 +69,36 @@ describe('Photos — the no-thumbnail placeholder', () => {
     expect(box.getAttribute('title')).toBe(LONG_NAME);
   });
 });
+
+describe('Photos — column widths with a long description', () => {
+  // The SLR attachments table had a short code (Type) collapse to one letter per line beside a long
+  // description, because every cell may break `anywhere`. Date is CHR's short column in that slot.
+  const lines = (cell: Element): number => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    // One rect per line box the text occupies.
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  };
+
+  it.each([['1200px'], ['420px']])('keeps the date readable in a %s tab', (width) => {
+    render(
+      <div style={{ inlineSize: width }}>
+        <Photos
+          {...baseProps}
+          pictures={[
+            {
+              id: '11',
+              fileName: 'site.jpg',
+              mimeTypeCode: 'image/jpeg',
+              description: 'Long description text '.repeat(40),
+              date: '2026-09-18',
+            },
+          ]}
+        />
+      </div>,
+    );
+
+    const dateCell = document.querySelectorAll('tbody td')[2];
+    expect(lines(dateCell)).toBe(1);
+  });
+});

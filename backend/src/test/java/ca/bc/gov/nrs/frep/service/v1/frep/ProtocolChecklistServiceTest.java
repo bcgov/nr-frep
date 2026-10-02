@@ -509,6 +509,51 @@ class ProtocolChecklistServiceTest {
   }
 
   @Test
+  void takeOfflineMakesTheCallerTheEvaluatorWhenNoneIsSet() {
+    // CHR's rule: whoever takes it offline becomes the evaluator. Offline the evaluator can't be
+    // changed, and a plot can't be saved without one, so a blank one would strand the device.
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ME");
+    when(writeRepository.takeOffline(eq("9001"), any(), eq("IDIR\\ME"))).thenReturn("");
+    BiodiversityOpening blank = opening(null, "loc", "N", null, "N", null, "W");
+    BiodiversityOpening claimed = blank.withTeamLead("IDIR\\ME", null, "1");
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(blank, claimed);
+    when(userDirectoryService.resolveName("IDIR\\ME")).thenReturn(Optional.of("Me (ME)"));
+
+    BioCheckout result = service.takeOffline("9001");
+
+    verify(writeRepository).assignBiodiversityLead("9001", "SLR", "IDIR\\ME", null, null,
+        "IDIR\\ME");
+    // Returned because the device's snapshot was read before the claim.
+    assertEquals("IDIR\\ME", result.evaluatorId());
+    assertEquals("Me (ME)", result.evaluatorName());
+    assertEquals("1", result.evaluatorRevisionCount());
+  }
+
+  @Test
+  void takeOfflineKeepsAnExistingEvaluator() {
+    when(loggedUserHelper.getLoggedUserId()).thenReturn("IDIR\\ME");
+    when(writeRepository.takeOffline(eq("9001"), any(), any())).thenReturn("");
+    when(writeRepository.getBiodiversityOpening("9001")).thenReturn(
+        opening(null, "loc", "N", null, "N", null, "W").withTeamLead("IDIR\\OTHER", null, "7"));
+    when(userDirectoryService.resolveName("IDIR\\OTHER")).thenReturn(Optional.of("Other (OTHER)"));
+
+    BioCheckout result = service.takeOffline("9001");
+
+    verify(writeRepository, never()).assignBiodiversityLead(any(), any(), any(), any(), any(), any());
+    assertEquals("IDIR\\OTHER", result.evaluatorId());
+    assertEquals("Other (OTHER)", result.evaluatorName());
+  }
+
+  @Test
+  void takeOfflineIsRefusedWhenTheProcRefusesAndClaimsNoEvaluator() {
+    when(writeRepository.takeOffline(eq("9001"), any(), any()))
+        .thenReturn("frep.error.usr.checkout.unavailable;");
+
+    assertThrows(AccessForbiddenException.class, () -> service.takeOffline("9001"));
+    verify(writeRepository, never()).assignBiodiversityLead(any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
   void takeOfflineIsRefusedForAHistoricalSlbRecord() {
     // Checking out an SLB record would hand a device a copy it could never sync back.
     when(checklistRepository.resolveResourceType("9001")).thenReturn("SLB");

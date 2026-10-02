@@ -862,6 +862,7 @@ const ProtocolChecklistPage: FC = () => {
                         checklistId={id}
                         canEdit={editable}
                         submitted={submitted}
+                        offline={Boolean(offlineRecord)}
                         onSaved={refreshTabStatuses}
                         tone={tone}
                       />
@@ -879,6 +880,7 @@ const ProtocolChecklistPage: FC = () => {
                         checklistId={id}
                         canEdit={editable}
                         submitted={submitted}
+                        offline={Boolean(offlineRecord)}
                         active={i === tabIndex}
                         onSaved={refreshTabStatuses}
                         outstanding={outstandingGroups('plots')}

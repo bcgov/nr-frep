@@ -257,6 +257,13 @@ export type BioCheckout = {
   statusCode?: string;
   /** Null once released or activated. */
   deviceCheckoutGuid?: string | null;
+  /**
+   * Take-offline only: the evaluator (team lead) after the checkout, which claims it for the caller
+   * when none is set. The snapshot predates the checkout, so this is what the device copy must hold.
+   */
+  evaluatorId?: string;
+  evaluatorName?: string;
+  evaluatorRevisionCount?: string;
 };
 
 /**

@@ -241,6 +241,19 @@ describe('BioPlotsView', () => {
     expect(screen.queryByRole('button', { name: 'Assign it to me' })).toBeNull();
   });
 
+  it('defaults "Evaluated by" offline but does not let it be changed', async () => {
+    // As in CHR: on an offline copy the evaluator is the one set at take-offline, and is fixed.
+    api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
+    api.listBioPlots.mockResolvedValue([]);
+
+    render(<BioPlotsView checklistId="9001" canEdit submitted={false} offline />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add plot' }));
+
+    expect(screen.getByText('John Doe (JDOE)')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Assign it to me' })).toBeNull();
+  });
+
   it('is read-only when submitted (Edit only, no Add or Delete)', async () => {
     api.listBioStrata.mockResolvedValue([{ stratumId: 'S1', stratumNumber: '1' }]);
     api.listBioPlots.mockResolvedValue([{ plotId: 'P1', plotNumber: '1' }]);

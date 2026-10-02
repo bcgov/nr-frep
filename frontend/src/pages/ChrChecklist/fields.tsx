@@ -7,6 +7,7 @@ import {
   TextArea,
   TextInput,
 } from '@carbon/react';
+import { useContext } from 'react';
 
 import FieldWithCounter from '@/components/core/FieldWithCounter';
 
@@ -14,8 +15,36 @@ import type { CodeOption } from '@/pages/ChrChecklist/codeLists';
 import type { Indicator } from '@/types/chrChecklist';
 import type { FC, ReactNode } from 'react';
 
+import { ChrReadOnlyContext } from '@/pages/ChrChecklist/chrReadOnlyContext';
 import { NO_AUTOFILL } from '@/utils/autofill';
+import { formatShortDate } from '@/utils/date';
 import { byteLength, overLimitError } from '@/utils/textLimits';
+
+const useReadOnlyView = () => useContext(ChrReadOnlyContext);
+
+/** One read-only label/value pair. A blank value shows "—", like SLR. */
+export const ReadOnlyValue: FC<{
+  labelText?: ReactNode;
+  value: string | undefined;
+  multiline?: boolean;
+  className?: string;
+}> = ({ labelText, value, multiline = false, className }) => (
+  <div className={['protocol-checklist__field', className].filter(Boolean).join(' ')}>
+    {/* Empty in a table cell, where the column header is the label. */}
+    {labelText ? <span className="protocol-checklist__label">{labelText}</span> : null}
+    <span
+      className={
+        multiline
+          ? 'protocol-checklist__value protocol-checklist__multiline'
+          : 'protocol-checklist__value'
+      }
+    >
+      {value || '—'}
+    </span>
+  </div>
+);
+
+const yesNo = (value: Indicator | undefined) => (value === 'true' ? 'Yes' : 'No');
 
 /** Carbon checkbox bound to a backend "true"/"false" string indicator. */
 export const IndicatorCheckbox: FC<{
@@ -24,15 +53,18 @@ export const IndicatorCheckbox: FC<{
   value: Indicator | undefined;
   onToggle: (next: Indicator) => void;
   disabled?: boolean;
-}> = ({ id, labelText, value, onToggle, disabled }) => (
-  <Checkbox
-    id={id}
-    labelText={labelText}
-    checked={value === 'true'}
-    disabled={disabled}
-    onChange={(_evt, { checked }) => onToggle(checked ? 'true' : 'false')}
-  />
-);
+}> = ({ id, labelText, value, onToggle, disabled }) =>
+  useReadOnlyView() ? (
+    <ReadOnlyValue labelText={labelText} value={yesNo(value)} />
+  ) : (
+    <Checkbox
+      id={id}
+      labelText={labelText}
+      checked={value === 'true'}
+      disabled={disabled}
+      onChange={(_evt, { checked }) => onToggle(checked ? 'true' : 'false')}
+    />
+  );
 
 export const TextField: FC<{
   id: string;
@@ -66,24 +98,27 @@ export const TextField: FC<{
   maxLength,
   onBlur,
   className,
-}) => (
-  <TextInput
-    autoComplete="off"
-    className={className}
-    id={id}
-    labelText={labelText}
-    value={value ?? ''}
-    disabled={disabled}
-    readOnly={readOnly}
-    placeholder={placeholder}
-    helperText={helperText}
-    invalid={invalid}
-    invalidText={invalidText}
-    maxLength={maxLength}
-    onBlur={onBlur}
-    onChange={(e) => onChange(e.target.value)}
-  />
-);
+}) =>
+  useReadOnlyView() ? (
+    <ReadOnlyValue labelText={labelText} value={value} className={className} />
+  ) : (
+    <TextInput
+      autoComplete="off"
+      className={className}
+      id={id}
+      labelText={labelText}
+      value={value ?? ''}
+      disabled={disabled}
+      readOnly={readOnly}
+      placeholder={placeholder}
+      helperText={helperText}
+      invalid={invalid}
+      invalidText={invalidText}
+      maxLength={maxLength}
+      onBlur={onBlur}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
 
 /**
  * Calendar date field bound to a backend {@code YYYY-MM-DD} string. Drop-in replacement for a
@@ -109,34 +144,37 @@ export const DateField: FC<{
   placeholder = 'YYYY-MM-DD',
   invalid,
   invalidText,
-}) => (
-  <DatePicker
-    className="frep-date-picker"
-    datePickerType="single"
-    dateFormat="Y-m-d"
-    // Pass a plain string (or undefined), never an empty array — Carbon's `setDate([])` re-sync
-    // effect on an empty array drives an update loop when the picker mounts mid-render.
-    value={value || undefined}
-    // Only propagate a real change. flatpickr fires onChange on mount/re-sync; the guard keeps that
-    // spurious call from feeding a parent draft-sync effect into an update loop.
-    onChange={(dates: Date[]) => {
-      const next = dates[0] ? dates[0].toISOString().slice(0, 10) : '';
-      if (next !== (value ?? '')) {
-        onChange(next);
-      }
-    }}
-  >
-    <DatePickerInput
-      {...NO_AUTOFILL}
-      id={id}
-      labelText={labelText}
-      placeholder={placeholder}
-      disabled={disabled}
-      invalid={invalid}
-      invalidText={invalidText}
-    />
-  </DatePicker>
-);
+}) =>
+  useReadOnlyView() ? (
+    <ReadOnlyValue labelText={labelText} value={formatShortDate(value)} />
+  ) : (
+    <DatePicker
+      className="frep-date-picker"
+      datePickerType="single"
+      dateFormat="Y-m-d"
+      // Pass a plain string (or undefined), never an empty array — Carbon's `setDate([])` re-sync
+      // effect on an empty array drives an update loop when the picker mounts mid-render.
+      value={value || undefined}
+      // Only propagate a real change. flatpickr fires onChange on mount/re-sync; the guard keeps that
+      // spurious call from feeding a parent draft-sync effect into an update loop.
+      onChange={(dates: Date[]) => {
+        const next = dates[0] ? dates[0].toISOString().slice(0, 10) : '';
+        if (next !== (value ?? '')) {
+          onChange(next);
+        }
+      }}
+    >
+      <DatePickerInput
+        {...NO_AUTOFILL}
+        id={id}
+        labelText={labelText}
+        placeholder={placeholder}
+        disabled={disabled}
+        invalid={invalid}
+        invalidText={invalidText}
+      />
+    </DatePicker>
+  );
 
 export const TextAreaField: FC<{
   id: string;
@@ -175,6 +213,10 @@ export const TextAreaField: FC<{
   invalid,
   invalidText,
 }) => {
+  const readOnlyView = useReadOnlyView();
+  if (readOnlyView) {
+    return <ReadOnlyValue labelText={labelText} value={value} multiline />;
+  }
   const used = limit === undefined ? 0 : measure(value);
   const over = limit !== undefined && used > limit;
   const field = (
@@ -226,23 +268,30 @@ export const CodeSelect: FC<{
   invalid,
   invalidText,
   hideLabel,
-}) => (
-  <Select
-    autoComplete="off"
-    id={id}
-    labelText={labelText}
-    hideLabel={hideLabel}
-    value={value ?? ''}
-    disabled={disabled}
-    invalid={invalid}
-    invalidText={invalidText}
-    onChange={(e) => onChange(e.target.value)}
-  >
-    {/* A form select invites a choice by name. In a table cell (`hideLabel`) the column header
+}) =>
+  useReadOnlyView() ? (
+    <ReadOnlyValue
+      labelText={hideLabel ? undefined : labelText}
+      // The same text the select shows; an unknown code shows as itself rather than as blank.
+      value={options.find((opt) => opt.code === value)?.label ?? value}
+    />
+  ) : (
+    <Select
+      autoComplete="off"
+      id={id}
+      labelText={labelText}
+      hideLabel={hideLabel}
+      value={value ?? ''}
+      disabled={disabled}
+      invalid={invalid}
+      invalidText={invalidText}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {/* A form select invites a choice by name. In a table cell (`hideLabel`) the column header
         already names the field and there is no width to spare, so the dash stays. */}
-    {includeBlank && <SelectItem value="" text={hideLabel ? '—' : 'Choose an option'} />}
-    {options.map((opt) => (
-      <SelectItem key={`${id}-${opt.code}`} value={opt.code} text={opt.label} />
-    ))}
-  </Select>
-);
+      {includeBlank && <SelectItem value="" text={hideLabel ? '—' : 'Choose an option'} />}
+      {options.map((opt) => (
+        <SelectItem key={`${id}-${opt.code}`} value={opt.code} text={opt.label} />
+      ))}
+    </Select>
+  );

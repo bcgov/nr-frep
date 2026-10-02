@@ -1,6 +1,6 @@
 import { render, waitFor } from '@testing-library/react';
 import { page } from '@vitest/browser/context';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded — a browser spec loads none by default, and
 // without them every measurement reports the unstyled layout. Kept in its own file for the same
@@ -560,5 +560,144 @@ describe('FeatureEditor — inline errors', () => {
     expect(error.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       next.getBoundingClientRect().top,
     );
+  });
+});
+
+describe('FeatureEditor — fields in the strategy table', () => {
+  // The rows are white on the grey tab panel, so a field in them must be grey: the panel's own white
+  // field token made the buffer-length and reserve-type fields white on white.
+  const bg = (el: Element) => getComputedStyle(el).backgroundColor;
+
+  afterEach(() => {
+    delete document.documentElement.dataset.carbonTheme;
+  });
+
+  it('gives the buffer and reserve fields the grey field colour', async () => {
+    await page.viewport(1250, 700);
+    // Carbon's colour tokens are defined only under the theme attribute ThemeProvider sets.
+    document.documentElement.dataset.carbonTheme = 'white';
+    render(
+      // The tab panel, which is what switches fields to white.
+      <div className="cds--tab-content">
+        <FeatureEditor
+          feature={
+            {
+              featureLabel: 'Feature 1',
+              managementStrategyFN: 'true',
+              retainBufferFN: 'true',
+              conserveinRotationalReserveFN: 'true',
+            } as Feature
+          }
+          onPatch={vi.fn()}
+          readOnly={false}
+        />
+      </div>,
+    );
+
+    const row = await waitFor(() => {
+      const input = document.getElementById('feat-bufferLengthFN');
+      expect(input).not.toBeNull();
+      return input!.closest('tr')!;
+    });
+    const buffer = document.getElementById('feat-bufferLengthFN')!;
+    const reserve = document.getElementById('feat-conserveRotationalReserveTypeFN')!;
+
+    expect(bg(row)).toBe('rgb(255, 255, 255)');
+    expect(bg(buffer)).toBe('rgb(244, 244, 244)');
+    expect(bg(reserve)).toBe('rgb(244, 244, 244)');
+  });
+});
+
+describe('FeatureEditor — read-only (submitted)', () => {
+  // A submitted feature reads like SLR's read-only view: each answer as text under its label, not a
+  // greyed-out control that looks unavailable rather than answered.
+  const submitted = {
+    featureLabel: '1',
+    featureDescriptionCode: 'CT',
+    featureInfoSourceCode: 'SP',
+    featureDescription: 'Trail along the ridge',
+    chrRegisteredSite: 'false',
+    widthofFeature: '100',
+    lengthofFeature: '159',
+    post1846: 'true',
+    managementStrategySP: 'true',
+    retainBufferSP: 'true',
+    bufferLengthSP: '20',
+  } as Feature;
+
+  it('shows values as text, with no form controls', async () => {
+    await page.viewport(1250, 900);
+    render(<FeatureEditor feature={submitted} onPatch={vi.fn()} readOnly />);
+
+    await waitFor(() => expect(document.body.textContent).toContain('Cultural Trail'));
+    const form = document.querySelector('.feature-sections')!;
+    expect(form.querySelectorAll('input, select, textarea')).toHaveLength(0);
+
+    const text = form.textContent ?? '';
+    expect(text).toContain('Site Plan');
+    expect(text).toContain('Trail along the ridge');
+    expect(text).toContain('Metres (width × length)');
+    expect(text).toContain('Post-1846');
+    // The buffer length under its ticked strategy box.
+    expect(text).toContain('20');
+  });
+
+  it('shows a blank answer as a dash, like SLR', async () => {
+    render(<FeatureEditor feature={{ featureLabel: '2' } as Feature} onPatch={vi.fn()} readOnly />);
+
+    const description = await waitFor(() => {
+      const label = [...document.querySelectorAll('.protocol-checklist__label')].find(
+        (el) => el.textContent === 'Feature description',
+      );
+      expect(label).toBeTruthy();
+      return label!.parentElement!;
+    });
+    expect(description.querySelector('.protocol-checklist__value')?.textContent).toBe('—');
+  });
+
+  it('is still a form when editable', async () => {
+    render(<FeatureEditor feature={submitted} onPatch={vi.fn()} readOnly={false} />);
+
+    await waitFor(() =>
+      expect(document.querySelectorAll('.feature-sections input').length).toBeGreaterThan(0),
+    );
+    expect(document.querySelector('.feature-sections select')).not.toBeNull();
+  });
+});
+
+describe('FeatureEditor — read-only follow-up alignment', () => {
+  // Editable, a ticked box's follow-ups are indented to its label text. Read-only there is no box,
+  // so the indent left them hanging right of the answer they belong to.
+  const valueLeft = (label: string) => {
+    const el = [...document.querySelectorAll('.protocol-checklist__label')].find(
+      (l) => l.textContent?.startsWith(label),
+    );
+    expect(el, label).toBeTruthy();
+    return Math.round(el!.parentElement!.getBoundingClientRect().left);
+  };
+
+  it('lines the follow-ups up with the answer that reveals them', async () => {
+    await page.viewport(1250, 900);
+    render(
+      <FeatureEditor
+        feature={
+          {
+            featureLabel: '1',
+            trailfeatures: 'true',
+            canthetrailstillbelocated: 'true',
+            windthrowManagement: 'true',
+            sitePermitIssued: 'true',
+            permit: 'P-1',
+          } as Feature
+        }
+        onPatch={vi.fn()}
+        readOnly
+      />,
+    );
+
+    await waitFor(() => valueLeft('Trail features applicable'));
+    expect(valueLeft('Trail still locatable')).toBe(valueLeft('Trail features applicable'));
+    expect(valueLeft('Area windfirm')).toBe(valueLeft('Windthrow management applicable'));
+    expect(valueLeft('Permit number')).toBe(valueLeft('AIA / site-alteration permit issued'));
   });
 });

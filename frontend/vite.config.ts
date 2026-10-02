@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'path';
 
 import react from '@vitejs/plugin-react';
+import { playwright } from '@vitest/browser-playwright';
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
@@ -181,7 +182,8 @@ export default defineConfig(({ mode }) => {
         provider: 'v8',
         reporter: ['lcov', 'cobertura', 'html', 'json', 'text'],
         reportsDirectory: './coverage',
-        all: true,
+        // No `all: true` — removed in Vitest 4, where files matching `include` are always reported,
+        // tested or not, which is what it used to switch on.
         exclude: [
           '**/node_modules/**',
           '**/tests/**',
@@ -218,6 +220,11 @@ export default defineConfig(({ mode }) => {
           plugins: [react(), tsconfigPaths()],
           test: {
             name: 'node',
+            // Its own group, run before the browser project's: Vitest 4 refuses to run projects
+            // together when their worker limits differ, and the browser project caps its workers
+            // on CI (see below). Unit tests take about two seconds, so running them first costs
+            // little.
+            sequence: { groupOrder: 0 },
             setupFiles: [
               './src/config/tests/setup-env.ts',
               './src/config/tests/custom-matchers.ts',
@@ -257,13 +264,15 @@ export default defineConfig(({ mode }) => {
           },
           test: {
             name: 'browser',
+            sequence: { groupOrder: 1 },
             setupFiles: [
               './src/config/tests/setup-browser.ts',
               './src/config/tests/custom-matchers.ts',
             ],
             browser: {
               enabled: true,
-              provider: 'playwright',
+              // A factory from its own package since Vitest 4; the bare 'playwright' string is gone.
+              provider: playwright(),
               instances: [{ browser: 'chromium' }],
             },
             include: ['src/**/*.browser.test.{ts,tsx}'],
@@ -276,7 +285,8 @@ export default defineConfig(({ mode }) => {
             // Capped rather than serialised: two workers keep most of the parallelism while
             // leaving the runner enough headroom to start them. Left uncapped locally, where
             // there are cores to spare.
-            ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
+            // (`minWorkers` went in Vitest 4 — `maxWorkers` alone is the cap.)
+            ...(process.env.CI ? { maxWorkers: 2 } : {}),
           },
         },
       ],

@@ -15,10 +15,14 @@ describe('ChrChecklistService.addPhoto', () => {
 
   beforeEach(() => {
     service = new ChrChecklistService({ baseURL: 'http://localhost' } as never);
-    vi.spyOn(service as never, 'doRequest').mockImplementation((_config, options) => {
-      sent = (options as { body: FormData }).body;
-      return Promise.resolve();
-    });
+    // `doRequest` isn't public, so the spy is given its shape (Vitest 4 types `as never` as never).
+    type WithDoRequest = { doRequest: (config: unknown, options: unknown) => Promise<unknown> };
+    vi.spyOn(service as unknown as WithDoRequest, 'doRequest').mockImplementation(
+      (_config, options) => {
+        sent = (options as { body: FormData }).body;
+        return Promise.resolve();
+      },
+    );
   });
 
   it('sends the file and description', async () => {

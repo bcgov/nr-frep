@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded. Kept in its own file: with Carbon's CSS

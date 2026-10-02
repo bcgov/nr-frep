@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded — a browser spec loads none by default.

@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react';
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Geometry, so the real stylesheets have to be loaded — a browser spec loads none by default, and

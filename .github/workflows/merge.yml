@@ -24,17 +24,14 @@ jobs:
       pr: ${{ steps.pr.outputs.pr }}
     runs-on: ubuntu-24.04
     steps:
-      # Find the PR number associated with this squash-merged commit on main,
-      # so we can deploy the same image tag that the PR was running.
+      # The PR behind this merge commit, so we deploy the image tag it built.
       - id: pr
         uses: bcgov/action-get-pr@28b0adf8e4d40720d41f9c87356ce24b0a4bd6af # v0.3.1
 
   deploy-test:
     name: TEST Deploys (${{ needs.init.outputs.pr }})
     needs: [init]
-    # contents:read here so the nested reusable-deploy jobs can checkout.
-    # Workflow-level `permissions: {}` above sets all scopes to none; the
-    # called workflow can't grant itself more than the caller has.
+    # Needed for the reusable workflow's checkout (workflow-level permissions are {}).
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -61,24 +58,11 @@ jobs:
       backend_replicas: "2"
       frontend_replicas: "2"
 
-  # ── Playwright E2E: DISABLED 2026-09-09 ══════════════════════════════
-  #
-  # Unattended CI login is not currently possible. FREP's CSS integration brokers IDIR - MFA
-  # (`kc_idp_hint=azureidir`), and a second factor is by construction something the credentials in
-  # E2E_IDIR_USER / E2E_IDIR_PASSWORD cannot supply — `auth.setup.ts` cannot get a session, so every
-  # spec fails at setup rather than on anything it is testing.
-  #
-  # Re-enabling needs ONE of:
-  #   - an MFA-exempt service account from the IDIR team, or
-  #   - a test strategy that never goes through the browser login (API-level, or a mocked session).
-  #
-  # The suite itself is current and runs locally against a deployed environment:
+  # ── Playwright E2E: DISABLED 2026-09-09 ──────────────────────────────
+  # CI can't log in: IDIR - MFA needs a second factor the E2E_IDIR_* credentials can't supply.
+  # Re-enable with an MFA-exempt account or a login-free strategy. Runs locally:
   #   cd frontend && npm run e2e:login && E2E_BASE_URL=<url> npm run e2e
-  # It already handles this migration — `e2e/fixtures.ts` saves and restores the sessionStorage half
-  # of the session, which Playwright's own storageState does not capture. Leave that in place.
-  #
-  # NOTE: unit and browser-mode tests are NOT affected. `analysis.yml` still runs `npm run
-  # test:coverage` (Vitest, which installs Chromium via the pretest hook) on every PR and merge.
+  # Unit/browser tests are unaffected (analysis.yml runs `npm run test:coverage`).
   #
   # tests:
   #   name: Tests
@@ -92,177 +76,90 @@ jobs:
   #   with:
   #     target: test
 
-  # ── PROD deploy + monitor + promote: DISABLED 2026-09-14 ════════════
+  # ── PROD deploy + monitor + promote: ENABLED 2026-10-05 (SLR offline release) ──
+  # Normally commented out so an unrelated merge can't redeploy PROD; disable again after this
+  # release. History is in git log.
   #
-  # History, because the on/off has happened seven times:
-  #   2026-08-10  Disabled. No PROD deploys until go-live. PROD scaled to zero.
-  #   2026-08-31  Re-enabled to deploy the BIO attachment migration — PROD's
-  #               image predated it, so the scheduler was not in the running
-  #               application and could not be armed. Ran with the backend
-  #               pinned to 1 and the frontend at 0 to keep PROD closed during
-  #               the window. Migration passed its gate the same day.
-  #   2026-08-31  Disabled again, and the PROD Deployments were DELETED.
-  #   2026-09-02  Re-enabled for go-live. This merge REBUILDS PROD from the
-  #               templates — Deployment, Service, HPA, PVC, Secret and
-  #               NetworkPolicies (backend), Deployment, Service, NetworkPolicy
-  #               (frontend), and the vanity Route — at 3 backend / 3 frontend.
-  #   2026-09-02  Disabled again, before that deploy ran.
-  #   2026-09-04  Re-enabled. PROD is live and in use by then — the earlier
-  #               note here claiming its Deployments were still deleted was
-  #               wrong, and is corrected rather than left to mislead the next
-  #               reader. This is a routine release onto a running PROD, not a
-  #               rebuild: evaluators have work in progress and checklists
-  #               taken offline on devices.
-  #   2026-09-04  Disabled again, this time AFTER the deploy ran and succeeded.
-  #               Pre-deploy checks were clean: association symmetry 802/802
-  #               with 0 one-way rows, no orphaned composite members, and no
-  #               checklist checked out to a device, so nothing was mid-edit
-  #               offline. The two empty composites in PROD are labelled C1/C2
-  #               — legacy naming — and pre-date this application.
-  #   2026-09-14  Re-enabled for the BC Gov SSO (Keycloak) cutover: PROD moves
-  #               off FAM/Cognito onto the standard realm. PROD is live and in
-  #               use, so this is a release onto a running environment, not a
-  #               rebuild. The `prod` environment's Keycloak config was
-  #               confirmed first — issuer on the PROD realm, the service
-  #               account's issuer on `forests`, VANITY_HOST set, and the three
-  #               SSO/user-lookup secrets present — as was the CSS console side
-  #               (redirect URIs, token mappers, and the 96 access grants).
-  #   2026-09-14  Disabled again, AFTER the cutover merged as PR #126. Back to
-  #               the normal closed state so an unrelated merge to main cannot
-  #               redeploy PROD on its own.
-  #
-  # They are disabled as a set, and must be re-enabled as a set: `monitor-prod`
-  # and `promote` declare `needs: [deploy-prod]`, so uncommenting any one of
-  # them on its own makes the WHOLE workflow file invalid — every run fails,
-  # including TEST.
-  #
-  # ── WHY THIS BLOCK DRIFTED WHILE DISABLED ───────────────────────────
-  #
-  # This block sat frozen at its 2026-09-04 state while the workflow around it
-  # kept moving. Two things drifted before it was re-enabled on 2026-09-14, and
-  # both were corrected then. They are recorded because the same drift will
-  # happen again the next time PROD is disabled for a stretch:
-  #
-  #   1. `needs:` named `tests`, a job commented out on 2026-09-09. A `needs:`
-  #      on a non-existent job invalidates the whole file. Now `[init]`.
-  #   2. The three BC Gov SSO / user-lookup secrets that deploy-test passes
-  #      were missing here. Absent, they do not fail the deploy — they leave
-  #      PROD unable to resolve user names. Now passed.
-  #
-  # The rule both came from: when a secret or a job dependency changes in
-  # `deploy-test`, change it HERE TOO — and if this block is ever commented out
-  # again, keep doing so. A commented job is invisible to every check CI runs,
-  # so nothing but this note will tell you.
-  #
-  # The vanity Route step is guarded by `env.VANITY_HOST != ''` and PROD is
-  # deliberately given no default cluster route, so a missing VANITY_HOST
-  # variable on the `prod` GitHub Environment skips it in silence and leaves
-  # production with no public URL. Confirm it, and the three VANITY_TLS_*
-  # secrets, before relying on this.
-  #
-  # Post-deploy: re-run the BIO attachment migration once. The legacy
-  # application kept writing to PROD after 2026-08-31 and those rows have no
-  # object — they still download via the Oracle BLOB fallback, so this is not
-  # a go-live blocker, but it IS a prerequisite for Phase 4b removing that
-  # fallback. See backend/tools/bio-attachment-migration-runbook.md.
+  # - Enable/disable all three together: monitor-prod and promote need deploy-prod, and a `needs:`
+  #   on a missing job invalidates the whole file (TEST included).
+  # - Keep secrets and `needs:` in step with deploy-test. A commented-out block is invisible to CI,
+  #   so drift only shows up when it's re-enabled.
+  # - The `prod` environment must define VANITY_HOST (else the vanity Route step skips silently and
+  #   PROD has no public URL) and ATTACHMENT_ALLOWED_TYPES (else `oc process` fails before rollout).
+  # - After deploying, re-run the BIO attachment migration once:
+  #   backend/tools/bio-attachment-migration-runbook.md
 
-  # deploy-prod:
-  #   name: PROD Deploys (${{ needs.init.outputs.pr }})
-  #   # `tests` was REMOVED from this list on 2026-09-14: the Playwright job it named was
-  #   # commented out on 2026-09-09 (see the E2E block above), and a `needs:` naming a job
-  #   # that does not exist makes the WHOLE workflow file invalid — every run fails,
-  #   # including TEST. Do not re-add it without re-enabling that job in the same edit.
-  #   needs: [init]
-  #   permissions:
-  #     contents: read
-  #   uses: ./.github/workflows/reusable-deploy.yml
-  #   secrets:
-  #     oc_namespace: ${{ secrets.oc_namespace }}
-  #     oc_token: ${{ secrets.oc_token }}
-  #     database_user: ${{ secrets.database_user }}
-  #     database_password: ${{ secrets.database_password }}
-  #     database_host: ${{ secrets.database_host }}
-  #     database_service_name: ${{ secrets.database_service_name }}
-  #     keystore_secret: ${{ secrets.keystore_secret }}
-  #     object_storage_host: ${{ secrets.object_storage_host }}
-  #     object_storage_bucket: ${{ secrets.object_storage_bucket }}
-  #     object_storage_access_key: ${{ secrets.object_storage_access_key }}
-  #     object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
-  #     # CLAMAV_HOST is `required: true` in backend/openshift.deploy.yml, so
-  #     # omitting it makes `oc process` fail outright — not a soft default.
-  #     # clamd does NOT run in a tools namespace, and not in FREP's own
-  #     # project set either: FREP PROD is c2d443-prod, while clamd lives in
-  #     # bd657f-prod. That cross-project-set hop needs NetworkPolicy on BOTH
-  #     # sides — backend egress here, plus a matching ingress rule in
-  #     # bd657f-prod that is maintained out of band.
-  #     clamav_host: ${{ secrets.CLAMAV_HOST }}
-  #     # Added 2026-09-14. These three landed in deploy-test with the BC Gov SSO / user-lookup
-  #     # work while this block was commented out, so it never received them.
-  #     #
-  #     # Their absence does NOT fail the deploy, which is what makes it dangerous: the
-  #     # service-account step in reusable-deploy.yml is guarded by
-  #     # `if: env.KC_SA_CLIENT_ID != ''`, so with the secret unset it silently skips,
-  #     # USER_LOOKUP_CLIENT_ID/_SECRET reach the backend empty, and PROD comes up looking
-  #     # healthy while every user's NAME fails to resolve — raw IDIR\<guid> in the UI.
-  #     # (KEYCLOAK_ISSUER_URI / KEYCLOAK_CLIENT_ID are different: they are `required: true`
-  #     # in both openshift templates, so a missing one fails `oc process` loudly instead.)
-  #     keycloak_sa_client_id: ${{ secrets.KEYCLOAK_SA_CLIENT_ID }}
-  #     keycloak_sa_client_secret: ${{ secrets.KEYCLOAK_SA_CLIENT_SECRET }}
-  #     user_lookup_base_url: ${{ secrets.USER_LOOKUP_BASE_URL }}
-  #     # PROD vanity Route (frep.nrs.gov.bc.ca) — the ONLY public URL on prod.
-  #     # Consumed only when the `prod` environment also defines the VANITY_HOST
-  #     # variable; the deploy step skips itself otherwise, which would leave
-  #     # prod with no route at all. See frontend/openshift.vanity-route.yml.
-  #     vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
-  #     vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
-  #     vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
-  #   with:
-  #     environment: prod
-  #     target: prod
-  #     tag: ${{ needs.init.outputs.pr }}
-  #     backend_replicas: "3"
-  #     frontend_replicas: "3"
-  #
-  # # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
-  # # unset — adoption is gradual. Alert templates live in monitoring/alerts/.
-  # monitor-prod:
-  #   name: Sysdig Monitor (PROD)
-  #   needs: [deploy-prod]
-  #   runs-on: ubuntu-24.04
-  #   environment: prod
-  #   permissions:
-  #     contents: read
-  #   timeout-minutes: 5
-  #   steps:
-  #     - uses: actions/checkout@v6
-  #     # Consolidated from bcgov/action-sysdig-monitor into the bcgov/actions
-  #     # suite. v0.5.0 is the first release carrying sysdig-monitor, and it
-  #     # keeps the __APP__ template substitution that monitoring/alerts/*.json
-  #     # depend on — don't downgrade this pin.
-  #     - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
-  #       with:
-  #         sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
-  #         oc_namespace: ${{ secrets.oc_namespace }}
-  #         app: nr-frep
-  #
-  # # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
-  # # record of "this is the image running in production right now" and a
-  # # rollback target.
-  # promote:
-  #   name: Promote Images
-  #   needs: [deploy-prod, init]
-  #   runs-on: ubuntu-slim
-  #   permissions:
-  #     packages: write
-  #   strategy:
-  #     matrix:
-  #       package: [backend, frontend]
-  #   timeout-minutes: 1
-  #   steps:
-  #     - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-  #       with:
-  #         registry: ghcr.io
-  #         repository: ${{ github.repository }}/${{ matrix.package }}
-  #         target: ${{ needs.init.outputs.pr }}
-  #         tags: prod
-  #
+  deploy-prod:
+    name: PROD Deploys (${{ needs.init.outputs.pr }})
+    # Not `tests`: that job is commented out (see above), and naming it would invalidate the file.
+    needs: [init]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-deploy.yml
+    secrets:
+      oc_namespace: ${{ secrets.oc_namespace }}
+      oc_token: ${{ secrets.oc_token }}
+      database_user: ${{ secrets.database_user }}
+      database_password: ${{ secrets.database_password }}
+      database_host: ${{ secrets.database_host }}
+      database_service_name: ${{ secrets.database_service_name }}
+      keystore_secret: ${{ secrets.keystore_secret }}
+      object_storage_host: ${{ secrets.object_storage_host }}
+      object_storage_bucket: ${{ secrets.object_storage_bucket }}
+      object_storage_access_key: ${{ secrets.object_storage_access_key }}
+      object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
+      # Required. clamd runs in bd657f-prod (FREP is c2d443-prod), so it also needs a matching
+      # ingress NetworkPolicy there, maintained out of band.
+      clamav_host: ${{ secrets.CLAMAV_HOST }}
+      # Missing these doesn't fail the deploy: PROD comes up healthy but can't resolve user
+      # names (raw IDIR\<guid> in the UI).
+      keycloak_sa_client_id: ${{ secrets.KEYCLOAK_SA_CLIENT_ID }}
+      keycloak_sa_client_secret: ${{ secrets.KEYCLOAK_SA_CLIENT_SECRET }}
+      user_lookup_base_url: ${{ secrets.USER_LOOKUP_BASE_URL }}
+      # Vanity Route (frep.nrs.gov.bc.ca), PROD's only public URL. Used only if VANITY_HOST is set.
+      vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
+      vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
+      vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
+    with:
+      environment: prod
+      target: prod
+      tag: ${{ needs.init.outputs.pr }}
+      backend_replicas: "3"
+      frontend_replicas: "3"
+
+  # Sync Sysdig email alerts (monitoring/alerts/). No-op if SYSDIG_API_TOKEN is unset.
+  monitor-prod:
+    name: Sysdig Monitor (PROD)
+    needs: [deploy-prod]
+    runs-on: ubuntu-24.04
+    environment: prod
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      # v0.5.0 or later: the alert templates rely on its __APP__ substitution.
+      - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
+        with:
+          sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
+          oc_namespace: ${{ secrets.oc_namespace }}
+          app: nr-frep
+
+  # Tag the deployed PR image as :prod in GHCR — a record of what's live and a rollback target.
+  promote:
+    name: Promote Images
+    needs: [deploy-prod, init]
+    runs-on: ubuntu-slim
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [backend, frontend]
+    timeout-minutes: 1
+    steps:
+      - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
+        with:
+          registry: ghcr.io
+          repository: ${{ github.repository }}/${{ matrix.package }}
+          target: ${{ needs.init.outputs.pr }}
+          tags: prod

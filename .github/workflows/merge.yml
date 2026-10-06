@@ -76,9 +76,9 @@ jobs:
   #   with:
   #     target: test
 
-  # ── PROD deploy + monitor + promote: ENABLED 2026-10-05 (SLR offline release) ──
-  # Normally commented out so an unrelated merge can't redeploy PROD; disable again after this
-  # release. History is in git log.
+  # ── PROD deploy + monitor + promote: DISABLED 2026-10-06 ─────────────────────
+  # Commented out so an unrelated merge can't redeploy PROD. Enabled only for a release (last:
+  # SLR offline, PR #144), then disabled again. History is in git log.
   #
   # - Enable/disable all three together: monitor-prod and promote need deploy-prod, and a `needs:`
   #   on a missing job invalidates the whole file (TEST included).
@@ -86,80 +86,80 @@ jobs:
   #   so drift only shows up when it's re-enabled.
   # - The `prod` environment must define VANITY_HOST (else the vanity Route step skips silently and
   #   PROD has no public URL) and ATTACHMENT_ALLOWED_TYPES (else `oc process` fails before rollout).
-  # - After deploying, re-run the BIO attachment migration once:
+  # - After a PROD deploy, re-run the BIO attachment migration once:
   #   backend/tools/bio-attachment-migration-runbook.md
 
-  deploy-prod:
-    name: PROD Deploys (${{ needs.init.outputs.pr }})
-    # Not `tests`: that job is commented out (see above), and naming it would invalidate the file.
-    needs: [init]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/reusable-deploy.yml
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      oc_token: ${{ secrets.oc_token }}
-      database_user: ${{ secrets.database_user }}
-      database_password: ${{ secrets.database_password }}
-      database_host: ${{ secrets.database_host }}
-      database_service_name: ${{ secrets.database_service_name }}
-      keystore_secret: ${{ secrets.keystore_secret }}
-      object_storage_host: ${{ secrets.object_storage_host }}
-      object_storage_bucket: ${{ secrets.object_storage_bucket }}
-      object_storage_access_key: ${{ secrets.object_storage_access_key }}
-      object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
-      # Required. clamd runs in bd657f-prod (FREP is c2d443-prod), so it also needs a matching
-      # ingress NetworkPolicy there, maintained out of band.
-      clamav_host: ${{ secrets.CLAMAV_HOST }}
-      # Missing these doesn't fail the deploy: PROD comes up healthy but can't resolve user
-      # names (raw IDIR\<guid> in the UI).
-      keycloak_sa_client_id: ${{ secrets.KEYCLOAK_SA_CLIENT_ID }}
-      keycloak_sa_client_secret: ${{ secrets.KEYCLOAK_SA_CLIENT_SECRET }}
-      user_lookup_base_url: ${{ secrets.USER_LOOKUP_BASE_URL }}
-      # Vanity Route (frep.nrs.gov.bc.ca), PROD's only public URL. Used only if VANITY_HOST is set.
-      vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
-      vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
-      vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
-    with:
-      environment: prod
-      target: prod
-      tag: ${{ needs.init.outputs.pr }}
-      backend_replicas: "3"
-      frontend_replicas: "3"
-
-  # Sync Sysdig email alerts (monitoring/alerts/). No-op if SYSDIG_API_TOKEN is unset.
-  monitor-prod:
-    name: Sysdig Monitor (PROD)
-    needs: [deploy-prod]
-    runs-on: ubuntu-24.04
-    environment: prod
-    permissions:
-      contents: read
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-      # v0.5.0 or later: the alert templates rely on its __APP__ substitution.
-      - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
-        with:
-          sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
-          oc_namespace: ${{ secrets.oc_namespace }}
-          app: nr-frep
-
-  # Tag the deployed PR image as :prod in GHCR — a record of what's live and a rollback target.
-  promote:
-    name: Promote Images
-    needs: [deploy-prod, init]
-    runs-on: ubuntu-slim
-    permissions:
-      packages: write
-    strategy:
-      matrix:
-        package: [backend, frontend]
-    timeout-minutes: 1
-    steps:
-      - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-        with:
-          registry: ghcr.io
-          repository: ${{ github.repository }}/${{ matrix.package }}
-          target: ${{ needs.init.outputs.pr }}
-          tags: prod
+  # deploy-prod:
+  #   name: PROD Deploys (${{ needs.init.outputs.pr }})
+  #   # Not `tests`: that job is commented out (see above), and naming it would invalidate the file.
+  #   needs: [init]
+  #   permissions:
+  #     contents: read
+  #   uses: ./.github/workflows/reusable-deploy.yml
+  #   secrets:
+  #     oc_namespace: ${{ secrets.oc_namespace }}
+  #     oc_token: ${{ secrets.oc_token }}
+  #     database_user: ${{ secrets.database_user }}
+  #     database_password: ${{ secrets.database_password }}
+  #     database_host: ${{ secrets.database_host }}
+  #     database_service_name: ${{ secrets.database_service_name }}
+  #     keystore_secret: ${{ secrets.keystore_secret }}
+  #     object_storage_host: ${{ secrets.object_storage_host }}
+  #     object_storage_bucket: ${{ secrets.object_storage_bucket }}
+  #     object_storage_access_key: ${{ secrets.object_storage_access_key }}
+  #     object_storage_secret_key: ${{ secrets.object_storage_secret_key }}
+  #     # Required. clamd runs in bd657f-prod (FREP is c2d443-prod), so it also needs a matching
+  #     # ingress NetworkPolicy there, maintained out of band.
+  #     clamav_host: ${{ secrets.CLAMAV_HOST }}
+  #     # Missing these doesn't fail the deploy: PROD comes up healthy but can't resolve user
+  #     # names (raw IDIR\<guid> in the UI).
+  #     keycloak_sa_client_id: ${{ secrets.KEYCLOAK_SA_CLIENT_ID }}
+  #     keycloak_sa_client_secret: ${{ secrets.KEYCLOAK_SA_CLIENT_SECRET }}
+  #     user_lookup_base_url: ${{ secrets.USER_LOOKUP_BASE_URL }}
+  #     # Vanity Route (frep.nrs.gov.bc.ca), PROD's only public URL. Used only if VANITY_HOST is set.
+  #     vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
+  #     vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
+  #     vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
+  #   with:
+  #     environment: prod
+  #     target: prod
+  #     tag: ${{ needs.init.outputs.pr }}
+  #     backend_replicas: "3"
+  #     frontend_replicas: "3"
+  #
+  # # Sync Sysdig email alerts (monitoring/alerts/). No-op if SYSDIG_API_TOKEN is unset.
+  # monitor-prod:
+  #   name: Sysdig Monitor (PROD)
+  #   needs: [deploy-prod]
+  #   runs-on: ubuntu-24.04
+  #   environment: prod
+  #   permissions:
+  #     contents: read
+  #   timeout-minutes: 5
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     # v0.5.0 or later: the alert templates rely on its __APP__ substitution.
+  #     - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
+  #       with:
+  #         sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
+  #         oc_namespace: ${{ secrets.oc_namespace }}
+  #         app: nr-frep
+  #
+  # # Tag the deployed PR image as :prod in GHCR — a record of what's live and a rollback target.
+  # promote:
+  #   name: Promote Images
+  #   needs: [deploy-prod, init]
+  #   runs-on: ubuntu-slim
+  #   permissions:
+  #     packages: write
+  #   strategy:
+  #     matrix:
+  #       package: [backend, frontend]
+  #   timeout-minutes: 1
+  #   steps:
+  #     - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
+  #       with:
+  #         registry: ghcr.io
+  #         repository: ${{ github.repository }}/${{ matrix.package }}
+  #         target: ${{ needs.init.outputs.pr }}
+  #         tags: prod

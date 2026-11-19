@@ -239,12 +239,13 @@ const AcceptedSitesPage: FC = () => {
 
   // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
   // (DataTable render-prop → rows.map → cells.map → onClick). First cell links to the checklist,
-  // Opening ID out to SILVA, and the map cell opens the in-app opening map.
+  // Opening out to SILVA, and the map cell opens the in-app opening map.
   const renderCell = (
     cell: { id: string; value: string; info: { header: string } },
     checklistLink: string | undefined,
-    statusCode: string | undefined,
+    rowMeta: ReturnType<typeof toTableRows>[number] | undefined,
   ) => {
+    const statusCode = rowMeta?.statusCode;
     if (cell.info.header === 'checklistStatus') {
       const label = statusLabel(statusCode, cell.value);
       return (
@@ -264,10 +265,11 @@ const AcceptedSitesPage: FC = () => {
         </TableCell>
       );
     }
-    // Opening ID deep-links into SILVA with an idp_hint for the signed-in provider, so the user
-    // lands on the opening without a second login. Rows without an opening id stay plain text.
-    if (cell.info.header === 'openingId') {
-      const href = silvaOpeningUrl(cell.value, user?.idpProvider);
+    // Opening deep-links into SILVA with an idp_hint for the signed-in provider, so the user lands
+    // on the opening without a second login. The URL is keyed by the row's opening id, not the
+    // number shown. Rows without an opening number (or id) stay plain text, with no bare icon.
+    if (cell.info.header === 'openingNumber') {
+      const href = cell.value ? silvaOpeningUrl(rowMeta?.openingId, user?.idpProvider) : null;
       return (
         <TableCell key={cell.id}>
           {href ? <ExternalLink href={href}>{cell.value}</ExternalLink> : cell.value}
@@ -443,9 +445,7 @@ const AcceptedSitesPage: FC = () => {
 
                         return (
                           <TableRow {...getRowProps({ row })} key={row.id}>
-                            {row.cells.map((cell) =>
-                              renderCell(cell, checklistLink, rowMeta?.statusCode),
-                            )}
+                            {row.cells.map((cell) => renderCell(cell, checklistLink, rowMeta))}
                           </TableRow>
                         );
                       })}

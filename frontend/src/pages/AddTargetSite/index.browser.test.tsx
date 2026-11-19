@@ -24,7 +24,7 @@ vi.mock('@/context/notification/useNotification', () => ({
   useNotification: () => ({ display: displayMock }),
 }));
 
-// The Opening ID cell builds a SILVA deep link from the signed-in provider; these tests render
+// The Opening cell builds a SILVA deep link from the signed-in provider; these tests render
 // outside an AuthProvider, so stub the hook rather than wrap each case.
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: () => ({ user: { idpProvider: 'IDIR', privileges: {} } }),

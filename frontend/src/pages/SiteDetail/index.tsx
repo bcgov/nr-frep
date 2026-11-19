@@ -281,7 +281,7 @@ function validateResources(rows: SiteResource[]): RowErrors[] {
 const HeaderRow: FC<{
   label: string;
   value: string | null | undefined;
-  /** When set (and there is a value), the value renders as an external link — see Opening ID. */
+  /** When set (and there is a value), the value renders as an external link — see Opening. */
   href?: string | null;
 }> = ({ label, value, href }) => (
   <div className="site-detail__field">
@@ -521,14 +521,15 @@ const SiteDetailPage: FC = () => {
                 <HeaderRow label="Org unit" value={detail.orgUnit} />
                 <HeaderRow label="Client" value={detail.client} />
                 <HeaderRow label="Client name" value={detail.clientName} />
-                <HeaderRow label="Opening" value={detail.opening} />
-                {/* Opening ID deep-links into SILVA with an idp_hint for the signed-in
-                    provider, so the user lands on the opening without a second login. */}
+                {/* Opening deep-links into SILVA (keyed by the opening id) with an idp_hint for
+                    the signed-in provider, so the user lands on the opening without a second
+                    login. HeaderRow only links when there is an opening to show. */}
                 <HeaderRow
-                  label="Opening ID"
-                  value={detail.openingId}
+                  label="Opening"
+                  value={detail.opening}
                   href={silvaOpeningUrl(detail.openingId, user?.idpProvider)}
                 />
+                <HeaderRow label="Opening ID" value={detail.openingId} />
                 <HeaderRow label="Licence" value={detail.licenceNo} />
                 <HeaderRow label="Cutting Permit" value={detail.cuttingPermitId} />
                 <HeaderRow label="Cut block" value={detail.cutBlockId} />

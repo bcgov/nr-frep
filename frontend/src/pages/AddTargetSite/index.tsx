@@ -616,18 +616,22 @@ const AddTargetSitePage: FC = () => {
             </TableHead>
             <TableBody>
               {results.map((opening) => {
-                // Null when there is no opening id to link to; the cell then shows plain text.
-                const silvaHref = silvaOpeningUrl(opening.openingId, user?.idpProvider);
+                // The opening number links out to SILVA (keyed by the opening id), matching the
+                // District Random List. Null when there's no opening number or id; the cell is then
+                // plain text.
+                const silvaHref = opening.openingNumber
+                  ? silvaOpeningUrl(opening.openingId, user?.idpProvider)
+                  : null;
                 return (
                   <TableRow key={rowKey(opening)}>
+                    <TableCell>{opening.openingId || '—'}</TableCell>
                     <TableCell>
                       {silvaHref ? (
-                        <ExternalLink href={silvaHref}>{opening.openingId}</ExternalLink>
+                        <ExternalLink href={silvaHref}>{opening.openingNumber}</ExternalLink>
                       ) : (
-                        opening.openingId || '—'
+                        opening.openingNumber || '—'
                       )}
                     </TableCell>
-                    <TableCell>{opening.openingNumber || '—'}</TableCell>
                     <TableCell>{opening.forestFileId || '—'}</TableCell>
                     <TableCell>{opening.cuttingPermitId || '—'}</TableCell>
                     <TableCell>{opening.timberMark || '—'}</TableCell>

@@ -45,3 +45,9 @@
 .random-list__map-btn.cds--btn--icon-only {
   padding-inline-start: 0;
 }
+
+// Widen the Opening column so the opening number doesn't wrap or crowd its neighbours.
+.random-list__opening-col {
+  min-width: 10rem;
+  white-space: nowrap;
+}

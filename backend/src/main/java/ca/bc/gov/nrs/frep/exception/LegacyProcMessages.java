@@ -62,6 +62,20 @@ public final class LegacyProcMessages {
           "Stratum Id must start with a letter, hold at most 3 letters and 2 digits, contain no "
               + "spaces, not be digits alone, not begin with a zero, and never place a letter "
               + "after a digit."),
+      // frep_biodiversity_stratum.validate_bec: the BEC fails FREP_VALIDATE_BGC. The proc picks
+      // the SiteSeries key when any of site series / site series phase / seral is set, else the
+      // plain one. The stratum form only takes a BEC from the catalogue (Add BEC), so the way
+      // out is to remove it and pick again.
+      Map.entry("results.web.usr.database.record.badBEC",
+          "The BEC on this stratum isn't a valid zone, subzone, variant and phase combination. "
+              + "Delete it and choose one with Add BEC."),
+      Map.entry("results.web.usr.database.record.badBECSiteSeries",
+          "The BEC on this stratum isn't valid: its site series, site series phase or seral "
+              + "doesn't match its zone, subzone, variant and phase. Delete it and choose one with "
+              + "Add BEC."),
+      Map.entry("results.web.usr.database.record.badBECZone",
+          "The BEC on this stratum has a subzone but no zone. Delete it and choose one with "
+              + "Add BEC."),
       Map.entry("frep.submit.biodiversity.stratum.clearcutWithTreesExistPlot",
           "Stratum type can't be Clear Cut while a plot in this stratum has \u201cTrees exist\u201d ticked."),
       // The generic legacy required-field key: the proc supplies the field name as the argument.

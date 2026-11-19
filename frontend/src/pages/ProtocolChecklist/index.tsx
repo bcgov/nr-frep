@@ -201,16 +201,17 @@ const ProtocolChecklistPage: FC = () => {
       </div>
     ) : null;
 
-  // Opening ID deep-links into SILVA, carrying an idp_hint for the provider the user signed in
-  // with so they land on the opening without a second login. Opens in a new tab — the checklist
-  // may hold unsaved edits — with rel="noopener noreferrer" so the opened page gets no handle on
-  // this window. Falls back to the plain cell when the record has no opening id.
-  const openingIdCell = (value: string | undefined) => {
-    const href = silvaOpeningUrl(value, user?.idpProvider);
-    if (!href) return headerCell('Opening ID', value);
+  // Opening number deep-links into SILVA (keyed by the opening id), carrying an idp_hint for the
+  // provider the user signed in with so they land on the opening without a second login. Opens in
+  // a new tab — the checklist may hold unsaved edits — with rel="noopener noreferrer" so the opened
+  // page gets no handle on this window. Falls back to the plain cell when there's no opening number
+  // or opening id.
+  const openingNumberCell = (value: string | undefined, openingId: string | undefined) => {
+    const href = value ? silvaOpeningUrl(openingId, user?.idpProvider) : null;
+    if (!href) return headerCell('Opening number', value, true);
     return (
-      <div key="Opening ID">
-        <span className="protocol-checklist__label">Opening ID</span>
+      <div key="Opening number">
+        <span className="protocol-checklist__label">Opening number</span>
         <span>
           <ExternalLink href={href}>{value}</ExternalLink>
         </span>
@@ -784,8 +785,8 @@ const ProtocolChecklistPage: FC = () => {
                 {headerCell('Checklist', checklist.checklistId, true)}
                 {headerCell('Client number', headerExtras['Client'])}
                 {headerCell('Client name', headerExtras['Client name'])}
-                {headerCell('Opening number', checklist.openingNumber, true)}
-                {openingIdCell(headerExtras['Opening ID'])}
+                {openingNumberCell(checklist.openingNumber, headerExtras['Opening ID'])}
+                {headerCell('Opening ID', headerExtras['Opening ID'])}
                 {headerCell('Licence', headerExtras['Licence'])}
                 {headerCell('Cutting permit', headerExtras['Cutting permit'])}
                 {headerCell('Cut block', headerExtras['Cut block'])}

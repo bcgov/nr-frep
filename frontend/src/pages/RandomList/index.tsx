@@ -41,9 +41,9 @@ import './randomList.scss';
 
 const TABLE_HEADERS = [
   { key: 'underReview', header: 'Status' },
-  { key: 'openingNumber', header: 'Opening' },
-  { key: 'orgUnitCode', header: 'Org Unit' },
   { key: 'openingId', header: 'Opening ID' },
+  { key: 'orgUnitCode', header: 'Org Unit' },
+  { key: 'openingNumber', header: 'Opening' },
   { key: 'licenceId', header: 'Licence' },
   { key: 'cuttingPermitId', header: 'Cutting Permit' },
   { key: 'cutBlockId', header: 'Cut Block' },
@@ -200,26 +200,28 @@ const RandomListPage: FC = () => {
   );
 
   // Extracted from the table render so the per-cell handlers aren't nested >4 functions deep
-  // (DataTable render-prop → rows.map → cells.map → onClick). Opening number links to site-detail,
-  // Opening ID out to SILVA, the review flag renders a tag, and the map cell opens the in-app
-  // opening map.
+  // (DataTable render-prop → rows.map → cells.map → onClick). Opening ID links to site-detail,
+  // Opening (number) out to SILVA, the review flag renders a tag, and the map cell opens the
+  // in-app opening map.
   // TODO(frep-external-links): legacy also linked Licence to FTA; that corporate integration isn't
   // wired yet, so Licence still renders as plain text.
   const renderCell = (
     cell: { id: string; value: string; info: { header: string } },
-    meta: { id: string } | undefined,
+    meta: ReturnType<typeof toTableRows>[number] | undefined,
   ) => {
-    if (cell.info.header === 'openingNumber' && meta) {
+    if (cell.info.header === 'openingId' && meta) {
       return (
         <TableCell key={cell.id}>
           <RouterLink to={`/site-detail/${meta.id}`}>{cell.value}</RouterLink>
         </TableCell>
       );
     }
-    // Opening ID deep-links into SILVA with an idp_hint for the signed-in provider, so the user
-    // lands on the opening without a second login. Rows without an opening id stay plain text.
-    if (cell.info.header === 'openingId') {
-      const href = silvaOpeningUrl(cell.value, user?.idpProvider);
+    // Opening deep-links into SILVA with an idp_hint for the signed-in provider, so the user
+    // lands on the opening without a second login. The SILVA URL is keyed by the row's opening
+    // id, not the opening number shown. Rows without an opening id stay plain text.
+    if (cell.info.header === 'openingNumber') {
+      // No opening number → leave the cell blank rather than rendering a bare link icon.
+      const href = cell.value ? silvaOpeningUrl(meta?.openingId, user?.idpProvider) : null;
       return (
         <TableCell key={cell.id}>
           {href ? <ExternalLink href={href}>{cell.value}</ExternalLink> : cell.value}
@@ -379,7 +381,15 @@ const RandomListPage: FC = () => {
                     <TableHead>
                       <TableRow>
                         {headers.map((header) => (
-                          <TableHeader {...getHeaderProps({ header })} key={header.key}>
+                          <TableHeader
+                            {...getHeaderProps({ header })}
+                            key={header.key}
+                            className={
+                              header.key === 'openingNumber'
+                                ? 'random-list__opening-col'
+                                : undefined
+                            }
+                          >
                             {header.header}
                           </TableHeader>
                         ))}

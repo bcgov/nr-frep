@@ -1213,17 +1213,18 @@ const ChrChecklistPage: FC = () => {
     </div>
   );
 
-  // Opening ID deep-links into SILVA, carrying an idp_hint for the provider the user signed in
-  // with so they land on the opening without a second login. New tab (the checklist may hold
-  // unsaved edits) with rel="noopener noreferrer" so the opened page gets no handle on this window.
-  // Rendered as plain text when offline or when the record has no opening id — this screen works
-  // offline, and a link to a corporate app that cannot load is worse than no link.
-  const openingIdCell = (value?: string) => {
-    const href = online ? silvaOpeningUrl(value, user?.idpProvider) : null;
-    if (!href) return headerCell('Opening ID', value);
+  // Opening number deep-links into SILVA (keyed by the opening id), carrying an idp_hint for the
+  // provider the user signed in with so they land on the opening without a second login. New tab
+  // (the checklist may hold unsaved edits) with rel="noopener noreferrer" so the opened page gets no
+  // handle on this window. Rendered as plain text when offline or when there's no opening number or
+  // opening id — this screen works offline, and a link to a corporate app that cannot load is worse
+  // than no link.
+  const openingNumberCell = (value?: string, openingId?: string) => {
+    const href = online && value ? silvaOpeningUrl(openingId, user?.idpProvider) : null;
+    if (!href) return headerCell('Opening number', value);
     return (
-      <div key="Opening ID">
-        <span className="protocol-checklist__label">Opening ID</span>
+      <div key="Opening number">
+        <span className="protocol-checklist__label">Opening number</span>
         <span>
           <ExternalLink href={href}>{value}</ExternalLink>
         </span>
@@ -1420,8 +1421,8 @@ const ChrChecklistPage: FC = () => {
             {headerCell('Checklist', checkList.checklistID)}
             {headerCell('Client number', checkList.client)}
             {headerCell('Client name', checkList.clientName)}
-            {headerCell('Opening number', checkList.openingNumber)}
-            {openingIdCell(checkList.openingID)}
+            {openingNumberCell(checkList.openingNumber, checkList.openingID)}
+            {headerCell('Opening ID', checkList.openingID)}
             {headerCell('Licence', checkList.licensee)}
             {headerCell('Cutting permit', checkList.cuttingPermit)}
             {headerCell('Cut block', checkList.block)}

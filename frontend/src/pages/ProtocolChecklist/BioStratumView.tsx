@@ -1142,6 +1142,13 @@ const BioStratumView: FC<Props> = ({
     );
   };
 
+  // A BEC is "selected" when any of its seven fields holds a value — a legacy stratum with a
+  // partial combination still shows as a row (and can be deleted), rather than as nothing.
+  const hasBec = BEC_KEYS.some((k) => get(k).trim() !== '');
+  // The BEC fields' errors (zone/subzone required, catalogue/length rules) have no inputs to sit
+  // under any more, so the first one is shown beneath the table.
+  const becError = BEC_KEYS.map((k) => fieldErrors[k]).find(Boolean);
+
   // Read-only label/value cell (used for computed NAR / plots-completed).
   const roCell = (label: string, value: string): ReactNode => (
     <div className="protocol-checklist__field">
@@ -1280,9 +1287,7 @@ const BioStratumView: FC<Props> = ({
               <>
                 {/* Actions at the top, mirroring the Opening info tab. */}
                 <div className="protocol-checklist__section-actions">
-                  {!readOnly && (
-                    <ActionButton busy={busy} onClick={() => void handleSave()} />
-                  )}
+                  {!readOnly && <ActionButton busy={busy} onClick={() => void handleSave()} />}
                   <Button
                     kind="ghost"
                     size="lg"
@@ -1317,28 +1322,74 @@ const BioStratumView: FC<Props> = ({
                   </div>
                 </fieldset>
 
-                {/* BEC */}
+                {/* BEC — picked, never typed: the only ways in are the catalogue search and the
+                    copy-from-another-stratum dialog, so the combination always comes from the
+                    catalogue FREP_VALIDATE_BGC checks against. One BEC per stratum: the pickers
+                    are hidden while one is selected, and Delete clears it to pick again. Laid out
+                    like the Plots tab's CWD table: no empty-state text, a tertiary Add button, and
+                    an Action column with a Delete button. */}
                 <fieldset className="rip-form__group">
-                  <legend>BEC</legend>
-                  <div className="rip-form__grid">
-                    {field('bgcZoneCode', 'BGC zone')}
-                    {field('bgcSubzoneCode', 'BGC subzone')}
-                    {field('bgcVariant', 'BGC variant')}
-                    {field('bgcPhase', 'BGC phase')}
-                    {field('becSiteSeriesCd', 'Site series')}
-                    {field('siteSeriesPhaseCd', 'Site series phase')}
-                    {field('seral', 'Seral')}
-                  </div>
-                  {!readOnly && (
+                  <legend>{requiredLabel('BEC', true)}</legend>
+                  {hasBec ? (
+                    <table className="rip-field-grid" data-testid="stratum-bec-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">BGC zone</th>
+                          <th scope="col">BGC subzone</th>
+                          <th scope="col">BGC variant</th>
+                          <th scope="col">BGC phase</th>
+                          <th scope="col">Site series</th>
+                          <th scope="col">Site series phase</th>
+                          <th scope="col">Seral</th>
+                          {!readOnly && (
+                            <th scope="col" className="table-actions">
+                              Action
+                            </th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          {BEC_KEYS.map((k) => (
+                            <td key={k}>{get(k) || '—'}</td>
+                          ))}
+                          {!readOnly && (
+                            <td>
+                              <Button
+                                kind="danger--tertiary"
+                                size="sm"
+                                renderIcon={TrashCan}
+                                disabled={busy}
+                                onClick={() => applyBecFrom({})}
+                              >
+                                Delete
+                              </Button>
+                            </td>
+                          )}
+                        </tr>
+                      </tbody>
+                    </table>
+                  ) : (
+                    // Read-only with nothing picked: a dash, so the section isn't an empty box.
+                    readOnly && <p className="protocol-checklist__value">—</p>
+                  )}
+                  {becError && <div className="protocol-checklist__field-error">{becError}</div>}
+                  {!readOnly && !hasBec && (
                     <div className="rip-form__group-actions">
-                      <Button kind="ghost" size="sm" onClick={() => setBecOpen(true)}>
-                        Search BEC
+                      <Button
+                        kind="tertiary"
+                        size="lg"
+                        renderIcon={Add}
+                        disabled={busy}
+                        onClick={() => setBecOpen(true)}
+                      >
+                        Add BEC
                       </Button>
                       {/* Only offered when there is another stratum to copy from. */}
                       {otherRows.length > 0 && (
                         <Button
-                          kind="ghost"
-                          size="sm"
+                          kind="tertiary"
+                          size="lg"
                           disabled={busy}
                           onClick={() => void openBecCopy()}
                         >

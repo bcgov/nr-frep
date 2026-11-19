@@ -348,6 +348,22 @@ describe('BioStratumView — same BEC as another stratum', () => {
   const stratumField = (key: string): string =>
     (document.getElementById(`stratum-${key}`) as HTMLInputElement | null)?.value ?? '(missing)';
 
+  /**
+   * The selected BEC, read off its table in form order (zone, subzone, variant, phase, site series,
+   * site series phase, seral) — the BEC has no inputs, it is picked and shown as one row. Blank
+   * cells read as '' rather than the em-dash they render.
+   */
+  const becCells = (): string[] => {
+    const row = document.querySelector('[data-testid="stratum-bec-table"] tbody tr');
+    if (!row) return [];
+    return Array.from(row.querySelectorAll('td'))
+      .slice(0, 7)
+      .map((td) => {
+        const text = td.textContent?.trim() ?? '';
+        return text === '—' ? '' : text;
+      });
+  };
+
   const openPicker = async (saved: Record<string, unknown>[] = [stratumOne, stratumTwo]) => {
     api.listBioStrata.mockResolvedValue(
       saved.map((s) => ({ stratumId: s.stratumId, stratumNumber: s.stratumNumber })),
@@ -386,13 +402,7 @@ describe('BioStratumView — same BEC as another stratum', () => {
 
     // All seven together: FREP_VALIDATE_BGC validates the combination, so a partial copy is worse
     // than none — including the blanks, which must overwrite rather than be skipped.
-    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('IDF'));
-    expect(stratumField('bgcSubzoneCode')).toBe('dk');
-    expect(stratumField('bgcVariant')).toBe('3');
-    expect(stratumField('bgcPhase')).toBe('');
-    expect(stratumField('becSiteSeriesCd')).toBe('05');
-    expect(stratumField('siteSeriesPhaseCd')).toBe('');
-    expect(stratumField('seral')).toBe('N');
+    await waitFor(() => expect(becCells()).toEqual(['IDF', 'dk', '3', '', '05', '', 'N']));
   });
 
   it('copies nothing but the BEC', async () => {
@@ -401,13 +411,49 @@ describe('BioStratumView — same BEC as another stratum', () => {
 
     const row = within(dialog).getByText('CWH').closest('tr') as HTMLElement;
     await userEvent.click(within(row).getByRole('button', { name: 'Select' }));
-    await waitFor(() => expect(stratumField('bgcZoneCode')).toBe('CWH'));
+    await waitFor(() => expect(becCells()[0]).toBe('CWH'));
 
     // The exact fields the user watched browser autofill drag across.
     expect(stratumField('estimatedSize')).toBe('');
     expect(stratumField('harvestAreaCode')).toBe('');
     expect(stratumField('patchWindthrowPct')).toBe('');
     expect(screen.queryByDisplayValue('Blowdown along the east edge')).toBeNull();
+  });
+
+  it('has no BEC inputs to type into, and says the BEC is owed on save', async () => {
+    api.listBioStrata.mockResolvedValue([]);
+    render(<BioStratumView checklistId="9001" canEdit submitted={false} outstanding={[]} />);
+    await userEvent.click(await screen.findByRole('button', { name: /Add stratum/i }));
+    await screen.findByLabelText(/Stratum type/i);
+
+    // Picked from the catalogue only — none of the seven BEC fields is a typed input.
+    for (const key of ['bgcZoneCode', 'bgcSubzoneCode', 'bgcVariant', 'seral']) {
+      expect(stratumField(key)).toBe('(missing)');
+    }
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    // The required error has no input to sit under, so it shows beneath the BEC section.
+    expect(await screen.findByText('BGC zone is required.')).toBeTruthy();
+  });
+
+  it('shows the picked BEC as one row, hides the pickers, and Delete clears it', async () => {
+    const dialog = await openPicker();
+    await within(dialog).findByText('IDF');
+    const row = within(dialog).getByText('IDF').closest('tr') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Select' }));
+    await waitFor(() => expect(becCells()[0]).toBe('IDF'));
+
+    // One BEC per stratum: with one selected there is nothing to add another with.
+    expect(screen.queryByRole('button', { name: /Add BEC/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Same BEC as another stratum/ })).toBeNull();
+
+    const table = document.querySelector('[data-testid="stratum-bec-table"]') as HTMLElement;
+    await userEvent.click(within(table).getByRole('button', { name: /Delete/ }));
+
+    // Like the CWD table: no rows, no table and no placeholder text — just the Add button.
+    await waitFor(() => expect(becCells()).toEqual([]));
+    expect(screen.queryByText(/No BEC selected/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Add BEC/ })).toBeTruthy();
   });
 
   it('lists one entry per distinct BEC, however many strata share it', async () => {

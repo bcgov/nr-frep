@@ -57,6 +57,23 @@ class LegacyProcMessagesTest {
     }
 
     @Test
+    @DisplayName("says what is wrong with an invalid BEC and how to fix it")
+    void resolvesInvalidBecKeys() {
+      // frep_biodiversity_stratum.validate_bec. Missed by the key sweep below until a wrong BEC
+      // reached PROD as a generic "request could not be completed" 500.
+      assertThat(LegacyProcMessages.resolve("results.web.usr.database.record.badBEC;"))
+          .hasValueSatisfying(m -> assertThat(m)
+              .contains("zone, subzone, variant and phase")
+              .contains("Add BEC"));
+      assertThat(LegacyProcMessages.resolve("results.web.usr.database.record.badBECSiteSeries;"))
+          .hasValueSatisfying(m -> assertThat(m).contains("site series").contains("Add BEC"));
+      // validate_bec can raise both at once (subzone without zone also fails FREP_VALIDATE_BGC).
+      assertThat(LegacyProcMessages.resolve(
+          "results.web.usr.database.record.badBEC;results.web.usr.database.record.badBECZone;"))
+          .hasValueSatisfying(m -> assertThat(m).contains("subzone but no zone"));
+    }
+
+    @Test
     @DisplayName("covers every key frep_biodiversity_plot and _stratum can emit")
     void coversEverySlrProcKey() {
       // The set grepped out of the package bodies in nr-mof-db. A proc emitting a key that is not
@@ -67,6 +84,9 @@ class LegacyProcMessagesTest {
           "frep.web.usr.database.record.badStratumFormat",
           "frep.web.usr.database.record.modified2",
           "frep.web.usr.database.record.plot.number.already.exists",
+          "results.web.usr.database.record.badBEC",
+          "results.web.usr.database.record.badBECSiteSeries",
+          "results.web.usr.database.record.badBECZone",
           "sil.error.usr.isrequired:Plot Number",
           "sil.web.error.usr.recordExists",
           "sil.web.usr.database.record.modified.no.params",

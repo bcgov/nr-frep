@@ -2,6 +2,7 @@ package ca.bc.gov.nrs.frep;
 
 import static org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO;
 
+import ca.bc.gov.nrs.frep.configuration.OracleTlsCompatibility;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -23,6 +24,7 @@ public class FrepApiApplication extends SpringBootServletInitializer {
 	}
 
 	public static void main(String[] args) {
+		OracleTlsCompatibility.allowRsaKeyExchange();
 		SpringApplication.run(FrepApiApplication.class, args);
 	}
 

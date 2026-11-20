@@ -6,7 +6,11 @@ COPY src src
 RUN mvn package -DskipTests
 RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
 
-FROM eclipse-temurin:21.0.9_10-jdk-alpine-3.23
+# 21.0.12 or later: earlier JDKs carry time-zone rules from before B.C. stayed on UTC−7
+# (2026-11-01), so America/Vancouver would fall back to UTC−8 and every Pacific timestamp would be an
+# hour behind. TZ only names the zone; the rules come from this JDK. 21.0.12+ also disables the
+# TLS_RSA_* ciphers the Oracle listener needs; OracleTlsCompatibility re-enables them at startup.
+FROM eclipse-temurin:21.0.13.1_2-jdk-alpine-3.23
 
 RUN adduser -D -s /bin/sh spring
 RUN mkdir -p /logs
